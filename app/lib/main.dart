@@ -11,6 +11,7 @@ import 'providers/snippet_provider.dart';
 import 'providers/local_session_provider.dart';
 import 'providers/terminal_layout_provider.dart';
 import 'providers/sync_provider.dart';
+import 'providers/known_hosts_provider.dart';
 import 'services/ssh_service.dart';
 import 'services/storage_service.dart';
 import 'services/supabase_service.dart';
@@ -42,6 +43,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final SessionProvider _sessionProvider;
   late final SyncProvider _syncProvider;
   late final SyncService _syncService;
+  late final KnownHostsProvider _knownHostsProvider;
 
   @override
   void initState() {
@@ -57,6 +59,9 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _sessionProvider.autoReconnectEnabled = () => _settingsProvider.autoReconnect;
     _sessionProvider.reconnectAttempts = () => _settingsProvider.reconnectAttempts;
     _sessionProvider.tmuxEnabled = () => _settingsProvider.tmuxEnabled;
+    _knownHostsProvider = KnownHostsProvider(_storage);
+    _knownHostsProvider.load();
+    _sessionProvider.hostKeyVerifier = _knownHostsProvider.verifyHostKey;
     _syncProvider = SyncProvider();
     _syncService = SyncService(_syncProvider, SupabaseService());
 
@@ -100,6 +105,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _settingsProvider.dispose();
     _sessionProvider.dispose();
     _syncProvider.dispose();
+    _knownHostsProvider.dispose();
     super.dispose();
   }
 
@@ -113,6 +119,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         ChangeNotifierProvider.value(value: _keyProvider),
         ChangeNotifierProvider.value(value: _settingsProvider),
         ChangeNotifierProvider.value(value: _sessionProvider),
+        ChangeNotifierProvider.value(value: _knownHostsProvider),
         ChangeNotifierProvider.value(value: _syncProvider),
         Provider.value(value: _syncService),
         ChangeNotifierProvider(create: (_) => PortForwardProvider()),
