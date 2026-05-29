@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'providers/command_history_provider.dart';
 import 'providers/host_provider.dart';
 import 'providers/key_provider.dart';
 import 'providers/port_forward_provider.dart';
 import 'providers/session_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/snippet_provider.dart';
+import 'providers/terminal_layout_provider.dart';
 import 'services/ssh_service.dart';
 import 'services/storage_service.dart';
 import 'screens/main_screen.dart';
@@ -65,6 +67,12 @@ class _YourSSHAppState extends State<YourSSHApp> {
         ChangeNotifierProvider.value(value: _sessionProvider),
         ChangeNotifierProvider(create: (_) => PortForwardProvider()),
         ChangeNotifierProvider(create: (_) => SnippetProvider()),
+        ChangeNotifierProvider(create: (_) {
+          final p = CommandHistoryProvider();
+          p.init();
+          return p;
+        }),
+        ChangeNotifierProvider(create: (_) => TerminalLayoutProvider()),
       ],
       child: MaterialApp(
         title: 'YourSSH',
