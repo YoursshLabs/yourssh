@@ -4,14 +4,14 @@
   <p align="center">
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
     <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.x-54C5F8?logo=flutter" alt="Flutter" /></a>
-    <a href="https://github.com/thangnm93/yourssh/releases"><img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-lightgrey?logo=apple" alt="Platform" /></a>
+    <a href="https://github.com/thangnm93/yourssh/releases"><img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?logo=apple" alt="Platform" /></a>
     <a href="https://github.com/thangnm93/yourssh/releases"><img src="https://img.shields.io/github/v/release/thangnm93/yourssh?color=green" alt="Release" /></a>
     <a href="https://github.com/thangnm93/yourssh/actions"><img src="https://img.shields.io/github/actions/workflow/status/thangnm93/yourssh/release.yml?label=build" alt="CI" /></a>
     <a href="https://github.com/thangnm93/yourssh/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" /></a>
   </p>
 </p>
 
-A professional, open-source SSH client for **macOS** and **Windows** built with Flutter. Designed for developers and sysadmins who want a fast, keyboard-friendly terminal experience with built-in SFTP, port forwarding, and secure credential management — all in a clean dark UI.
+A professional, open-source SSH client for **macOS**, **Windows**, and **Linux** built with Flutter. Designed for developers and sysadmins who want a fast, keyboard-friendly terminal experience with built-in SFTP, port forwarding, and secure credential management — all in a clean dark UI.
 
 ---
 
@@ -21,7 +21,7 @@ A professional, open-source SSH client for **macOS** and **Windows** built with 
 - **Multi-tab SSH sessions** with named tabs and per-tab connection state
 - **Split terminal view** — horizontal/vertical pane splitting within a session
 - **Port forwarding** — local, remote, and dynamic SOCKS5 tunnels
-- **Local shell** — spawn native macOS/Windows shell alongside SSH sessions
+- **Local shell** — spawn native macOS/Windows/Linux shell alongside SSH sessions
 - **xterm-256color** terminal emulation with full PTY support
 
 ### File Management
@@ -95,6 +95,7 @@ A professional, open-source SSH client for **macOS** and **Windows** built with 
 |---|---|
 | macOS | 10.14 Mojave |
 | Windows | Windows 10 (64-bit) |
+| Linux | Ubuntu 20.04+ / any GTK3-compatible distro |
 | Flutter SDK | 3.12.0+ |
 | Dart SDK | 3.12.0+ |
 
@@ -124,6 +125,9 @@ flutter run -d macos
 
 # Windows
 flutter run -d windows
+
+# Linux
+flutter run -d linux
 ```
 
 ### 4. Build a release binary
@@ -134,6 +138,9 @@ flutter build macos
 
 # Windows
 flutter build windows
+
+# Linux
+flutter build linux
 ```
 
 ### 5. Lint & analyze
@@ -174,6 +181,7 @@ yourssh/
 │   │       └── nerd/             # MesloLGS NF (Nerd Font, 4 variants)
 │   ├── macos/                    # Flutter macOS runner (Xcode entitlements, Info.plist)
 │   ├── windows/                  # Flutter Windows build configuration
+│   ├── linux/                    # Flutter Linux build configuration (CMake)
 │   └── pubspec.yaml
 │
 ├── macos/                        # Xcode project files (xcodegen — project.yml)
@@ -229,7 +237,7 @@ Flutter UI (widgets / screens)
 | `SyncService` | Encrypts host list and pushes/pulls from Supabase |
 | `SyncEncryption` | AES-GCM encrypt/decrypt for sync data |
 | `SupabaseService` | Supabase client wrapper (auth, RPC calls) |
-| `LocalShellService` | Spawns native PTY sessions on macOS/Windows |
+| `LocalShellService` | Spawns native PTY sessions on macOS/Windows/Linux |
 | `PtyRunner` | Low-level PTY wrapper used by `LocalShellService` |
 | `SftpFileOpsService` | SFTP file operations (copy, move, rename, delete) |
 | `SftpTransferService` | Chunked SFTP upload/download with progress callbacks |
@@ -298,7 +306,7 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 - [ ] Custom terminal color themes (30+ presets)
 - [ ] SSH certificate authentication
 - [ ] Jump host / bastion proxy support
-- [ ] Linux desktop target
+- [x] Linux desktop target
 - [ ] iOS / iPadOS target (experimental)
 - [ ] Plugin / extension system
 
@@ -306,7 +314,7 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 
 ## License
 
-This project is open-source. License TBD — see [LICENSE](LICENSE) once finalized.
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
