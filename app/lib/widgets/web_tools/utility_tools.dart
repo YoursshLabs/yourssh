@@ -4,6 +4,48 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../theme/app_theme.dart';
 
+@visibleForTesting
+String encodeBase64(String input) => base64.encode(utf8.encode(input));
+
+@visibleForTesting
+String decodeBase64(String input) {
+  try {
+    return utf8.decode(base64.decode(input));
+  } catch (_) {
+    return 'Invalid Base64';
+  }
+}
+
+@visibleForTesting
+String encodeUrl(String input) => Uri.encodeComponent(input);
+
+@visibleForTesting
+String decodeUrl(String input) {
+  try {
+    return Uri.decodeComponent(input);
+  } catch (_) {
+    return 'Invalid URL encoding';
+  }
+}
+
+@visibleForTesting
+String formatJson(String input) {
+  try {
+    return const JsonEncoder.withIndent('  ').convert(jsonDecode(input));
+  } catch (_) {
+    return 'Invalid JSON';
+  }
+}
+
+@visibleForTesting
+String minifyJson(String input) {
+  try {
+    return jsonEncode(jsonDecode(input));
+  } catch (_) {
+    return 'Invalid JSON';
+  }
+}
+
 enum _UtilTab { base64, url, json, hash }
 
 class UtilityTools extends StatefulWidget {
@@ -221,17 +263,9 @@ class _Base64ToolState extends State<_Base64Tool> {
     super.dispose();
   }
 
-  void _encode() => setState(() {
-        _output = base64.encode(utf8.encode(_inputCtrl.text));
-      });
+  void _encode() => setState(() => _output = encodeBase64(_inputCtrl.text));
 
-  void _decode() => setState(() {
-        try {
-          _output = utf8.decode(base64.decode(_inputCtrl.text));
-        } catch (_) {
-          _output = 'Invalid Base64';
-        }
-      });
+  void _decode() => setState(() => _output = decodeBase64(_inputCtrl.text));
 
   @override
   Widget build(BuildContext context) => _IoPane(
@@ -266,15 +300,9 @@ class _UrlToolState extends State<_UrlTool> {
     super.dispose();
   }
 
-  void _encode() => setState(() => _output = Uri.encodeComponent(_inputCtrl.text));
+  void _encode() => setState(() => _output = encodeUrl(_inputCtrl.text));
 
-  void _decode() => setState(() {
-        try {
-          _output = Uri.decodeComponent(_inputCtrl.text);
-        } catch (_) {
-          _output = 'Invalid URL encoding';
-        }
-      });
+  void _decode() => setState(() => _output = decodeUrl(_inputCtrl.text));
 
   @override
   Widget build(BuildContext context) => _IoPane(
@@ -309,22 +337,9 @@ class _JsonToolState extends State<_JsonTool> {
     super.dispose();
   }
 
-  void _format() => setState(() {
-        try {
-          _output = const JsonEncoder.withIndent('  ')
-              .convert(jsonDecode(_inputCtrl.text));
-        } catch (_) {
-          _output = 'Invalid JSON';
-        }
-      });
+  void _format() => setState(() => _output = formatJson(_inputCtrl.text));
 
-  void _minify() => setState(() {
-        try {
-          _output = jsonEncode(jsonDecode(_inputCtrl.text));
-        } catch (_) {
-          _output = 'Invalid JSON';
-        }
-      });
+  void _minify() => setState(() => _output = minifyJson(_inputCtrl.text));
 
   @override
   Widget build(BuildContext context) => _IoPane(
