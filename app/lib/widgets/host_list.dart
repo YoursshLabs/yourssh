@@ -34,7 +34,11 @@ class HostListPanel extends StatelessWidget {
         Expanded(
           child: hosts.isEmpty
               ? const Center(
-                  child: Text('No hosts yet\nAdd one with +', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                  child: Text(
+                    'No hosts yet\nAdd one with +',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 )
               : ListView.builder(
                   itemCount: hosts.length,
@@ -69,7 +73,10 @@ class HostListPanel extends StatelessWidget {
       builder: (_) => const AddHostDialog(),
     );
     if (result == null || !context.mounted) return;
-    await context.read<HostProvider>().addHost(result.host, password: result.password);
+    await context.read<HostProvider>().addHost(
+      result.host,
+      password: result.password,
+    );
   }
 
   Future<void> _editHost(BuildContext context, Host host) async {
@@ -78,7 +85,10 @@ class HostListPanel extends StatelessWidget {
       builder: (_) => AddHostDialog(existing: host),
     );
     if (result == null || !context.mounted) return;
-    await context.read<HostProvider>().updateHost(result.host, password: result.password);
+    await context.read<HostProvider>().updateHost(
+      result.host,
+      password: result.password,
+    );
   }
 }
 
@@ -88,38 +98,59 @@ class _HostTile extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _HostTile({required this.host, required this.onConnect, required this.onEdit, required this.onDelete});
+  const _HostTile({
+    required this.host,
+    required this.onConnect,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme;
-    return InkWell(
-      onDoubleTap: onConnect,
-      child: ListTile(
-        dense: true,
-        leading: CircleAvatar(
-          radius: 16,
-          backgroundColor: color.primaryContainer,
-          child: Text(
-            host.label[0].toUpperCase(),
-            style: TextStyle(fontSize: 12, color: color.onPrimaryContainer),
-          ),
-        ),
-        title: Text(host.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-        subtitle: Text('${host.username}@${host.host}:${host.port}', style: const TextStyle(fontSize: 11)),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(icon: const Icon(Icons.terminal, size: 16), tooltip: 'Connect', onPressed: onConnect),
-            PopupMenuButton(
-              iconSize: 16,
-              itemBuilder: (_) => [
-                const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
-              ],
-              onSelected: (v) => v == 'edit' ? onEdit() : onDelete(),
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onDoubleTap: onConnect,
+        child: ListTile(
+          dense: true,
+          leading: CircleAvatar(
+            radius: 16,
+            backgroundColor: color.primaryContainer,
+            child: Text(
+              host.label[0].toUpperCase(),
+              style: TextStyle(fontSize: 12, color: color.onPrimaryContainer),
             ),
-          ],
+          ),
+          title: Text(
+            host.label,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          subtitle: Text(
+            '${host.username}@${host.host}:${host.port}',
+            style: const TextStyle(fontSize: 11),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.terminal, size: 16),
+                tooltip: 'Connect',
+                onPressed: onConnect,
+              ),
+              PopupMenuButton(
+                iconSize: 16,
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Delete', style: TextStyle(color: Colors.red)),
+                  ),
+                ],
+                onSelected: (v) => v == 'edit' ? onEdit() : onDelete(),
+              ),
+            ],
+          ),
         ),
       ),
     );

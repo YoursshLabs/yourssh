@@ -4,8 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 enum TestConnectionOutcome { connected, tableNotFound, failed }
 
-class SupabaseService {
-  static const _migrationSql = '''
+const _migrationSql = '''
 create table if not exists sync_data (
   sync_id    text        primary key check (char_length(sync_id) = 12),
   payload    text        not null,
@@ -19,6 +18,7 @@ create policy "anon_rw" on sync_data
   with check (char_length(sync_id) = 12);
 ''';
 
+class SupabaseService {
   final String _url;
   final String _anonKey;
   SupabaseClient? _clientInstance;
@@ -34,9 +34,7 @@ create policy "anon_rw" on sync_data
   String get url => _url;
   String get anonKey => _anonKey;
 
-  /// Dispatches an HTTP POST. Delegates to [testDoPost] when set (tests only).
-  Future<http.Response> doPost(
-      Uri uri, Map<String, String> headers, String body) {
+  Future<http.Response> doPost(Uri uri, Map<String, String> headers, String body) {
     if (testDoPost != null) return testDoPost!(uri, headers, body);
     return http.post(uri, headers: headers, body: body);
   }
@@ -57,7 +55,7 @@ create policy "anon_rw" on sync_data
   }
 
   /// Runs the sync_data schema migration via the Supabase pg/query endpoint.
-  /// Requires the project's service role key (not persisted — used once).
+  /// The service role key is used once and never persisted.
   Future<(bool, String?)> setupSchema(String serviceRoleKey) async {
     try {
       final uri = Uri.parse('$_url/pg/query');
@@ -73,10 +71,7 @@ create policy "anon_rw" on sync_data
       if (response.statusCode == 200 || response.statusCode == 201) {
         return (true, null);
       }
-      return (
-        false,
-        'Migration failed (HTTP ${response.statusCode}): ${response.body}'
-      );
+      return (false, 'Migration failed (HTTP ${response.statusCode}): ${response.body}');
     } catch (e) {
       return (false, e.toString());
     }

@@ -21,8 +21,14 @@ import '../widgets/split_terminal_view.dart';
 import '../widgets/web_tools_screen.dart';
 import '../widgets/new_group_panel.dart';
 import '../widgets/import_panel.dart';
+import '../widgets/devops_hub_screen.dart';
+import '../widgets/vault_screen.dart';
+import '../widgets/ai_chat_sidebar.dart';
+import '../providers/settings_provider.dart';
+import '../providers/terminal_layout_provider.dart';
+import '../services/hotkey_service.dart';
 
-enum NavSection { hosts, keychain, portForwarding, sftp, webTools, snippets, localTerminal, knownHosts, settings }
+enum NavSection { hosts, keychain, portForwarding, sftp, webTools, devOps, snippets, localTerminal, knownHosts, vault, settings }
 
 enum _SidePanel { none, host, newGroup, import }
 
@@ -39,15 +45,47 @@ class _MainScreenState extends State<MainScreen> {
   Host? _editingHost;
   String? _initialGroup;
   bool _viewingTerminal = false;
+  bool _showAiChat = false;
   final _sftpConnectionNotifier = ValueNotifier<bool>(false);
   SessionProvider? _sessionProvider;
   KnownHostsProvider? _knownHostsProvider;
+  SettingsProvider? _settingsProvider;
   bool _hostKeyDialogShowing = false;
 
   @override
   void initState() {
     super.initState();
     _sftpConnectionNotifier.addListener(_onSftpConnectionChanged);
+  }
+
+  Future<void> _registerHotkeys(Map<String, String> hotkeys) async {
+    final svc = HotkeyService();
+    await svc.unregisterAll();
+    for (final entry in hotkeys.entries) {
+      final hotKey = HotkeyService.parse(entry.value);
+      if (hotKey == null) continue;
+      await svc.register(entry.key, hotKey, () => _handleHotkey(entry.key));
+    }
+  }
+
+  void _handleHotkey(String name) {
+    if (!mounted) return;
+    switch (name) {
+      case 'new_session':
+        _openHostPanel();
+      case 'close_session':
+        context.read<SessionProvider>().closeActive();
+      case 'next_session':
+        context.read<SessionProvider>().activateNext();
+      case 'prev_session':
+        context.read<SessionProvider>().activatePrev();
+      case 'toggle_input_bar':
+        context.read<TerminalLayoutProvider>().toggleInputBar();
+      case 'split_horizontal':
+        context.read<TerminalLayoutProvider>().setLayout(SplitLayout.horizontal);
+      case 'split_vertical':
+        context.read<TerminalLayoutProvider>().setLayout(SplitLayout.vertical);
+    }
   }
 
   void _onSftpConnectionChanged() {
@@ -63,11 +101,24 @@ class _MainScreenState extends State<MainScreen> {
       _sessionProvider = provider;
       provider.addListener(_onSessionsChanged);
     }
+    final settings = context.read<SettingsProvider>();
+    if (_settingsProvider != settings) {
+      _settingsProvider?.removeListener(_onSettingsChanged);
+      _settingsProvider = settings;
+      settings.addListener(_onSettingsChanged);
+      _registerHotkeys(settings.hotkeys);
+    }
     final knownHostsProvider = context.read<KnownHostsProvider>();
     if (_knownHostsProvider != knownHostsProvider) {
       _knownHostsProvider?.removeListener(_onKnownHostsChanged);
       _knownHostsProvider = knownHostsProvider;
       knownHostsProvider.addListener(_onKnownHostsChanged);
+    }
+  }
+
+  void _onSettingsChanged() {
+    if (_settingsProvider != null) {
+      _registerHotkeys(_settingsProvider!.hotkeys);
     }
   }
 
@@ -102,6 +153,8 @@ class _MainScreenState extends State<MainScreen> {
     _sftpConnectionNotifier.dispose();
     _sessionProvider?.removeListener(_onSessionsChanged);
     _knownHostsProvider?.removeListener(_onKnownHostsChanged);
+    _settingsProvider?.removeListener(_onSettingsChanged);
+    HotkeyService().unregisterAll();
     super.dispose();
   }
 
@@ -148,6 +201,7 @@ class _MainScreenState extends State<MainScreen> {
             onNavSelect: (s) => setState(() {
               _nav = s;
               _viewingTerminal = false;
+              _showAiChat = false;
               if (s != NavSection.hosts) _closePanel();
               if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
             }),
@@ -163,6 +217,7 @@ class _MainScreenState extends State<MainScreen> {
                   _Sidebar(selected: _nav, onSelect: (s) => setState(() {
                     _nav = s;
                     _viewingTerminal = false;
+                    _showAiChat = false;
                     if (s != NavSection.hosts) _closePanel();
                     if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
                   })),
@@ -201,14 +256,34 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildContent(SshSession? active) {
     if (_viewingTerminal && active != null) {
-      return Stack(
-        children: const [
-          SplitTerminalView(),
-          Positioned(
-            top: 8,
-            right: 8,
-            child: NetworkStatsOverlay(),
+      return Row(
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                const SplitTerminalView(),
+                Positioned(
+                  top: 8,
+                  right: _showAiChat ? 348 : 8,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const NetworkStatsOverlay(),
+                      const SizedBox(width: 8),
+                      _AiChatToggle(
+                        active: _showAiChat,
+                        onToggle: () => setState(() => _showAiChat = !_showAiChat),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
+          if (_showAiChat)
+            AiChatSidebar(
+              onClose: () => setState(() => _showAiChat = false),
+            ),
         ],
       );
     }
@@ -230,6 +305,8 @@ class _MainScreenState extends State<MainScreen> {
       NavSection.knownHosts => const KnownHostsScreen(),
       NavSection.settings => const SettingsScreen(),
       NavSection.webTools => const WebToolsScreen(),
+      NavSection.devOps => const DevOpsHubScreen(),
+      NavSection.vault => const VaultScreen(),
     };
   }
 }
@@ -263,14 +340,23 @@ class _Sidebar extends StatelessWidget {
           const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 8),
 
+          const _SectionLabel('CONNECTIONS'),
           _navItem(Icons.dns_outlined, 'Hosts', NavSection.hosts),
-          _navItem(Icons.vpn_key_outlined, 'Keychain', NavSection.keychain),
           _navItem(Icons.swap_horiz, 'Port Forwarding', NavSection.portForwarding),
+          _navItem(Icons.fact_check_outlined, 'Known Hosts', NavSection.knownHosts),
+
+          const _SectionLabel('FILES & TRANSFER'),
           _navItem(Icons.folder_open, 'SFTP', NavSection.sftp),
+
+          const _SectionLabel('TOOLS'),
           _navItem(Icons.build_outlined, 'Web Tools', NavSection.webTools),
+          _navItem(Icons.rocket_launch_outlined, 'DevOps', NavSection.devOps),
           _navItem(Icons.code, 'Snippets', NavSection.snippets),
           _navItem(Icons.laptop_mac, 'Local Terminal', NavSection.localTerminal),
-          _navItem(Icons.fact_check_outlined, 'Known Hosts', NavSection.knownHosts),
+
+          const _SectionLabel('SECURITY'),
+          _navItem(Icons.vpn_key_outlined, 'Keychain', NavSection.keychain),
+          _navItem(Icons.lock_outlined, 'Vault', NavSection.vault),
 
           const Spacer(),
           const Divider(height: 1, color: AppColors.border),
@@ -594,6 +680,56 @@ class _AddTabBtnState extends State<_AddTabBtn> {
   }
 }
 
+// ── AI Chat Toggle Button ─────────────────────────────────
+
+class _AiChatToggle extends StatelessWidget {
+  final bool active;
+  final VoidCallback onToggle;
+
+  const _AiChatToggle({required this.active, required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: active ? 'Close AI Chat' : 'Open AI Chat',
+      child: GestureDetector(
+        onTap: onToggle,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: active
+                ? AppColors.accent.withValues(alpha: 0.15)
+                : AppColors.card.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: active ? AppColors.accent : AppColors.border,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.smart_toy_outlined,
+                size: 14,
+                color: active ? AppColors.accent : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                'AI',
+                style: TextStyle(
+                  color: active ? AppColors.accent : AppColors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── Host Key Mismatch Dialog ──────────────────────────────
 
 class _HostKeyDialog extends StatelessWidget {
@@ -643,6 +779,27 @@ class _HostKeyDialog extends StatelessWidget {
           child: const Text('Trust new key'),
         ),
       ],
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: AppColors.textTertiary,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.8,
+        ),
+      ),
     );
   }
 }

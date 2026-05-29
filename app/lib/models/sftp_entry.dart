@@ -29,4 +29,10 @@ class SftpEntry {
   }
 
   String get sortKey => (isDirectory ? '0' : '1') + name.toLowerCase();
+
+  String get kindLabel {
+    if (isDirectory) return 'folder';
+    if (extension.isEmpty) return 'document';
+    return extension;
+  }
 }

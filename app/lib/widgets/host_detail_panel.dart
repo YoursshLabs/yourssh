@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 
 class HostDetailPanel extends StatefulWidget {
   final Host? existing;
+  final String? initialGroup;
   final VoidCallback onClose;
   final Future<void> Function(Host host, String password) onSave;
   final Future<void> Function(Host host)? onConnect;
@@ -14,6 +15,7 @@ class HostDetailPanel extends StatefulWidget {
   const HostDetailPanel({
     super.key,
     this.existing,
+    this.initialGroup,
     required this.onClose,
     required this.onSave,
     this.onConnect,
@@ -45,7 +47,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     final h = widget.existing;
     _hostCtrl = TextEditingController(text: h?.host ?? '');
     _labelCtrl = TextEditingController(text: h?.label ?? '');
-    _groupCtrl = TextEditingController(text: h?.group ?? '');
+    _groupCtrl = TextEditingController(text: h?.group ?? widget.initialGroup ?? '');
     _tagsCtrl = TextEditingController(text: h?.tags.join(', ') ?? '');
     _portCtrl = TextEditingController(text: (h?.port ?? 22).toString());
     _usernameCtrl = TextEditingController(text: h?.username ?? '');

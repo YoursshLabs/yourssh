@@ -101,4 +101,25 @@ class SessionProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  void closeActive() {
+    final active = activeSession;
+    if (active != null) closeSession(active.id);
+  }
+
+  void activateNext() {
+    if (_sessions.isEmpty) return;
+    final idx = _sessions.indexWhere((s) => s.id == _activeSessionId);
+    final nextIdx = (idx + 1) % _sessions.length;
+    _activeSessionId = _sessions[nextIdx].id;
+    notifyListeners();
+  }
+
+  void activatePrev() {
+    if (_sessions.isEmpty) return;
+    final idx = _sessions.indexWhere((s) => s.id == _activeSessionId);
+    final prevIdx = (idx - 1 + _sessions.length) % _sessions.length;
+    _activeSessionId = _sessions[prevIdx].id;
+    notifyListeners();
+  }
 }

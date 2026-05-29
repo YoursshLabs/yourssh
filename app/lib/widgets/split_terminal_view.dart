@@ -1,4 +1,3 @@
-// app/lib/widgets/split_terminal_view.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/ssh_session.dart';
@@ -8,21 +7,8 @@ import 'terminal_view.dart';
 import 'terminal_input_bar.dart';
 import 'broadcast_toolbar.dart';
 
-class SplitTerminalView extends StatefulWidget {
+class SplitTerminalView extends StatelessWidget {
   const SplitTerminalView({super.key});
-
-  @override
-  State<SplitTerminalView> createState() => _SplitTerminalViewState();
-}
-
-class _SplitTerminalViewState extends State<SplitTerminalView> {
-  final Map<int, bool> _inputBarVisible = {};
-
-  void _toggleInputBar(int paneIndex) {
-    setState(() {
-      _inputBarVisible[paneIndex] = !(_inputBarVisible[paneIndex] ?? false);
-    });
-  }
 
   void _sendCommand(SshSession session, String command) {
     session.terminal.textInput(command);
@@ -53,34 +39,34 @@ class _SplitTerminalViewState extends State<SplitTerminalView> {
     return Column(
       children: [
         const BroadcastToolbar(),
-        Expanded(child: _buildPanes(layout, sessions)),
+        Expanded(child: _buildPanes(context, layout, sessions)),
       ],
     );
   }
 
-  Widget _buildPanes(TerminalLayoutProvider layout, List<SshSession> sessions) {
+  Widget _buildPanes(BuildContext context, TerminalLayoutProvider layout, List<SshSession> sessions) {
     switch (layout.layout) {
       case SplitLayout.single:
-        return _buildPane(0, sessions[0], sessions, layout);
+        return _buildPane(context, 0, sessions[0], sessions, layout);
 
       case SplitLayout.horizontal:
         return Row(children: [
-          Expanded(child: _buildPane(0, sessions[0], sessions, layout)),
+          Expanded(child: _buildPane(context, 0, sessions[0], sessions, layout)),
           const VerticalDivider(width: 1, color: Color(0xFF2A2A2A)),
           Expanded(
             child: sessions.length > 1
-                ? _buildPane(1, sessions[1], sessions, layout)
+                ? _buildPane(context, 1, sessions[1], sessions, layout)
                 : _buildEmptyPane(),
           ),
         ]);
 
       case SplitLayout.vertical:
         return Column(children: [
-          Expanded(child: _buildPane(0, sessions[0], sessions, layout)),
+          Expanded(child: _buildPane(context, 0, sessions[0], sessions, layout)),
           const Divider(height: 1, color: Color(0xFF2A2A2A)),
           Expanded(
             child: sessions.length > 1
-                ? _buildPane(1, sessions[1], sessions, layout)
+                ? _buildPane(context, 1, sessions[1], sessions, layout)
                 : _buildEmptyPane(),
           ),
         ]);
@@ -89,11 +75,11 @@ class _SplitTerminalViewState extends State<SplitTerminalView> {
         return Column(children: [
           Expanded(
             child: Row(children: [
-              Expanded(child: _buildPane(0, sessions[0], sessions, layout)),
+              Expanded(child: _buildPane(context, 0, sessions[0], sessions, layout)),
               const VerticalDivider(width: 1, color: Color(0xFF2A2A2A)),
               Expanded(
                 child: sessions.length > 1
-                    ? _buildPane(1, sessions[1], sessions, layout)
+                    ? _buildPane(context, 1, sessions[1], sessions, layout)
                     : _buildEmptyPane(),
               ),
             ]),
@@ -103,13 +89,13 @@ class _SplitTerminalViewState extends State<SplitTerminalView> {
             child: Row(children: [
               Expanded(
                 child: sessions.length > 2
-                    ? _buildPane(2, sessions[2], sessions, layout)
+                    ? _buildPane(context, 2, sessions[2], sessions, layout)
                     : _buildEmptyPane(),
               ),
               const VerticalDivider(width: 1, color: Color(0xFF2A2A2A)),
               Expanded(
                 child: sessions.length > 3
-                    ? _buildPane(3, sessions[3], sessions, layout)
+                    ? _buildPane(context, 3, sessions[3], sessions, layout)
                     : _buildEmptyPane(),
               ),
             ]),
@@ -125,12 +111,16 @@ class _SplitTerminalViewState extends State<SplitTerminalView> {
   }
 
   Widget _buildPane(
+    BuildContext context,
     int paneIndex,
     SshSession session,
     List<SshSession> allSessions,
     TerminalLayoutProvider layout,
   ) {
-    final showInput = _inputBarVisible[paneIndex] ?? false;
+    // Pane 0 reflects the global inputBarVisible toggle; other panes use it too
+    // when broadcast is on, otherwise only pane 0 gets the bar from the hotkey
+    final showInput = layout.inputBarVisible && paneIndex == 0 ||
+        (layout.inputBarVisible && layout.broadcastEnabled);
 
     return Column(
       children: [
@@ -150,7 +140,7 @@ class _SplitTerminalViewState extends State<SplitTerminalView> {
                 _sendCommand(session, cmd);
               }
             },
-            onDismiss: () => _toggleInputBar(paneIndex),
+            onDismiss: () => layout.toggleInputBar(),
           ),
       ],
     );

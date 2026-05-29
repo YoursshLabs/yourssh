@@ -6,9 +6,11 @@ enum SplitLayout { single, horizontal, vertical, quad }
 class TerminalLayoutProvider extends ChangeNotifier {
   SplitLayout _layout = SplitLayout.single;
   bool _broadcastEnabled = false;
+  bool _inputBarVisible = false;
 
   SplitLayout get layout => _layout;
   bool get broadcastEnabled => _broadcastEnabled;
+  bool get inputBarVisible => _inputBarVisible;
 
   int get paneCount => switch (_layout) {
     SplitLayout.single => 1,
@@ -24,6 +26,11 @@ class TerminalLayoutProvider extends ChangeNotifier {
 
   void toggleBroadcast() {
     _broadcastEnabled = !_broadcastEnabled;
+    notifyListeners();
+  }
+
+  void toggleInputBar() {
+    _inputBarVisible = !_inputBarVisible;
     notifyListeners();
   }
 }

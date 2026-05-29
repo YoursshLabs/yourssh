@@ -5,17 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../models/host.dart';
 import '../models/sftp_entry.dart';
-import '../models/ssh_session.dart';
 import '../services/sftp_transfer_service.dart';
 
 class CodeEditorScreen extends StatefulWidget {
-  final SshSession session;
+  final Host host;
   final SftpEntry entry;
 
   const CodeEditorScreen({
     super.key,
-    required this.session,
+    required this.host,
     required this.entry,
   });
 
@@ -52,7 +52,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
 
   Future<void> _loadFile() async {
     final service = context.read<SftpTransferService>();
-    final tmpPath = await service.downloadToTemp(widget.session.host, widget.entry);
+    final tmpPath = await service.downloadToTemp(widget.host, widget.entry);
     if (tmpPath == null || !mounted) return;
     final bytes = await File(tmpPath).readAsBytes();
     setState(() => _content = utf8.decode(bytes, allowMalformed: true));
@@ -84,7 +84,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       final tmpDir = await getTemporaryDirectory();
       final tmpPath = '${tmpDir.path}/${widget.entry.name}';
       await File(tmpPath).writeAsString(content);
-      await service.uploadFile(widget.session.host, tmpPath, widget.entry.path);
+      await service.uploadFile(widget.host, tmpPath, widget.entry.path);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Saved'), duration: Duration(seconds: 1)),

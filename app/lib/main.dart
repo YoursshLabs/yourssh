@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import 'providers/ai_chat_provider.dart';
 import 'providers/command_history_provider.dart';
 import 'providers/host_provider.dart';
 import 'providers/key_provider.dart';
@@ -22,6 +24,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
   await windowManager.setMinimumSize(const Size(800, 600));
+  await hotKeyManager.unregisterAll();
   runApp(const YourSSHApp());
 }
 
@@ -129,6 +132,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         }),
         ChangeNotifierProvider(create: (_) => TerminalLayoutProvider()),
         ChangeNotifierProvider(create: (_) => LocalSessionProvider()),
+        ChangeNotifierProvider(create: (_) => AiChatProvider()),
       ],
       child: MaterialApp(
         title: 'YourSSH',

@@ -8,6 +8,7 @@ import '../providers/host_provider.dart';
 import '../services/storage_service.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
+import 'hotkey_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -54,7 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final settings = context.watch<SettingsProvider>();
     final sync = context.watch<SyncProvider>();
 
-    return Container(
+    return Material(
       color: AppColors.bg,
       child: Column(
         children: [
@@ -188,6 +189,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 24),
                 _SyncSection(sync: sync),
                 const SizedBox(height: 24),
+                _Section(title: 'Keyboard', children: [
+                  _Row(
+                    label: 'Keyboard Shortcuts',
+                    trailing: TextButton.icon(
+                      icon: const Icon(Icons.keyboard_outlined, size: 14),
+                      label: const Text('Configure', style: TextStyle(fontSize: 12)),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const HotkeySettingsScreen()),
+                      ),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 24),
                 _Section(title: 'About', children: [
                   const _Row(label: 'Version', trailing: Text('v0.1.0', style: TextStyle(color: AppColors.textTertiary, fontSize: 12))),
                   const _Row(label: 'Build', trailing: Text('Flutter + dartssh2', style: TextStyle(color: AppColors.textTertiary, fontSize: 12))),
@@ -254,6 +268,7 @@ class _SyncSectionState extends State<_SyncSection> {
   String? _testError;
   bool _migrating = false;
   bool _tableCreated = false;
+  bool _needsServiceKey = false;
   final _serviceRoleKeyController = TextEditingController();
   bool _showServiceRoleKey = false;
 
@@ -307,10 +322,10 @@ class _SyncSectionState extends State<_SyncSection> {
     final anonKey = _anonKeyController.text.trim();
     final serviceRoleKey = _serviceRoleKeyController.text.trim();
     if (url.isEmpty || anonKey.isEmpty) {
-      setState(() { _testError = 'URL and anon key are required'; _testOk = false; });
+      setState(() { _testError = 'URL and Anon key are required'; _testOk = false; });
       return;
     }
-    setState(() { _testing = true; _testError = null; _testOk = false; _tableCreated = false; });
+    setState(() { _testing = true; _testError = null; _testOk = false; _needsServiceKey = false; _tableCreated = false; });
     try {
       final svc = SupabaseService(url, anonKey);
       final (outcome, error) = await svc.testConnection();
@@ -323,7 +338,11 @@ class _SyncSectionState extends State<_SyncSection> {
         return;
       }
 
-      if (outcome == TestConnectionOutcome.tableNotFound && serviceRoleKey.isNotEmpty) {
+      if (outcome == TestConnectionOutcome.tableNotFound) {
+        if (serviceRoleKey.isEmpty) {
+          setState(() { _testing = false; _needsServiceKey = true; });
+          return;
+        }
         setState(() { _testing = false; _migrating = true; });
         final (ok, migrateError) = await svc.setupSchema(serviceRoleKey);
         if (!mounted) return;
@@ -343,10 +362,7 @@ class _SyncSectionState extends State<_SyncSection> {
         return;
       }
 
-      final message = outcome == TestConnectionOutcome.tableNotFound
-          ? 'Table not found. Add your Service Role Key above to auto-create it.'
-          : (error ?? 'Connection failed');
-      setState(() { _testing = false; _testError = message; });
+      setState(() { _testing = false; _testError = error ?? 'Connection failed'; });
     } catch (e) {
       if (!mounted) return;
       setState(() { _testing = false; _migrating = false; _testError = e.toString(); });
@@ -368,6 +384,13 @@ class _SyncSectionState extends State<_SyncSection> {
         const Icon(Icons.check_circle, size: 12, color: Colors.green),
         const SizedBox(width: 4),
         Text(label, style: const TextStyle(color: Colors.green, fontSize: 11)),
+      ]);
+    }
+    if (_needsServiceKey) {
+      return const Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.info_outline, size: 12, color: Colors.orange),
+        SizedBox(width: 4),
+        Flexible(child: Text('Table not found — enter Service Role Key to auto-create it', style: TextStyle(color: Colors.orange, fontSize: 11))),
       ]);
     }
     if (_testError != null) {
@@ -484,7 +507,7 @@ class _SyncSectionState extends State<_SyncSection> {
                               obscureText: !_showAnonKey,
                               style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
                               decoration: InputDecoration(
-                                hintText: 'Publishable (Anon) key',
+                                hintText: 'Anon key',
                                 hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
                                 filled: true,
                                 fillColor: AppColors.bg,
@@ -496,6 +519,29 @@ class _SyncSectionState extends State<_SyncSection> {
                                 suffixIcon: IconButton(
                                   icon: Icon(_showAnonKey ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
                                   onPressed: () => setState(() => _showAnonKey = !_showAnonKey),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _serviceRoleKeyController,
+                              obscureText: !_showServiceRoleKey,
+                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                              decoration: InputDecoration(
+                                hintText: 'Service Role Key',
+                                hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
+                                filled: true,
+                                fillColor: AppColors.bg,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
+                                suffixIcon: IconButton(
+                                  icon: Icon(_showServiceRoleKey ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
+                                  onPressed: () => setState(() => _showServiceRoleKey = !_showServiceRoleKey),
                                 ),
                               ),
                             ),
@@ -519,28 +565,7 @@ class _SyncSectionState extends State<_SyncSection> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _serviceRoleKeyController,
-                        obscureText: !_showServiceRoleKey,
-                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'Service Role Key (optional — auto-creates table on first run)',
-                          hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
-                          filled: true,
-                          fillColor: AppColors.bg,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
-                          suffixIcon: IconButton(
-                            icon: Icon(_showServiceRoleKey ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
-                            onPressed: () => setState(() => _showServiceRoleKey = !_showServiceRoleKey),
-                          ),
-                        ),
-                      ),
-                      if (_testing || _migrating || _testOk || _testError != null) ...[
+                      if (_testing || _migrating || _testOk || _needsServiceKey || _testError != null) ...[
                         const SizedBox(height: 6),
                         _buildTestStatus(),
                       ],

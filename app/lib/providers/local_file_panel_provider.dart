@@ -11,6 +11,7 @@ class LocalFilePanelProvider extends ChangeNotifier {
   final Set<String> _selectedPaths = {};
   String _filterQuery = '';
   bool _filterVisible = false;
+  bool _showHidden = false;
   final List<String> _history = [];
   int _historyIndex = -1;
   LocalFilePanelLoadState loadState = LocalFilePanelLoadState.idle;
@@ -36,6 +37,7 @@ class LocalFilePanelProvider extends ChangeNotifier {
 
   String get currentPath => _currentPath;
   bool get filterVisible => _filterVisible;
+  bool get showHidden => _showHidden;
   String get filterQuery => _filterQuery;
   bool get canGoBack => _historyIndex > 0;
   bool get canGoForward => _historyIndex < _history.length - 1;
@@ -152,11 +154,23 @@ class LocalFilePanelProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void selectAll() {
+    for (final entry in filteredEntries) {
+      _selectedPaths.add(entry.path);
+    }
+    notifyListeners();
+  }
+
   // ── Filter ──────────────────────────────────────────────
 
   void toggleFilterVisible() {
     _filterVisible = !_filterVisible;
     if (!_filterVisible) _filterQuery = '';
+    notifyListeners();
+  }
+
+  void toggleShowHidden() {
+    _showHidden = !_showHidden;
     notifyListeners();
   }
 

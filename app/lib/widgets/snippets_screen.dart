@@ -14,48 +14,58 @@ class SnippetsScreen extends StatefulWidget {
 
 class _SnippetsScreenState extends State<SnippetsScreen> {
   String _search = '';
+  bool _showPanel = false;
 
   @override
   Widget build(BuildContext context) {
     final snippets = context.watch<SnippetProvider>().snippets;
     final filtered = _search.isEmpty
         ? snippets
-        : snippets.where((s) =>
-            s.label.toLowerCase().contains(_search.toLowerCase()) ||
-            s.command.toLowerCase().contains(_search.toLowerCase()) ||
-            s.tag.toLowerCase().contains(_search.toLowerCase())).toList();
+        : snippets
+            .where((s) =>
+                s.label.toLowerCase().contains(_search.toLowerCase()) ||
+                s.command.toLowerCase().contains(_search.toLowerCase()) ||
+                s.tag.toLowerCase().contains(_search.toLowerCase()))
+            .toList();
 
-    return Container(
-      color: AppColors.bg,
-      child: Column(
-        children: [
-          _TopBar(
-            search: _search,
-            onSearch: (v) => setState(() => _search = v),
-            onAdd: () => _showAddDialog(context),
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            color: AppColors.bg,
+            child: Column(
+              children: [
+                _TopBar(
+                  search: _search,
+                  onSearch: (v) => setState(() => _search = v),
+                  onAdd: () => setState(() => _showPanel = true),
+                ),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? const Center(
+                          child: Text('No snippets',
+                              style: TextStyle(color: AppColors.textTertiary)))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(24),
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) =>
+                              _SnippetTile(snippet: filtered[i]),
+                        ),
+                ),
+              ],
+            ),
           ),
-          Expanded(
-            child: filtered.isEmpty
-                ? const Center(child: Text('No snippets', style: TextStyle(color: AppColors.textTertiary)))
-                : ListView.builder(
-                    padding: const EdgeInsets.all(24),
-                    itemCount: filtered.length,
-                    itemBuilder: (_, i) => _SnippetTile(snippet: filtered[i]),
-                  ),
+        ),
+        if (_showPanel)
+          _SnippetPanel(
+            onClose: () => setState(() => _showPanel = false),
+            onSave: (snippet) async {
+              await context.read<SnippetProvider>().add(snippet);
+              if (mounted) setState(() => _showPanel = false);
+            },
           ),
-        ],
-      ),
+      ],
     );
-  }
-
-  Future<void> _showAddDialog(BuildContext context) async {
-    final result = await showDialog<Snippet>(
-      context: context,
-      builder: (_) => const _AddSnippetDialog(),
-    );
-    if (result != null && context.mounted) {
-      await context.read<SnippetProvider>().add(result);
-    }
   }
 }
 
@@ -63,7 +73,8 @@ class _TopBar extends StatelessWidget {
   final String search;
   final ValueChanged<String> onSearch;
   final VoidCallback onAdd;
-  const _TopBar({required this.search, required this.onSearch, required this.onAdd});
+  const _TopBar(
+      {required this.search, required this.onSearch, required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
@@ -86,11 +97,14 @@ class _TopBar extends StatelessWidget {
               ),
               child: TextField(
                 onChanged: onSearch,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                style: const TextStyle(
+                    color: AppColors.textPrimary, fontSize: 13),
                 decoration: const InputDecoration(
                   hintText: 'Search snippets…',
-                  hintStyle: TextStyle(color: AppColors.textTertiary, fontSize: 13),
-                  prefixIcon: Icon(Icons.search, color: AppColors.textTertiary, size: 16),
+                  hintStyle:
+                      TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                  prefixIcon: Icon(Icons.search,
+                      color: AppColors.textTertiary, size: 16),
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 8),
                   isDense: true,
@@ -102,14 +116,22 @@ class _TopBar extends StatelessWidget {
           GestureDetector(
             onTap: onAdd,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(6)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                  color: AppColors.accent,
+                  borderRadius: BorderRadius.circular(6)),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.add, size: 14, color: Colors.black),
                   SizedBox(width: 6),
-                  Text('NEW SNIPPET', style: TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.3)),
+                  Text('NEW SNIPPET',
+                      style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3)),
                 ],
               ),
             ),
@@ -154,7 +176,11 @@ class _SnippetTileState extends State<_SnippetTile> {
                 children: [
                   Row(
                     children: [
-                      Text(s.label, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
+                      Text(s.label,
+                          style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500)),
                       if (s.tag.isNotEmpty) ...[
                         const SizedBox(width: 8),
                         _Badge(s.tag),
@@ -163,19 +189,25 @@ class _SnippetTileState extends State<_SnippetTile> {
                   ),
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: AppColors.bg,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       s.command,
-                      style: const TextStyle(color: AppColors.accent, fontSize: 12, fontFamily: 'monospace'),
+                      style: const TextStyle(
+                          color: AppColors.accent,
+                          fontSize: 12,
+                          fontFamily: 'monospace'),
                     ),
                   ),
                   if (s.description.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    Text(s.description, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    Text(s.description,
+                        style: const TextStyle(
+                            color: AppColors.textSecondary, fontSize: 11)),
                   ],
                 ],
               ),
@@ -184,9 +216,8 @@ class _SnippetTileState extends State<_SnippetTile> {
               _ActionBtn(
                 icon: Icons.copy,
                 tooltip: 'Copy',
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: s.command));
-                },
+                onTap: () =>
+                    Clipboard.setData(ClipboardData(text: s.command)),
               ),
               const SizedBox(width: 4),
               _ActionBtn(
@@ -208,7 +239,11 @@ class _ActionBtn extends StatelessWidget {
   final String tooltip;
   final Color? color;
   final VoidCallback onTap;
-  const _ActionBtn({required this.icon, required this.tooltip, this.color, required this.onTap});
+  const _ActionBtn(
+      {required this.icon,
+      required this.tooltip,
+      this.color,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -217,13 +252,15 @@ class _ActionBtn extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          width: 28, height: 28,
+          width: 28,
+          height: 28,
           decoration: BoxDecoration(
             color: AppColors.bg,
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: AppColors.border),
           ),
-          child: Icon(icon, size: 14, color: color ?? AppColors.textSecondary),
+          child:
+              Icon(icon, size: 14, color: color ?? AppColors.textSecondary),
         ),
       ),
     );
@@ -238,25 +275,35 @@ class _Badge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
-      child: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.w500)),
+      decoration: BoxDecoration(
+          color: AppColors.border, borderRadius: BorderRadius.circular(4)),
+      child: Text(label,
+          style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 10,
+              fontWeight: FontWeight.w500)),
     );
   }
 }
 
-class _AddSnippetDialog extends StatefulWidget {
-  const _AddSnippetDialog();
+// ── Snippet Panel ─────────────────────────────────────────
+
+class _SnippetPanel extends StatefulWidget {
+  final VoidCallback onClose;
+  final Future<void> Function(Snippet) onSave;
+  const _SnippetPanel({required this.onClose, required this.onSave});
 
   @override
-  State<_AddSnippetDialog> createState() => _AddSnippetDialogState();
+  State<_SnippetPanel> createState() => _SnippetPanelState();
 }
 
-class _AddSnippetDialogState extends State<_AddSnippetDialog> {
+class _SnippetPanelState extends State<_SnippetPanel> {
   final _formKey = GlobalKey<FormState>();
   final _label = TextEditingController();
   final _command = TextEditingController();
   final _description = TextEditingController();
   final _tag = TextEditingController();
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -266,58 +313,146 @@ class _AddSnippetDialogState extends State<_AddSnippetDialog> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    Navigator.of(context).pop(Snippet(
-      label: _label.text.trim(),
-      command: _command.text.trim(),
-      description: _description.text.trim(),
-      tag: _tag.text.trim(),
-    ));
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(Snippet(
+        label: _label.text.trim(),
+        command: _command.text.trim(),
+        description: _description.text.trim(),
+        tag: _tag.text.trim(),
+      ));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('New Snippet'),
-      content: SizedBox(
-        width: 400,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _label,
-                decoration: const InputDecoration(labelText: 'Label', border: OutlineInputBorder()),
-                validator: (v) => v?.isEmpty == true ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _command,
-                decoration: const InputDecoration(labelText: 'Command', border: OutlineInputBorder()),
-                validator: (v) => v?.isEmpty == true ? 'Required' : null,
-                maxLines: 3,
-                minLines: 1,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _description,
-                decoration: const InputDecoration(labelText: 'Description (optional)', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _tag,
-                decoration: const InputDecoration(labelText: 'Tag (optional)', hintText: 'system, network…', border: OutlineInputBorder()),
-              ),
-            ],
-          ),
-        ),
+    return Container(
+      width: 340,
+      decoration: const BoxDecoration(
+        color: AppColors.sidebar,
+        border: Border(left: BorderSide(color: AppColors.border)),
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        FilledButton(onPressed: _submit, child: const Text('Add')),
-      ],
+      child: Column(
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                children: [
+                  _field(_label, 'Label',
+                      autofocus: true,
+                      validator: (v) =>
+                          v?.isEmpty == true ? 'Required' : null),
+                  const SizedBox(height: 12),
+                  _field(_command, 'Command',
+                      maxLines: 3,
+                      validator: (v) =>
+                          v?.isEmpty == true ? 'Required' : null),
+                  const SizedBox(height: 12),
+                  _field(_description, 'Description (optional)'),
+                  const SizedBox(height: 12),
+                  _field(_tag, 'Tag (optional)'),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _saving ? null : _submit,
+                      style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: Colors.black),
+                      child: _saving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.black))
+                          : const Text('Add Snippet',
+                              style:
+                                  TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      height: 52,
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text('New Snippet',
+                style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600)),
+          ),
+          GestureDetector(
+            onTap: widget.onClose,
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Icon(Icons.close,
+                  size: 14, color: AppColors.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _field(
+    TextEditingController ctrl,
+    String label, {
+    bool autofocus = false,
+    int? maxLines = 1,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: ctrl,
+      autofocus: autofocus,
+      maxLines: maxLines,
+      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle:
+            const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        filled: true,
+        fillColor: AppColors.card,
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.border)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.border)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.accent)),
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      validator: validator,
     );
   }
 }

@@ -56,6 +56,27 @@ dependencies:
   # Cryptography utilities
   cryptography: ^2.7.0
 
+  # Network info (LAN share)
+  network_info_plus: ^6.0.0
+
+  # HTTP server (LAN share)
+  shelf: ^1.4.1
+
+  # Markdown rendering (AI chat)
+  flutter_markdown: ^0.7.1
+
+  # Local authentication / biometrics (vault)
+  local_auth: ^2.3.0
+
+  # HMAC/SHA hashing for AWS Signature V4 (S3 browser)
+  crypto: ^3.0.3
+
+  # XML parsing for S3 API responses
+  xml: ^6.5.0
+
+  # URL launcher (Cloudflare tunnel)
+  url_launcher: ^6.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
