@@ -10,9 +10,30 @@ YourSSH sync dùng Supabase làm backend lưu trữ. Dữ liệu được mã ho
 2. Chọn region gần nhất (Singapore hoặc Tokyo cho SEA)
 3. Đặt database password mạnh → **Create project**
 
-## 2. Chạy migration tạo bảng
+## 2. Lấy credentials
 
-### Cách A — Supabase Dashboard (dễ nhất)
+Vào **Project Settings → API**:
+
+- **Project URL**: `https://<project-ref>.supabase.co`
+- **Publishable (anon) key**: chuỗi JWT bên dưới "Project API keys" — còn gọi là "anon key"
+- **Service Role Key** *(chỉ cần lần đầu)*: chuỗi JWT bên dưới "service_role" → nhấn **Reveal**
+
+> Service Role Key chỉ dùng một lần để tạo bảng — app không lưu lại sau khi setup xong.
+
+## 3. Cấu hình trong app (tự động tạo bảng)
+
+**Settings → Sync → bật Enable Sync → Supabase Backend:**
+
+1. Điền **Project URL**
+2. Điền **Anon Key**
+3. Điền **Service Role Key** vào field phía dưới *(lần đầu setup)*
+4. Nhấn **Save & Test**
+   - Nếu bảng chưa tồn tại → app tự động chạy migration và hiện **"Connected (table created)"**
+   - Lần sau không cần nhập Service Role Key nữa — bảng đã có sẵn
+
+## 4. Tạo bảng thủ công (nếu không dùng Service Role Key)
+
+### Cách A — Supabase Dashboard
 
 1. Vào **SQL Editor** trong dashboard
 2. Copy nội dung file `supabase/migrations/20260529000000_sync_data.sql`
@@ -26,23 +47,7 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-## 3. Lấy credentials
-
-Vào **Project Settings → API**:
-
-- **Project URL**: `https://<project-ref>.supabase.co`
-- **Publishable (anon) key**: chuỗi JWT dài bên dưới "Project API keys" — có thể gọi là "anon key" hoặc "Publishable key" tùy phiên bản dashboard
-
-## 4. Cấu hình trong app
-
-**Settings → Sync → Supabase Backend:**
-
-1. Điền **Project URL**
-2. Điền **Anon Key** (tức Publishable key)
-3. Nhấn **Save & Test**
-4. Nếu thấy **"Connected"** → bật **Enable Sync**
-
-## 5. Kết nối thiết bị khác
+## 5. Kết nối thêm thiết bị
 
 1. **Thiết bị A** (có sẵn data):
    - Settings → Sync → copy **Sync Code** (ví dụ: `ABCD-EFGH-JKLM`)
@@ -58,6 +63,6 @@ Vào **Project Settings → API**:
 
 | Lỗi | Nguyên nhân | Fix |
 |---|---|---|
-| `Table "sync_data" not found` | Migration chưa chạy | Chạy SQL migration (Bước 2) |
+| `Table not found. Add your Service Role Key…` | Migration chưa chạy | Điền Service Role Key vào field phía dưới anon key rồi Save & Test lại |
 | `Invalid API key` | Anon key sai | Kiểm tra lại Project Settings → API |
 | `Invalid sync code` | Code sai hoặc khác project | Đảm bảo nhập đúng 12 ký tự |
