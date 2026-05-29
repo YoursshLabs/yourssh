@@ -12,10 +12,11 @@ import '../widgets/keychain_screen.dart';
 import '../widgets/port_forwarding_screen.dart';
 import '../widgets/settings_screen.dart';
 import '../widgets/snippets_screen.dart';
+import '../widgets/local_terminal_screen.dart';
 import '../widgets/network_stats_overlay.dart';
 import '../widgets/split_terminal_view.dart';
 
-enum NavSection { hosts, keychain, portForwarding, webTools, snippets, knownHosts, settings }
+enum NavSection { hosts, keychain, portForwarding, webTools, snippets, localTerminal, knownHosts, settings }
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -106,6 +107,7 @@ class _MainScreenState extends State<MainScreen> {
       NavSection.keychain => const KeychainScreen(),
       NavSection.portForwarding => const PortForwardingScreen(),
       NavSection.snippets => const SnippetsScreen(),
+      NavSection.localTerminal => const LocalTerminalScreen(),
       NavSection.settings => const SettingsScreen(),
       _ => _ComingSoon(label: _nav.name),
     };
@@ -146,6 +148,7 @@ class _Sidebar extends StatelessWidget {
           _navItem(Icons.swap_horiz, 'Port Forwarding', NavSection.portForwarding),
           _navItem(Icons.build_outlined, 'Web Tools', NavSection.webTools),
           _navItem(Icons.code, 'Snippets', NavSection.snippets),
+          _navItem(Icons.laptop_mac, 'Local Terminal', NavSection.localTerminal),
           _navItem(Icons.fact_check_outlined, 'Known Hosts', NavSection.knownHosts),
 
           const Spacer(),
