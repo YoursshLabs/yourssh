@@ -21,7 +21,6 @@ class _ResultTab {
   _ResultTab({
     required this.id,
     required this.label,
-    this.result,
     this.isLoading = false,
   });
 }
@@ -171,6 +170,86 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
     _ => '',
   };
 
+  Widget _buildTabBar() {
+    if (_tabs.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      height: 33,
+      decoration: const BoxDecoration(
+        color: AppColors.sidebar,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: _tabs.asMap().entries.map((e) {
+            final i = e.key;
+            final tab = e.value;
+            final isActive = i == _activeTabIndex;
+
+            return GestureDetector(
+              onTap: () => setState(() => _activeTabIndex = i),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: isActive ? AppColors.bg : Colors.transparent,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: isActive ? AppColors.accent : Colors.transparent,
+                      width: 2,
+                    ),
+                    right: const BorderSide(color: AppColors.border),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (tab.isLoading)
+                      const SizedBox(
+                        width: 10,
+                        height: 10,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 1.5, color: AppColors.accent),
+                      )
+                    else
+                      Icon(
+                        tab.result?.isSuccess == true
+                            ? Icons.check_circle_outline
+                            : Icons.error_outline,
+                        size: 11,
+                        color: tab.result?.isSuccess == true
+                            ? AppColors.accent
+                            : AppColors.red,
+                      ),
+                    const SizedBox(width: 6),
+                    Text(
+                      tab.label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isActive
+                            ? AppColors.textPrimary
+                            : AppColors.textTertiary,
+                        fontWeight: isActive
+                            ? FontWeight.w500
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => _closeTab(i),
+                      child: const Icon(Icons.close,
+                          size: 11, color: AppColors.textTertiary),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   Widget _navItem(_Tool tool) => _NavItem(
         icon: tool.icon,
         label: tool.label,
@@ -215,11 +294,7 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
                   color: AppColors.card,
                   child: const Row(
                     children: [
-                      Icon(
-                        Icons.warning_amber,
-                        size: 14,
-                        color: AppColors.orange,
-                      ),
+                      Icon(Icons.warning_amber, size: 14, color: AppColors.orange),
                       SizedBox(width: 8),
                       Text(
                         'No active session — connect to a host first',
@@ -243,18 +318,14 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
                           ),
                           decoration: InputDecoration(
                             hintText: _inputHint,
-                            hintStyle: const TextStyle(
-                              color: AppColors.textTertiary,
-                            ),
+                            hintStyle: const TextStyle(color: AppColors.textTertiary),
                             filled: true,
                             fillColor: AppColors.card,
                             border: const OutlineInputBorder(
                               borderSide: BorderSide(color: AppColors.border),
                             ),
                             contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
+                                horizontal: 12, vertical: 10),
                           ),
                           onSubmitted: (_) => session != null ? _run() : null,
                         ),
@@ -262,24 +333,37 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
                       const SizedBox(width: 8),
                     ],
                     ElevatedButton.icon(
-                      onPressed: session != null && !_loading ? _run : null,
+                      onPressed: session != null ? _run : null,
                       icon: const Icon(Icons.play_arrow, size: 16),
                       label: Text(_selected.label),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.accent,
                         foregroundColor: Colors.black,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
+                            horizontal: 16, vertical: 12),
                       ),
                     ),
+                    if (_tabs.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.clear_all,
+                            size: 18, color: AppColors.textSecondary),
+                        tooltip: 'Clear all tabs',
+                        onPressed: _clearAllTabs,
+                      ),
+                    ],
                   ],
                 ),
               ),
               const Divider(height: 1, color: AppColors.border),
+              _buildTabBar(),
               Expanded(
-                child: ToolResultView(result: _result, isLoading: _loading),
+                child: _activeTabIndex >= 0 && _activeTabIndex < _tabs.length
+                    ? ToolResultView(
+                        result: _tabs[_activeTabIndex].result,
+                        isLoading: _tabs[_activeTabIndex].isLoading,
+                      )
+                    : const ToolResultView(),
               ),
             ],
           ),
