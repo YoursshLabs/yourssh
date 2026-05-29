@@ -4,6 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../theme/app_theme.dart';
 
+@visibleForTesting
+Map<String, String> parseHeaders(String raw) {
+  final result = <String, String>{};
+  for (final line in raw.split(RegExp(r'\r?\n'))) {
+    final idx = line.indexOf(':');
+    if (idx <= 0) continue;
+    final key = line.substring(0, idx).trim();
+    final value = line.substring(idx + 1).trim();
+    if (key.isNotEmpty) result[key] = value;
+  }
+  return result;
+}
+
 class HttpClientTool extends StatefulWidget {
   const HttpClientTool({super.key});
 
@@ -32,64 +45,50 @@ class _HttpClientToolState extends State<HttpClientTool> {
     super.dispose();
   }
 
-  Map<String, String> _parseHeaders(String raw) {
-    final result = <String, String>{};
-    for (final line in raw.split('\n')) {
-      final idx = line.indexOf(':');
-      if (idx <= 0) continue;
-      final key = line.substring(0, idx).trim();
-      final value = line.substring(idx + 1).trim();
-      if (key.isNotEmpty) result[key] = value;
-    }
-    return result;
-  }
-
   Future<void> _send() async {
     final url = _urlCtrl.text.trim();
     if (url.isEmpty) return;
-    setState(() {
-      _loading = true;
-      _response = null;
-    });
+    setState(() { _loading = true; _response = null; });
 
     try {
       final uri = Uri.parse(url);
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 15);
-
-      final request = await client.openUrl(_method, uri);
-      final headers = _parseHeaders(_headersCtrl.text);
-      headers.forEach(request.headers.set);
-
-      if (_hasBody && _bodyCtrl.text.isNotEmpty) {
-        final bodyBytes = utf8.encode(_bodyCtrl.text);
-        request.contentLength = bodyBytes.length;
-        request.add(bodyBytes);
-      }
-
-      final response = await request.close();
-      final bodyRaw = await response.transform(utf8.decoder).join();
-      final responseHeaders = <String, String>{};
-      response.headers.forEach((name, values) {
-        responseHeaders[name] = values.join(', ');
-      });
-
-      String prettyBody = bodyRaw;
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
       try {
-        final decoded = jsonDecode(bodyRaw);
-        prettyBody = const JsonEncoder.withIndent('  ').convert(decoded);
-      } catch (_) {}
+        final request = await client.openUrl(_method, uri);
+        final headers = parseHeaders(_headersCtrl.text);
+        headers.forEach(request.headers.set);
 
-      if (!mounted) return;
-      setState(() {
-        _response = _HttpResponse(
-          statusCode: response.statusCode,
-          reasonPhrase: response.reasonPhrase,
-          headers: responseHeaders,
-          body: prettyBody,
-        );
-      });
-      client.close();
+        if (_hasBody && _bodyCtrl.text.isNotEmpty) {
+          final bodyBytes = utf8.encode(_bodyCtrl.text);
+          request.contentLength = bodyBytes.length;
+          request.add(bodyBytes);
+        }
+
+        final response = await request.close();
+        final bodyRaw = await response.transform(utf8.decoder).join();
+        final responseHeaders = <String, String>{};
+        response.headers.forEach((name, values) {
+          responseHeaders[name] = values.join(', ');
+        });
+
+        String prettyBody = bodyRaw;
+        try {
+          final decoded = jsonDecode(bodyRaw);
+          prettyBody = const JsonEncoder.withIndent('  ').convert(decoded);
+        } catch (_) {}
+
+        if (!mounted) return;
+        setState(() {
+          _response = _HttpResponse(
+            statusCode: response.statusCode,
+            reasonPhrase: response.reasonPhrase,
+            headers: responseHeaders,
+            body: prettyBody,
+          );
+        });
+      } finally {
+        client.close();
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {

@@ -1,17 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-
-// Extracted pure helper — same logic as in HttpClientTool
-Map<String, String> parseHeaders(String raw) {
-  final result = <String, String>{};
-  for (final line in raw.split('\n')) {
-    final idx = line.indexOf(':');
-    if (idx <= 0) continue;
-    final key = line.substring(0, idx).trim();
-    final value = line.substring(idx + 1).trim();
-    if (key.isNotEmpty) result[key] = value;
-  }
-  return result;
-}
+import 'package:yourssh/widgets/web_tools/http_client.dart';
 
 void main() {
   group('parseHeaders', () {
@@ -36,6 +24,11 @@ void main() {
 
     test('returns empty map for blank input', () {
       expect(parseHeaders(''), {});
+    });
+
+    test('handles CRLF line endings', () {
+      expect(parseHeaders('Content-Type: application/json\r\nAccept: */*'),
+          {'Content-Type': 'application/json', 'Accept': '*/*'});
     });
   });
 }
