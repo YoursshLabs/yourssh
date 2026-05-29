@@ -16,6 +16,14 @@ class WebToolsScreen extends StatefulWidget {
 
 class _WebToolsScreenState extends State<WebToolsScreen> {
   _WebTool _active = _WebTool.browser;
+  String? _browserUrl;
+
+  void _openUrl(String url) {
+    setState(() {
+      _browserUrl = url;
+      _active = _WebTool.browser;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,10 +37,10 @@ class _WebToolsScreenState extends State<WebToolsScreen> {
   }
 
   Widget _buildContent() => switch (_active) {
-        _WebTool.browser     => const EmbeddedBrowser(),
+        _WebTool.browser     => EmbeddedBrowser(key: ValueKey(_browserUrl), initialUrl: _browserUrl),
         _WebTool.http        => const HttpClientTool(),
         _WebTool.utilities   => const UtilityTools(),
-        _WebTool.portForward => const PortForwardBrowser(),
+        _WebTool.portForward => PortForwardBrowser(onOpenUrl: _openUrl),
       };
 }
 
