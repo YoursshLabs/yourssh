@@ -43,6 +43,10 @@ class SyncEncryption {
   }
 
   /// Decrypts base64(iv[12] + ciphertext + authTag[16]); throws ArgumentError on bad key or malformed data.
+  static void evictKey(String syncId) {
+    _keyCache.remove(syncId);
+  }
+
   static Future<String> decrypt(String encoded, String syncId) async {
     final key = await _deriveKey(syncId);
     final combined = base64.decode(encoded);

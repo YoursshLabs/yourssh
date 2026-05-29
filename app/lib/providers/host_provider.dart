@@ -65,8 +65,14 @@ class HostProvider extends ChangeNotifier {
   }
 
   Future<void> replaceAll(List<Host> hosts, Map<String, String> passwords) async {
+    final oldIds = _hosts.map((h) => h.id).toSet();
+    final newIds = hosts.map((h) => h.id).toSet();
+    final removedIds = oldIds.difference(newIds);
     _hosts = hosts;
     await _storage.saveHosts(_hosts);
+    for (final id in removedIds) {
+      await _storage.deletePassword(id);
+    }
     for (final entry in passwords.entries) {
       final hostId = entry.key.replaceFirst('pw_', '');
       await _storage.savePassword(hostId, entry.value);

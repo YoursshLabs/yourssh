@@ -161,6 +161,7 @@ class _SyncSectionState extends State<_SyncSection> {
         hosts: hostProvider.allHosts,
         loadPasswords: () async => passwords,
       );
+      syncService.restartRetryTimer();
     }
   }
 
@@ -179,6 +180,10 @@ class _SyncSectionState extends State<_SyncSection> {
     } on ArgumentError catch (e) {
       setState(() { _connecting = false; _connectError = e.message.toString(); });
       return;
+    }
+    if (!sync.enabled) {
+      await sync.setEnabled(true);
+      if (!mounted) return;
     }
     final payload = await syncService.pull();
     if (!mounted) return;

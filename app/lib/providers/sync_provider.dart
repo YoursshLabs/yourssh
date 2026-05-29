@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/sync_encryption.dart';
 
 enum SyncStatus { idle, syncing, synced, error }
 
@@ -79,7 +80,11 @@ class SyncProvider extends ChangeNotifier {
     if (clean.length != 12) {
       throw ArgumentError('Sync code must be 12 characters');
     }
-    // write to storage FIRST, then update in-memory state
+    // Validate charset: only A-Z (minus O,I) and 2-9
+    if (!RegExp(r'^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{12}$').hasMatch(clean)) {
+      throw ArgumentError('Invalid sync code characters');
+    }
+    SyncEncryption.evictKey(_syncId);  // evict old key before rotating
     await _storage.write(key: _syncIdKey, value: clean);
     _syncId = clean;
     notifyListeners();

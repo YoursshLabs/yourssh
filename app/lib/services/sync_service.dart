@@ -20,6 +20,9 @@ class SyncService {
   final SyncProvider _syncProvider;
   final SupabaseService _supabase;
   Timer? _retryTimer;
+  Future<List<Host>> Function()? _getHosts;
+  Future<Map<String, String>> Function()? _loadPasswords;
+  bool _syncing = false;
 
   SyncService(this._syncProvider, this._supabase);
 
@@ -62,6 +65,9 @@ class SyncService {
     required Future<Map<String, String>> Function() loadPasswords,
   }) async {
     if (!_syncProvider.enabled) return;
+    if (_syncProvider.syncId.isEmpty) return;
+    if (_syncing) return;
+    _syncing = true;
     final prefs = await SharedPreferences.getInstance();
     try {
       _syncProvider.setStatus(SyncStatus.syncing);
@@ -71,8 +77,10 @@ class SyncService {
       await _supabase.upsertPayload(_syncProvider.syncId, encrypted);
       await prefs.setString(_lastPushKey, DateTime.now().toUtc().toIso8601String());
       await prefs.setBool(_pendingPushKey, false);
+      _syncing = false;
       _syncProvider.setStatus(SyncStatus.synced);
     } catch (e) {
+      _syncing = false;
       await prefs.setBool(_pendingPushKey, true);
       _syncProvider.setError(e.toString());
     }
@@ -82,6 +90,9 @@ class SyncService {
 
   Future<SyncPayload?> pull() async {
     if (!_syncProvider.enabled) return null;
+    if (_syncProvider.syncId.isEmpty) return null;
+    if (_syncing) return null;
+    _syncing = true;
     final prefs = await SharedPreferences.getInstance();
     try {
       _syncProvider.setStatus(SyncStatus.syncing);
@@ -90,24 +101,29 @@ class SyncService {
 
       final remoteUpdatedAt = await _supabase.fetchUpdatedAt(_syncProvider.syncId);
       if (remoteUpdatedAt == null) {
+        _syncing = false;
         _syncProvider.setStatus(SyncStatus.synced);
         return null;
       }
       if (!shouldPullRemote(remoteUpdatedAt, lastPushAt)) {
+        _syncing = false;
         _syncProvider.setStatus(SyncStatus.synced);
         return null;
       }
       final encrypted = await _supabase.fetchPayload(_syncProvider.syncId);
       if (encrypted == null) {
+        _syncing = false;
         _syncProvider.setStatus(SyncStatus.synced);
         return null;
       }
       final decrypted = await SyncEncryption.decrypt(encrypted, _syncProvider.syncId);
       final result = parsePayload(decrypted);
       await prefs.setBool(_pendingPushKey, false);
+      _syncing = false;
       _syncProvider.setStatus(SyncStatus.synced);
       return result;
     } catch (e) {
+      _syncing = false;
       _syncProvider.setError(e.toString());
       return null;
     }
@@ -119,15 +135,23 @@ class SyncService {
     required Future<List<Host>> Function() getHosts,
     required Future<Map<String, String>> Function() loadPasswords,
   }) {
+    _getHosts = getHosts;
+    _loadPasswords = loadPasswords;
     _retryTimer?.cancel();
     _retryTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       final prefs = await SharedPreferences.getInstance();
       final pending = prefs.getBool(_pendingPushKey) ?? false;
-      if (pending) {
-        final hosts = await getHosts();
-        await push(hosts: hosts, loadPasswords: loadPasswords);
+      if (pending && _getHosts != null && _loadPasswords != null) {
+        final hosts = await _getHosts!();
+        await push(hosts: hosts, loadPasswords: _loadPasswords!);
       }
     });
+  }
+
+  void restartRetryTimer() {
+    if (_getHosts != null && _loadPasswords != null) {
+      startRetryTimer(getHosts: _getHosts!, loadPasswords: _loadPasswords!);
+    }
   }
 
   void stopRetryTimer() {
