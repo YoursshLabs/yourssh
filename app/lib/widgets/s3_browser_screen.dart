@@ -229,7 +229,46 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
     }
   }
 
-  Future<void> _createFolder() async {}
+  Future<void> _createFolder() async {
+    final ctrl = TextEditingController();
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: AppColors.sidebar,
+          title: const Text('New Folder', style: TextStyle(color: AppColors.textPrimary)),
+          content: _field(ctrl, 'Folder Name', 'images'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      final name = ctrl.text.trim();
+      if (name.isEmpty || name.contains('/')) {
+        setState(() => _error = 'Folder name must not be empty or contain "/"');
+        return;
+      }
+      setState(() => _loading = true);
+      try {
+        await _service!.putObject('$_prefix$name/', Uint8List(0));
+        await _listObjects();
+      } catch (e) {
+        if (mounted) setState(() => _error = e.toString());
+      } finally {
+        if (mounted) setState(() => _loading = false);
+      }
+    } finally {
+      ctrl.dispose();
+    }
+  }
 
   Future<void> _listObjects() async {
     if (_service == null) return;
