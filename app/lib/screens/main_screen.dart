@@ -1,14 +1,16 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/host.dart';
+import '../models/known_host.dart';
 import '../models/ssh_session.dart';
 import '../providers/host_provider.dart';
+import '../providers/known_hosts_provider.dart';
 import '../providers/session_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/host_detail_panel.dart';
 import '../widgets/hosts_dashboard.dart';
 import '../widgets/keychain_screen.dart';
+import '../widgets/known_hosts_screen.dart';
 import '../widgets/port_forwarding_screen.dart';
 import '../widgets/settings_screen.dart';
 import '../widgets/snippets_screen.dart';
@@ -30,6 +32,59 @@ class _MainScreenState extends State<MainScreen> {
   NavSection _nav = NavSection.hosts;
   bool _showHostPanel = false;
   Host? _editingHost;
+  bool _viewingTerminal = false;
+  SessionProvider? _sessionProvider;
+  KnownHostsProvider? _knownHostsProvider;
+  bool _hostKeyDialogShowing = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = context.read<SessionProvider>();
+    if (_sessionProvider != provider) {
+      _sessionProvider?.removeListener(_onSessionsChanged);
+      _sessionProvider = provider;
+      provider.addListener(_onSessionsChanged);
+    }
+    final knownHostsProvider = context.read<KnownHostsProvider>();
+    if (_knownHostsProvider != knownHostsProvider) {
+      _knownHostsProvider?.removeListener(_onKnownHostsChanged);
+      _knownHostsProvider = knownHostsProvider;
+      knownHostsProvider.addListener(_onKnownHostsChanged);
+    }
+  }
+
+  void _onKnownHostsChanged() {
+    final challenge = _knownHostsProvider?.pendingChallenge;
+    if (challenge != null && !_hostKeyDialogShowing && mounted) {
+      _hostKeyDialogShowing = true;
+      showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _HostKeyDialog(challenge: challenge),
+      ).then((trusted) {
+        challenge.resolve(trusted ?? false);
+        _hostKeyDialogShowing = false;
+      });
+    }
+  }
+
+  void _onSessionsChanged() {
+    if (!mounted) return;
+    final sessions = _sessionProvider?.sessions ?? [];
+    if (sessions.isNotEmpty && !_viewingTerminal) {
+      setState(() => _viewingTerminal = true);
+    } else if (sessions.isEmpty && _viewingTerminal) {
+      setState(() => _viewingTerminal = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _sessionProvider?.removeListener(_onSessionsChanged);
+    _knownHostsProvider?.removeListener(_onKnownHostsChanged);
+    super.dispose();
+  }
 
   void _openHostPanel({Host? existing}) {
     setState(() {
@@ -54,18 +109,31 @@ class _MainScreenState extends State<MainScreen> {
       backgroundColor: AppColors.bg,
       body: Column(
         children: [
-          if (sessions.isNotEmpty)
-            _SessionTabBar(sessions: sessions, active: activeSession),
+          _TopTabBar(
+            sessions: sessions,
+            active: activeSession,
+            nav: _nav,
+            viewingTerminal: _viewingTerminal && sessions.isNotEmpty,
+            onNavSelect: (s) => setState(() {
+              _nav = s;
+              _viewingTerminal = false;
+              if (s != NavSection.hosts) _closeHostPanel();
+            }),
+            onSessionTap: (_) => setState(() => _viewingTerminal = true),
+            onAddSession: () => _openHostPanel(),
+          ),
 
           Expanded(
             child: Row(
               children: [
-                _Sidebar(selected: _nav, onSelect: (s) => setState(() {
-                  _nav = s;
-                  if (s != NavSection.hosts) _closeHostPanel();
-                })),
+                if (!_viewingTerminal || sessions.isEmpty)
+                  _Sidebar(selected: _nav, onSelect: (s) => setState(() {
+                    _nav = s;
+                    _viewingTerminal = false;
+                    if (s != NavSection.hosts) _closeHostPanel();
+                  })),
                 Expanded(child: _buildContent(activeSession)),
-                if (_showHostPanel && _nav == NavSection.hosts)
+                if (_showHostPanel && _nav == NavSection.hosts && !_viewingTerminal)
                   HostDetailPanel(
                     existing: _editingHost,
                     onClose: _closeHostPanel,
@@ -77,7 +145,10 @@ class _MainScreenState extends State<MainScreen> {
                         await hp.addHost(host, password: password);
                       }
                     },
-                    onConnect: (host) => context.read<SessionProvider>().connect(host),
+                    onConnect: (host) async {
+                      setState(() => _viewingTerminal = true);
+                      await context.read<SessionProvider>().connect(host);
+                    },
                   ),
               ],
             ),
@@ -88,7 +159,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildContent(SshSession? active) {
-    if (_nav == NavSection.hosts && active != null && active.status == SessionStatus.connected) {
+    if (_viewingTerminal && active != null) {
       return Stack(
         children: const [
           SplitTerminalView(),
@@ -110,6 +181,7 @@ class _MainScreenState extends State<MainScreen> {
       NavSection.sftp => const DualPanelSftpScreen(),
       NavSection.snippets => const SnippetsScreen(),
       NavSection.localTerminal => const LocalTerminalScreen(),
+      NavSection.knownHosts => const KnownHostsScreen(),
       NavSection.settings => const SettingsScreen(),
       _ => _ComingSoon(label: _nav.name),
     };
@@ -179,22 +251,6 @@ class _Sidebar extends StatelessWidget {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.open_in_new, size: 14, color: AppColors.textSecondary),
-                  tooltip: 'New Window',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () async {
-                    await Process.run(Platform.resolvedExecutable, []);
-                  },
-                ),
-              ],
-            ),
-          ),
           const SizedBox(height: 8),
         ],
       ),
@@ -257,70 +313,235 @@ class _NavItemState extends State<_NavItem> {
   }
 }
 
-// ── Session Tab Bar ───────────────────────────────────────
+// ── Top Tab Bar ───────────────────────────────────────────
 
-class _SessionTabBar extends StatelessWidget {
+class _TopTabBar extends StatelessWidget {
   final List<SshSession> sessions;
   final SshSession? active;
-  const _SessionTabBar({required this.sessions, required this.active});
+  final NavSection nav;
+  final bool viewingTerminal;
+  final ValueChanged<NavSection> onNavSelect;
+  final ValueChanged<String> onSessionTap;
+  final VoidCallback onAddSession;
+
+  const _TopTabBar({
+    required this.sessions,
+    required this.active,
+    required this.nav,
+    required this.viewingTerminal,
+    required this.onNavSelect,
+    required this.onSessionTap,
+    required this.onAddSession,
+  });
 
   @override
   Widget build(BuildContext context) {
     final provider = context.read<SessionProvider>();
     return Container(
       height: 38,
-      color: AppColors.sidebar,
+      decoration: const BoxDecoration(
+        color: Color(0xFF0D0D0D),
+        border: Border(bottom: BorderSide(color: Color(0xFF1E1E1E))),
+      ),
       child: Row(
         children: [
-          const SizedBox(width: 8),
+          // Pinned nav shortcuts
+          _PinnedTab(
+            icon: Icons.home_outlined,
+            label: 'Home',
+            active: nav == NavSection.hosts && !viewingTerminal,
+            onTap: () => onNavSelect(NavSection.hosts),
+          ),
+          _PinnedTab(
+            icon: Icons.folder_outlined,
+            label: 'SFTP',
+            active: nav == NavSection.sftp && !viewingTerminal,
+            onTap: () => onNavSelect(NavSection.sftp),
+          ),
+          // Divider
+          Container(width: 1, height: 18, color: const Color(0xFF2A2A2A)),
+          const SizedBox(width: 4),
+          // Session tabs (scrollable)
           Expanded(
             child: ListView(
               scrollDirection: Axis.horizontal,
-              children: sessions.map((s) => _SessionTab(session: s, isActive: s.id == active?.id, provider: provider)).toList(),
+              children: sessions
+                  .map((s) => _SessionTab(
+                        session: s,
+                        isActive: s.id == active?.id && viewingTerminal,
+                        provider: provider,
+                        onTap: () => onSessionTap(s.id),
+                      ))
+                  .toList(),
             ),
           ),
+          // "+" button
+          _AddTabBtn(onTap: onAddSession),
         ],
       ),
     );
   }
 }
 
-class _SessionTab extends StatelessWidget {
-  final SshSession session;
-  final bool isActive;
-  final SessionProvider provider;
-  const _SessionTab({required this.session, required this.isActive, required this.provider});
+class _PinnedTab extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _PinnedTab({required this.icon, required this.label, required this.active, required this.onTap});
+
+  @override
+  State<_PinnedTab> createState() => _PinnedTabState();
+}
+
+class _PinnedTabState extends State<_PinnedTab> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => provider.setActive(session.id),
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          color: isActive ? AppColors.card : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: isActive ? Border.all(color: AppColors.border) : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 6, height: 6,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: session.status == SessionStatus.connected ? AppColors.accent : AppColors.red,
+    final color = widget.active
+        ? AppColors.accent
+        : _hovered
+            ? const Color(0xFFAAAAAA)
+            : const Color(0xFF666666);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            border: widget.active
+                ? const Border(bottom: BorderSide(color: AppColors.accent, width: 2))
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(widget.icon, size: 13, color: color),
+              const SizedBox(width: 6),
+              Text(
+                widget.label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: widget.active ? FontWeight.w500 : FontWeight.normal,
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            Text(session.title, style: TextStyle(color: isActive ? AppColors.textPrimary : AppColors.textSecondary, fontSize: 12)),
-            const SizedBox(width: 6),
-            GestureDetector(
-              onTap: () => provider.closeSession(session.id),
-              child: const Icon(Icons.close, size: 11, color: AppColors.textTertiary),
-            ),
-          ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionTab extends StatefulWidget {
+  final SshSession session;
+  final bool isActive;
+  final SessionProvider provider;
+  final VoidCallback onTap;
+  const _SessionTab({required this.session, required this.isActive, required this.provider, required this.onTap});
+
+  @override
+  State<_SessionTab> createState() => _SessionTabState();
+}
+
+class _SessionTabState extends State<_SessionTab> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final labelColor = widget.isActive ? AppColors.accent : const Color(0xFF888888);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: () {
+          widget.provider.setActive(widget.session.id);
+          widget.onTap();
+        },
+        child: Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: widget.isActive
+                ? const Color(0xFF1C1C1C)
+                : _hovered
+                    ? const Color(0xFF141414)
+                    : Colors.transparent,
+            border: widget.isActive
+                ? const Border(bottom: BorderSide(color: AppColors.accent, width: 2))
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // X close button (left, per image)
+              GestureDetector(
+                onTap: () => widget.provider.closeSession(widget.session.id),
+                child: Icon(
+                  Icons.close,
+                  size: 11,
+                  color: _hovered || widget.isActive ? const Color(0xFF888888) : const Color(0xFF444444),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Host label
+              Text(
+                widget.session.host.label,
+                style: TextStyle(
+                  color: labelColor,
+                  fontSize: 12,
+                  fontWeight: widget.isActive ? FontWeight.w500 : FontWeight.normal,
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Terminal icon (right, per image)
+              Icon(
+                Icons.monitor_outlined,
+                size: 13,
+                color: widget.isActive ? AppColors.accent : const Color(0xFF555555),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddTabBtn extends StatefulWidget {
+  final VoidCallback onTap;
+  const _AddTabBtn({required this.onTap});
+
+  @override
+  State<_AddTabBtn> createState() => _AddTabBtnState();
+}
+
+class _AddTabBtnState extends State<_AddTabBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          width: 36,
+          height: 38,
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.add,
+            size: 16,
+            color: _hovered ? const Color(0xFFAAAAAA) : const Color(0xFF555555),
+          ),
         ),
       ),
     );
@@ -346,6 +567,87 @@ class _ComingSoon extends StatelessWidget {
           const Text('Coming soon', style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
         ],
       ),
+    );
+  }
+}
+
+// ── Host Key Mismatch Dialog ──────────────────────────────
+
+class _HostKeyDialog extends StatelessWidget {
+  final HostKeyChallenge challenge;
+  const _HostKeyDialog({required this.challenge});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.sidebar,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      title: const Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+          SizedBox(width: 8),
+          Text('Host key changed',
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 15)),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${challenge.host}:${challenge.port}',
+              style: const TextStyle(
+                  color: AppColors.textSecondary, fontSize: 13)),
+          const SizedBox(height: 12),
+          _FpRow(label: 'Old', fp: challenge.oldFingerprint),
+          const SizedBox(height: 4),
+          _FpRow(label: 'New', fp: challenge.newFingerprint),
+          const SizedBox(height: 12),
+          const Text(
+            'This could indicate a man-in-the-middle attack. '
+            'Only trust the new key if you know the server key changed.',
+            style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          style: TextButton.styleFrom(foregroundColor: Colors.orange),
+          child: const Text('Trust new key'),
+        ),
+      ],
+    );
+  }
+}
+
+class _FpRow extends StatelessWidget {
+  final String label;
+  final String fp;
+  const _FpRow({required this.label, required this.fp});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 34,
+          child: Text('$label:',
+              style: const TextStyle(
+                  color: AppColors.textSecondary, fontSize: 11)),
+        ),
+        Expanded(
+          child: Text(fp,
+              style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 11,
+                  fontFamily: 'monospace')),
+        ),
+      ],
     );
   }
 }
