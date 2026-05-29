@@ -1,7 +1,9 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/command_history_provider.dart';
+import 'suggestion_popup.dart';
 
 class TerminalInputBar extends StatefulWidget {
   final String sessionId;
@@ -23,6 +25,7 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
   final _controller = TextEditingController();
   final _focus = FocusNode();
   List<String> _suggestions = [];
+  int _selectedIndex = -1;
 
   @override
   void initState() {
@@ -35,6 +38,7 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
     final provider = context.read<CommandHistoryProvider>();
     setState(() {
       _suggestions = provider.suggestions(widget.sessionId, _controller.text);
+      _selectedIndex = -1;
     });
   }
 
@@ -43,27 +47,63 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
     context.read<CommandHistoryProvider>().recordCommand(widget.sessionId, command);
     widget.onSubmit('$command\n');
     _controller.clear();
-    setState(() => _suggestions = []);
+    setState(() {
+      _suggestions = [];
+      _selectedIndex = -1;
+    });
   }
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final provider = context.read<CommandHistoryProvider>();
+
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      if (_suggestions.isNotEmpty) {
+        final completion = _suggestions[max(0, _selectedIndex)];
+        _controller.text = completion;
+        _controller.selection = TextSelection.collapsed(offset: completion.length);
+      }
+      return KeyEventResult.handled;
+    }
+
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      final cmd = provider.navigateUp(widget.sessionId);
-      if (cmd != null) _controller.text = cmd;
+      if (_suggestions.isNotEmpty) {
+        setState(() {
+          _selectedIndex = (_selectedIndex - 1).clamp(-1, _suggestions.length - 1);
+        });
+      } else {
+        final cmd = provider.navigateUp(widget.sessionId);
+        if (cmd != null) _controller.text = cmd;
+      }
       return KeyEventResult.handled;
     }
+
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      final cmd = provider.navigateDown(widget.sessionId);
-      _controller.text = cmd ?? '';
+      if (_suggestions.isNotEmpty) {
+        setState(() {
+          _selectedIndex = (_selectedIndex + 1).clamp(-1, _suggestions.length - 1);
+        });
+      } else {
+        final cmd = provider.navigateDown(widget.sessionId);
+        _controller.text = cmd ?? '';
+      }
       return KeyEventResult.handled;
     }
+
+    if (event.logicalKey == LogicalKeyboardKey.enter) {
+      if (_selectedIndex >= 0 && _suggestions.isNotEmpty) {
+        _submit(_suggestions[_selectedIndex]);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
     if (event.logicalKey == LogicalKeyboardKey.escape) {
       provider.resetCursor(widget.sessionId);
       widget.onDismiss();
       return KeyEventResult.handled;
     }
+
     return KeyEventResult.ignored;
   }
 
@@ -80,30 +120,10 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (_suggestions.isNotEmpty)
-          Container(
-            constraints: const BoxConstraints(maxHeight: 160),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C1C1C),
-              border: Border.all(color: const Color(0xFF2A2A2A)),
-            ),
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: _suggestions.length,
-              itemBuilder: (_, i) => InkWell(
-                onTap: () => _submit(_suggestions[i]),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: Text(
-                    _suggestions[i],
-                    style: const TextStyle(
-                      color: Color(0xFFD4D4D4),
-                      fontFamily: 'monospace',
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+          SuggestionPopup(
+            suggestions: _suggestions,
+            selectedIndex: _selectedIndex,
+            onSelect: _submit,
           ),
         Focus(
           focusNode: _focus,
@@ -118,7 +138,7 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
             decoration: InputDecoration(
               filled: true,
               fillColor: const Color(0xFF141414),
-              hintText: 'Type command… (↑↓ history, Esc dismiss)',
+              hintText: 'Type command… (↑↓ history/suggestions, Tab complete, Esc dismiss)',
               hintStyle: const TextStyle(color: Color(0xFF555555)),
               border: const OutlineInputBorder(borderSide: BorderSide.none),
               prefixIcon: const Icon(Icons.terminal, color: Color(0xFF22C55E), size: 16),
