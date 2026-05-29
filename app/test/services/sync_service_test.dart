@@ -1,10 +1,24 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/host.dart';
+import 'package:yourssh/providers/sync_provider.dart';
+import 'package:yourssh/services/supabase_service.dart';
 import 'package:yourssh/services/sync_encryption.dart';
 import 'package:yourssh/services/sync_service.dart';
 
+class _ThrowingSupabase extends SupabaseService {
+  @override
+  Future<void> deleteSyncRow(String syncId) async {
+    throw Exception('network error');
+  }
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('SyncService.buildPayload', () {
     test('serialises hosts and passwords into JSON', () async {
       final host = Host(
@@ -66,6 +80,62 @@ void main() {
       expect(result.hosts, hasLength(1));
       expect(result.hosts.first.id, 'abc');
       expect(result.passwords['pw_abc'], 'pass123');
+    });
+  });
+
+  group('SyncService.disableAndDelete', () {
+    const secureStorageChannel =
+        MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+    final Map<String, String> secureData = {};
+
+    setUp(() async {
+      secureData.clear();
+      SharedPreferences.setMockInitialValues({
+        'sync_pending_push': true,
+        'sync_last_push_at': '2026-01-01T00:00:00.000Z',
+        'sync_enabled': true,
+      });
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(secureStorageChannel, (MethodCall call) async {
+        switch (call.method) {
+          case 'read':
+            return secureData[call.arguments['key'] as String];
+          case 'write':
+            secureData[call.arguments['key'] as String] =
+                call.arguments['value'] as String;
+            return null;
+          default:
+            return null;
+        }
+      });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(secureStorageChannel, null);
+    });
+
+    Future<SyncProvider> _buildProvider() async {
+      final p = SyncProvider();
+      final c = Completer<void>();
+      p.addListener(() { if (!c.isCompleted) c.complete(); });
+      await c.future.timeout(const Duration(seconds: 2));
+      return p;
+    }
+
+    test('clears local prefs and disables sync even when remote delete throws', () async {
+      final syncProvider = await _buildProvider();
+      await syncProvider.setEnabled(true);
+
+      final service = SyncService(syncProvider, _ThrowingSupabase());
+      await service.disableAndDelete();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('sync_pending_push'), isNull);
+      expect(prefs.getString('sync_last_push_at'), isNull);
+      expect(syncProvider.enabled, false);
+
+      syncProvider.dispose();
     });
   });
 }
