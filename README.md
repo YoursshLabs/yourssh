@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/assets/app_icon.png" width="96" alt="YourSSH" />
+  <img src="app/assets/app_icon.png" alt="YourSSH" />
   <h1 align="center">YourSSH</h1>
   <p align="center">
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
