@@ -17,7 +17,7 @@ dependencies:
   xterm: ^4.0.0
 
   # PTY (pseudo-terminal) for local shell sessions
-  flutter_pty: ^0.3.1
+  flutter_pty: ^0.4.2
 
   # Secure credential storage (Keychain on macOS, Credential Manager on Windows)
   flutter_secure_storage: ^9.2.2
