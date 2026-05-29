@@ -270,6 +270,58 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
     }
   }
 
+  Future<void> _renameMove(S3BucketEntry entry) async {
+    final currentFolder = entry.key.substring(0, entry.key.length - entry.name.length);
+    final folderCtrl = TextEditingController(text: currentFolder);
+    final nameCtrl = TextEditingController(text: entry.name);
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: AppColors.sidebar,
+          title: const Text('Rename / Move', style: TextStyle(color: AppColors.textPrimary)),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _field(folderCtrl, 'Folder Path', 'images/2024/'),
+                _field(nameCtrl, 'File Name', 'photo.jpg'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Move'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      final destKey = folderCtrl.text + nameCtrl.text.trim();
+      if (destKey == entry.key) return;
+
+      setState(() => _loading = true);
+      try {
+        await _service!.copyObject(entry.key, destKey);
+        await _service!.deleteObject(entry.key);
+        await _listObjects();
+      } catch (e) {
+        if (mounted) setState(() => _error = e.toString());
+      } finally {
+        if (mounted) setState(() => _loading = false);
+      }
+    } finally {
+      folderCtrl.dispose();
+      nameCtrl.dispose();
+    }
+  }
+
   Future<void> _listObjects() async {
     if (_service == null) return;
     setState(() {
@@ -634,6 +686,7 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
           onCopyUrl: entry.isPrefix ? null : () => _copyDownloadUrl(entry),
           onOpenUrl: entry.isPrefix ? null : () => _openInBrowser(entry),
           onDownload: entry.isPrefix ? null : () => _download(entry),
+          onRenameMove: entry.isPrefix ? null : () => _renameMove(entry),
         );
       },
     );
@@ -681,6 +734,7 @@ class _EntryTile extends StatefulWidget {
   final VoidCallback? onCopyUrl;
   final VoidCallback? onOpenUrl;
   final VoidCallback? onDownload;
+  final VoidCallback? onRenameMove;
 
   const _EntryTile({
     required this.entry,
@@ -689,6 +743,7 @@ class _EntryTile extends StatefulWidget {
     this.onCopyUrl,
     this.onOpenUrl,
     this.onDownload,
+    this.onRenameMove,
   });
 
   @override
@@ -732,6 +787,8 @@ class _EntryTileState extends State<_EntryTile> {
                       _actionBtn(Icons.open_in_browser_outlined, 'Open', widget.onOpenUrl!),
                     if (widget.onDownload != null)
                       _actionBtn(Icons.download_outlined, 'Download', widget.onDownload!),
+                    if (widget.onRenameMove != null)
+                      _actionBtn(Icons.drive_file_rename_outline, 'Rename / Move', widget.onRenameMove!),
                     if (widget.onDelete != null)
                       _actionBtn(Icons.delete_outlined, 'Delete', widget.onDelete!, color: AppColors.red),
                   ],
