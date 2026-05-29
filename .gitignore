@@ -1,11 +1,11 @@
 # Rust
 /core/target/
 
-# Xcode
-*.xcodeproj/
-!*.xcodeproj/project.pbxproj
-*.xcworkspace/
+# Xcode (scope to core/ only — app/macos/ xcodeproj must be tracked for CI)
+core/*.xcodeproj/
+core/*.xcworkspace/
 xcuserdata/
+**/xcuserdata/
 *.moved-aside
 DerivedData/
 .build/
@@ -19,8 +19,16 @@ macos/YourSSH/Generated/
 
 # macOS
 .DS_Store
+**/.DS_Store
 .AppleDouble
 .LSOverride
 
 # Env
 .env
+.claude/
+.superpowers/
+.idea/
+.superpowers
+docs
+.idea
+app/build
