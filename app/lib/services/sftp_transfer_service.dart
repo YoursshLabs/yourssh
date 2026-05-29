@@ -59,16 +59,27 @@ class SftpTransferService {
     sftp.close();
   }
 
-  Future<void> copyBetweenPanels({
-    required Host sourceHost,
-    required SftpEntry sourceEntry,
-    required Host destinationHost,
-    required String destinationPath,
+  Future<void> copyLocalToRemote({
+    required String localPath,
+    required Host remoteHost,
+    required String remoteDir,
   }) async {
-    final tmpPath = await downloadToTemp(sourceHost, sourceEntry);
-    if (tmpPath == null) return;
-    final destFilePath = p.posix.join(destinationPath, sourceEntry.name);
-    await uploadFile(destinationHost, tmpPath, destFilePath);
-    await File(tmpPath).delete();
+    final fileName = p.basename(localPath);
+    final remotePath = p.posix.join(remoteDir, fileName);
+    await uploadFile(remoteHost, localPath, remotePath);
+  }
+
+  Future<void> copyRemoteToLocal({
+    required Host remoteHost,
+    required SftpEntry remoteEntry,
+    required String localDir,
+  }) async {
+    final sftp = await _sshService.openSftp(remoteHost);
+    final remoteFile = await sftp.open(remoteEntry.path);
+    final bytes = await remoteFile.readBytes();
+    await remoteFile.close();
+    sftp.close();
+    final localPath = p.join(localDir, remoteEntry.name);
+    await File(localPath).writeAsBytes(bytes);
   }
 }
