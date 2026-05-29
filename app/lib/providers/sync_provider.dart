@@ -76,8 +76,12 @@ class SyncProvider extends ChangeNotifier {
 
   Future<void> replaceSyncId(String rawCode) async {
     final clean = rawCode.replaceAll('-', '').toUpperCase();
-    _syncId = clean;
+    if (clean.length != 12) {
+      throw ArgumentError('Sync code must be 12 characters');
+    }
+    // write to storage FIRST, then update in-memory state
     await _storage.write(key: _syncIdKey, value: clean);
+    _syncId = clean;
     notifyListeners();
   }
 

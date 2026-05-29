@@ -1,9 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
-  // Replace with your project's URL and anon key
-  static const _supabaseUrl = 'https://YOUR_PROJECT.supabase.co';
-  static const _anonKey = 'YOUR_ANON_KEY';
+  // Use dart-define at build time: --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+  static const _supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
+  static const _anonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
 
   static Future<void> initialize() async {
     await Supabase.initialize(url: _supabaseUrl, anonKey: _anonKey);
@@ -14,7 +14,7 @@ class SupabaseService {
   Future<String?> fetchPayload(String syncId) async {
     final response = await _client
         .from('sync_data')
-        .select('payload, updated_at')
+        .select('payload')
         .eq('sync_id', syncId)
         .maybeSingle();
     return response?['payload'] as String?;
