@@ -5,6 +5,7 @@ import '../services/storage_service.dart';
 class HostProvider extends ChangeNotifier {
   final StorageService _storage;
   List<Host> _hosts = [];
+  List<String> _pinnedGroups = [];
   String _search = '';
 
   /// Called after any mutation so SyncService can push.
@@ -24,6 +25,26 @@ class HostProvider extends ChangeNotifier {
 
   List<Host> get allHosts => _hosts;
 
+  List<String> get pinnedGroups => List.unmodifiable(_pinnedGroups);
+
+  Future<void> addGroup(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    final alreadyExists = _pinnedGroups.any(
+      (g) => g.toLowerCase() == trimmed.toLowerCase(),
+    );
+    if (alreadyExists) return;
+    _pinnedGroups.add(trimmed);
+    await _storage.savePinnedGroups(_pinnedGroups);
+    notifyListeners();
+  }
+
+  Future<void> removeGroup(String name) async {
+    _pinnedGroups.removeWhere((g) => g.toLowerCase() == name.toLowerCase());
+    await _storage.savePinnedGroups(_pinnedGroups);
+    notifyListeners();
+  }
+
   void setSearch(String q) {
     _search = q;
     notifyListeners();
@@ -31,6 +52,7 @@ class HostProvider extends ChangeNotifier {
 
   Future<void> _load() async {
     _hosts = await _storage.loadHosts();
+    _pinnedGroups = await _storage.loadPinnedGroups();
     notifyListeners();
   }
 
