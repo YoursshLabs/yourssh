@@ -36,11 +36,6 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
     _loadConfigs();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
   Future<void> _loadConfigs() async {
     final oldEndpoint = await _storage.read(key: 's3_endpoint');
     if (oldEndpoint != null) {
@@ -305,6 +300,10 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       if (confirmed != true || !mounted) return;
       final destKey = folderCtrl.text + nameCtrl.text.trim();
       if (destKey == entry.key) return;
+      if (destKey.isEmpty || destKey.endsWith('/')) {
+        setState(() => _error = 'Invalid destination path');
+        return;
+      }
 
       setState(() => _loading = true);
       try {
@@ -456,9 +455,9 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
 
   String _getDownloadsPath() {
     if (Platform.isWindows) {
-      return '${Platform.environment['USERPROFILE']}\\Downloads';
+      return '${Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '.'}\\Downloads';
     }
-    return '${Platform.environment['HOME']}/Downloads';
+    return '${Platform.environment['HOME'] ?? '.'}/Downloads';
   }
 
   @override
