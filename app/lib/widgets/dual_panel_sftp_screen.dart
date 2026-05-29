@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/host.dart';
@@ -209,7 +210,10 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
         final item = items[i]; final entry = selected[i];
         _transferProvider.updateItem(item.id, status: TransferStatus.inProgress);
         final tmp = await service.downloadToTemp(hostA, entry);
-        if (tmp != null) await service.copyLocalToRemote(localPath: tmp, remoteHost: hostB, remoteDir: destDir);
+        if (tmp != null) {
+          await service.copyLocalToRemote(localPath: tmp, remoteHost: hostB, remoteDir: destDir);
+          await File(tmp).delete();
+        }
         _transferProvider.updateItem(item.id, bytesTransferred: entry.size, status: TransferStatus.done);
       }
     } catch (e) {
@@ -240,7 +244,10 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
         final item = items[i]; final entry = selected[i];
         _transferProvider.updateItem(item.id, status: TransferStatus.inProgress);
         final tmp = await service.downloadToTemp(hostB, entry);
-        if (tmp != null) await service.copyLocalToRemote(localPath: tmp, remoteHost: hostA, remoteDir: destDir);
+        if (tmp != null) {
+          await service.copyLocalToRemote(localPath: tmp, remoteHost: hostA, remoteDir: destDir);
+          await File(tmp).delete();
+        }
         _transferProvider.updateItem(item.id, bytesTransferred: entry.size, status: TransferStatus.done);
       }
     } catch (e) {
@@ -261,6 +268,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
 
   Future<void> _onRemoteDroppedOnLocal(SftpEntry entry) async {
     if (_hostA == null || entry.isDirectory) return;
+    _providerA.clearSelection();
     _providerA.toggleSelection(entry);
     await _download();
   }
