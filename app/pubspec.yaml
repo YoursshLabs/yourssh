@@ -16,6 +16,9 @@ dependencies:
   # Terminal emulator widget
   xterm: ^4.0.0
 
+  # PTY (pseudo-terminal) for local shell sessions
+  flutter_pty: ^0.3.1
+
   # Secure credential storage (Keychain on macOS, Credential Manager on Windows)
   flutter_secure_storage: ^9.2.2
 
@@ -59,3 +62,22 @@ flutter:
   uses-material-design: true
   assets:
     - assets/monaco_editor.html
+  fonts:
+    - family: DejaVu Sans Mono for Powerline
+      fonts:
+        - asset: assets/fonts/powerline/DejaVu Sans Mono for Powerline.ttf
+    - family: Inconsolata for Powerline
+      fonts:
+        - asset: assets/fonts/powerline/Inconsolata for Powerline.otf
+    - family: Meslo LG S for Powerline
+      fonts:
+        - asset: assets/fonts/powerline/Meslo LG S Regular for Powerline.ttf
+    - family: Source Code Pro for Powerline
+      fonts:
+        - asset: assets/fonts/powerline/Source Code Pro for Powerline.otf
+    - family: Ubuntu Mono derivative Powerline
+      fonts:
+        - asset: assets/fonts/powerline/Ubuntu Mono derivative Powerline.ttf
+    - family: Roboto Mono for Powerline
+      fonts:
+        - asset: assets/fonts/powerline/Roboto Mono for Powerline.ttf
