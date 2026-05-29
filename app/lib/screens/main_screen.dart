@@ -19,8 +19,12 @@ import '../widgets/network_stats_overlay.dart';
 import '../widgets/dual_panel_sftp_screen.dart';
 import '../widgets/split_terminal_view.dart';
 import '../widgets/web_tools_screen.dart';
+import '../widgets/new_group_panel.dart';
+import '../widgets/import_panel.dart';
 
 enum NavSection { hosts, keychain, portForwarding, sftp, webTools, snippets, localTerminal, knownHosts, settings }
+
+enum _SidePanel { none, host, newGroup, import }
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -31,7 +35,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   NavSection _nav = NavSection.hosts;
-  bool _showHostPanel = false;
+  _SidePanel _sidePanel = _SidePanel.none;
   Host? _editingHost;
   String? _initialGroup;
   bool _viewingTerminal = false;
@@ -103,19 +107,29 @@ class _MainScreenState extends State<MainScreen> {
 
   void _openHostPanel({Host? existing, String? initialGroup}) {
     setState(() {
-      _showHostPanel = true;
+      _sidePanel = _SidePanel.host;
       _editingHost = existing;
       _initialGroup = initialGroup;
     });
   }
 
-  void _closeHostPanel() {
-    setState(() {
-      _showHostPanel = false;
-      _editingHost = null;
-      _initialGroup = null;
-    });
-  }
+  void _openNewGroupPanel() => setState(() {
+        _sidePanel = _SidePanel.newGroup;
+        _editingHost = null;
+        _initialGroup = null;
+      });
+
+  void _openImportPanel() => setState(() {
+        _sidePanel = _SidePanel.import;
+        _editingHost = null;
+        _initialGroup = null;
+      });
+
+  void _closePanel() => setState(() {
+        _sidePanel = _SidePanel.none;
+        _editingHost = null;
+        _initialGroup = null;
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -134,7 +148,7 @@ class _MainScreenState extends State<MainScreen> {
             onNavSelect: (s) => setState(() {
               _nav = s;
               _viewingTerminal = false;
-              if (s != NavSection.hosts) _closeHostPanel();
+              if (s != NavSection.hosts) _closePanel();
               if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
             }),
             onSessionTap: (_) => setState(() => _viewingTerminal = true),
@@ -149,28 +163,34 @@ class _MainScreenState extends State<MainScreen> {
                   _Sidebar(selected: _nav, onSelect: (s) => setState(() {
                     _nav = s;
                     _viewingTerminal = false;
-                    if (s != NavSection.hosts) _closeHostPanel();
+                    if (s != NavSection.hosts) _closePanel();
                     if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
                   })),
                 Expanded(child: _buildContent(activeSession)),
-                if (_showHostPanel && _nav == NavSection.hosts && !_viewingTerminal)
-                  HostDetailPanel(
-                    existing: _editingHost,
-                    initialGroup: _initialGroup,
-                    onClose: _closeHostPanel,
-                    onSave: (host, password) async {
-                      final hp = context.read<HostProvider>();
-                      if (_editingHost != null) {
-                        await hp.updateHost(host, password: password);
-                      } else {
-                        await hp.addHost(host, password: password);
-                      }
-                    },
-                    onConnect: (host) async {
-                      setState(() => _viewingTerminal = true);
-                      await context.read<SessionProvider>().connect(host);
-                    },
-                  ),
+                if (_nav == NavSection.hosts && !_viewingTerminal) ...[
+                  if (_sidePanel == _SidePanel.host)
+                    HostDetailPanel(
+                      existing: _editingHost,
+                      initialGroup: _initialGroup,
+                      onClose: _closePanel,
+                      onSave: (host, password) async {
+                        final hp = context.read<HostProvider>();
+                        if (_editingHost != null) {
+                          await hp.updateHost(host, password: password);
+                        } else {
+                          await hp.addHost(host, password: password);
+                        }
+                      },
+                      onConnect: (host) async {
+                        setState(() => _viewingTerminal = true);
+                        await context.read<SessionProvider>().connect(host);
+                      },
+                    ),
+                  if (_sidePanel == _SidePanel.newGroup)
+                    NewGroupPanel(onClose: _closePanel),
+                  if (_sidePanel == _SidePanel.import)
+                    ImportPanel(onClose: _closePanel),
+                ],
               ],
             ),
           ),
@@ -197,7 +217,8 @@ class _MainScreenState extends State<MainScreen> {
           onAddHost: () => _openHostPanel(),
           onEditHost: (h) => _openHostPanel(existing: h),
           onOpenLocalTerminal: () => setState(() => _nav = NavSection.localTerminal),
-          onNewGroup: () => _openHostPanel(),
+          onNewGroup: _openNewGroupPanel,
+          onImport: _openImportPanel,
         ),
       NavSection.keychain => const KeychainScreen(),
       NavSection.portForwarding => const PortForwardingScreen(),
