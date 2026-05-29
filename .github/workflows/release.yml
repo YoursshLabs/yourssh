@@ -9,8 +9,30 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: app
+        run: flutter analyze
+
+      - name: Test
+        working-directory: app
+        run: flutter test
+
   build-macos:
     runs-on: macos-latest
+    needs: test
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +58,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+    needs: test
     steps:
       - uses: actions/checkout@v4
 
