@@ -7,6 +7,9 @@ class HostProvider extends ChangeNotifier {
   List<Host> _hosts = [];
   String _search = '';
 
+  /// Called after any mutation so SyncService can push.
+  Future<void> Function()? onMutation;
+
   HostProvider(this._storage) {
     _load();
   }
@@ -18,6 +21,8 @@ class HostProvider extends ChangeNotifier {
               h.label.toLowerCase().contains(_search.toLowerCase()) ||
               h.host.toLowerCase().contains(_search.toLowerCase()))
           .toList();
+
+  List<Host> get allHosts => _hosts;
 
   void setSearch(String q) {
     _search = q;
@@ -36,6 +41,7 @@ class HostProvider extends ChangeNotifier {
       await _storage.savePassword(host.id, password);
     }
     notifyListeners();
+    await onMutation?.call();
   }
 
   Future<void> updateHost(Host host, {String? password}) async {
@@ -47,12 +53,24 @@ class HostProvider extends ChangeNotifier {
       await _storage.savePassword(host.id, password);
     }
     notifyListeners();
+    await onMutation?.call();
   }
 
   Future<void> deleteHost(String id) async {
     _hosts.removeWhere((h) => h.id == id);
     await _storage.saveHosts(_hosts);
     await _storage.deletePassword(id);
+    notifyListeners();
+    await onMutation?.call();
+  }
+
+  Future<void> replaceAll(List<Host> hosts, Map<String, String> passwords) async {
+    _hosts = hosts;
+    await _storage.saveHosts(_hosts);
+    for (final entry in passwords.entries) {
+      final hostId = entry.key.replaceFirst('pw_', '');
+      await _storage.savePassword(hostId, entry.value);
+    }
     notifyListeners();
   }
 }
