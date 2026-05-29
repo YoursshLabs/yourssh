@@ -276,9 +276,16 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
     if (file.bytes == null) return;
 
     final key = _prefix + file.name;
-    setState(() => _loading = true);
+    if (mounted) setState(() => _error = null);
     try {
-      await _service!.putObject(key, file.bytes!);
+      await _service!.putObject(
+        key,
+        file.bytes!,
+        onProgress: (sent, total) {
+          if (mounted) setState(() => _uploadProgress = sent / total);
+        },
+      );
+      if (mounted) setState(() => _uploadProgress = null);
       await _listObjects();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -286,9 +293,7 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
         );
       }
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() { _uploadProgress = null; _error = e.toString(); });
     }
   }
 
