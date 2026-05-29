@@ -18,6 +18,7 @@ import '../widgets/local_terminal_screen.dart';
 import '../widgets/network_stats_overlay.dart';
 import '../widgets/dual_panel_sftp_screen.dart';
 import '../widgets/split_terminal_view.dart';
+import '../widgets/web_tools_screen.dart';
 
 enum NavSection { hosts, keychain, portForwarding, sftp, webTools, snippets, localTerminal, knownHosts, settings }
 
@@ -32,10 +33,22 @@ class _MainScreenState extends State<MainScreen> {
   NavSection _nav = NavSection.hosts;
   bool _showHostPanel = false;
   Host? _editingHost;
+  String? _initialGroup;
   bool _viewingTerminal = false;
+  final _sftpConnectionNotifier = ValueNotifier<bool>(false);
   SessionProvider? _sessionProvider;
   KnownHostsProvider? _knownHostsProvider;
   bool _hostKeyDialogShowing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _sftpConnectionNotifier.addListener(_onSftpConnectionChanged);
+  }
+
+  void _onSftpConnectionChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void didChangeDependencies() {
@@ -81,15 +94,18 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
+    _sftpConnectionNotifier.removeListener(_onSftpConnectionChanged);
+    _sftpConnectionNotifier.dispose();
     _sessionProvider?.removeListener(_onSessionsChanged);
     _knownHostsProvider?.removeListener(_onKnownHostsChanged);
     super.dispose();
   }
 
-  void _openHostPanel({Host? existing}) {
+  void _openHostPanel({Host? existing, String? initialGroup}) {
     setState(() {
       _showHostPanel = true;
       _editingHost = existing;
+      _initialGroup = initialGroup;
     });
   }
 
@@ -97,6 +113,7 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _showHostPanel = false;
       _editingHost = null;
+      _initialGroup = null;
     });
   }
 
@@ -118,6 +135,7 @@ class _MainScreenState extends State<MainScreen> {
               _nav = s;
               _viewingTerminal = false;
               if (s != NavSection.hosts) _closeHostPanel();
+              if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
             }),
             onSessionTap: (_) => setState(() => _viewingTerminal = true),
             onAddSession: () => _openHostPanel(),
@@ -126,16 +144,19 @@ class _MainScreenState extends State<MainScreen> {
           Expanded(
             child: Row(
               children: [
-                if (!_viewingTerminal || sessions.isEmpty)
+                if ((!_viewingTerminal || sessions.isEmpty) &&
+                    !(_nav == NavSection.sftp && _sftpConnectionNotifier.value))
                   _Sidebar(selected: _nav, onSelect: (s) => setState(() {
                     _nav = s;
                     _viewingTerminal = false;
                     if (s != NavSection.hosts) _closeHostPanel();
+                    if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
                   })),
                 Expanded(child: _buildContent(activeSession)),
                 if (_showHostPanel && _nav == NavSection.hosts && !_viewingTerminal)
                   HostDetailPanel(
                     existing: _editingHost,
+                    initialGroup: _initialGroup,
                     onClose: _closeHostPanel,
                     onSave: (host, password) async {
                       final hp = context.read<HostProvider>();
@@ -175,15 +196,19 @@ class _MainScreenState extends State<MainScreen> {
       NavSection.hosts => HostsDashboard(
           onAddHost: () => _openHostPanel(),
           onEditHost: (h) => _openHostPanel(existing: h),
+          onOpenLocalTerminal: () => setState(() => _nav = NavSection.localTerminal),
+          onNewGroup: (group) => _openHostPanel(initialGroup: group),
         ),
       NavSection.keychain => const KeychainScreen(),
       NavSection.portForwarding => const PortForwardingScreen(),
-      NavSection.sftp => const DualPanelSftpScreen(),
+      NavSection.sftp => DualPanelSftpScreen(
+          connectionNotifier: _sftpConnectionNotifier,
+        ),
       NavSection.snippets => const SnippetsScreen(),
       NavSection.localTerminal => const LocalTerminalScreen(),
       NavSection.knownHosts => const KnownHostsScreen(),
       NavSection.settings => const SettingsScreen(),
-      _ => _ComingSoon(label: _nav.name),
+      NavSection.webTools => const WebToolsScreen(),
     };
   }
 }
@@ -543,29 +568,6 @@ class _AddTabBtnState extends State<_AddTabBtn> {
             color: _hovered ? const Color(0xFFAAAAAA) : const Color(0xFF555555),
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ── Coming Soon Placeholder ───────────────────────────────
-
-class _ComingSoon extends StatelessWidget {
-  final String label;
-  const _ComingSoon({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.construction, size: 48, color: AppColors.textTertiary),
-          const SizedBox(height: 12),
-          Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-          const SizedBox(height: 4),
-          const Text('Coming soon', style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
-        ],
       ),
     );
   }
