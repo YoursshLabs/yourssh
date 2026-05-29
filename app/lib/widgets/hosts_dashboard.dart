@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -467,7 +468,12 @@ class _HostCardState extends State<_HostCard> {
       ),
     );
   }
-  void _export(BuildContext context) {}
+  void _export(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _ExportDialog(host: widget.host),
+    );
+  }
 
   void _openSftp(BuildContext context) {
     showDialog<void>(
@@ -528,6 +534,119 @@ class _MoveToGroupDialog extends StatelessWidget {
               },
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+// ── Export Dialog ─────────────────────────────────────────
+
+class _ExportDialog extends StatefulWidget {
+  final Host host;
+  const _ExportDialog({required this.host});
+
+  @override
+  State<_ExportDialog> createState() => _ExportDialogState();
+}
+
+class _ExportDialogState extends State<_ExportDialog> {
+  bool _showSshConfig = true;
+
+  String get _sshConfigText =>
+      'Host ${widget.host.label}\n'
+      '    HostName ${widget.host.host}\n'
+      '    User ${widget.host.username}\n'
+      '    Port ${widget.host.port}';
+
+  String get _jsonText {
+    const encoder = JsonEncoder.withIndent('  ');
+    return encoder.convert({
+      'label': widget.host.label,
+      'host': widget.host.host,
+      'port': widget.host.port,
+      'username': widget.host.username,
+      'authType': widget.host.authType.name,
+      'group': widget.host.group,
+      'tags': widget.host.tags,
+    });
+  }
+
+  String get _currentText => _showSshConfig ? _sshConfigText : _jsonText;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.card,
+      title: const Text('Export Host', style: TextStyle(color: AppColors.textPrimary, fontSize: 15)),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _formatTab('.ssh/config', selected: _showSshConfig, onTap: () => setState(() => _showSshConfig = true)),
+                const SizedBox(width: 8),
+                _formatTab('JSON', selected: !_showSshConfig, onTap: () => setState(() => _showSshConfig = false)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.bg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: SelectableText(
+                _currentText,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close', style: TextStyle(color: AppColors.textSecondary)),
+        ),
+        TextButton(
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: _currentText));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 2)),
+            );
+          },
+          child: const Text('Copy', style: TextStyle(color: AppColors.textPrimary)),
+        ),
+      ],
+    );
+  }
+
+  Widget _formatTab(String label, {required bool selected, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.textPrimary.withValues(alpha: 0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: selected ? AppColors.border : Colors.transparent),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          ),
         ),
       ),
     );

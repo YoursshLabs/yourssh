@@ -52,6 +52,46 @@ void main() {
     });
   });
 
+  group('Export formats', () {
+    late Host host;
+
+    setUp(() {
+      host = Host(
+        label: 'My Server',
+        host: '192.168.1.10',
+        port: 2222,
+        username: 'deploy',
+        group: 'prod',
+      );
+    });
+
+    test('ssh/config format', () {
+      final output = 'Host ${host.label}\n'
+          '    HostName ${host.host}\n'
+          '    User ${host.username}\n'
+          '    Port ${host.port}';
+      expect(output, contains('Host My Server'));
+      expect(output, contains('HostName 192.168.1.10'));
+      expect(output, contains('User deploy'));
+      expect(output, contains('Port 2222'));
+    });
+
+    test('json export excludes id and createdAt', () {
+      final json = {
+        'label': host.label,
+        'host': host.host,
+        'port': host.port,
+        'username': host.username,
+        'authType': host.authType.name,
+        'group': host.group,
+        'tags': host.tags,
+      };
+      expect(json.containsKey('id'), isFalse);
+      expect(json.containsKey('createdAt'), isFalse);
+      expect(json['label'], 'My Server');
+    });
+  });
+
   group('Move to Group — group list', () {
     test('derives distinct non-empty groups from host list', () {
       final hosts = [
