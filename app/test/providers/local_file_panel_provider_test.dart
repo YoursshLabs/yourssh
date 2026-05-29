@@ -130,4 +130,44 @@ void main() {
       expect(provider.filterQuery, '');
     });
   });
+
+  group('showHidden', () {
+    test('showHidden starts false', () {
+      expect(provider.showHidden, false);
+    });
+
+    test('toggleShowHidden flips to true', () {
+      provider.toggleShowHidden();
+      expect(provider.showHidden, true);
+    });
+
+    test('toggleShowHidden twice returns to false', () {
+      provider.toggleShowHidden();
+      provider.toggleShowHidden();
+      expect(provider.showHidden, false);
+    });
+  });
+
+  group('selectAll', () {
+    test('selectAll selects every filteredEntry', () {
+      provider.setEntriesForTest([_entry('a'), _entry('b'), _entry('c')]);
+      provider.selectAll();
+      expect(provider.selectedEntries.length, 3);
+    });
+
+    test('selectAll with active filter only selects visible entries', () {
+      provider.setEntriesForTest([_entry('doc.txt'), _entry('readme.md'), _entry('config.txt')]);
+      provider.setFilterQuery('txt');
+      provider.selectAll();
+      // only 'doc.txt' and 'config.txt' match 'txt'
+      expect(provider.selectedEntries.length, 2);
+      expect(provider.selectedEntries.map((e) => e.name), containsAll(['doc.txt', 'config.txt']));
+    });
+
+    test('selectAll on empty list is a no-op', () {
+      provider.setEntriesForTest([]);
+      provider.selectAll();
+      expect(provider.selectedEntries.isEmpty, true);
+    });
+  });
 }

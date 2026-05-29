@@ -31,5 +31,20 @@ void main() {
       final file = SftpEntry(name: 'main.dart', path: '/main.dart', isDirectory: false, size: 100, modifiedAt: DateTime(2024));
       expect(dir.sortKey.compareTo(file.sortKey), lessThan(0));
     });
+
+    test('kindLabel returns "folder" for directories', () {
+      final entry = SftpEntry(name: 'src', path: '/src', isDirectory: true, size: 0, modifiedAt: DateTime(2024));
+      expect(entry.kindLabel, 'folder');
+    });
+
+    test('kindLabel returns "document" for files without extension', () {
+      final entry = SftpEntry(name: 'Makefile', path: '/Makefile', isDirectory: false, size: 100, modifiedAt: DateTime(2024));
+      expect(entry.kindLabel, 'document');
+    });
+
+    test('kindLabel returns lowercase extension for files with extension', () {
+      final entry = SftpEntry(name: 'main.DART', path: '/main.DART', isDirectory: false, size: 100, modifiedAt: DateTime(2024));
+      expect(entry.kindLabel, 'dart');
+    });
   });
 }
