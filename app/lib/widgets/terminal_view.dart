@@ -49,7 +49,7 @@ class _TerminalWidget extends StatelessWidget {
       theme: theme,
       textStyle: TerminalStyle(
         fontSize: settings.fontSize,
-        fontFamily: 'monospace',
+        fontFamily: settings.terminalFont,
       ),
       padding: EdgeInsets.zero,
       autofocus: true,

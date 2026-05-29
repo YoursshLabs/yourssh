@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:xterm/xterm.dart';
 import '../providers/local_session_provider.dart';
+import '../providers/settings_provider.dart';
 import '../models/local_session.dart';
 
 class LocalTerminalScreen extends StatefulWidget {
@@ -101,6 +102,13 @@ class _LocalTerminalScreenState extends State<LocalTerminalScreen> {
         ),
       );
     }
-    return TerminalView(session.terminal);
+    final settings = context.watch<SettingsProvider>();
+    return TerminalView(
+      session.terminal,
+      textStyle: TerminalStyle(
+        fontSize: settings.fontSize,
+        fontFamily: settings.terminalFont,
+      ),
+    );
   }
 }
