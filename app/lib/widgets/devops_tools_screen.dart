@@ -171,6 +171,13 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
     _ => '',
   };
 
+  Widget _navItem(_Tool tool) => _NavItem(
+        icon: tool.icon,
+        label: tool.label,
+        active: _selected == tool,
+        onTap: () => setState(() => _selected = tool),
+      );
+
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionProvider>().activeSession;
@@ -179,37 +186,22 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
       children: [
         SizedBox(
           width: 160,
-          child: Material(
+          child: Container(
             color: AppColors.sidebar,
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: ListView(
-              children: _Tool.values
-                  .map(
-                    (tool) => ListTile(
-                      leading: Icon(
-                        tool.icon,
-                        size: 16,
-                        color: _selected == tool
-                            ? AppColors.accent
-                            : AppColors.textSecondary,
-                      ),
-                      title: Text(
-                        tool.label,
-                        style: TextStyle(
-                          color: _selected == tool
-                              ? AppColors.accent
-                              : AppColors.textPrimary,
-                          fontSize: 13,
-                        ),
-                      ),
-                      selected: _selected == tool,
-                      onTap: () => setState(() {
-                        _selected = tool;
-                        _result = null;
-                      }),
-                      dense: true,
-                    ),
-                  )
-                  .toList(),
+              children: [
+                const _SidebarSection('Network'),
+                ...[
+                  _Tool.ping, _Tool.curl, _Tool.dns,
+                  _Tool.traceroute, _Tool.portScan, _Tool.whois, _Tool.netstat,
+                ].map(_navItem),
+                const _SidebarSection('System'),
+                ...[_Tool.diskUsage, _Tool.topProcesses, _Tool.memory]
+                    .map(_navItem),
+                const _SidebarSection('HTTP'),
+                ...[_Tool.httpHeaders, _Tool.sslCert].map(_navItem),
+              ],
             ),
           ),
         ),
@@ -293,6 +285,94 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── Sidebar widgets ────────────────────────────────────────
+
+class _SidebarSection extends StatelessWidget {
+  final String label;
+  const _SidebarSection(this.label);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        child: Text(
+          label.toUpperCase(),
+          style: const TextStyle(
+            color: AppColors.textTertiary,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+          ),
+        ),
+      );
+}
+
+class _NavItem extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _NavItem({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  State<_NavItem> createState() => _NavItemState();
+}
+
+class _NavItemState extends State<_NavItem> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = widget.active
+        ? AppColors.accent.withValues(alpha: 0.12)
+        : _hovered
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.transparent;
+    final color = widget.active ? AppColors.accent : AppColors.textSecondary;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(6),
+            border: widget.active
+                ? Border.all(color: AppColors.accent.withValues(alpha: 0.2))
+                : null,
+          ),
+          child: Row(
+            children: [
+              Icon(widget.icon, size: 13, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  widget.label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight:
+                        widget.active ? FontWeight.w500 : FontWeight.normal,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
