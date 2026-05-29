@@ -248,9 +248,14 @@ class _SyncSectionState extends State<_SyncSection> {
   final _urlController = TextEditingController();
   final _anonKeyController = TextEditingController();
   bool _showAnonKey = false;
+  bool _urlHasText = false;
   bool _testing = false;
   bool _testOk = false;
   String? _testError;
+  bool _migrating = false;
+  bool _tableCreated = false;
+  final _serviceRoleKeyController = TextEditingController();
+  bool _showServiceRoleKey = false;
 
   @override
   void initState() {
@@ -258,6 +263,11 @@ class _SyncSectionState extends State<_SyncSection> {
     _urlController.text = widget.sync.supabaseUrl;
     _anonKeyController.text = widget.sync.supabaseAnonKey;
     if (widget.sync.isSupabaseConfigured) _testOk = true;
+    _urlHasText = _urlController.text.isNotEmpty;
+    _urlController.addListener(() {
+      final has = _urlController.text.isNotEmpty;
+      if (has != _urlHasText) setState(() => _urlHasText = has);
+    });
   }
 
   @override
@@ -265,18 +275,18 @@ class _SyncSectionState extends State<_SyncSection> {
     _codeController.dispose();
     _urlController.dispose();
     _anonKeyController.dispose();
+    _serviceRoleKeyController.dispose();
     super.dispose();
   }
 
   Future<void> _onToggle(bool value) async {
     final sync = context.read<SyncProvider>();
-    if (!sync.isSupabaseConfigured) return;
     final syncService = context.read<SyncService>();
     if (!value) {
       await syncService.disableAndDelete();
     } else {
       await sync.setEnabled(true);
-      if (!mounted) return;
+      if (!mounted || !sync.isSupabaseConfigured) return;
       final hostProvider = context.read<HostProvider>();
       final storage = context.read<StorageService>();
       final passwords = <String, String>{};
@@ -295,30 +305,69 @@ class _SyncSectionState extends State<_SyncSection> {
   Future<void> _testAndSave() async {
     final url = _urlController.text.trim();
     final anonKey = _anonKeyController.text.trim();
+    final serviceRoleKey = _serviceRoleKeyController.text.trim();
     if (url.isEmpty || anonKey.isEmpty) {
       setState(() { _testError = 'URL and anon key are required'; _testOk = false; });
       return;
     }
-    setState(() { _testing = true; _testError = null; });
+    setState(() { _testing = true; _testError = null; _testOk = false; _tableCreated = false; });
     try {
-      await context.read<SyncProvider>().setSupabaseConfig(url, anonKey);
+      final svc = SupabaseService(url, anonKey);
+      final (outcome, error) = await svc.testConnection();
       if (!mounted) return;
-      final (ok, error) = await SupabaseService(url, anonKey).testConnection();
-      if (!mounted) return;
-      setState(() { _testing = false; _testOk = ok; _testError = ok ? null : error; });
+
+      if (outcome == TestConnectionOutcome.connected) {
+        await context.read<SyncProvider>().setSupabaseConfig(url, anonKey);
+        if (!mounted) return;
+        setState(() { _testing = false; _testOk = true; });
+        return;
+      }
+
+      if (outcome == TestConnectionOutcome.tableNotFound && serviceRoleKey.isNotEmpty) {
+        setState(() { _testing = false; _migrating = true; });
+        final (ok, migrateError) = await svc.setupSchema(serviceRoleKey);
+        if (!mounted) return;
+        if (!ok) {
+          setState(() { _migrating = false; _testError = migrateError; });
+          return;
+        }
+        final (outcome2, error2) = await svc.testConnection();
+        if (!mounted) return;
+        if (outcome2 == TestConnectionOutcome.connected) {
+          await context.read<SyncProvider>().setSupabaseConfig(url, anonKey);
+          if (!mounted) return;
+          setState(() { _migrating = false; _testOk = true; _tableCreated = true; });
+        } else {
+          setState(() { _migrating = false; _testError = error2 ?? 'Connection failed after migration'; });
+        }
+        return;
+      }
+
+      final message = outcome == TestConnectionOutcome.tableNotFound
+          ? 'Table not found. Add your Service Role Key above to auto-create it.'
+          : (error ?? 'Connection failed');
+      setState(() { _testing = false; _testError = message; });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _testing = false; _testOk = false; _testError = e.toString(); });
+      setState(() { _testing = false; _migrating = false; _testError = e.toString(); });
     }
   }
 
   Widget _buildTestStatus() {
+    if (_migrating) {
+      return const Row(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5)),
+        SizedBox(width: 6),
+        Text('Setting up database…', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+      ]);
+    }
     if (_testing) return const SizedBox.shrink();
     if (_testOk) {
-      return const Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.check_circle, size: 12, color: Colors.green),
-        SizedBox(width: 4),
-        Text('Connected', style: TextStyle(color: Colors.green, fontSize: 11)),
+      final label = _tableCreated ? 'Connected (table created)' : 'Connected';
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.check_circle, size: 12, color: Colors.green),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(color: Colors.green, fontSize: 11)),
       ]);
     }
     if (_testError != null) {
@@ -381,85 +430,19 @@ class _SyncSectionState extends State<_SyncSection> {
           ),
           child: Column(
             children: [
-              // ── Supabase backend config ──────────────────────
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Supabase Backend', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _urlController,
-                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                      decoration: InputDecoration(
-                        labelText: 'Project URL',
-                        labelStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                        hintText: 'https://xxxx.supabase.co',
-                        hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                        filled: true,
-                        fillColor: AppColors.bg,
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _anonKeyController,
-                      obscureText: !_showAnonKey,
-                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                      decoration: InputDecoration(
-                        labelText: 'Anon Key',
-                        labelStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                        hintText: 'eyJhbGciOiJIUzI1NiIs...',
-                        hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                        filled: true,
-                        fillColor: AppColors.bg,
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                        suffixIcon: IconButton(
-                          icon: Icon(_showAnonKey ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
-                          onPressed: () => setState(() => _showAnonKey = !_showAnonKey),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(child: _buildTestStatus()),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: _testing ? null : _testAndSave,
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: _testing
-                              ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
-                              : const Text('Save & Test', style: TextStyle(fontSize: 12)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1, color: AppColors.border, indent: 16),
               // ── Enable Sync toggle ───────────────────────────
               SwitchListTile(
                 title: const Text('Enable Sync', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
                 subtitle: Text(
-                  sync.isSupabaseConfigured
+                  sync.enabled && sync.isSupabaseConfigured
                       ? 'Sync hosts across devices'
-                      : 'Configure Supabase above first',
+                      : sync.enabled
+                          ? 'Enter Supabase credentials below'
+                          : 'Sync hosts across devices',
                   style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
                 ),
                 value: sync.enabled,
-                onChanged: sync.isSupabaseConfigured ? _onToggle : null,
+                onChanged: _onToggle,
               ),
               if (sync.enabled) ...[
                 const Divider(height: 1, color: AppColors.border, indent: 16),
@@ -468,72 +451,171 @@ class _SyncSectionState extends State<_SyncSection> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Sync Code', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: AppColors.bg,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Text(sync.syncCodeDisplay, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontFamily: 'monospace', letterSpacing: 2)),
-                          ),
-                          const SizedBox(width: 8),
-                          TextButton.icon(
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(text: sync.syncCodeDisplay));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Sync code copied'), duration: Duration(seconds: 2)),
-                              );
-                            },
-                            icon: const Icon(Icons.copy, size: 14),
-                            label: const Text('Copy', style: TextStyle(fontSize: 12)),
-                          ),
-                        ],
+                      // ── Supabase backend config ──────────────
+                      const Text('Supabase Backend', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _urlController,
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'Project URL',
+                          hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
+                          filled: true,
+                          fillColor: AppColors.bg,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
+                          suffixIcon: _urlHasText
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 16, color: AppColors.textTertiary),
+                                  onPressed: () => _urlController.clear(),
+                                )
+                              : const Icon(Icons.link, size: 16, color: AppColors.textTertiary),
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      const Text('Enter this code on other devices to sync.', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                      const SizedBox(height: 12),
-                      _SyncStatusRow(sync: sync),
-                      const SizedBox(height: 16),
-                      const Divider(height: 1, color: AppColors.border),
-                      const SizedBox(height: 16),
-                      const Text('Connect to another device', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           Expanded(
                             child: TextField(
-                              controller: _codeController,
-                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                              controller: _anonKeyController,
+                              obscureText: !_showAnonKey,
+                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
                               decoration: InputDecoration(
-                                hintText: 'Enter sync code…',
-                                hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                                hintText: 'Publishable (Anon) key',
+                                hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
                                 filled: true,
                                 fillColor: AppColors.bg,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
                                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
+                                suffixIcon: IconButton(
+                                  icon: Icon(_showAnonKey ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
+                                  onPressed: () => setState(() => _showAnonKey = !_showAnonKey),
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: _connecting ? null : _connect,
-                            child: _connecting
-                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Text('Connect', style: TextStyle(fontSize: 12)),
+                          SizedBox(
+                            width: 110,
+                            height: 36,
+                            child: ElevatedButton(
+                              onPressed: (_testing || _migrating) ? null : _testAndSave,
+                              style: ElevatedButton.styleFrom(
+                                minimumSize: Size.zero,
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                              ),
+                              child: _testing
+                                  ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Text('Save & Test', style: TextStyle(fontSize: 12)),
+                            ),
                           ),
                         ],
                       ),
-                      if (_connectError != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(_connectError!, style: const TextStyle(color: Colors.red, fontSize: 11)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _serviceRoleKeyController,
+                        obscureText: !_showServiceRoleKey,
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'Service Role Key (optional — auto-creates table on first run)',
+                          hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+                          filled: true,
+                          fillColor: AppColors.bg,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
+                          suffixIcon: IconButton(
+                            icon: Icon(_showServiceRoleKey ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
+                            onPressed: () => setState(() => _showServiceRoleKey = !_showServiceRoleKey),
+                          ),
                         ),
+                      ),
+                      if (_testing || _migrating || _testOk || _testError != null) ...[
+                        const SizedBox(height: 6),
+                        _buildTestStatus(),
+                      ],
+                      // ── Sync code & connect (only when configured) ──
+                      if (sync.isSupabaseConfigured) ...[
+                        const SizedBox(height: 16),
+                        const Divider(height: 1, color: AppColors.border),
+                        const SizedBox(height: 16),
+                        const Text('Sync Code', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppColors.bg,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: Text(sync.syncCodeDisplay, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontFamily: 'monospace', letterSpacing: 2)),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton.icon(
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: sync.syncCodeDisplay));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Sync code copied'), duration: Duration(seconds: 2)),
+                                );
+                              },
+                              icon: const Icon(Icons.copy, size: 14),
+                              label: const Text('Copy', style: TextStyle(fontSize: 12)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        const Text('Enter this code on other devices to sync.', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                        const SizedBox(height: 12),
+                        _SyncStatusRow(sync: sync),
+                        const SizedBox(height: 16),
+                        const Divider(height: 1, color: AppColors.border),
+                        const SizedBox(height: 16),
+                        const Text('Connect to another device', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _codeController,
+                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                                decoration: InputDecoration(
+                                  hintText: 'Enter sync code…',
+                                  hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                                  filled: true,
+                                  fillColor: AppColors.bg,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: _connecting ? null : _connect,
+                              child: _connecting
+                                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Text('Connect', style: TextStyle(fontSize: 12)),
+                            ),
+                          ],
+                        ),
+                        if (_connectError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(_connectError!, style: const TextStyle(color: Colors.red, fontSize: 11)),
+                          ),
+                      ],
                     ],
                   ),
                 ),
