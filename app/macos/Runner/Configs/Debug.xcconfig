@@ -1,0 +1,6 @@
+#include "../../Flutter/Flutter-Debug.xcconfig"
+#include "Warnings.xcconfig"
+
+// Disable code signing for local debug builds (iCloud Drive xattr workaround)
+CODE_SIGNING_REQUIRED = NO
+CODE_SIGNING_ALLOWED = NO

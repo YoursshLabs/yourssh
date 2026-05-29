@@ -1,0 +1,4 @@
+module yoursshFFI {
+    header "yoursshFFI.h"
+    export *
+}

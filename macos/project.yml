@@ -1,0 +1,30 @@
+name: YourSSH
+options:
+  bundleIdPrefix: com.thangnm
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "15"
+
+settings:
+  SWIFT_VERSION: "5.9"
+  MACOSX_DEPLOYMENT_TARGET: "13.0"
+  PRODUCT_BUNDLE_IDENTIFIER: com.thangnm.yourssh
+  PRODUCT_NAME: YourSSH
+  MARKETING_VERSION: "0.1.0"
+  CURRENT_PROJECT_VERSION: "1"
+  DEVELOPMENT_TEAM: ""
+
+targets:
+  YourSSH:
+    type: application
+    platform: macOS
+    sources:
+      - path: YourSSH
+    settings:
+      INFOPLIST_FILE: YourSSH/Resources/Info.plist
+      PRODUCT_BUNDLE_IDENTIFIER: com.thangnm.yourssh
+      ENABLE_HARDENED_RUNTIME: YES
+      CODE_SIGN_ENTITLEMENTS: YourSSH/Resources/YourSSH.entitlements
+    dependencies: []
+    # Swift packages will be added after Rust core is built
+    # - package: YoursshCore

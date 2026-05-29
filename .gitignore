@@ -1,0 +1,26 @@
+# Rust
+/core/target/
+
+# Xcode
+*.xcodeproj/
+!*.xcodeproj/project.pbxproj
+*.xcworkspace/
+xcuserdata/
+*.moved-aside
+DerivedData/
+.build/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Generated bindings (rebuilt via `make core`)
+macos/YourSSH/Generated/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Env
+.env

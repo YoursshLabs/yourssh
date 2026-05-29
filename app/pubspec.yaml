@@ -1,0 +1,44 @@
+name: yourssh
+description: YourSSH - A professional SSH client for macOS and Windows
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # SSH / SFTP / Port forwarding
+  dartssh2: ^2.9.0
+
+  # Terminal emulator widget
+  xterm: ^4.0.0
+
+  # Secure credential storage (Keychain on macOS, Credential Manager on Windows)
+  flutter_secure_storage: ^9.2.2
+
+  # State management
+  provider: ^6.1.2
+
+  # App settings persistence
+  shared_preferences: ^2.3.2
+
+  # File picker for SFTP upload
+  file_picker: ^8.1.2
+
+  # UUID generation
+  uuid: ^4.5.1
+
+  # Path utilities
+  path: ^1.9.0
+  path_provider: ^2.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

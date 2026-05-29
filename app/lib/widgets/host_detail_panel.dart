@@ -1,0 +1,475 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../models/host.dart';
+import '../providers/key_provider.dart';
+import '../theme/app_theme.dart';
+
+class HostDetailPanel extends StatefulWidget {
+  final Host? existing;
+  final VoidCallback onClose;
+  final Future<void> Function(Host host, String password) onSave;
+  final Future<void> Function(Host host)? onConnect;
+
+  const HostDetailPanel({
+    super.key,
+    this.existing,
+    required this.onClose,
+    required this.onSave,
+    this.onConnect,
+  });
+
+  @override
+  State<HostDetailPanel> createState() => _HostDetailPanelState();
+}
+
+class _HostDetailPanelState extends State<HostDetailPanel> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _hostCtrl;
+  late final TextEditingController _labelCtrl;
+  late final TextEditingController _groupCtrl;
+  late final TextEditingController _tagsCtrl;
+  late final TextEditingController _portCtrl;
+  late final TextEditingController _usernameCtrl;
+  late final TextEditingController _passwordCtrl;
+  late AuthType _authType;
+  String? _selectedKeyId;
+  bool _obscurePassword = true;
+  bool _saving = false;
+
+  bool get _isNew => widget.existing == null;
+
+  @override
+  void initState() {
+    super.initState();
+    final h = widget.existing;
+    _hostCtrl = TextEditingController(text: h?.host ?? '');
+    _labelCtrl = TextEditingController(text: h?.label ?? '');
+    _groupCtrl = TextEditingController(text: h?.group ?? '');
+    _tagsCtrl = TextEditingController(text: h?.tags.join(', ') ?? '');
+    _portCtrl = TextEditingController(text: (h?.port ?? 22).toString());
+    _usernameCtrl = TextEditingController(text: h?.username ?? '');
+    _passwordCtrl = TextEditingController();
+    _authType = h?.authType ?? AuthType.password;
+    _selectedKeyId = h?.keyId;
+  }
+
+  @override
+  void dispose() {
+    for (final c in [_hostCtrl, _labelCtrl, _groupCtrl, _tagsCtrl, _portCtrl, _usernameCtrl, _passwordCtrl]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    final tags = _tagsCtrl.text.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+    final host = Host(
+      id: widget.existing?.id,
+      label: _labelCtrl.text.trim().isEmpty ? _hostCtrl.text.trim() : _labelCtrl.text.trim(),
+      host: _hostCtrl.text.trim(),
+      port: int.tryParse(_portCtrl.text) ?? 22,
+      username: _usernameCtrl.text.trim(),
+      authType: _authType,
+      keyId: _authType == AuthType.privateKey ? _selectedKeyId : null,
+      group: _groupCtrl.text.trim(),
+      tags: tags,
+    );
+    try {
+      await widget.onSave(host, _passwordCtrl.text);
+      if (mounted) widget.onClose();
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _connect() async {
+    if (_formKey.currentState?.validate() != true) return;
+    await _save();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keys = context.watch<KeyProvider>().keys;
+
+    return Container(
+      width: 340,
+      decoration: const BoxDecoration(
+        color: AppColors.sidebar,
+        border: Border(left: BorderSide(color: AppColors.border)),
+      ),
+      child: Column(
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                children: [
+                  // Address card
+                  _Card(children: [
+                    _AddressField(controller: _hostCtrl),
+                  ]),
+
+                  const SizedBox(height: 16),
+                  _sectionLabel('GENERAL'),
+                  const SizedBox(height: 6),
+                  _Card(children: [
+                    _PanelField(
+                      controller: _labelCtrl,
+                      hint: 'Label',
+                      icon: Icons.label_outline,
+                    ),
+                    _divider(),
+                    _PanelField(
+                      controller: _groupCtrl,
+                      hint: 'Group',
+                      icon: Icons.folder_outlined,
+                    ),
+                    _divider(),
+                    _PanelField(
+                      controller: _tagsCtrl,
+                      hint: 'Tags (comma separated)',
+                      icon: Icons.tag,
+                    ),
+                  ]),
+
+                  const SizedBox(height: 16),
+                  // SSH Port row
+                  Row(
+                    children: [
+                      const Text('SSH on', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: 56,
+                        child: TextFormField(
+                          controller: _portCtrl,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            filled: true,
+                            fillColor: AppColors.card,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide: const BorderSide(color: AppColors.border),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide: const BorderSide(color: AppColors.border),
+                            ),
+                          ),
+                          validator: (v) => int.tryParse(v ?? '') == null ? '!' : null,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text('port', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+                  _sectionLabel('CREDENTIALS'),
+                  const SizedBox(height: 6),
+                  _Card(children: [
+                    _PanelField(
+                      controller: _usernameCtrl,
+                      hint: 'Username',
+                      icon: Icons.person_outline,
+                    ),
+                    _divider(),
+                    _PasswordField(
+                      controller: _passwordCtrl,
+                      obscure: _obscurePassword,
+                      onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                  ]),
+
+                  const SizedBox(height: 16),
+                  _sectionLabel('AUTH METHOD'),
+                  const SizedBox(height: 6),
+                  _Card(children: [
+                    _DropdownRow(
+                      icon: Icons.lock_outline,
+                      child: DropdownButton<AuthType>(
+                        value: _authType,
+                        isExpanded: true,
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                        dropdownColor: AppColors.card,
+                        underline: const SizedBox(),
+                        items: const [
+                          DropdownMenuItem(value: AuthType.password, child: Text('Password')),
+                          DropdownMenuItem(value: AuthType.privateKey, child: Text('Private Key')),
+                          DropdownMenuItem(value: AuthType.agent, child: Text('SSH Agent')),
+                        ],
+                        onChanged: (v) => setState(() { _authType = v!; _selectedKeyId = null; }),
+                      ),
+                    ),
+                    if (_authType == AuthType.privateKey) ...[
+                      _divider(),
+                      _DropdownRow(
+                        icon: Icons.vpn_key_outlined,
+                        child: DropdownButton<String>(
+                          value: _selectedKeyId,
+                          isExpanded: true,
+                          hint: const Text('Select key', style: TextStyle(color: AppColors.textTertiary, fontSize: 13)),
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                          dropdownColor: AppColors.card,
+                          underline: const SizedBox(),
+                          items: keys.map((k) => DropdownMenuItem(
+                            value: k.id,
+                            child: Text('${k.label} (${k.algorithmLabel})'),
+                          )).toList(),
+                          onChanged: (v) => setState(() => _selectedKeyId = v),
+                        ),
+                      ),
+                    ],
+                  ]),
+
+                  const SizedBox(height: 24),
+                  // Connect button
+                  GestureDetector(
+                    onTap: _saving ? null : _connect,
+                    child: Container(
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: _saving ? AppColors.accentDim : AppColors.accent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: _saving
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                          : const Text('CONNECT', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 1)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Save without connecting
+                  GestureDetector(
+                    onTap: _saving ? null : _save,
+                    child: Container(
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text('Save only', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      height: 52,
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _isNew ? 'New Host' : 'Edit Host',
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: widget.onClose,
+            child: Container(
+              width: 28, height: 28,
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Icon(Icons.close, size: 14, color: AppColors.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String label) {
+    return Text(label, style: const TextStyle(color: AppColors.textTertiary, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 0.8));
+  }
+
+  Widget _divider() => const Divider(height: 1, color: AppColors.border, indent: 36);
+}
+
+// ── Sub-widgets ───────────────────────────────────────────
+
+class _Card extends StatelessWidget {
+  final List<Widget> children;
+  const _Card({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+}
+
+class _AddressField extends StatelessWidget {
+  final TextEditingController controller;
+  const _AddressField({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.blue.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.dns, color: AppColors.blue, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextFormField(
+              controller: controller,
+              autofocus: true,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+              decoration: const InputDecoration(
+                hintText: 'IP or Hostname',
+                hintStyle: TextStyle(color: AppColors.textTertiary, fontSize: 14),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PanelField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final IconData icon;
+  const _PanelField({required this.controller, required this.hint, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: AppColors.textTertiary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextFormField(
+              controller: controller,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+              validator: null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PasswordField extends StatelessWidget {
+  final TextEditingController controller;
+  final bool obscure;
+  final VoidCallback onToggle;
+  const _PasswordField({required this.controller, required this.obscure, required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(Icons.password, size: 16, color: AppColors.textTertiary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextFormField(
+              controller: controller,
+              obscureText: obscure,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              decoration: const InputDecoration(
+                hintText: 'Password',
+                hintStyle: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: onToggle,
+            child: Icon(
+              obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+              size: 16,
+              color: AppColors.textTertiary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DropdownRow extends StatelessWidget {
+  final IconData icon;
+  final Widget child;
+  const _DropdownRow({required this.icon, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: AppColors.textTertiary),
+          const SizedBox(width: 10),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
