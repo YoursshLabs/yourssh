@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #0F0F0F; overflow: hidden; }
+    #editor { width: 100%; height: 100%; }
+    #status {
+      position: fixed; bottom: 0; left: 0; right: 0; height: 24px;
+      background: #141414; color: #888; font-family: monospace; font-size: 11px;
+      display: flex; align-items: center; padding: 0 12px; gap: 16px;
+      border-top: 1px solid #2A2A2A;
+    }
+  </style>
+</head>
+<body>
+  <div id="editor"></div>
+  <div id="status">
+    <span id="status-lang">Plain Text</span>
+    <span id="status-pos">Ln 1, Col 1</span>
+    <span id="status-msg"></span>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs/loader.js"></script>
+  <script>
+    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+      const editor = monaco.editor.create(document.getElementById('editor'), {
+        value: '',
+        language: 'plaintext',
+        theme: 'vs-dark',
+        fontSize: 13,
+        fontFamily: 'monospace',
+        automaticLayout: true,
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+      });
+
+      document.getElementById('editor').style.height = 'calc(100% - 24px)';
+
+      editor.onDidChangeCursorPosition(e => {
+        document.getElementById('status-pos').textContent =
+          `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+      });
+
+      window.loadContent = function(content, language) {
+        monaco.editor.setModelLanguage(editor.getModel(), language || 'plaintext');
+        editor.setValue(content);
+        document.getElementById('status-lang').textContent = language || 'Plain Text';
+        editor.setScrollPosition({ scrollTop: 0 });
+      };
+
+      window.getContent = function() {
+        return editor.getValue();
+      };
+
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
+        if (window.FlutterChannel) {
+          window.FlutterChannel.postMessage(JSON.stringify({
+            type: 'save',
+            content: editor.getValue(),
+          }));
+        }
+      });
+
+      if (window.FlutterChannel) {
+        window.FlutterChannel.postMessage(JSON.stringify({ type: 'ready' }));
+      }
+    });
+  </script>
+</body>
+</html>
