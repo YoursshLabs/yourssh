@@ -408,7 +408,7 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
           ),
           items: _configs.asMap().entries.map((e) => DropdownMenuItem<int>(
             value: e.key,
-            child: Text('s3://${e.value.bucket}'),
+            child: Text(e.value.name),
           )).toList(),
           onChanged: (index) {
             if (index != null && index != _activeIndex) _activateConfig(index);
