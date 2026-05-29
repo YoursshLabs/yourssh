@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../providers/key_provider.dart';
+import '../services/ssh_service.dart';
 import '../theme/app_theme.dart';
 
 class HostDetailPanel extends StatefulWidget {
@@ -38,6 +39,8 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   String? _selectedKeyId;
   bool _obscurePassword = true;
   bool _saving = false;
+  bool _testing = false;
+  ({bool success, int latencyMs, String? error})? _testResult;
 
   bool get _isNew => widget.existing == null;
 
@@ -54,6 +57,13 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     _passwordCtrl = TextEditingController();
     _authType = h?.authType ?? AuthType.password;
     _selectedKeyId = h?.keyId;
+    for (final c in [_hostCtrl, _portCtrl, _usernameCtrl, _passwordCtrl]) {
+      c.addListener(_clearTestResult);
+    }
+  }
+
+  void _clearTestResult() {
+    if (_testResult != null || _testing) setState(() { _testResult = null; _testing = false; });
   }
 
   @override
@@ -90,6 +100,36 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   Future<void> _connect() async {
     if (_formKey.currentState?.validate() != true) return;
     await _save();
+  }
+
+  Future<void> _test() async {
+    if (_formKey.currentState?.validate() != true) return;
+    setState(() { _testing = true; _testResult = null; });
+
+    final keys = context.read<KeyProvider>().keys;
+    final keyEntry = _authType == AuthType.privateKey && _selectedKeyId != null
+        ? keys.where((k) => k.id == _selectedKeyId).firstOrNull
+        : null;
+
+    final host = Host(
+      id: widget.existing?.id,
+      label: _hostCtrl.text.trim(),
+      host: _hostCtrl.text.trim(),
+      port: int.tryParse(_portCtrl.text) ?? 22,
+      username: _usernameCtrl.text.trim(),
+      authType: _authType,
+      keyId: _authType == AuthType.privateKey ? _selectedKeyId : null,
+      group: '',
+      tags: const [],
+    );
+
+    final result = await context.read<SshService>().testConnection(
+      host,
+      password: _passwordCtrl.text,
+      keyEntry: keyEntry,
+    );
+
+    if (mounted) setState(() { _testing = false; _testResult = result; });
   }
 
   @override
@@ -209,7 +249,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                           DropdownMenuItem(value: AuthType.privateKey, child: Text('Private Key')),
                           DropdownMenuItem(value: AuthType.agent, child: Text('SSH Agent')),
                         ],
-                        onChanged: (v) => setState(() { _authType = v!; _selectedKeyId = null; }),
+                        onChanged: (v) => setState(() { _authType = v!; _selectedKeyId = null; _testResult = null; }),
                       ),
                     ),
                     if (_authType == AuthType.privateKey) ...[
@@ -227,13 +267,75 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                             value: k.id,
                             child: Text('${k.label} (${k.algorithmLabel})'),
                           )).toList(),
-                          onChanged: (v) => setState(() => _selectedKeyId = v),
+                          onChanged: (v) => setState(() { _selectedKeyId = v; _testResult = null; }),
                         ),
                       ),
                     ],
                   ]),
 
                   const SizedBox(height: 24),
+                  // Test connection button
+                  GestureDetector(
+                    onTap: (_testing || _saving) ? null : _test,
+                    child: Container(
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      alignment: Alignment.center,
+                      child: _testing
+                          ? const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.textSecondary)),
+                                SizedBox(width: 8),
+                                Text('TESTING…', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, letterSpacing: 0.5)),
+                              ],
+                            )
+                          : const Text('TEST CONNECTION', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, letterSpacing: 0.5)),
+                    ),
+                  ),
+                  if (_testResult != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _testResult!.success
+                            ? AppColors.accent.withValues(alpha: 0.08)
+                            : AppColors.red.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _testResult!.success
+                              ? AppColors.accent.withValues(alpha: 0.3)
+                              : AppColors.red.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _testResult!.success ? Icons.check_circle_outline : Icons.error_outline,
+                            size: 14,
+                            color: _testResult!.success ? AppColors.accent : AppColors.red,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _testResult!.success
+                                  ? 'Connected · ${_testResult!.latencyMs}ms'
+                                  : _testResult!.error ?? 'Failed',
+                              style: TextStyle(
+                                color: _testResult!.success ? AppColors.accent : AppColors.red,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
                   // Connect button
                   GestureDetector(
                     onTap: _saving ? null : _connect,
@@ -261,7 +363,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                         border: Border.all(color: AppColors.border),
                       ),
                       alignment: Alignment.center,
-                      child: const Text('Save only', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                      child: const Text('SAVE ONLY', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, letterSpacing: 0.5)),
                     ),
                   ),
                 ],
