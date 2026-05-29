@@ -435,7 +435,20 @@ class _HostCardState extends State<_HostCard> {
     );
   }
 
-  void _duplicate(BuildContext context, HostProvider hostProvider) {}
+  Future<void> _duplicate(BuildContext context, HostProvider hostProvider) async {
+    final copy = Host(
+      label: '${widget.host.label} (copy)',
+      host: widget.host.host,
+      port: widget.host.port,
+      username: widget.host.username,
+      authType: widget.host.authType,
+      keyId: widget.host.keyId,
+      group: widget.host.group,
+    );
+    await hostProvider.addHost(copy);
+    if (!context.mounted) return;
+    widget.onEditHost?.call(copy);
+  }
   void _moveToGroup(BuildContext context, HostProvider hostProvider) {}
   void _export(BuildContext context) {}
 

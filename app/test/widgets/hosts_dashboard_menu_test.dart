@@ -15,4 +15,23 @@ void main() {
       expect(url, 'ssh://root@10.0.0.1:2222');
     });
   });
+
+  group('Duplicate host', () {
+    test('copy has different id', () {
+      final original = Host(label: 'Prod', host: '1.2.3.4', port: 22, username: 'root');
+      final copy = Host(
+        label: '${original.label} (copy)',
+        host: original.host,
+        port: original.port,
+        username: original.username,
+        authType: original.authType,
+        keyId: original.keyId,
+        group: original.group,
+      );
+      expect(copy.id, isNot(original.id));
+      expect(copy.label, 'Prod (copy)');
+      expect(copy.host, original.host);
+      expect(copy.group, original.group);
+    });
+  });
 }
