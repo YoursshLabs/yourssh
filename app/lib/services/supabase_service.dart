@@ -1,15 +1,31 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
-  // Use dart-define at build time: --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
-  static const _supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
-  static const _anonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
+  final String _url;
+  final String _anonKey;
+  late final SupabaseClient _client;
 
-  static Future<void> initialize() async {
-    await Supabase.initialize(url: _supabaseUrl, anonKey: _anonKey);
+  SupabaseService(this._url, this._anonKey) {
+    _client = SupabaseClient(_url, _anonKey);
   }
 
-  SupabaseClient get _client => Supabase.instance.client;
+  String get url => _url;
+  String get anonKey => _anonKey;
+
+  /// Returns (true, null) on success; (false, errorMessage) on failure.
+  Future<(bool, String?)> testConnection() async {
+    try {
+      await _client.from('sync_data').select('sync_id').limit(1);
+      return (true, null);
+    } on PostgrestException catch (e) {
+      if (e.code == '42P01') {
+        return (false, 'Table "sync_data" not found. Run the SQL migration (see docs/SYNC_SETUP.md).');
+      }
+      return (false, e.message);
+    } catch (e) {
+      return (false, e.toString());
+    }
+  }
 
   Future<String?> fetchPayload(String syncId) async {
     final response = await _client
