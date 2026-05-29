@@ -44,7 +44,7 @@ class SshService {
 
   // ── Shell session (feeds into xterm Terminal) ──────────
 
-  Future<void> openShell(SshSession session) async {
+  Future<void> openShell(SshSession session, {bool useTmux = false}) async {
     final client = _clients[session.host.id];
     if (client == null) throw Exception('Not connected');
 
@@ -57,6 +57,10 @@ class SshService {
     );
 
     _shells[session.id] = shell;
+
+    if (useTmux) {
+      shell.write(Uint8List.fromList('tmux new-session -A -s yourssh\n'.codeUnits));
+    }
 
     // Pipe SSH output → xterm terminal
     shell.stdout.cast<List<int>>().listen(

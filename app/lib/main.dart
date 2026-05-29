@@ -49,6 +49,7 @@ class _YourSSHAppState extends State<YourSSHApp> {
     _sessionProvider.keyLookup = (id) => _keyProvider.findById(id);
     _sessionProvider.autoReconnectEnabled = () => _settingsProvider.autoReconnect;
     _sessionProvider.reconnectAttempts = () => _settingsProvider.reconnectAttempts;
+    _sessionProvider.tmuxEnabled = () => _settingsProvider.tmuxEnabled;
   }
 
   @override

@@ -49,6 +49,15 @@ class SettingsScreen extends StatelessWidget {
                       onChanged: (v) => context.read<SettingsProvider>().save(reconnectAttempts: v),
                     ),
                   ),
+                  SwitchListTile(
+                    title: const Text('Tmux Integration', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+                    subtitle: const Text('Attach to tmux session on connect (requires tmux on server)', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    value: settings.tmuxEnabled,
+                    onChanged: (v) {
+                      settings.tmuxEnabled = v;
+                      settings.save();
+                    },
+                  ),
                 ]),
                 const SizedBox(height: 24),
                 _Section(title: 'Terminal', children: [

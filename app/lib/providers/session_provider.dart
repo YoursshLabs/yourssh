@@ -12,6 +12,7 @@ class SessionProvider extends ChangeNotifier {
   SshKeyEntry? Function(String keyId)? keyLookup;
   bool Function()? autoReconnectEnabled;
   int Function()? reconnectAttempts;
+  bool Function()? tmuxEnabled;
 
   SessionProvider(this._ssh);
 
@@ -48,7 +49,7 @@ class SessionProvider extends ChangeNotifier {
       session.errorMessage = null;
       notifyListeners();
 
-      await _ssh.openShell(session);
+      await _ssh.openShell(session, useTmux: tmuxEnabled?.call() ?? false);
       notifyListeners();
 
       // Shell closed — try auto-reconnect
