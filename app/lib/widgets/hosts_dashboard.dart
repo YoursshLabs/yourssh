@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../providers/host_provider.dart';
@@ -9,7 +12,9 @@ import 'sftp_screen.dart';
 class HostsDashboard extends StatefulWidget {
   final VoidCallback? onAddHost;
   final void Function(Host)? onEditHost;
-  const HostsDashboard({super.key, this.onAddHost, this.onEditHost});
+  final VoidCallback? onOpenLocalTerminal;
+  final void Function(String group)? onNewGroup;
+  const HostsDashboard({super.key, this.onAddHost, this.onEditHost, this.onOpenLocalTerminal, this.onNewGroup});
 
   @override
   State<HostsDashboard> createState() => _HostsDashboardState();
@@ -45,6 +50,8 @@ class _HostsDashboardState extends State<HostsDashboard> {
             totalHosts: hosts.length,
             filteredCount: filtered.length,
             onAddHost: widget.onAddHost,
+            onLocalTerminal: widget.onOpenLocalTerminal,
+            onNewGroup: widget.onNewGroup,
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -95,8 +102,10 @@ class _TopBar extends StatelessWidget {
   final int totalHosts;
   final int filteredCount;
   final VoidCallback? onAddHost;
+  final VoidCallback? onLocalTerminal;
+  final void Function(String group)? onNewGroup;
 
-  const _TopBar({required this.search, required this.onSearch, required this.totalHosts, required this.filteredCount, this.onAddHost});
+  const _TopBar({required this.search, required this.onSearch, required this.totalHosts, required this.filteredCount, this.onAddHost, this.onLocalTerminal, this.onNewGroup});
 
   @override
   Widget build(BuildContext context) {
@@ -109,7 +118,6 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
-          // Search
           Expanded(
             child: Container(
               height: 34,
@@ -133,25 +141,18 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-
-          // Host count
           Text('$filteredCount of $totalHosts hosts',
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
           const SizedBox(width: 16),
-
-          // Local Terminal button
           _OutlinedBtn(
             icon: Icons.terminal,
             label: 'LOCAL TERMINAL',
-            onTap: () {},
+            onTap: onLocalTerminal ?? () {},
           ),
           const SizedBox(width: 8),
-
-          // New Host button
-          _GreenBtn(
-            icon: Icons.add,
-            label: 'NEW HOST',
-            onTap: onAddHost ?? () {},
+          _SplitNewHostBtn(
+            onAddHost: onAddHost,
+            onNewGroup: onNewGroup,
           ),
         ],
       ),
@@ -188,30 +189,199 @@ class _OutlinedBtn extends StatelessWidget {
   }
 }
 
-class _GreenBtn extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  const _GreenBtn({required this.icon, required this.label, required this.onTap});
+class _SplitNewHostBtn extends StatelessWidget {
+  final VoidCallback? onAddHost;
+  final void Function(String group)? onNewGroup;
+
+  const _SplitNewHostBtn({this.onAddHost, this.onNewGroup});
+
+  void _showMenu(BuildContext context, GlobalKey key) {
+    final box = key.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final pos = box.localToGlobal(Offset(0, box.size.height + 4), ancestor: overlay);
+    showMenu<String>(
+      context: context,
+      color: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFF2A2A2A)),
+      ),
+      position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 240, pos.dy + 300),
+      items: [
+        _menuItem('new_group', Icons.create_new_folder_outlined, 'New Group'),
+        _menuItem('import', Icons.upload_file_outlined, 'Import'),
+        const PopupMenuDivider(height: 1),
+        _cloudItem('aws', 'AWS Integration'),
+        _cloudItem('digitalocean', 'DigitalOcean Integration'),
+        _cloudItem('azure', 'Azure Integration'),
+      ],
+    ).then((val) {
+      if (val == null || !context.mounted) return;
+      switch (val) {
+        case 'new_group':
+          _handleNewGroup(context);
+        case 'import':
+          _handleImport(context);
+        case 'aws':
+        case 'digitalocean':
+        case 'azure':
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${val == 'aws' ? 'AWS' : val == 'digitalocean' ? 'DigitalOcean' : 'Azure'} Integration — coming soon'),
+              backgroundColor: const Color(0xFF1E1E1E),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+      }
+    });
+  }
+
+  PopupMenuItem<String> _menuItem(String value, IconData icon, String label) {
+    return PopupMenuItem<String>(
+      value: value,
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: const Color(0xFF888888)),
+          const SizedBox(width: 10),
+          Text(label, style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _cloudItem(String value, String label) {
+    return PopupMenuItem<String>(
+      value: value,
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_outlined, size: 15, color: Color(0xFF888888)),
+          const SizedBox(width: 10),
+          Expanded(child: Text(label, style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13))),
+          const Icon(Icons.arrow_forward_ios, size: 10, color: Color(0xFF555555)),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleNewGroup(BuildContext context) async {
+    final ctrl = TextEditingController();
+    final groupName = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        title: const Text('New Group', style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 15)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
+          decoration: const InputDecoration(
+            hintText: 'Group name',
+            hintStyle: TextStyle(color: Color(0xFF555555)),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF2A2A2A))),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF22C55E))),
+          ),
+          onSubmitted: (v) => Navigator.pop(context, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF666666))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+            child: const Text('Create', style: TextStyle(color: Color(0xFF22C55E))),
+          ),
+        ],
+      ),
+    );
+    if (groupName != null && groupName.isNotEmpty && context.mounted) {
+      onNewGroup?.call(groupName);
+    }
+  }
+
+  Future<void> _handleImport(BuildContext context) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty || !context.mounted) return;
+    final bytes = result.files.first.bytes;
+    if (bytes == null) return;
+    try {
+      final decoded = jsonDecode(utf8.decode(bytes));
+      final List<dynamic> list = decoded is List ? decoded : [decoded];
+      final provider = context.read<HostProvider>();
+      int count = 0;
+      for (final item in list) {
+        try {
+          final host = Host.fromJson(item as Map<String, dynamic>);
+          await provider.addHost(host);
+          count++;
+        } catch (_) {}
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Imported $count host${count == 1 ? '' : 's'}'),
+            backgroundColor: const Color(0xFF1E2A1E),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Import failed: invalid JSON'),
+            backgroundColor: const Color(0xFF2A1A1A),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: AppColors.accent,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: Colors.black),
-            const SizedBox(width: 6),
-            Text(label, style: const TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.3)),
-          ],
-        ),
+    final chevronKey = GlobalKey();
+    return Container(
+      height: 34,
+      decoration: BoxDecoration(
+        color: AppColors.accent,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: onAddHost,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add, size: 14, color: Colors.black),
+                  SizedBox(width: 6),
+                  Text('NEW HOST', style: TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.3)),
+                ],
+              ),
+            ),
+          ),
+          Container(width: 1, height: 20, color: Colors.black.withValues(alpha: 0.2)),
+          GestureDetector(
+            key: chevronKey,
+            onTap: () => _showMenu(context, chevronKey),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.keyboard_arrow_up, size: 16, color: Colors.black),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -386,9 +556,9 @@ class _HostCardState extends State<_HostCard> {
 
               // Action buttons (show on hover)
               if (_hovered) ...[
-                _iconBtn(Icons.folder_outlined, 'SFTP', () => _openSftp(context)),
+                _iconBtn(Icons.folder_outlined, 'SFTP', onTap: () => _openSftp(context)),
                 const SizedBox(width: 2),
-                _iconBtn(Icons.more_horiz, 'More', () => _showMenu(context, hostProvider, sessionProvider)),
+                _iconBtn(Icons.more_horiz, 'More', onTapDown: (d) => _showMenu(context, hostProvider, sessionProvider, d.globalPosition)),
               ],
             ],
           ),
@@ -397,11 +567,12 @@ class _HostCardState extends State<_HostCard> {
     );
   }
 
-  Widget _iconBtn(IconData icon, String tooltip, VoidCallback onTap) {
+  Widget _iconBtn(IconData icon, String tooltip, {VoidCallback? onTap, void Function(TapDownDetails)? onTapDown}) {
     return Tooltip(
       message: tooltip,
       child: GestureDetector(
         onTap: onTap,
+        onTapDown: onTapDown,
         child: Container(
           width: 28, height: 28,
           decoration: BoxDecoration(
@@ -415,17 +586,24 @@ class _HostCardState extends State<_HostCard> {
     );
   }
 
-  void _showMenu(BuildContext context, HostProvider hostProvider, SessionProvider sessionProvider) {
-    final RenderBox box = context.findRenderObject() as RenderBox;
-    final offset = box.localToGlobal(Offset.zero);
+  void _showMenu(BuildContext context, HostProvider hostProvider, SessionProvider sessionProvider, Offset tapPosition) {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     showMenu(
       context: context,
       color: AppColors.card,
-      position: RelativeRect.fromLTRB(offset.dx + box.size.width, offset.dy, 0, 0),
+      position: RelativeRect.fromRect(
+        tapPosition & const Size(1, 1),
+        Offset.zero & overlay.size,
+      ),
       items: <PopupMenuEntry<String>>[
         _menuItem('terminal', Icons.terminal, 'Connect', () => sessionProvider.connect(widget.host)),
         _menuItem('sftp', Icons.folder_outlined, 'SFTP', () => _openSftp(context)),
         _menuItem('edit', Icons.edit_outlined, 'Edit', () => widget.onEditHost?.call(widget.host)),
+        const PopupMenuDivider(),
+        _menuItem('duplicate', Icons.copy_outlined, 'Duplicate', () => _duplicate(context, hostProvider)),
+        _menuItem('copy_url', Icons.link_outlined, 'Copy SSH URL', () => _copySshUrl(context)),
+        _menuItem('move_group', Icons.drive_file_move_outlined, 'Move to Group', () => _moveToGroup(context, hostProvider)),
+        _menuItem('export', Icons.upload_outlined, 'Export', () => _export(context)),
         const PopupMenuDivider(),
         _menuItem('delete', Icons.delete_outlined, 'Delete', () => hostProvider.deleteHost(widget.host.id), color: AppColors.red),
       ],
@@ -446,6 +624,19 @@ class _HostCardState extends State<_HostCard> {
       ),
     );
   }
+
+  void _copySshUrl(BuildContext context) {
+    final url = 'ssh://${widget.host.username}@${widget.host.host}:${widget.host.port}';
+    Clipboard.setData(ClipboardData(text: url));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('SSH URL copied'), duration: Duration(seconds: 2)),
+    );
+  }
+
+  void _duplicate(BuildContext context, HostProvider hostProvider) {}
+  void _moveToGroup(BuildContext context, HostProvider hostProvider) {}
+  void _export(BuildContext context) {}
 
   void _openSftp(BuildContext context) {
     showDialog<void>(
