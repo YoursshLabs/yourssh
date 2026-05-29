@@ -1,0 +1,62 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+class KnownHost {
+  final String host;
+  final int port;
+  final String keyType;
+  final String fingerprint;
+  final DateTime addedAt;
+
+  const KnownHost({
+    required this.host,
+    required this.port,
+    required this.keyType,
+    required this.fingerprint,
+    required this.addedAt,
+  });
+
+  String get lookupKey => '$host:$port:$keyType';
+
+  Map<String, dynamic> toJson() => {
+        'host': host,
+        'port': port,
+        'keyType': keyType,
+        'fingerprint': fingerprint,
+        'addedAt': addedAt.toIso8601String(),
+      };
+
+  factory KnownHost.fromJson(Map<String, dynamic> json) => KnownHost(
+        host: json['host'] as String,
+        port: json['port'] as int,
+        keyType: json['keyType'] as String,
+        fingerprint: json['fingerprint'] as String,
+        addedAt: DateTime.parse(json['addedAt'] as String),
+      );
+
+  static String bytesToFingerprint(Uint8List bytes) =>
+      bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(':');
+}
+
+class HostKeyChallenge {
+  final String host;
+  final int port;
+  final String keyType;
+  final String oldFingerprint;
+  final String newFingerprint;
+  final _completer = Completer<bool>();
+
+  HostKeyChallenge({
+    required this.host,
+    required this.port,
+    required this.keyType,
+    required this.oldFingerprint,
+    required this.newFingerprint,
+  });
+
+  void resolve(bool trust) {
+    if (!_completer.isCompleted) _completer.complete(trust);
+  }
+
+  Future<bool> get result => _completer.future;
+}
