@@ -50,6 +50,60 @@ class SshService {
     return client;
   }
 
+  // ── Test connection (TCP + auth, no shell) ────────────
+
+  Future<({bool success, int latencyMs, String? error})> testConnection(
+    Host host, {
+    String? password,
+    SshKeyEntry? keyEntry,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    SSHClient? client;
+    try {
+      final socket = await SSHSocket.connect(host.host, host.port)
+          .timeout(const Duration(seconds: 10));
+
+      List<SSHKeyPair> identities = [];
+      if (host.authType == AuthType.privateKey && keyEntry != null) {
+        final keyFile = File(keyEntry.privateKeyPath);
+        if (await keyFile.exists()) {
+          final pem = await keyFile.readAsString();
+          final passphrase = await _storage.loadPassphrase(keyEntry.id);
+          identities = SSHKeyPair.fromPem(pem, passphrase ?? '');
+        }
+      }
+
+      client = SSHClient(
+        socket,
+        username: host.username,
+        onPasswordRequest: () => password ?? '',
+        identities: identities.isNotEmpty ? identities : null,
+        onVerifyHostKey: (_, _) async => true,
+      );
+      await client.authenticated.timeout(const Duration(seconds: 10));
+      stopwatch.stop();
+      return (success: true, latencyMs: stopwatch.elapsedMilliseconds, error: null);
+    } on TimeoutException {
+      return (success: false, latencyMs: 0, error: 'Host unreachable');
+    } on SocketException {
+      return (success: false, latencyMs: 0, error: 'Host unreachable');
+    } catch (e) {
+      final msg = e.toString();
+      final isAuth = msg.toLowerCase().contains('auth') ||
+          msg.toLowerCase().contains('permission denied') ||
+          msg.toLowerCase().contains('userauth');
+      return (
+        success: false,
+        latencyMs: 0,
+        error: isAuth
+            ? 'Authentication failed'
+            : (msg.length > 80 ? '${msg.substring(0, 80)}…' : msg),
+      );
+    } finally {
+      client?.close();
+    }
+  }
+
   // ── Shell session (feeds into xterm Terminal) ──────────
 
   Future<void> openShell(SshSession session, {bool useTmux = false}) async {
