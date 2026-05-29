@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -6,6 +7,15 @@ class SettingsProvider extends ChangeNotifier {
   int reconnectAttempts = 3;
   double fontSize = 13;
   String terminalTheme = 'Dracula';
+  Map<String, String> hotkeys = {
+    'new_session': 'ctrl+t',
+    'close_session': 'ctrl+w',
+    'next_session': 'ctrl+tab',
+    'prev_session': 'ctrl+shift+tab',
+    'toggle_input_bar': 'ctrl+shift+i',
+    'split_horizontal': 'ctrl+shift+h',
+    'split_vertical': 'ctrl+shift+v',
+  };
 
   SettingsProvider() {
     _load();
@@ -17,6 +27,11 @@ class SettingsProvider extends ChangeNotifier {
     reconnectAttempts = prefs.getInt('reconnectAttempts') ?? 3;
     fontSize = prefs.getDouble('fontSize') ?? 13;
     terminalTheme = prefs.getString('terminalTheme') ?? 'Dracula';
+    final hotkeysJson = prefs.getString('hotkeys');
+    if (hotkeysJson != null) {
+      final decoded = jsonDecode(hotkeysJson) as Map<String, dynamic>;
+      hotkeys = decoded.map((k, v) => MapEntry(k, v as String));
+    }
     notifyListeners();
   }
 
@@ -25,16 +40,19 @@ class SettingsProvider extends ChangeNotifier {
     int? reconnectAttempts,
     double? fontSize,
     String? terminalTheme,
+    Map<String, String>? hotkeys,
   }) async {
     if (autoReconnect != null) this.autoReconnect = autoReconnect;
     if (reconnectAttempts != null) this.reconnectAttempts = reconnectAttempts;
     if (fontSize != null) this.fontSize = fontSize;
     if (terminalTheme != null) this.terminalTheme = terminalTheme;
+    if (hotkeys != null) this.hotkeys = hotkeys;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('autoReconnect', this.autoReconnect);
     await prefs.setInt('reconnectAttempts', this.reconnectAttempts);
     await prefs.setDouble('fontSize', this.fontSize);
     await prefs.setString('terminalTheme', this.terminalTheme);
+    await prefs.setString('hotkeys', jsonEncode(this.hotkeys));
     notifyListeners();
   }
 }
