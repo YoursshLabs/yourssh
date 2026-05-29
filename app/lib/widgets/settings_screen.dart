@@ -17,6 +17,25 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   static const _themes = ['Dracula', 'One Dark', 'Tokyo Night', 'Nord', 'Solarized Dark'];
+  static const _bundledFonts = [
+    'monospace',
+    'DejaVu Sans Mono for Powerline',
+    'Inconsolata for Powerline',
+    'Meslo LG S for Powerline',
+    'Source Code Pro for Powerline',
+    'Ubuntu Mono derivative Powerline',
+    'Roboto Mono for Powerline',
+  ];
+  static const _kCustom = '__custom__';
+
+  final _customFontController = TextEditingController();
+  bool _pendingCustom = false;
+
+  @override
+  void dispose() {
+    _customFontController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +113,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ),
+                  _Row(
+                    label: 'Terminal font',
+                    trailing: _buildFontDropdown(context, settings),
+                  ),
+                  if (_pendingCustom || !_bundledFonts.contains(settings.terminalFont))
+                    _Row(
+                      label: 'Custom font name',
+                      trailing: SizedBox(
+                        width: 220,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _customFontController,
+                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                                decoration: InputDecoration(
+                                  hintText: 'e.g. Hack Nerd Font',
+                                  hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  filled: true,
+                                  fillColor: AppColors.bg,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: const BorderSide(color: AppColors.border),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: const BorderSide(color: AppColors.border),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            TextButton(
+                              onPressed: () {
+                                final name = _customFontController.text.trim();
+                                if (name.isEmpty) return;
+                                setState(() => _pendingCustom = false);
+                                context.read<SettingsProvider>().save(terminalFont: name);
+                              },
+                              child: const Text('Apply', style: TextStyle(fontSize: 12)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ]),
                 const SizedBox(height: 24),
                 _Section(title: 'Monitoring', children: [
@@ -119,6 +185,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFontDropdown(BuildContext context, SettingsProvider settings) {
+    final isCustom = !_bundledFonts.contains(settings.terminalFont);
+    if (isCustom && !_pendingCustom && _customFontController.text.isEmpty) {
+      _customFontController.text = settings.terminalFont;
+    }
+    final ddValue = (isCustom || _pendingCustom) ? _kCustom : settings.terminalFont;
+    return DropdownButton<String>(
+      value: ddValue,
+      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+      dropdownColor: AppColors.card,
+      underline: const SizedBox(),
+      items: [
+        ..._bundledFonts.map((f) => DropdownMenuItem(
+          value: f,
+          child: Text(f == 'monospace' ? 'System Default' : f, style: const TextStyle(fontSize: 12)),
+        )),
+        const DropdownMenuItem(
+          value: _kCustom,
+          child: Text('Custom…', style: TextStyle(fontSize: 12)),
+        ),
+      ],
+      onChanged: (v) {
+        if (v == _kCustom) {
+          setState(() {
+            _pendingCustom = true;
+            _customFontController.clear();
+          });
+        } else if (v != null) {
+          setState(() => _pendingCustom = false);
+          context.read<SettingsProvider>().save(terminalFont: v);
+        }
+      },
     );
   }
 }
