@@ -40,6 +40,20 @@ class SftpPanelProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void selectAll() {
+    for (final entry in _entries) {
+      _selected.add(entry);
+    }
+    notifyListeners();
+  }
+
+  void deselectAll() {
+    _selected.clear();
+    notifyListeners();
+  }
+
+  bool get isAllSelected => _entries.isNotEmpty && _selected.length == _entries.length;
+
   void navigateUp() {
     if (_currentPath == '/') return;
     final parts = _currentPath.split('/');
