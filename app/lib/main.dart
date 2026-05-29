@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 import 'providers/command_history_provider.dart';
 import 'providers/host_provider.dart';
 import 'providers/key_provider.dart';
@@ -13,8 +14,10 @@ import 'services/storage_service.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await windowManager.ensureInitialized();
+  await windowManager.setMinimumSize(const Size(800, 600));
   runApp(const YourSSHApp());
 }
 
