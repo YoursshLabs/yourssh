@@ -35,4 +35,22 @@ void main() {
     p.setLayout(SplitLayout.quad);
     expect(p.paneCount, 4);
   });
+
+  test('setLayout notifies listeners', () {
+    final p = TerminalLayoutProvider();
+    var notificationCount = 0;
+    p.addListener(() => notificationCount++);
+    p.setLayout(SplitLayout.horizontal);
+    expect(notificationCount, 1);
+    p.setLayout(SplitLayout.vertical);
+    expect(notificationCount, 2);
+  });
+
+  test('toggleBroadcast notifies listeners', () {
+    final p = TerminalLayoutProvider();
+    var notificationCount = 0;
+    p.addListener(() => notificationCount++);
+    p.toggleBroadcast();
+    expect(notificationCount, 1);
+  });
 }
