@@ -13,6 +13,7 @@ class EmbeddedBrowser extends StatefulWidget {
 class _EmbeddedBrowserState extends State<EmbeddedBrowser> {
   late final WebViewController _controller;
   late final TextEditingController _urlCtrl;
+  final _urlFocusNode = FocusNode();
   bool _loading = false;
 
   static const _defaultUrl = 'https://www.google.com';
@@ -25,14 +26,16 @@ class _EmbeddedBrowserState extends State<EmbeddedBrowser> {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(NavigationDelegate(
-        onPageStarted: (url) => setState(() {
-          _loading = true;
-          _urlCtrl.text = url;
-        }),
-        onPageFinished: (url) => setState(() {
-          _loading = false;
-          _urlCtrl.text = url;
-        }),
+        onPageStarted: (url) {
+          if (!mounted) return;
+          setState(() => _loading = true);
+          if (!_urlFocusNode.hasFocus) _urlCtrl.text = url;
+        },
+        onPageFinished: (url) {
+          if (!mounted) return;
+          setState(() => _loading = false);
+          if (!_urlFocusNode.hasFocus) _urlCtrl.text = url;
+        },
       ))
       ..loadRequest(Uri.parse(initial));
   }
@@ -40,17 +43,27 @@ class _EmbeddedBrowserState extends State<EmbeddedBrowser> {
   @override
   void dispose() {
     _urlCtrl.dispose();
+    _urlFocusNode.dispose();
     super.dispose();
   }
 
-  void _navigate(String url) {
-    var target = url.trim();
+  void _navigate(String raw) {
+    var target = raw.trim();
     if (!target.startsWith('http://') && !target.startsWith('https://')) {
       target = 'https://$target';
     }
+    final uri = Uri.tryParse(target);
+    if (uri == null || uri.host.isEmpty) {
+      _controller.loadRequest(
+        Uri.parse('https://www.google.com/search?q=${Uri.encodeComponent(raw.trim())}'),
+      );
+      return;
+    }
     _urlCtrl.text = target;
-    _controller.loadRequest(Uri.parse(target));
+    _controller.loadRequest(uri);
   }
+
+  void _stop() => _controller.runJavaScript('window.stop();');
 
   @override
   Widget build(BuildContext context) {
@@ -58,11 +71,13 @@ class _EmbeddedBrowserState extends State<EmbeddedBrowser> {
       children: [
         _AddressBar(
           controller: _urlCtrl,
+          focusNode: _urlFocusNode,
           loading: _loading,
           onNavigate: _navigate,
           onBack: () => _controller.goBack(),
           onForward: () => _controller.goForward(),
           onReload: () => _controller.reload(),
+          onStop: _stop,
         ),
         const Divider(height: 1, color: AppColors.border),
         Expanded(child: WebViewWidget(controller: _controller)),
@@ -73,19 +88,23 @@ class _EmbeddedBrowserState extends State<EmbeddedBrowser> {
 
 class _AddressBar extends StatelessWidget {
   final TextEditingController controller;
+  final FocusNode focusNode;
   final bool loading;
   final ValueChanged<String> onNavigate;
   final VoidCallback onBack;
   final VoidCallback onForward;
   final VoidCallback onReload;
+  final VoidCallback onStop;
 
   const _AddressBar({
     required this.controller,
+    required this.focusNode,
     required this.loading,
     required this.onNavigate,
     required this.onBack,
     required this.onForward,
     required this.onReload,
+    required this.onStop,
   });
 
   @override
@@ -103,7 +122,7 @@ class _AddressBar extends StatelessWidget {
           _NavBtn(
             icon: loading ? Icons.close : Icons.refresh,
             size: 16,
-            onTap: loading ? () => controller.clear() : onReload,
+            onTap: loading ? onStop : onReload,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -119,18 +138,18 @@ class _AddressBar extends StatelessWidget {
                   const SizedBox(width: 10),
                   if (loading)
                     const SizedBox(
-                      width: 12,
-                      height: 12,
+                      width: 12, height: 12,
                       child: CircularProgressIndicator(
-                          strokeWidth: 1.5, color: AppColors.accent),
+                        strokeWidth: 1.5, color: AppColors.accent),
                     )
                   else
-                    const Icon(Icons.lock_outline,
-                        size: 12, color: AppColors.textTertiary),
+                    const Icon(Icons.lock_outline, size: 12,
+                        color: AppColors.textTertiary),
                   const SizedBox(width: 6),
                   Expanded(
                     child: TextField(
                       controller: controller,
+                      focusNode: focusNode,
                       style: const TextStyle(
                           color: AppColors.textPrimary, fontSize: 12),
                       decoration: const InputDecoration(
@@ -164,7 +183,6 @@ class _NavBtn extends StatefulWidget {
 
 class _NavBtnState extends State<_NavBtn> {
   bool _hovered = false;
-
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
@@ -173,16 +191,13 @@ class _NavBtnState extends State<_NavBtn> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: Container(
-          width: 28,
-          height: 28,
+          width: 28, height: 28,
           decoration: BoxDecoration(
             color: _hovered ? AppColors.cardHover : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
           ),
-          child: Icon(widget.icon,
-              size: widget.size,
-              color:
-                  _hovered ? AppColors.textPrimary : AppColors.textSecondary),
+          child: Icon(widget.icon, size: widget.size,
+              color: _hovered ? AppColors.textPrimary : AppColors.textSecondary),
         ),
       ),
     );
