@@ -7,6 +7,7 @@ import '../services/sync_service.dart';
 import '../providers/host_provider.dart';
 import '../services/storage_service.dart';
 import '../services/supabase_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import 'hotkey_settings_screen.dart';
 
@@ -187,6 +188,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ]),
                 const SizedBox(height: 24),
+                _Section(title: 'Features', children: [
+                  SwitchListTile(
+                    title: const Text('Web Tools', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+                    subtitle: const Text('Show Web Tools section in sidebar', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    value: settings.showWebTools,
+                    onChanged: (v) => context.read<SettingsProvider>().save(showWebTools: v),
+                  ),
+                  SwitchListTile(
+                    title: const Text('DevOps Tools', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+                    subtitle: const Text('Show DevOps section in sidebar (ping, DNS, port scan, etc.)', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    value: settings.showDevOps,
+                    onChanged: (v) => context.read<SettingsProvider>().save(showDevOps: v),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Snippets', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+                    subtitle: const Text('Show Snippets section in sidebar', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    value: settings.showSnippets,
+                    onChanged: (v) => context.read<SettingsProvider>().save(showSnippets: v),
+                  ),
+                ]),
+                const SizedBox(height: 24),
                 _SyncSection(sync: sync),
                 const SizedBox(height: 24),
                 _Section(title: 'Keyboard', children: [
@@ -266,11 +288,8 @@ class _SyncSectionState extends State<_SyncSection> {
   bool _testing = false;
   bool _testOk = false;
   String? _testError;
-  bool _migrating = false;
-  bool _tableCreated = false;
   bool _needsServiceKey = false;
-  final _serviceRoleKeyController = TextEditingController();
-  bool _showServiceRoleKey = false;
+
 
   @override
   void initState() {
@@ -290,8 +309,23 @@ class _SyncSectionState extends State<_SyncSection> {
     _codeController.dispose();
     _urlController.dispose();
     _anonKeyController.dispose();
-    _serviceRoleKeyController.dispose();
+
     super.dispose();
+  }
+
+  Future<void> _pushNow() async {
+    final sync = context.read<SyncProvider>();
+    if (!sync.enabled || !sync.isSupabaseConfigured) return;
+    final syncService = context.read<SyncService>();
+    final hostProvider = context.read<HostProvider>();
+    final storage = context.read<StorageService>();
+    final passwords = <String, String>{};
+    for (final host in hostProvider.allHosts) {
+      final pw = await storage.loadPassword(host.id);
+      if (pw != null) passwords['pw_${host.id}'] = pw;
+    }
+    await syncService.push(hosts: hostProvider.allHosts, loadPasswords: () async => passwords);
+    syncService.restartRetryTimer();
   }
 
   Future<void> _onToggle(bool value) async {
@@ -301,31 +335,19 @@ class _SyncSectionState extends State<_SyncSection> {
       await syncService.disableAndDelete();
     } else {
       await sync.setEnabled(true);
-      if (!mounted || !sync.isSupabaseConfigured) return;
-      final hostProvider = context.read<HostProvider>();
-      final storage = context.read<StorageService>();
-      final passwords = <String, String>{};
-      for (final host in hostProvider.allHosts) {
-        final pw = await storage.loadPassword(host.id);
-        if (pw != null) passwords['pw_${host.id}'] = pw;
-      }
-      await syncService.push(
-        hosts: hostProvider.allHosts,
-        loadPasswords: () async => passwords,
-      );
-      syncService.restartRetryTimer();
+      if (!mounted) return;
+      await _pushNow();
     }
   }
 
   Future<void> _testAndSave() async {
     final url = _urlController.text.trim();
     final anonKey = _anonKeyController.text.trim();
-    final serviceRoleKey = _serviceRoleKeyController.text.trim();
     if (url.isEmpty || anonKey.isEmpty) {
       setState(() { _testError = 'URL and Anon key are required'; _testOk = false; });
       return;
     }
-    setState(() { _testing = true; _testError = null; _testOk = false; _needsServiceKey = false; _tableCreated = false; });
+    setState(() { _testing = true; _testError = null; _testOk = false; _needsServiceKey = false; });
     try {
       final svc = SupabaseService(url, anonKey);
       final (outcome, error) = await svc.testConnection();
@@ -334,64 +356,114 @@ class _SyncSectionState extends State<_SyncSection> {
       if (outcome == TestConnectionOutcome.connected) {
         await context.read<SyncProvider>().setSupabaseConfig(url, anonKey);
         if (!mounted) return;
+        await _pushNow();
+        if (!mounted) return;
         setState(() { _testing = false; _testOk = true; });
         return;
       }
 
       if (outcome == TestConnectionOutcome.tableNotFound) {
-        if (serviceRoleKey.isEmpty) {
-          setState(() { _testing = false; _needsServiceKey = true; });
-          return;
-        }
-        setState(() { _testing = false; _migrating = true; });
-        final (ok, migrateError) = await svc.setupSchema(serviceRoleKey);
-        if (!mounted) return;
-        if (!ok) {
-          setState(() { _migrating = false; _testError = migrateError; });
-          return;
-        }
-        final (outcome2, error2) = await svc.testConnection();
-        if (!mounted) return;
-        if (outcome2 == TestConnectionOutcome.connected) {
-          await context.read<SyncProvider>().setSupabaseConfig(url, anonKey);
-          if (!mounted) return;
-          setState(() { _migrating = false; _testOk = true; _tableCreated = true; });
-        } else {
-          setState(() { _migrating = false; _testError = error2 ?? 'Connection failed after migration'; });
-        }
+        setState(() { _testing = false; _needsServiceKey = true; });
         return;
       }
 
       setState(() { _testing = false; _testError = error ?? 'Connection failed'; });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _testing = false; _migrating = false; _testError = e.toString(); });
+      setState(() { _testing = false; _testError = e.toString(); });
     }
   }
 
+  Future<void> _disconnect() async {
+    await context.read<SyncProvider>().clearSupabaseConfig();
+    if (!mounted) return;
+    setState(() {
+      _testOk = false;
+      _urlController.clear();
+      _anonKeyController.clear();
+    });
+  }
+
   Widget _buildTestStatus() {
-    if (_migrating) {
-      return const Row(mainAxisSize: MainAxisSize.min, children: [
-        SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5)),
-        SizedBox(width: 6),
-        Text('Setting up database…', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-      ]);
-    }
     if (_testing) return const SizedBox.shrink();
     if (_testOk) {
-      final label = _tableCreated ? 'Connected (table created)' : 'Connected';
       return Row(mainAxisSize: MainAxisSize.min, children: [
         const Icon(Icons.check_circle, size: 12, color: Colors.green),
         const SizedBox(width: 4),
-        Text(label, style: const TextStyle(color: Colors.green, fontSize: 11)),
+        const Text('Connected', style: TextStyle(color: Colors.green, fontSize: 11)),
+        const SizedBox(width: 12),
+        TextButton(
+          onPressed: _disconnect,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            foregroundColor: Colors.red,
+          ),
+          child: const Text('Disconnect', style: TextStyle(fontSize: 11)),
+        ),
       ]);
     }
     if (_needsServiceKey) {
-      return const Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.info_outline, size: 12, color: Colors.orange),
-        SizedBox(width: 4),
-        Flexible(child: Text('Table not found — enter Service Role Key to auto-create it', style: TextStyle(color: Colors.orange, fontSize: 11))),
-      ]);
+      final projectRef = Uri.tryParse(_urlController.text.trim())?.host.split('.').first ?? '';
+      final sqlEditorUrl = projectRef.isNotEmpty
+          ? 'https://supabase.com/dashboard/project/$projectRef/sql/new'
+          : 'https://supabase.com/dashboard';
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(children: [
+            Icon(Icons.info_outline, size: 12, color: Colors.orange),
+            SizedBox(width: 4),
+            Flexible(child: Text(
+              'Table not found. Copy the SQL below and run it in Supabase SQL Editor, then click Save & Test again:',
+              style: TextStyle(color: Colors.orange, fontSize: 11),
+            )),
+          ]),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.bg,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Text(
+              SupabaseService.migrationSql,
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 10, fontFamily: 'monospace'),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              TextButton.icon(
+                onPressed: () {
+                  Clipboard.setData(const ClipboardData(text: SupabaseService.migrationSql));
+                },
+                icon: const Icon(Icons.copy, size: 12, color: AppColors.textSecondary),
+                label: const Text('Copy SQL', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: () => launchUrl(Uri.parse(sqlEditorUrl)),
+                icon: const Icon(Icons.open_in_new, size: 12, color: AppColors.accent),
+                label: const Text('Open SQL Editor', style: TextStyle(color: AppColors.accent, fontSize: 11)),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
     }
     if (_testError != null) {
       return Row(mainAxisSize: MainAxisSize.min, children: [
@@ -524,34 +596,11 @@ class _SyncSectionState extends State<_SyncSection> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: _serviceRoleKeyController,
-                              obscureText: !_showServiceRoleKey,
-                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                              decoration: InputDecoration(
-                                hintText: 'Service Role Key',
-                                hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                                filled: true,
-                                fillColor: AppColors.bg,
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
-                                suffixIcon: IconButton(
-                                  icon: Icon(_showServiceRoleKey ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
-                                  onPressed: () => setState(() => _showServiceRoleKey = !_showServiceRoleKey),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
                           SizedBox(
                             width: 110,
                             height: 36,
                             child: ElevatedButton(
-                              onPressed: (_testing || _migrating) ? null : _testAndSave,
+                              onPressed: _testing ? null : _testAndSave,
                               style: ElevatedButton.styleFrom(
                                 minimumSize: Size.zero,
                                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -565,7 +614,7 @@ class _SyncSectionState extends State<_SyncSection> {
                           ),
                         ],
                       ),
-                      if (_testing || _migrating || _testOk || _needsServiceKey || _testError != null) ...[
+                      if (_testing || _testOk || _needsServiceKey || _testError != null) ...[
                         const SizedBox(height: 6),
                         _buildTestStatus(),
                       ],

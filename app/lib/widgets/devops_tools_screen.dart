@@ -85,6 +85,32 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
   final List<_ResultTab> _tabs = [];
   int _activeTabIndex = -1;
 
+  IconData _iconFor(_Tool tool) => switch (tool) {
+    _Tool.ping || _Tool.traceroute => Icons.wifi_tethering_outlined,
+    _Tool.dns => Icons.dns_outlined,
+    _Tool.portScan => Icons.radar,
+    _Tool.whois => Icons.info_outline,
+    _Tool.curl || _Tool.httpHeaders => Icons.link,
+    _Tool.sslCert => Icons.lock_outline,
+    _Tool.diskUsage => Icons.folder_outlined,
+    _ => Icons.search,
+  };
+
+  String _defaultInputFor(_Tool tool) => switch (tool) {
+    _Tool.ping || _Tool.dns || _Tool.traceroute || _Tool.portScan => '8.8.8.8',
+    _Tool.curl || _Tool.httpHeaders => 'https://example.com',
+    _Tool.sslCert || _Tool.whois => 'example.com',
+    _Tool.diskUsage => '/',
+    _ => '',
+  };
+
+  void _selectTool(_Tool tool) {
+    setState(() {
+      _selected = tool;
+      _inputController.text = _defaultInputFor(tool);
+    });
+  }
+
   @override
   void dispose() {
     _inputController.dispose();
@@ -254,7 +280,7 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
         icon: tool.icon,
         label: tool.label,
         active: _selected == tool,
-        onTap: () => setState(() => _selected = tool),
+        onTap: () => _selectTool(tool),
       );
 
   @override
@@ -309,38 +335,52 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
                   children: [
                     if (_needsInput) ...[
                       Expanded(
-                        child: TextField(
-                          controller: _inputController,
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontFamily: 'monospace',
-                            fontSize: 13,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: _inputHint,
-                            hintStyle: const TextStyle(color: AppColors.textTertiary),
-                            filled: true,
-                            fillColor: AppColors.card,
-                            border: const OutlineInputBorder(
-                              borderSide: BorderSide(color: AppColors.border),
+                        child: SizedBox(
+                          height: 44,
+                          child: TextField(
+                            controller: _inputController,
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontFamily: 'monospace',
+                              fontSize: 13,
                             ),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
+                            decoration: InputDecoration(
+                              hintText: _inputHint,
+                              hintStyle: const TextStyle(color: AppColors.textTertiary),
+                              prefixIcon: Icon(
+                                _iconFor(_selected),
+                                size: 16,
+                                color: AppColors.textTertiary,
+                              ),
+                              prefixIconConstraints: const BoxConstraints(
+                                minWidth: 40,
+                                minHeight: 0,
+                              ),
+                              filled: true,
+                              fillColor: AppColors.card,
+                              border: const OutlineInputBorder(
+                                borderSide: BorderSide(color: AppColors.border),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 0),
+                            ),
+                            onSubmitted: (_) => session != null ? _run() : null,
                           ),
-                          onSubmitted: (_) => session != null ? _run() : null,
                         ),
                       ),
                       const SizedBox(width: 8),
                     ],
-                    ElevatedButton.icon(
-                      onPressed: session != null ? _run : null,
-                      icon: const Icon(Icons.play_arrow, size: 16),
-                      label: Text(_selected.label),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accent,
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
+                    SizedBox(
+                      height: 44,
+                      child: ElevatedButton.icon(
+                        onPressed: session != null ? _run : null,
+                        icon: const Icon(Icons.play_arrow, size: 16),
+                        label: Text(_selected.label),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                        ),
                       ),
                     ),
                     if (_tabs.isNotEmpty) ...[

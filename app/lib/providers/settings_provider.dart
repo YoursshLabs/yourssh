@@ -9,6 +9,9 @@ class SettingsProvider extends ChangeNotifier {
   String terminalTheme = 'Dracula';
   bool networkStatsEnabled = false;
   bool tmuxEnabled = false;
+  bool showDevOps = false;
+  bool showWebTools = false;
+  bool showSnippets = false;
   String terminalFont = 'MesloLGS NF';
   Map<String, String> hotkeys = {
     'new_session': 'ctrl+t',
@@ -32,6 +35,9 @@ class SettingsProvider extends ChangeNotifier {
     terminalTheme = prefs.getString('terminalTheme') ?? 'Dracula';
     networkStatsEnabled = prefs.getBool('networkStatsEnabled') ?? false;
     tmuxEnabled = prefs.getBool('tmuxEnabled') ?? false;
+    showDevOps = prefs.getBool('showDevOps') ?? false;
+    showWebTools = prefs.getBool('showWebTools') ?? false;
+    showSnippets = prefs.getBool('showSnippets') ?? false;
     terminalFont = prefs.getString('terminalFont') ?? 'MesloLGS NF';
     final hotkeysJson = prefs.getString('hotkeys');
     if (hotkeysJson != null) {
@@ -50,6 +56,9 @@ class SettingsProvider extends ChangeNotifier {
     bool? networkStatsEnabled,
     bool? tmuxEnabled,
     String? terminalFont,
+    bool? showDevOps,
+    bool? showWebTools,
+    bool? showSnippets,
   }) async {
     if (autoReconnect != null) this.autoReconnect = autoReconnect;
     if (reconnectAttempts != null) this.reconnectAttempts = reconnectAttempts;
@@ -59,6 +68,9 @@ class SettingsProvider extends ChangeNotifier {
     if (networkStatsEnabled != null) this.networkStatsEnabled = networkStatsEnabled;
     if (tmuxEnabled != null) this.tmuxEnabled = tmuxEnabled;
     if (terminalFont != null) this.terminalFont = terminalFont;
+    if (showDevOps != null) this.showDevOps = showDevOps;
+    if (showWebTools != null) this.showWebTools = showWebTools;
+    if (showSnippets != null) this.showSnippets = showSnippets;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('autoReconnect', this.autoReconnect);
     await prefs.setInt('reconnectAttempts', this.reconnectAttempts);
@@ -68,6 +80,9 @@ class SettingsProvider extends ChangeNotifier {
     await prefs.setBool('networkStatsEnabled', this.networkStatsEnabled);
     await prefs.setBool('tmuxEnabled', this.tmuxEnabled);
     await prefs.setString('terminalFont', this.terminalFont);
+    await prefs.setBool('showDevOps', this.showDevOps);
+    await prefs.setBool('showWebTools', this.showWebTools);
+    await prefs.setBool('showSnippets', this.showSnippets);
     notifyListeners();
   }
 }

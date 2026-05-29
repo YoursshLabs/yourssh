@@ -23,6 +23,7 @@ import 'theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
+  await windowManager.setTitle('YourSSH');
   await windowManager.setMinimumSize(const Size(800, 600));
   await hotKeyManager.unregisterAll();
   runApp(const YourSSHApp());

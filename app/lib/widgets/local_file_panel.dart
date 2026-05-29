@@ -19,7 +19,9 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
   @override
   void initState() {
     super.initState();
-    widget.provider.reload();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.provider.reload();
+    });
   }
 
   // ── Actions ─────────────────────────────────────────────

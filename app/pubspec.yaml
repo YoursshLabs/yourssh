@@ -86,6 +86,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/monaco_editor.html
+    - assets/app_icon.png
   fonts:
     - family: DejaVu Sans Mono for Powerline
       fonts:

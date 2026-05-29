@@ -22,13 +22,12 @@ import '../widgets/web_tools_screen.dart';
 import '../widgets/new_group_panel.dart';
 import '../widgets/import_panel.dart';
 import '../widgets/devops_hub_screen.dart';
-import '../widgets/vault_screen.dart';
 import '../widgets/ai_chat_sidebar.dart';
 import '../providers/settings_provider.dart';
 import '../providers/terminal_layout_provider.dart';
 import '../services/hotkey_service.dart';
 
-enum NavSection { hosts, keychain, portForwarding, sftp, webTools, devOps, snippets, localTerminal, knownHosts, vault, settings }
+enum NavSection { hosts, keychain, portForwarding, sftp, webTools, devOps, snippets, localTerminal, knownHosts, settings }
 
 enum _SidePanel { none, host, newGroup, import }
 
@@ -206,7 +205,15 @@ class _MainScreenState extends State<MainScreen> {
               if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
             }),
             onSessionTap: (_) => setState(() => _viewingTerminal = true),
-            onAddSession: () => _openHostPanel(),
+            onAddSession: () {
+              setState(() {
+                _nav = NavSection.hosts;
+                _viewingTerminal = false;
+                _showAiChat = false;
+                _sftpConnectionNotifier.value = false;
+              });
+              _openHostPanel();
+            },
           ),
 
           Expanded(
@@ -255,6 +262,17 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildContent(SshSession? active) {
+    final settings = context.read<SettingsProvider>();
+    final hiddenNav = (_nav == NavSection.devOps && !settings.showDevOps) ||
+        (_nav == NavSection.webTools && !settings.showWebTools) ||
+        (_nav == NavSection.snippets && !settings.showSnippets);
+    if (hiddenNav) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _nav = NavSection.hosts);
+      });
+      return const SizedBox.shrink();
+    }
+
     if (_viewingTerminal && active != null) {
       return Row(
         children: [
@@ -306,7 +324,6 @@ class _MainScreenState extends State<MainScreen> {
       NavSection.settings => const SettingsScreen(),
       NavSection.webTools => const WebToolsScreen(),
       NavSection.devOps => const DevOpsHubScreen(),
-      NavSection.vault => const VaultScreen(),
     };
   }
 }
@@ -349,14 +366,16 @@ class _Sidebar extends StatelessWidget {
           _navItem(Icons.folder_open, 'SFTP', NavSection.sftp),
 
           const _SectionLabel('TOOLS'),
-          _navItem(Icons.build_outlined, 'Web Tools', NavSection.webTools),
-          _navItem(Icons.rocket_launch_outlined, 'DevOps', NavSection.devOps),
-          _navItem(Icons.code, 'Snippets', NavSection.snippets),
+          if (context.watch<SettingsProvider>().showWebTools)
+            _navItem(Icons.build_outlined, 'Web Tools', NavSection.webTools),
+          if (context.watch<SettingsProvider>().showDevOps)
+            _navItem(Icons.rocket_launch_outlined, 'DevOps', NavSection.devOps),
+          if (context.watch<SettingsProvider>().showSnippets)
+            _navItem(Icons.code, 'Snippets', NavSection.snippets),
           _navItem(Icons.laptop_mac, 'Local Terminal', NavSection.localTerminal),
 
           const _SectionLabel('SECURITY'),
           _navItem(Icons.vpn_key_outlined, 'Keychain', NavSection.keychain),
-          _navItem(Icons.lock_outlined, 'Vault', NavSection.vault),
 
           const Spacer(),
           const Divider(height: 1, color: AppColors.border),
@@ -367,10 +386,13 @@ class _Sidebar extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 14,
-                  backgroundColor: AppColors.purple,
-                  child: const Text('Y', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.asset(
+                    'assets/app_icon.png',
+                    width: 28,
+                    height: 28,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Column(

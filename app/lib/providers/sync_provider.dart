@@ -107,6 +107,16 @@ class SyncProvider extends ChangeNotifier {
     await prefs.setString(_supabaseAnonKeyKey, _supabaseAnonKey);
   }
 
+  Future<void> clearSupabaseConfig() async {
+    _supabaseUrl = '';
+    _supabaseAnonKey = '';
+    _supabaseConfigExplicitlySet = false;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_supabaseUrlKey);
+    await prefs.remove(_supabaseAnonKeyKey);
+  }
+
   Future<void> replaceSyncId(String rawCode) async {
     final clean = rawCode.replaceAll('-', '').toUpperCase();
     if (clean.length != 12) {
