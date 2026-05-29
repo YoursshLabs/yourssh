@@ -50,6 +50,9 @@ dependencies:
   # Supabase backend integration
   supabase_flutter: ^2.5.0
 
+  # HTTP client for Supabase migration API calls
+  http: ^1.2.0
+
   # Cryptography utilities
   cryptography: ^2.7.0
 
