@@ -37,12 +37,14 @@ class HostProvider extends ChangeNotifier {
     _pinnedGroups.add(trimmed);
     await _storage.savePinnedGroups(_pinnedGroups);
     notifyListeners();
+    await onMutation?.call();
   }
 
   Future<void> removeGroup(String name) async {
     _pinnedGroups.removeWhere((g) => g.toLowerCase() == name.toLowerCase());
     await _storage.savePinnedGroups(_pinnedGroups);
     notifyListeners();
+    await onMutation?.call();
   }
 
   void setSearch(String q) {

@@ -73,11 +73,18 @@ class _HostsDashboardState extends State<HostsDashboard> {
                       spacing: 12,
                       runSpacing: 12,
                       children: groups.entries
-                          .map((e) => _GroupCard(
-                            name: e.key,
-                            count: e.value.length,
-                            onDelete: () => context.read<HostProvider>().removeGroup(e.key),
-                          ))
+                          .map((e) {
+                            final isPinned = hostProvider.pinnedGroups.any(
+                              (g) => g.toUpperCase() == e.key,
+                            );
+                            return _GroupCard(
+                              name: e.key,
+                              count: e.value.length,
+                              onDelete: (isPinned && e.value.isEmpty)
+                                  ? () => context.read<HostProvider>().removeGroup(e.key)
+                                  : null,
+                            );
+                          })
                           .toList(),
                     ),
                     const SizedBox(height: 32),

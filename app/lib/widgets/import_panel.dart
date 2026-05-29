@@ -97,9 +97,7 @@ class _ImportPanelState extends State<ImportPanel> {
     super.dispose();
   }
 
-  List<Host> get _existingHosts => context.read<HostProvider>().allHosts;
-
-  bool _isDuplicate(Host h) => _existingHosts.any(
+  bool _isDuplicate(Host h, List<Host> existing) => existing.any(
         (e) =>
             e.host.toLowerCase() == h.host.toLowerCase() &&
             e.username.toLowerCase() == h.username.toLowerCase(),
@@ -127,21 +125,22 @@ class _ImportPanelState extends State<ImportPanel> {
     if (result == null || result.files.isEmpty) return;
     final bytes = result.files.first.bytes;
     if (bytes == null) return;
-    _applyParsed(detectAndParse(String.fromCharCodes(bytes)));
+    _applyParsed(detectAndParse(utf8.decode(bytes)));
   }
 
   void _parsePaste() => _applyParsed(detectAndParse(_pasteCtrl.text));
 
-  int get _effectiveImportCount => _included.entries
+  int _effectiveImportCount(List<Host> existing) => _included.entries
       .where((e) => e.value)
       .where((e) {
-        final dup = _isDuplicate(_parsed[e.key]);
+        final dup = _isDuplicate(_parsed[e.key], existing);
         return !dup || (_overwrite[e.key] ?? false);
       })
       .length;
 
   @override
   Widget build(BuildContext context) {
+    final existingHosts = context.read<HostProvider>().allHosts;
     return Container(
       width: 340,
       decoration: const BoxDecoration(
@@ -165,9 +164,9 @@ class _ImportPanelState extends State<ImportPanel> {
                 ],
                 if (_parsed.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  _buildPreview(),
+                  _buildPreview(existingHosts),
                   const SizedBox(height: 16),
-                  _buildImportButton(context),
+                  _buildImportButton(context, existingHosts),
                 ],
               ],
             ),
@@ -312,7 +311,7 @@ class _ImportPanelState extends State<ImportPanel> {
     );
   }
 
-  Widget _buildPreview() {
+  Widget _buildPreview(List<Host> existingHosts) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -330,7 +329,7 @@ class _ImportPanelState extends State<ImportPanel> {
           child: Column(
             children: List.generate(_parsed.length, (i) {
               final h = _parsed[i];
-              final dup = _isDuplicate(h);
+              final dup = _isDuplicate(h, existingHosts);
               return _PreviewRow(
                 host: h,
                 isDuplicate: dup,
@@ -347,8 +346,8 @@ class _ImportPanelState extends State<ImportPanel> {
     );
   }
 
-  Widget _buildImportButton(BuildContext context) {
-    final count = _effectiveImportCount;
+  Widget _buildImportButton(BuildContext context, List<Host> existingHosts) {
+    final count = _effectiveImportCount(existingHosts);
     return GestureDetector(
       onTap: count == 0 ? null : () => _doImport(context),
       child: Container(
@@ -368,14 +367,15 @@ class _ImportPanelState extends State<ImportPanel> {
 
   Future<void> _doImport(BuildContext context) async {
     final provider = context.read<HostProvider>();
+    final existingHosts = provider.allHosts.toList(); // snapshot once
     int imported = 0;
     for (var i = 0; i < _parsed.length; i++) {
       if (!(_included[i] ?? true)) continue;
       final h = _parsed[i];
-      final dup = _isDuplicate(h);
+      final dup = _isDuplicate(h, existingHosts);
       if (dup) {
         if (!(_overwrite[i] ?? false)) continue;
-        final existing = provider.allHosts.firstWhere(
+        final existing = existingHosts.firstWhere(
           (e) =>
               e.host.toLowerCase() == h.host.toLowerCase() &&
               e.username.toLowerCase() == h.username.toLowerCase(),
