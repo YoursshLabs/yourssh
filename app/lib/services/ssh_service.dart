@@ -287,4 +287,23 @@ class SshService {
   }
 
   bool isConnected(String hostId) => _clients.containsKey(hostId);
+
+  // ── OS Detection ────────────────────────────────────────
+
+  static String? parseOsFromUname(String output) {
+    final s = output.trim();
+    if (s.contains('Linux')) return 'linux';
+    if (s.contains('Darwin')) return 'macos';
+    if (s.contains('Windows') || s.contains('MINGW') || s.contains('CYGWIN')) return 'windows';
+    return null;
+  }
+
+  Future<String?> detectOs(Host host) async {
+    try {
+      final result = await exec(host, 'uname -s 2>/dev/null || ver');
+      return parseOsFromUname(result.stdout);
+    } catch (_) {
+      return null;
+    }
+  }
 }
