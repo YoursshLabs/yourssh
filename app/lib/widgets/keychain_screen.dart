@@ -240,6 +240,8 @@ class _KeyTileState extends State<_KeyTile> {
                     const Text('File not found',
                         style: TextStyle(
                             color: AppColors.red, fontSize: 11)),
+                  const SizedBox(height: 4),
+                  _CertRow(entry: e),
                 ],
               ),
             ),
@@ -305,6 +307,63 @@ class _Badge extends StatelessWidget {
               color: AppColors.textSecondary,
               fontSize: 10,
               fontWeight: FontWeight.w500)),
+    );
+  }
+}
+
+class _CertRow extends StatelessWidget {
+  final SshKeyEntry entry;
+  const _CertRow({required this.entry});
+
+  @override
+  Widget build(BuildContext context) {
+    if (entry.hasCertificate) {
+      final filename = entry.certificatePath!.split('/').last.split('\\').last;
+      return Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Text('CERT',
+                style: TextStyle(
+                    color: AppColors.accent,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(filename,
+                style: const TextStyle(
+                    color: AppColors.textTertiary, fontSize: 11),
+                overflow: TextOverflow.ellipsis),
+          ),
+          GestureDetector(
+            onTap: () => context.read<KeyProvider>().removeCertificate(entry.id),
+            child: const Icon(Icons.link_off, size: 13, color: AppColors.textTertiary),
+          ),
+        ],
+      );
+    }
+
+    return GestureDetector(
+      onTap: () async {
+        final result = await FilePicker.platform.pickFiles(
+          dialogTitle: 'Select Certificate File (*-cert.pub)',
+          allowMultiple: false,
+        );
+        if (result == null || result.files.isEmpty) return;
+        if (context.mounted) {
+          await context.read<KeyProvider>().setCertificate(
+                entry.id,
+                result.files.first.path!,
+              );
+        }
+      },
+      child: const Text('Link certificate…',
+          style: TextStyle(color: AppColors.textTertiary, fontSize: 11)),
     );
   }
 }
