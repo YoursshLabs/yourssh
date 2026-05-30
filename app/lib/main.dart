@@ -79,6 +79,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _settingsProvider = SettingsProvider();
     _sessionProvider = SessionProvider(_ssh);
     _sessionProvider.keyLookup = (id) => _keyProvider.findById(id);
+    _sessionProvider.jumpHostLookup = (id) =>
+        _hostProvider.allHosts.where((h) => h.id == id).firstOrNull;
     _sessionProvider.autoReconnectEnabled = () => _settingsProvider.autoReconnect;
     _sessionProvider.reconnectAttempts = () => _settingsProvider.reconnectAttempts;
     _sessionProvider.tmuxEnabled = () => _settingsProvider.tmuxEnabled;

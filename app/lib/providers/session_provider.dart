@@ -10,6 +10,7 @@ class SessionProvider extends ChangeNotifier {
   final List<SshSession> _sessions = [];
   String? _activeSessionId;
   SshKeyEntry? Function(String keyId)? keyLookup;
+  Host? Function(String jumpHostId)? jumpHostLookup;
   bool Function()? autoReconnectEnabled;
   int Function()? reconnectAttempts;
   bool Function()? tmuxEnabled;
@@ -46,9 +47,19 @@ class SessionProvider extends ChangeNotifier {
     final maxAttempts = reconnectAttempts?.call() ?? 3;
     try {
       final keyEntry = host.keyId != null ? keyLookup?.call(host.keyId!) : null;
+      Host? jumpHost;
+      SshKeyEntry? jumpKeyEntry;
+      if (host.jumpHostId != null) {
+        jumpHost = jumpHostLookup?.call(host.jumpHostId!);
+        if (jumpHost != null && jumpHost.keyId != null) {
+          jumpKeyEntry = keyLookup?.call(jumpHost.keyId!);
+        }
+      }
       await _ssh.connect(
         host,
         keyEntry: keyEntry,
+        jumpHost: jumpHost,
+        jumpKeyEntry: jumpKeyEntry,
         verifyHostKey: hostKeyVerifier != null
             ? (keyType, fp) => hostKeyVerifier!(host.host, host.port, keyType, fp)
             : null,
