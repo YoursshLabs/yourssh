@@ -48,5 +48,39 @@ void main() {
       // byName throws ArgumentError on unknown values
       expect(() => Host.fromJson(json), throwsArgumentError);
     });
+
+    test('jumpHostId round-trips through JSON', () {
+      final h = Host(
+        label: 'Target',
+        host: '10.0.0.5',
+        username: 'admin',
+        jumpHostId: 'bastion-id-123',
+      );
+      final decoded = Host.fromJson(h.toJson());
+      expect(decoded.jumpHostId, 'bastion-id-123');
+    });
+
+    test('jumpHostId defaults to null', () {
+      final h = Host(label: 'x', host: 'y', username: 'z');
+      expect(h.jumpHostId, isNull);
+      final decoded = Host.fromJson(h.toJson());
+      expect(decoded.jumpHostId, isNull);
+    });
+
+    test('copyWith preserves jumpHostId when not overridden', () {
+      final h = Host(
+        label: 'x', host: 'y', username: 'z', jumpHostId: 'jid',
+      );
+      final copy = h.copyWith(label: 'new label');
+      expect(copy.jumpHostId, 'jid');
+    });
+
+    test('copyWith can clear jumpHostId', () {
+      final h = Host(
+        label: 'x', host: 'y', username: 'z', jumpHostId: 'jid',
+      );
+      final copy = h.copyWith(jumpHostId: null);
+      expect(copy.jumpHostId, isNull);
+    });
   });
 }

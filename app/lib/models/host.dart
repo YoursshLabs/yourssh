@@ -15,6 +15,7 @@ class Host {
   DateTime createdAt;
   String? detectedOs;
   bool autoRecord;
+  String? jumpHostId;
 
   Host({
     String? id,
@@ -29,6 +30,7 @@ class Host {
     DateTime? createdAt,
     this.detectedOs,
     this.autoRecord = false,
+    this.jumpHostId,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -45,6 +47,7 @@ class Host {
         'createdAt': createdAt.toIso8601String(),
         'detectedOs': detectedOs,
         'autoRecord': autoRecord,
+        'jumpHostId': jumpHostId,
       };
 
   factory Host.fromJson(Map<String, dynamic> json) => Host(
@@ -60,6 +63,7 @@ class Host {
         createdAt: DateTime.parse(json['createdAt']),
         detectedOs: json['detectedOs'] as String?,
         autoRecord: (json['autoRecord'] as bool?) ?? false,
+        jumpHostId: json['jumpHostId'] as String?,
       );
 
   Host copyWith({
@@ -72,6 +76,7 @@ class Host {
     String? group,
     String? detectedOs,
     bool? autoRecord,
+    Object? jumpHostId = const _Unset(),
   }) =>
       Host(
         id: id,
@@ -86,5 +91,8 @@ class Host {
         createdAt: createdAt,
         detectedOs: detectedOs ?? this.detectedOs,
         autoRecord: autoRecord ?? this.autoRecord,
+        jumpHostId: jumpHostId is _Unset ? this.jumpHostId : jumpHostId as String?,
       );
 }
+
+class _Unset { const _Unset(); }
