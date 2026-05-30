@@ -90,6 +90,9 @@ dependencies:
   # HMAC/SHA hashing for AWS Signature V4 (S3 browser)
   crypto: ^3.0.3
 
+  # FFI utilities (Utf16 string conversion, Arena allocator) — Windows SSH agent named pipe
+  ffi: ^2.1.3
+
   # XML parsing for S3 API responses
   xml: ^6.5.0
 
