@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+/// Color constants mirroring app/lib/theme/app_theme.dart AppColors.
+/// Keep in sync with the host app's theme.
 abstract final class WebToolsColors {
   static const bg = Color(0xFF0F0F0F);
   static const sidebar = Color(0xFF141414);
