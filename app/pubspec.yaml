@@ -25,6 +25,9 @@ dependencies:
   # State management
   provider: ^6.1.2
 
+  # SVG rendering for OS icons
+  flutter_svg: ^2.0.10
+
   # App settings persistence
   shared_preferences: ^2.3.2
 
@@ -93,6 +96,9 @@ dependencies:
   # URL launcher (Cloudflare tunnel)
   url_launcher: ^6.3.0
 
+  package_info_plus: ^9.0.1
+
+
 dependency_overrides:
   dartssh2:
     path: ../packages/dartssh2
@@ -107,6 +113,7 @@ flutter:
   assets:
     - assets/monaco_editor.html
     - assets/app_icon.png
+    - assets/os/
   fonts:
     - family: DejaVu Sans Mono for Powerline
       fonts:
