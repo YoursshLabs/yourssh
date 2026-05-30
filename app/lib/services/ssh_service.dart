@@ -239,7 +239,7 @@ class SshService {
     _shells.removeWhere((k, _) => k.startsWith(hostId));
     _clients[hostId]?.close();
     _clients.remove(hostId);
-    _agentProxies[hostId]?.close();
+    unawaited(_agentProxies[hostId]?.close() ?? Future.value());
     _agentProxies.remove(hostId);
   }
 
