@@ -8,11 +8,13 @@ import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
 import 'certificate_key_pair.dart';
 import 'storage_service.dart';
+import 'system_agent_proxy.dart';
 
 class SshService {
   final StorageService _storage;
   final Map<String, SSHClient> _clients = {};
   final Map<String, SSHSession> _shells = {};
+  final Map<String, SystemAgentProxy> _agentProxies = {};
 
   SshService(this._storage);
 
@@ -49,6 +51,15 @@ class SshService {
           passphrase: passphrase,
         ),
       ];
+    } else if (host.authType == AuthType.agent) {
+      final proxy = await SystemAgentProxy.connect();
+      _agentProxies[host.id] = proxy;
+      identities = await proxy.getIdentities();
+      if (identities.isEmpty) {
+        throw Exception(
+          'SSH agent has no identities. Run "ssh-add <private-key>" to add one.',
+        );
+      }
     }
 
     final client = SSHClient(
@@ -101,6 +112,14 @@ class SshService {
             passphrase: passphrase,
           ),
         ];
+      } else if (host.authType == AuthType.agent) {
+        try {
+          final proxy = await SystemAgentProxy.connect();
+          identities = await proxy.getIdentities();
+          await proxy.close();
+        } on SSHAgentUnavailableException catch (e) {
+          return (success: false, latencyMs: 0, error: e.message);
+        }
       }
 
       client = SSHClient(
@@ -220,6 +239,8 @@ class SshService {
     _shells.removeWhere((k, _) => k.startsWith(hostId));
     _clients[hostId]?.close();
     _clients.remove(hostId);
+    _agentProxies[hostId]?.close();
+    _agentProxies.remove(hostId);
   }
 
   void disconnectSession(String sessionId) {
