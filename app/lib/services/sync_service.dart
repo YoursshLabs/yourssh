@@ -50,7 +50,11 @@ class SyncService {
     required Map<String, String> passwords,
   }) {
     return jsonEncode({
-      'hosts': hosts.map((h) => h.toJson()).toList(),
+      'hosts': hosts.map((h) {
+        final json = h.toJson();
+        json.remove('detectedOs');
+        return json;
+      }).toList(),
       'passwords': passwords,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     });
@@ -196,7 +200,7 @@ class SyncService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_pendingPushKey);
     await prefs.remove(_lastPushKey);
-    await _syncProvider.setEnabled(false);
+    await _syncProvider.clearSupabaseConfig();
   }
 
   void dispose() {

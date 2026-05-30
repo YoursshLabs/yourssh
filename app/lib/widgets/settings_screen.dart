@@ -13,6 +13,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import 'hotkey_settings_screen.dart';
 import 'theme_picker.dart';
+import 'qr_export_dialog.dart';
+import 'qr_import_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -264,6 +266,8 @@ class _SyncSection extends StatefulWidget {
   State<_SyncSection> createState() => _SyncSectionState();
 }
 
+enum _SyncMode { cloud, p2p }
+
 class _SyncSectionState extends State<_SyncSection> {
   final _urlController = TextEditingController();
   final _anonKeyController = TextEditingController();
@@ -273,6 +277,7 @@ class _SyncSectionState extends State<_SyncSection> {
   bool _testOk = false;
   String? _testError;
   bool _needsServiceKey = false;
+  _SyncMode _syncMode = _SyncMode.cloud;
 
 
   @override
@@ -308,18 +313,6 @@ class _SyncSectionState extends State<_SyncSection> {
     }
     await syncService.push(hosts: hostProvider.allHosts, loadPasswords: () async => passwords);
     syncService.restartRetryTimer();
-  }
-
-  Future<void> _onToggle(bool value) async {
-    final sync = context.read<SyncProvider>();
-    final syncService = context.read<SyncService>();
-    if (!value) {
-      await syncService.disableAndDelete();
-    } else {
-      await sync.setEnabled(true);
-      if (!mounted) return;
-      await _pushNow();
-    }
   }
 
   Future<void> _testAndSave() async {
@@ -457,6 +450,46 @@ class _SyncSectionState extends State<_SyncSection> {
     return const SizedBox.shrink();
   }
 
+  Future<void> _showQrExport(BuildContext context) async {
+    final hostProvider = context.read<HostProvider>();
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => QrExportDialog(
+        getPayload: () async {
+          final hosts = hostProvider.allHosts;
+          final passwords = await hostProvider.loadAllPasswords();
+          return SyncService.buildPayload(hosts: hosts, passwords: passwords);
+        },
+      ),
+    );
+  }
+
+  Widget _buildModeTab(String label, IconData icon, _SyncMode mode) {
+    final selected = _syncMode == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _syncMode = mode),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.accent.withValues(alpha: 0.15) : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: selected ? AppColors.accent : Colors.transparent),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14, color: selected ? AppColors.accent : AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(fontSize: 12, color: selected ? AppColors.accent : AppColors.textSecondary, fontWeight: selected ? FontWeight.w600 : FontWeight.normal)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final sync = widget.sync;
@@ -465,119 +498,163 @@ class _SyncSectionState extends State<_SyncSection> {
       children: [
         const Text('SYNC', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
         const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            children: [
-              // ── Enable Sync toggle ───────────────────────────
-              SwitchListTile(
-                title: const Text('Enable Sync', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-                subtitle: Text(
-                  sync.enabled && sync.isSupabaseConfigured
-                      ? 'Sync hosts across devices'
-                      : sync.enabled
-                          ? 'Enter Supabase credentials below'
-                          : 'Sync hosts across devices',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                ),
-                value: sync.enabled,
-                onChanged: _onToggle,
-              ),
-              if (sync.enabled) ...[
-                const Divider(height: 1, color: AppColors.border, indent: 16),
+        Material(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(10),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              children: [
+                // ── Mode selector ────────────────────────────────
                 Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  padding: const EdgeInsets.all(10),
+                  child: Row(
                     children: [
-                      // ── Supabase backend config ──────────────
-                      const Text('Supabase Backend', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _urlController,
-                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'Project URL',
-                          hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                          filled: true,
-                          fillColor: AppColors.bg,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
-                          suffixIcon: _urlHasText
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 16, color: AppColors.textTertiary),
-                                  onPressed: () => _urlController.clear(),
-                                )
-                              : const Icon(Icons.link, size: 16, color: AppColors.textTertiary),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _anonKeyController,
-                              obscureText: !_showAnonKey,
-                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                              decoration: InputDecoration(
-                                hintText: 'Anon key',
-                                hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                                filled: true,
-                                fillColor: AppColors.bg,
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
-                                suffixIcon: IconButton(
-                                  icon: Icon(_showAnonKey ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
-                                  onPressed: () => setState(() => _showAnonKey = !_showAnonKey),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 110,
-                            height: 36,
-                            child: ElevatedButton(
-                              onPressed: _testing ? null : _testAndSave,
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: Size.zero,
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                              ),
-                              child: _testing
-                                  ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
-                                  : const Text('Save & Test', style: TextStyle(fontSize: 12)),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (_testing || _testOk || _needsServiceKey || _testError != null) ...[
-                        const SizedBox(height: 6),
-                        _buildTestStatus(),
-                      ],
-                      // ── Sync status (only when configured) ──
-                      if (sync.isSupabaseConfigured) ...[
-                        const SizedBox(height: 16),
-                        const Divider(height: 1, color: AppColors.border),
-                        const SizedBox(height: 16),
-                        _SyncStatusRow(sync: sync),
-                      ],
+                      _buildModeTab('Cloud Sync', Icons.cloud_sync, _SyncMode.cloud),
+                      const SizedBox(width: 8),
+                      _buildModeTab('P2P Transfer', Icons.wifi_tethering, _SyncMode.p2p),
                     ],
                   ),
                 ),
+                const Divider(height: 1, color: AppColors.border),
+                if (_syncMode == _SyncMode.cloud) ...[
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Supabase Backend', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _urlController,
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                          decoration: InputDecoration(
+                            hintText: 'Project URL',
+                            hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
+                            filled: true,
+                            fillColor: AppColors.bg,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
+                            suffixIcon: _urlHasText
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 16, color: AppColors.textTertiary),
+                                    onPressed: () => _urlController.clear(),
+                                  )
+                                : const Icon(Icons.link, size: 16, color: AppColors.textTertiary),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _anonKeyController,
+                                obscureText: !_showAnonKey,
+                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                                decoration: InputDecoration(
+                                  hintText: 'Anon key',
+                                  hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
+                                  filled: true,
+                                  fillColor: AppColors.bg,
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(_showAnonKey ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
+                                    onPressed: () => setState(() => _showAnonKey = !_showAnonKey),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 110,
+                              height: 36,
+                              child: ElevatedButton(
+                                onPressed: _testing ? null : _testAndSave,
+                                style: ElevatedButton.styleFrom(
+                                  minimumSize: Size.zero,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                ),
+                                child: _testing
+                                    ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Text('Save & Test', style: TextStyle(fontSize: 12)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_testing || _testOk || _needsServiceKey || _testError != null) ...[
+                          const SizedBox(height: 6),
+                          _buildTestStatus(),
+                        ],
+                        if (sync.isSupabaseConfigured) ...[
+                          const SizedBox(height: 16),
+                          const Divider(height: 1, color: AppColors.border),
+                          const SizedBox(height: 16),
+                          _SyncStatusRow(sync: sync),
+                        ],
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  // ── P2P Transfer ─────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Transfer all hosts and passwords to another device over LAN or Tailscale. No cloud required.',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.qr_code, size: 16),
+                                label: const Text('Show QR Code'),
+                                onPressed: () => _showQrExport(context),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.textPrimary,
+                                  side: const BorderSide(color: AppColors.border),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.content_paste, size: 16),
+                                label: const Text('Import via Code'),
+                                onPressed: () => showDialog<void>(
+                                  context: context,
+                                  builder: (_) => const QrImportDialog(),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.textPrimary,
+                                  side: const BorderSide(color: AppColors.border),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ],
@@ -851,21 +928,25 @@ class _Section extends StatelessWidget {
       children: [
         Text(title, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
         const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            children: children.indexed.map((e) {
-              final (i, child) = e;
-              return Column(children: [
-                child,
-                if (i < children.length - 1)
-                  const Divider(height: 1, color: AppColors.border, indent: 16),
-              ]);
-            }).toList(),
+        Material(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(10),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              children: children.indexed.map((e) {
+                final (i, child) = e;
+                return Column(children: [
+                  child,
+                  if (i < children.length - 1)
+                    const Divider(height: 1, color: AppColors.border, indent: 16),
+                ]);
+              }).toList(),
+            ),
           ),
         ),
       ],

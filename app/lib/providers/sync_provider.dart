@@ -4,11 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 enum SyncStatus { idle, syncing, synced, error }
 
 class SyncProvider extends ChangeNotifier {
-  static const _enabledKey = 'sync_enabled';
   static const _supabaseUrlKey = 'supabase_url';
   static const _supabaseAnonKeyKey = 'supabase_anon_key';
 
-  bool _enabled = false;
   SyncStatus _status = SyncStatus.idle;
   String? _error;
   DateTime? _lastSynced;
@@ -17,7 +15,7 @@ class SyncProvider extends ChangeNotifier {
   bool _supabaseConfigExplicitlySet = false;
   bool _disposed = false;
 
-  bool get enabled => _enabled;
+  bool get enabled => isSupabaseConfigured;
   SyncStatus get status => _status;
   String? get error => _error;
   DateTime? get lastSynced => _lastSynced;
@@ -38,20 +36,12 @@ class SyncProvider extends ChangeNotifier {
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     if (_disposed) return;
-    _enabled = prefs.getBool(_enabledKey) ?? false;
     if (!_supabaseConfigExplicitlySet) {
       _supabaseUrl = prefs.getString(_supabaseUrlKey) ?? '';
       _supabaseAnonKey = prefs.getString(_supabaseAnonKeyKey) ?? '';
     }
     if (_disposed) return;
     notifyListeners();
-  }
-
-  Future<void> setEnabled(bool value) async {
-    _enabled = value;
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_enabledKey, value);
   }
 
   Future<void> setSupabaseConfig(String url, String anonKey) async {
