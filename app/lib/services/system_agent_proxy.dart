@@ -110,24 +110,43 @@ class _AgentReader {
   }
 }
 
+/// Buffers incoming socket data and supports sequential async reads via [readMessage].
+///
+/// Not thread-safe: callers must not issue concurrent [readMessage] calls.
+/// The SSH agent protocol is inherently serial (request/response), so this is
+/// satisfied as long as [_AgentKeyPair.signAsync] calls are not overlapped.
 class _AgentSession {
   final Socket _socket;
   final _buffer = <int>[];
   Completer<void>? _dataWaiter;
   late final StreamSubscription<List<int>> _sub;
+  Object? _closeError;
 
   _AgentSession(this._socket) {
-    _sub = _socket.listen((chunk) {
-      _buffer.addAll(chunk);
-      _dataWaiter?.complete();
-      _dataWaiter = null;
-    });
+    _sub = _socket.listen(
+      (chunk) {
+        _buffer.addAll(chunk);
+        _dataWaiter?.complete();
+        _dataWaiter = null;
+      },
+      onError: (Object e, StackTrace st) {
+        _closeError = e;
+        _dataWaiter?.completeError(e, st);
+        _dataWaiter = null;
+      },
+      onDone: () {
+        _closeError ??= const SSHAgentUnavailableException('Agent socket closed unexpectedly');
+        _dataWaiter?.completeError(_closeError!);
+        _dataWaiter = null;
+      },
+    );
   }
 
   void write(List<int> data) => _socket.add(data);
 
   Future<Uint8List> _readExact(int count) async {
     while (_buffer.length < count) {
+      if (_closeError != null) throw _closeError!;
       _dataWaiter = Completer();
       await _dataWaiter!.future;
     }

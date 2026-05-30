@@ -88,5 +88,47 @@ void main() {
         throwsA(isA<SSHAgentUnavailableException>()),
       );
     });
+
+    test('_AgentKeyPair.signAsync sends type 13 and receives type 14', () async {
+      final algName = utf8.encode('ssh-ed25519');
+      final keyBlob = Uint8List.fromList([
+        ..._strField(algName),
+        ..._strField(List.filled(32, 0xAB)),
+      ]);
+      final fakeSignature = Uint8List.fromList([0x01, 0x02, 0x03, 0x04]);
+
+      unawaited(server.first.then((client) {
+        // First request: identities
+        var requestCount = 0;
+        client.listen((data) {
+          requestCount++;
+          if (requestCount == 1) {
+            // Respond to REQUEST_IDENTITIES (11) with one key
+            final nkeys = Uint8List(4);
+            ByteData.view(nkeys.buffer).setUint32(0, 1, Endian.big);
+            final response = [
+              12, ...nkeys,
+              ..._strField(keyBlob),
+              ..._strField(utf8.encode('test-key')),
+            ];
+            client.add(_agentMsg(response));
+          } else {
+            // Respond to SIGN_REQUEST (13) with SIGN_RESPONSE (14)
+            final response = [14, ..._strField(fakeSignature)];
+            client.add(_agentMsg(response));
+          }
+        });
+      }));
+
+      final proxy = await SystemAgentProxy.connectTo(socketPath);
+      final identities = await proxy.getIdentities();
+      expect(identities.length, 1);
+
+      final challenge = Uint8List.fromList([0xAA, 0xBB, 0xCC]);
+      final sig = await identities[0].signAsync(challenge);
+      expect(sig.encode(), equals(fakeSignature));
+
+      await proxy.close();
+    });
   });
 }
