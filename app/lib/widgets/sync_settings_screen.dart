@@ -8,6 +8,7 @@ import '../services/sync_encryption.dart';
 import '../services/sync_service.dart';
 import '../theme/app_theme.dart';
 import 'qr_export_dialog.dart';
+import 'qr_import_dialog.dart';
 
 class SyncSettingsScreen extends StatefulWidget {
   const SyncSettingsScreen({super.key});
@@ -220,13 +221,31 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
                   child: OutlinedButton.icon(
                     icon: const Icon(Icons.content_paste, size: 16),
                     label: const Text('Import via Code'),
-                    onPressed: null,
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => const QrImportDialog(),
+                    ),
                   ),
                 ),
               ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _showQrExport(BuildContext context) async {
+    final hostProvider = context.read<HostProvider>();
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => QrExportDialog(
+        getPayload: () async {
+          final hosts = hostProvider.allHosts;
+          final passwords = await hostProvider.loadAllPasswords();
+          return SyncService.buildPayload(hosts: hosts, passwords: passwords);
+        },
       ),
     );
   }

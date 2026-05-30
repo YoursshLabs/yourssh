@@ -88,6 +88,15 @@ class HostProvider extends ChangeNotifier {
     await onMutation?.call();
   }
 
+  Future<Map<String, String>> loadAllPasswords() async {
+    final result = <String, String>{};
+    for (final host in _hosts) {
+      final pw = await _storage.loadPassword(host.id);
+      if (pw != null) result['pw_${host.id}'] = pw;
+    }
+    return result;
+  }
+
   Future<void> replaceAll(List<Host> hosts, Map<String, String> passwords) async {
     final oldIds = _hosts.map((h) => h.id).toSet();
     final newIds = hosts.map((h) => h.id).toSet();
@@ -102,14 +111,5 @@ class HostProvider extends ChangeNotifier {
       await _storage.savePassword(hostId, entry.value);
     }
     notifyListeners();
-  }
-
-  Future<Map<String, String>> loadAllPasswords() async {
-    final result = <String, String>{};
-    for (final host in _hosts) {
-      final pw = await _storage.loadPassword(host.id);
-      if (pw != null) result['pw_${host.id}'] = pw;
-    }
-    return result;
   }
 }

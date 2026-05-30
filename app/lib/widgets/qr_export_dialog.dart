@@ -126,7 +126,7 @@ class _QrExportDialogState extends State<QrExportDialog> {
                 onChanged: (v) async {
                   if (v == null) return;
                   setState(() => _selectedInterface = v);
-                  _service.stop();
+                  await _service.stop();
                   await _startServer();
                 },
               ),

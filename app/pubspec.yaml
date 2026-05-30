@@ -31,6 +31,9 @@ dependencies:
   # File picker for SFTP upload
   file_picker: ^8.1.2
 
+  # QR code generation (P2P sync)
+  qr_flutter: ^4.1.0
+
   # UUID generation
   uuid: ^4.5.1
 
@@ -89,9 +92,6 @@ dependencies:
 
   # URL launcher (Cloudflare tunnel)
   url_launcher: ^6.3.0
-
-  # QR code display (P2P sync)
-  qr_flutter: ^4.1.0
 
 dependency_overrides:
   dartssh2:
