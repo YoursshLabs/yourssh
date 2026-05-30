@@ -32,3 +32,8 @@ macos/YourSSH/Generated/
 docs
 .idea
 app/build
+
+# Dart package build artifacts (packages/ subdirectories only)
+packages/*/.dart_tool/
+packages/*/pubspec.lock
+.dart_tool/
