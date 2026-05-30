@@ -44,6 +44,7 @@ class _RecordingPlayerWidgetState extends State<RecordingPlayerWidget> {
   Future<void> _loadFile() async {
     try {
       final lines = await File(widget.filePath).readAsLines();
+      if (!mounted) return;
       if (lines.isEmpty) throw const FormatException('Empty file');
 
       // Parse header for metadata (width/height); terminal is sized by the widget.
@@ -84,8 +85,10 @@ class _RecordingPlayerWidgetState extends State<RecordingPlayerWidget> {
   }
 
   void _scheduleNext() {
-    if (!mounted || _currentIndex >= _events.length) {
-      if (mounted) setState(() => _playing = false);
+    _timer?.cancel();
+    if (!mounted) return;
+    if (_currentIndex >= _events.length) {
+      setState(() => _playing = false);
       return;
     }
     final event = _events[_currentIndex];

@@ -20,6 +20,7 @@ class _RecordingLibraryScreenState extends State<RecordingLibraryScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       context.read<RecordingProvider>().refreshLibrary();
     });
   }
