@@ -1,0 +1,11 @@
+name: yourssh_plugin_api
+description: Public plugin API for YourSSH — implement YourSSHPlugin to build tools.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
