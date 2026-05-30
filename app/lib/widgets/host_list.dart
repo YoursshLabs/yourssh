@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../providers/host_provider.dart';
 import '../providers/session_provider.dart';
+import '../services/sync_service.dart';
 import 'add_host_dialog.dart';
+import 'qr_export_dialog.dart';
 
 class HostListPanel extends StatelessWidget {
   const HostListPanel({super.key});
@@ -51,16 +53,25 @@ class HostListPanel extends StatelessWidget {
                 ),
         ),
 
-        // Add button
+        // Bottom action bar
         Padding(
           padding: const EdgeInsets.all(8),
-          child: SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Add Host'),
-              onPressed: () => _addHost(context),
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Host'),
+                  onPressed: () => _addHost(context),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.qr_code, size: 18),
+                tooltip: 'Export via QR',
+                onPressed: () => _showQrExport(context),
+              ),
+            ],
           ),
         ),
       ],
@@ -88,6 +99,21 @@ class HostListPanel extends StatelessWidget {
     await context.read<HostProvider>().updateHost(
       result.host,
       password: result.password,
+    );
+  }
+
+  Future<void> _showQrExport(BuildContext context) async {
+    final hostProvider = context.read<HostProvider>();
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => QrExportDialog(
+        getPayload: () async {
+          final hosts = hostProvider.allHosts;
+          final passwords = await hostProvider.loadAllPasswords();
+          return SyncService.buildPayload(hosts: hosts, passwords: passwords);
+        },
+      ),
     );
   }
 }
