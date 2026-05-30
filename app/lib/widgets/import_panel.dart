@@ -229,7 +229,7 @@ class _ImportPanelState extends State<ImportPanel> {
       _csvWarnings = List.of(warnings);
       _parseError = hosts.isEmpty && warnings.isEmpty
           ? 'No hosts found or unrecognized format'
-          : null;
+          : (hosts.isEmpty && warnings.isNotEmpty ? 'All rows were skipped' : null);
       _included.clear();
       _overwrite.clear();
       for (var i = 0; i < hosts.length; i++) {
@@ -471,7 +471,7 @@ class _ImportPanelState extends State<ImportPanel> {
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
         title: Text(
-          '${_csvWarnings.length} row${_csvWarnings.length == 1 ? '' : 's'} skipped — tap to see details',
+          '${_csvWarnings.length} row${_csvWarnings.length == 1 ? '' : 's'} skipped — click to expand',
           style: const TextStyle(color: Colors.orange, fontSize: 11),
         ),
         children: _csvWarnings
