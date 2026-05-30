@@ -245,11 +245,38 @@ class SystemAgentProxy {
   SystemAgentProxy._(this._session);
 
   static Future<SystemAgentProxy> connect() async {
+    if (Platform.isWindows) return _connectWindows();
     final sockPath = Platform.environment['SSH_AUTH_SOCK'];
     if (sockPath == null || sockPath.isEmpty) {
       throw const SSHAgentUnavailableException('SSH_AUTH_SOCK is not set');
     }
     return connectTo(sockPath);
+  }
+
+  static Future<SystemAgentProxy> _connectWindows() async {
+    // Prefer SSH_AUTH_SOCK when set — supports WSL agent forwarding and
+    // third-party agents that expose a Unix-compatible socket on Windows.
+    final sockPath = Platform.environment['SSH_AUTH_SOCK'];
+    if (sockPath != null && sockPath.isNotEmpty) {
+      try {
+        return await connectTo(sockPath);
+      } catch (_) {
+        // Fall through to named pipe
+      }
+    }
+
+    const pipePath = r'\\.\pipe\openssh-ssh-agent';
+    try {
+      final transport = await _WindowsPipeTransport.connect(pipePath);
+      return SystemAgentProxy._(_AgentSession(transport));
+    } on SSHAgentUnavailableException {
+      rethrow;
+    } catch (e) {
+      throw SSHAgentUnavailableException(
+        'No SSH agent found. Start the OpenSSH Authentication Agent service '
+        'or set SSH_AUTH_SOCK. ($e)',
+      );
+    }
   }
 
   static Future<SystemAgentProxy> connectTo(String socketPath) async {
