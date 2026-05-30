@@ -488,12 +488,15 @@ class _HostCardState extends State<_HostCard> {
     super.dispose();
   }
 
+  static const _osAssets = {'linux', 'macos', 'windows'};
+
   Widget _osIcon(Host host) {
-    if (host.detectedOs != null) {
+    final os = host.detectedOs;
+    if (os != null && _osAssets.contains(os)) {
       return Padding(
         padding: const EdgeInsets.all(8),
         child: SvgPicture.asset(
-          'assets/os/${host.detectedOs}.svg',
+          'assets/os/$os.svg',
           width: 20,
           height: 20,
           colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
