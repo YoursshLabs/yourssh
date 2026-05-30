@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
+import 'package:flutter/foundation.dart';
 import '../models/host.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
@@ -33,6 +33,67 @@ class SshService {
 
   SshService(this._storage);
 
+  // ── Identity resolution ───────────────────────────────
+  //
+  // Resolves the SSH key material for a given host, keyed by [host.authType].
+  // Centralised so connect / _ensureJumpClient / testConnection don't drift.
+  // The caller owns the returned agentProxy: connect/jump store it on a long-
+  // lived map; testConnection closes it in finally.
+
+  Future<_IdentityResolution> _resolveIdentities(
+    Host host,
+    SshKeyEntry? keyEntry, {
+    String? jumpHostLabel,
+  }) async {
+    switch (host.authType) {
+      case AuthType.password:
+        return const _IdentityResolution([]);
+      case AuthType.privateKey:
+        if (keyEntry == null) return const _IdentityResolution([]);
+        final keyFile = File(keyEntry.privateKeyPath);
+        if (!await keyFile.exists()) return const _IdentityResolution([]);
+        final pem = await keyFile.readAsString();
+        final passphrase = await _storage.loadPassphrase(keyEntry.id);
+        return _IdentityResolution(SSHKeyPair.fromPem(pem, passphrase ?? ''));
+      case AuthType.certificate:
+        if (keyEntry == null) {
+          throw Exception('No key linked for certificate auth');
+        }
+        final certPath = keyEntry.certificatePath;
+        if (certPath == null) {
+          throw Exception(jumpHostLabel == null
+              ? 'No certificate linked to key "${keyEntry.label}". Add one in Keychain.'
+              : 'Jump host certificate file missing or not linked');
+        }
+        if (!await File(certPath).exists()) {
+          throw Exception('Certificate file not found: $certPath');
+        }
+        final passphrase = await _storage.loadPassphrase(keyEntry.id);
+        return _IdentityResolution([
+          await CertificateKeyPair.load(
+            keyPath: keyEntry.privateKeyPath,
+            certPath: certPath,
+            passphrase: passphrase,
+          ),
+        ]);
+      case AuthType.agent:
+        final proxy = await SystemAgentProxy.connect();
+        try {
+          final identities = await proxy.getIdentities();
+          if (identities.isEmpty) {
+            await proxy.close();
+            throw Exception(jumpHostLabel == null
+                ? 'SSH agent has no identities. Run "ssh-add <private-key>" to add one.'
+                : 'SSH agent has no identities for jump host. Run "ssh-add <private-key>" to add one.');
+          }
+          return _IdentityResolution(identities, proxy);
+        } catch (_) {
+          await proxy.close();
+          rethrow;
+        }
+    }
+  }
+
   // ── Connect ────────────────────────────────────────────
 
   Future<SSHClient> connect(
@@ -43,48 +104,9 @@ class SshService {
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
   }) async {
     final password = await _storage.loadPassword(host.id);
-
-    List<SSHKeyPair> identities = [];
-    if (host.authType == AuthType.privateKey && keyEntry != null) {
-      final keyFile = File(keyEntry.privateKeyPath);
-      if (await keyFile.exists()) {
-        final pem = await keyFile.readAsString();
-        final passphrase = await _storage.loadPassphrase(keyEntry.id);
-        identities = SSHKeyPair.fromPem(pem, passphrase ?? '');
-      }
-    } else if (host.authType == AuthType.certificate && keyEntry != null) {
-      final certPath = keyEntry.certificatePath;
-      if (certPath == null) {
-        throw Exception('No certificate linked to key "${keyEntry.label}". Add one in Keychain.');
-      }
-      if (!await File(certPath).exists()) {
-        throw Exception('Certificate file not found: $certPath');
-      }
-      final passphrase = await _storage.loadPassphrase(keyEntry.id);
-      identities = [
-        await CertificateKeyPair.load(
-          keyPath: keyEntry.privateKeyPath,
-          certPath: certPath,
-          passphrase: passphrase,
-        ),
-      ];
-    } else if (host.authType == AuthType.agent) {
-      final proxy = await SystemAgentProxy.connect();
-      _agentProxies[host.id] = proxy;
-      try {
-        identities = await proxy.getIdentities();
-      } catch (e) {
-        _agentProxies.remove(host.id);
-        await proxy.close();
-        rethrow;
-      }
-      if (identities.isEmpty) {
-        _agentProxies.remove(host.id);
-        await proxy.close();
-        throw Exception(
-          'SSH agent has no identities. Run "ssh-add <private-key>" to add one.',
-        );
-      }
+    final resolution = await _resolveIdentities(host, keyEntry);
+    if (resolution.agentProxy != null) {
+      _agentProxies[host.id] = resolution.agentProxy!;
     }
 
     final SSHClient client;
@@ -105,7 +127,7 @@ class SshService {
         socket,
         username: host.username,
         onPasswordRequest: () => password ?? '',
-        identities: identities.isNotEmpty ? identities : null,
+        identities: resolution.identities.isNotEmpty ? resolution.identities : null,
         onVerifyHostKey: (type, fp) async {
           if (verifyHostKey != null) return verifyHostKey(type.toString(), fp);
           return true;
@@ -113,7 +135,7 @@ class SshService {
       );
       await client.authenticated;
     } catch (e) {
-      if (host.authType == AuthType.agent) {
+      if (resolution.agentProxy != null) {
         unawaited(_agentProxies[host.id]?.close() ?? Future.value());
         _agentProxies.remove(host.id);
       }
@@ -141,52 +163,20 @@ class SshService {
       return _jumpClients[jumpHost.id]!;
     }
     final password = await _storage.loadPassword(jumpHost.id);
-
-    List<SSHKeyPair> identities = [];
-    if (jumpHost.authType == AuthType.privateKey && keyEntry != null) {
-      final keyFile = File(keyEntry.privateKeyPath);
-      if (await keyFile.exists()) {
-        final pem = await keyFile.readAsString();
-        final passphrase = await _storage.loadPassphrase(keyEntry.id);
-        identities = SSHKeyPair.fromPem(pem, passphrase ?? '');
-      }
-    } else if (jumpHost.authType == AuthType.certificate && keyEntry != null) {
-      final certPath = keyEntry.certificatePath;
-      if (certPath == null || !await File(certPath).exists()) {
-        throw Exception('Jump host certificate file missing or not linked');
-      }
-      final passphrase = await _storage.loadPassphrase(keyEntry.id);
-      identities = [
-        await CertificateKeyPair.load(
-          keyPath: keyEntry.privateKeyPath,
-          certPath: certPath,
-          passphrase: passphrase,
-        ),
-      ];
-    } else if (jumpHost.authType == AuthType.agent) {
-      final proxy = await SystemAgentProxy.connect();
-      _jumpAgentProxies[jumpHost.id] = proxy;
-      try {
-        identities = await proxy.getIdentities();
-      } catch (e) {
-        _jumpAgentProxies.remove(jumpHost.id);
-        await proxy.close();
-        rethrow;
-      }
-      if (identities.isEmpty) {
-        _jumpAgentProxies.remove(jumpHost.id);
-        await proxy.close();
-        throw Exception(
-          'SSH agent has no identities for jump host. Run "ssh-add <private-key>" to add one.',
-        );
-      }
+    final resolution = await _resolveIdentities(
+      jumpHost,
+      keyEntry,
+      jumpHostLabel: jumpHost.label,
+    );
+    if (resolution.agentProxy != null) {
+      _jumpAgentProxies[jumpHost.id] = resolution.agentProxy!;
     }
 
     final jumpClient = SSHClient(
       await SSHSocket.connect(jumpHost.host, jumpHost.port),
       username: jumpHost.username,
       onPasswordRequest: () => password ?? '',
-      identities: identities.isNotEmpty ? identities : null,
+      identities: resolution.identities.isNotEmpty ? resolution.identities : null,
       onVerifyHostKey: (type, fp) async {
         if (verifyHostKey != null) return verifyHostKey(type.toString(), fp);
         return true;
@@ -225,42 +215,20 @@ class SshService {
       SSHSocket socket;
       if (jumpHost != null) {
         final jumpPassword = await _storage.loadPassword(jumpHost.id);
-        List<SSHKeyPair> jumpIdentities = [];
-        if (jumpHost.authType == AuthType.privateKey && jumpKeyEntry != null) {
-          final keyFile = File(jumpKeyEntry.privateKeyPath);
-          if (await keyFile.exists()) {
-            final pem = await keyFile.readAsString();
-            final passphrase = await _storage.loadPassphrase(jumpKeyEntry.id);
-            jumpIdentities = SSHKeyPair.fromPem(pem, passphrase ?? '');
-          }
-        } else if (jumpHost.authType == AuthType.certificate && jumpKeyEntry != null) {
-          final certPath = jumpKeyEntry.certificatePath;
-          if (certPath == null || !await File(certPath).exists()) {
-            return (success: false, latencyMs: 0, error: 'Jump host certificate file missing or not linked');
-          }
-          final passphrase = await _storage.loadPassphrase(jumpKeyEntry.id);
-          jumpIdentities = [
-            await CertificateKeyPair.load(
-              keyPath: jumpKeyEntry.privateKeyPath,
-              certPath: certPath,
-              passphrase: passphrase,
-            ),
-          ];
-        } else if (jumpHost.authType == AuthType.agent) {
-          jumpAgentProxyForTest = await SystemAgentProxy.connect();
-          jumpIdentities = await jumpAgentProxyForTest.getIdentities();
-          if (jumpIdentities.isEmpty) {
-            await jumpAgentProxyForTest.close();
-            jumpAgentProxyForTest = null;
-            return (success: false, latencyMs: 0, error: 'SSH agent has no identities for jump host');
-          }
-        }
+        final jumpResolution = await _resolveIdentities(
+          jumpHost,
+          jumpKeyEntry,
+          jumpHostLabel: jumpHost.label,
+        );
+        // Track for cleanup; closed in `finally` below.
+        jumpAgentProxyForTest = jumpResolution.agentProxy;
         jumpClient = SSHClient(
           await SSHSocket.connect(jumpHost.host, jumpHost.port)
               .timeout(const Duration(seconds: 10)),
           username: jumpHost.username,
           onPasswordRequest: () => jumpPassword ?? '',
-          identities: jumpIdentities.isNotEmpty ? jumpIdentities : null,
+          identities:
+              jumpResolution.identities.isNotEmpty ? jumpResolution.identities : null,
           onVerifyHostKey: (_, _) async => true,
         );
         await jumpClient.authenticated.timeout(const Duration(seconds: 10));
@@ -271,48 +239,20 @@ class SshService {
             .timeout(const Duration(seconds: 10));
       }
 
-      List<SSHKeyPair> identities = [];
-      if (host.authType == AuthType.privateKey && keyEntry != null) {
-        final keyFile = File(keyEntry.privateKeyPath);
-        if (await keyFile.exists()) {
-          final pem = await keyFile.readAsString();
-          final passphrase = await _storage.loadPassphrase(keyEntry.id);
-          identities = SSHKeyPair.fromPem(pem, passphrase ?? '');
-        }
-      } else if (host.authType == AuthType.certificate && keyEntry != null) {
-        final certPath = keyEntry.certificatePath;
-        if (certPath == null || !await File(certPath).exists()) {
-          return (success: false, latencyMs: 0, error: 'Certificate file missing or not linked');
-        }
-        final passphrase = await _storage.loadPassphrase(keyEntry.id);
-        identities = [
-          await CertificateKeyPair.load(
-            keyPath: keyEntry.privateKeyPath,
-            certPath: certPath,
-            passphrase: passphrase,
-          ),
-        ];
-      } else if (host.authType == AuthType.agent) {
-        try {
-          agentProxy = await SystemAgentProxy.connect();
-          identities = await agentProxy.getIdentities();
-          // Keep proxy alive until after client.authenticated — agent keys
-          // need the socket open to sign the challenge.
-        } on SSHAgentUnavailableException catch (e) {
-          return (success: false, latencyMs: 0, error: e.message);
-        }
-      }
-
+      final resolution = await _resolveIdentities(host, keyEntry);
+      agentProxy = resolution.agentProxy;
       client = SSHClient(
         socket,
         username: host.username,
         onPasswordRequest: () => password ?? '',
-        identities: identities.isNotEmpty ? identities : null,
+        identities: resolution.identities.isNotEmpty ? resolution.identities : null,
         onVerifyHostKey: (_, _) async => true,
       );
       await client.authenticated.timeout(const Duration(seconds: 10));
       stopwatch.stop();
       return (success: true, latencyMs: stopwatch.elapsedMilliseconds, error: null);
+    } on SSHAgentUnavailableException catch (e) {
+      return (success: false, latencyMs: 0, error: e.message);
     } on TimeoutException {
       return (success: false, latencyMs: 0, error: 'Host unreachable');
     } on SocketException {
@@ -375,7 +315,10 @@ class SshService {
             sessionId: session.id,
             sessionLabel: sessionLabel,
           );
-        } catch (_) {}
+        } catch (e) {
+          // Notifications must never break TTY output — log and move on.
+          debugPrint('[SshService] notification handler threw: $e');
+        }
       },
       onDone: () {
         _onShellClosed(session);
@@ -504,8 +447,19 @@ class SshService {
     try {
       final result = await exec(host, 'uname -s 2>/dev/null || ver');
       return parseOsFromUname(result.stdout);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[SshService] OS detect failed for ${host.host}: $e');
       return null;
     }
   }
+}
+
+/// Return value of [_SshService._resolveIdentities]. The optional [agentProxy]
+/// must stay open until SSH authentication completes — agent-backed identities
+/// need the socket to sign challenges.
+class _IdentityResolution {
+  final List<SSHKeyPair> identities;
+  final SystemAgentProxy? agentProxy;
+
+  const _IdentityResolution(this.identities, [this.agentProxy]);
 }

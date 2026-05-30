@@ -102,12 +102,12 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
 
     _hostProvider.onMutation = () => _syncService.push(
           hosts: _hostProvider.allHosts,
-          loadPasswords: _loadAllPasswords,
+          loadPasswords: _hostProvider.loadAllPasswords,
         );
 
     _syncService.startRetryTimer(
       getHosts: () async => _hostProvider.allHosts,
-      loadPasswords: _loadAllPasswords,
+      loadPasswords: _hostProvider.loadAllPasswords,
     );
 
     NotificationService.instance.enabled = _settingsProvider.commandNotificationsEnabled;
@@ -122,15 +122,6 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
 
   void _syncNotificationSetting() {
     NotificationService.instance.enabled = _settingsProvider.commandNotificationsEnabled;
-  }
-
-  Future<Map<String, String>> _loadAllPasswords() async {
-    final passwords = <String, String>{};
-    for (final host in _hostProvider.allHosts) {
-      final pw = await _storage.loadPassword(host.id);
-      if (pw != null) passwords['pw_${host.id}'] = pw;
-    }
-    return passwords;
   }
 
   @override

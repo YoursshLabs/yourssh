@@ -8,7 +8,6 @@ import '../providers/settings_provider.dart';
 import '../providers/sync_provider.dart';
 import '../services/sync_service.dart';
 import '../providers/host_provider.dart';
-import '../services/storage_service.dart';
 import '../services/supabase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
@@ -372,13 +371,10 @@ class _SyncSectionState extends State<_SyncSection> {
     if (!sync.enabled || !sync.isSupabaseConfigured) return;
     final syncService = context.read<SyncService>();
     final hostProvider = context.read<HostProvider>();
-    final storage = context.read<StorageService>();
-    final passwords = <String, String>{};
-    for (final host in hostProvider.allHosts) {
-      final pw = await storage.loadPassword(host.id);
-      if (pw != null) passwords['pw_${host.id}'] = pw;
-    }
-    await syncService.push(hosts: hostProvider.allHosts, loadPasswords: () async => passwords);
+    await syncService.push(
+      hosts: hostProvider.allHosts,
+      loadPasswords: hostProvider.loadAllPasswords,
+    );
     syncService.restartRetryTimer();
   }
 
