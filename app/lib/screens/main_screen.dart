@@ -21,13 +21,17 @@ import '../widgets/split_terminal_view.dart';
 import '../widgets/web_tools_screen.dart';
 import '../widgets/new_group_panel.dart';
 import '../widgets/import_panel.dart';
-import '../widgets/devops_hub_screen.dart';
 import '../widgets/ai_chat_sidebar.dart';
+import '../widgets/plugin_marketplace_screen.dart';
+import '../plugins/plugin_context_impl.dart';
+import '../providers/plugin_provider.dart';
+import '../services/ssh_service.dart';
+import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
 import '../providers/settings_provider.dart';
 import '../providers/terminal_layout_provider.dart';
 import '../services/hotkey_service.dart';
 
-enum NavSection { hosts, keychain, portForwarding, sftp, webTools, devOps, snippets, localTerminal, knownHosts, settings }
+enum NavSection { hosts, keychain, portForwarding, sftp, webTools, snippets, localTerminal, knownHosts, settings, plugins }
 
 enum _SidePanel { none, host, newGroup, import }
 
@@ -40,6 +44,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   NavSection _nav = NavSection.hosts;
+  String? _activePluginId;
   _SidePanel _sidePanel = _SidePanel.none;
   Host? _editingHost;
   String? _initialGroup;
@@ -221,13 +226,27 @@ class _MainScreenState extends State<MainScreen> {
               children: [
                 if ((!_viewingTerminal || sessions.isEmpty) &&
                     !(_nav == NavSection.sftp && _sftpConnectionNotifier.value))
-                  _Sidebar(selected: _nav, onSelect: (s) => setState(() {
-                    _nav = s;
-                    _viewingTerminal = false;
-                    _showAiChat = false;
-                    if (s != NavSection.hosts) _closePanel();
-                    if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
-                  })),
+                  _Sidebar(
+                    selected: _nav,
+                    activePluginId: _activePluginId,
+                    onSelect: (s) {
+                      if (s != NavSection.hosts) _closePanel();
+                      if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
+                      setState(() {
+                        _activePluginId = null;
+                        _nav = s;
+                        _viewingTerminal = false;
+                        _showAiChat = false;
+                      });
+                    },
+                    onSelectPlugin: (id) {
+                      setState(() {
+                        _activePluginId = id;
+                        _viewingTerminal = false;
+                        _sidePanel = _SidePanel.none;
+                      });
+                    },
+                  ),
                 Expanded(child: _buildContent(activeSession)),
                 if (_nav == NavSection.hosts && !_viewingTerminal) ...[
                   if (_sidePanel == _SidePanel.host)
@@ -263,8 +282,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildContent(SshSession? active) {
     final settings = context.read<SettingsProvider>();
-    final hiddenNav = (_nav == NavSection.devOps && !settings.showDevOps) ||
-        (_nav == NavSection.webTools && !settings.showWebTools) ||
+    final hiddenNav = (_nav == NavSection.webTools && !settings.showWebTools) ||
         (_nav == NavSection.snippets && !settings.showSnippets);
     if (hiddenNav) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -305,6 +323,32 @@ class _MainScreenState extends State<MainScreen> {
         ],
       );
     }
+
+    // Active plugin view
+    if (_activePluginId != null) {
+      final pluginProvider = context.read<PluginProvider>();
+      final enabled = pluginProvider.enabledPlugins.where((p) => p.id == _activePluginId);
+      if (enabled.isNotEmpty) {
+        final plugin = enabled.first;
+        final ssh = context.read<SshService>();
+        final sessions = context.read<SessionProvider>();
+        final pluginCtx = PluginContextImpl(
+          sessions: sessions,
+          ssh: ssh,
+          pluginId: plugin.id,
+        );
+        return _PluginErrorBoundary(
+          key: ValueKey(plugin.id),
+          child: plugin.buildUI(context, pluginCtx),
+        );
+      }
+      // Plugin was disabled while viewing it — reset
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _activePluginId = null);
+      });
+      return const SizedBox.shrink();
+    }
+
     return switch (_nav) {
       NavSection.hosts => HostsDashboard(
           onAddHost: () => _openHostPanel(),
@@ -323,7 +367,7 @@ class _MainScreenState extends State<MainScreen> {
       NavSection.knownHosts => const KnownHostsScreen(),
       NavSection.settings => const SettingsScreen(),
       NavSection.webTools => const WebToolsScreen(),
-      NavSection.devOps => const DevOpsHubScreen(),
+      NavSection.plugins => const PluginMarketplaceScreen(),
     };
   }
 }
@@ -332,8 +376,15 @@ class _MainScreenState extends State<MainScreen> {
 
 class _Sidebar extends StatelessWidget {
   final NavSection selected;
+  final String? activePluginId;
   final ValueChanged<NavSection> onSelect;
-  const _Sidebar({required this.selected, required this.onSelect});
+  final ValueChanged<String> onSelectPlugin;
+  const _Sidebar({
+    required this.selected,
+    required this.activePluginId,
+    required this.onSelect,
+    required this.onSelectPlugin,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -368,17 +419,19 @@ class _Sidebar extends StatelessWidget {
           const _SectionLabel('TOOLS'),
           if (context.watch<SettingsProvider>().showWebTools)
             _navItem(Icons.build_outlined, 'Web Tools', NavSection.webTools),
-          if (context.watch<SettingsProvider>().showDevOps)
-            _navItem(Icons.rocket_launch_outlined, 'DevOps', NavSection.devOps),
           if (context.watch<SettingsProvider>().showSnippets)
             _navItem(Icons.code, 'Snippets', NavSection.snippets),
           _navItem(Icons.laptop_mac, 'Local Terminal', NavSection.localTerminal),
+          ...context.watch<PluginProvider>().enabledPlugins.map(
+            (plugin) => _pluginNavItem(context, plugin),
+          ),
 
           const _SectionLabel('SECURITY'),
           _navItem(Icons.vpn_key_outlined, 'Keychain', NavSection.keychain),
 
           const Spacer(),
           const Divider(height: 1, color: AppColors.border),
+          _navItem(Icons.extension_outlined, 'Plugins', NavSection.plugins),
           _navItem(Icons.settings_outlined, 'Settings', NavSection.settings),
           const SizedBox(height: 8),
 
@@ -414,6 +467,44 @@ class _Sidebar extends StatelessWidget {
   Widget _navItem(IconData icon, String label, NavSection section) {
     final isSelected = selected == section;
     return _NavItem(icon: icon, label: label, selected: isSelected, onTap: () => onSelect(section));
+  }
+
+  Widget _pluginNavItem(BuildContext context, YourSSHPlugin plugin) {
+    final isActive = activePluginId == plugin.id;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onSelectPlugin(plugin.id),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: isActive ? AppColors.accent.withValues(alpha: 0.12) : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: isActive ? Border.all(color: AppColors.accent.withValues(alpha: 0.2)) : null,
+          ),
+          child: Row(
+            children: [
+              Icon(plugin.icon,
+                  size: 15,
+                  color: isActive ? AppColors.accent : AppColors.textSecondary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  plugin.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isActive ? AppColors.accent : AppColors.textSecondary,
+                    fontSize: 13,
+                    fontWeight: isActive ? FontWeight.w500 : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -802,6 +893,50 @@ class _HostKeyDialog extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+// ── Plugin Error Boundary ─────────────────────────────────
+
+class _PluginErrorBoundary extends StatefulWidget {
+  final Widget child;
+  const _PluginErrorBoundary({super.key, required this.child});
+
+  @override
+  State<_PluginErrorBoundary> createState() => _PluginErrorBoundaryState();
+}
+
+class _PluginErrorBoundaryState extends State<_PluginErrorBoundary> {
+  Object? _error;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 32),
+              const SizedBox(height: 12),
+              Text(
+                'Plugin crashed: $_error',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return widget.child;
+  }
+
+  @override
+  void didUpdateWidget(_PluginErrorBoundary oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.child != widget.child) _error = null;
   }
 }
 

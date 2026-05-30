@@ -14,6 +14,8 @@ import 'providers/local_session_provider.dart';
 import 'providers/terminal_layout_provider.dart';
 import 'providers/sync_provider.dart';
 import 'providers/known_hosts_provider.dart';
+import 'providers/plugin_provider.dart';
+import 'plugins/plugin_registry.dart';
 import 'services/ssh_service.dart';
 import 'services/storage_service.dart';
 import 'services/sync_service.dart';
@@ -46,6 +48,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final SyncProvider _syncProvider;
   late final SyncService _syncService;
   late final KnownHostsProvider _knownHostsProvider;
+  late final PluginProvider _pluginProvider;
 
   @override
   void initState() {
@@ -64,6 +67,12 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _knownHostsProvider = KnownHostsProvider(_storage);
     _knownHostsProvider.load();
     _sessionProvider.hostKeyVerifier = _knownHostsProvider.verifyHostKey;
+    _pluginProvider = PluginProvider(plugins: kRegisteredPlugins);
+    _pluginProvider.loadFromPrefs();
+    // NOTE: onToggled lifecycle hooks (onActivate/onDeactivate) require a
+    // YourSSHPluginContext, which needs SessionProvider from the widget tree.
+    // Actual lifecycle wiring is done in MainScreen after the widget tree is built.
+    _pluginProvider.onToggled = (plugin, enabled) {};
     _syncProvider = SyncProvider();
     _syncService = SyncService(_syncProvider);
 
@@ -108,6 +117,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _sessionProvider.dispose();
     _syncProvider.dispose();
     _knownHostsProvider.dispose();
+    _pluginProvider.dispose();
     super.dispose();
   }
 
@@ -134,6 +144,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         ChangeNotifierProvider(create: (_) => TerminalLayoutProvider()),
         ChangeNotifierProvider(create: (_) => LocalSessionProvider()),
         ChangeNotifierProvider(create: (_) => AiChatProvider()),
+        ChangeNotifierProvider.value(value: _pluginProvider),
       ],
       child: MaterialApp(
         title: 'YourSSH',

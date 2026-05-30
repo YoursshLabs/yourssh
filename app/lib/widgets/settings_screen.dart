@@ -196,12 +196,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onChanged: (v) => context.read<SettingsProvider>().save(showWebTools: v),
                   ),
                   SwitchListTile(
-                    title: const Text('DevOps Tools', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-                    subtitle: const Text('Show DevOps section in sidebar (ping, DNS, port scan, etc.)', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                    value: settings.showDevOps,
-                    onChanged: (v) => context.read<SettingsProvider>().save(showDevOps: v),
-                  ),
-                  SwitchListTile(
                     title: const Text('Snippets', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
                     subtitle: const Text('Show Snippets section in sidebar', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                     value: settings.showSnippets,
