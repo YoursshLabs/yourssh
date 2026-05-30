@@ -386,7 +386,7 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 ### ✅ Phase 1 — Quick wins
 
 - [x] **SSH config import** — paste `~/.ssh/config` or JSON to bulk-import hosts
-- [ ] **Host import from CSV** — bulk import connection profiles from a spreadsheet
+- [x] **Host import from CSV** — bulk import connection profiles from a spreadsheet
 - [ ] **Command finish notification** — system alert when a long-running command completes while the window is not focused
 
 ### 🔜 Phase 2 — Core SSH improvements
