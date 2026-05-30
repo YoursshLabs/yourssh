@@ -38,8 +38,10 @@ class SettingsProvider extends ChangeNotifier {
     tmuxEnabled = prefs.getBool('tmuxEnabled') ?? false;
     commandNotificationsEnabled = prefs.getBool('commandNotificationsEnabled') ?? true;
     terminalFont = prefs.getString('terminalFont') ?? 'MesloLGS NF';
-    final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? '';
-    final defaultPath = p.join(home, 'Documents', 'YourSSH', 'Recordings');
+    final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+    final defaultPath = home != null
+        ? p.join(home, 'Documents', 'YourSSH', 'Recordings')
+        : p.join(Directory.current.path, 'YourSSH', 'Recordings');
     recordingPath = prefs.getString('recordingPath') ?? defaultPath;
     final hotkeysJson = prefs.getString('hotkeys');
     if (hotkeysJson != null) {
