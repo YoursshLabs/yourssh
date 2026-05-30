@@ -411,7 +411,7 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 
 ### 🔜 Phase 2 — Core SSH improvements
 
-- [ ] **Jump host / bastion proxy** — `ProxyJump` support for multi-hop connections
+- [x] **Jump host / bastion proxy** — `ProxyJump` support for multi-hop connections
 - [ ] **TOTP / keyboard-interactive 2FA** — OTP prompt for servers that require it after password
 - [x] **Windows SSH agent (Pageant)** — named-pipe agent support alongside `SSH_AUTH_SOCK`
 

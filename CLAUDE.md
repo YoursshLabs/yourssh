@@ -5,15 +5,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Run
 
 ```bash
-# Run on macOS (primary target)
+# Run (macOS / Windows / Linux)
 cd app && flutter run -d macos
-
-# Run on Windows
 cd app && flutter run -d windows
+cd app && flutter run -d linux
 
 # Build
 cd app && flutter build macos
 cd app && flutter build windows
+cd app && flutter build linux
 
 # Lint / analyze
 cd app && flutter analyze
@@ -21,6 +21,7 @@ cd app && flutter analyze
 # Tests
 cd app && flutter test
 cd app && flutter test test/services/sync_service_test.dart   # single test file
+cd app && flutter test --name "pattern"                       # filter by test name
 ```
 
 ## Makefile targets (Rust core — inactive/future)
@@ -35,7 +36,7 @@ make clean          # Remove Rust build artifacts + generated bindings
 
 ## Architecture
 
-The active codebase is `app/` — a Flutter app targeting macOS and Windows. The `core/` Rust library is **not currently used at runtime**; it was built in Sprint 1 and kept for future `flutter_rust_bridge` integration.
+The active codebase is `app/` — a Flutter app targeting macOS, Windows, and Linux. The `core/` Rust library is **not currently used at runtime**; it was built in Sprint 1 and kept for future `flutter_rust_bridge` integration.
 
 **Monorepo layout:**
 - `app/` — the Flutter app
