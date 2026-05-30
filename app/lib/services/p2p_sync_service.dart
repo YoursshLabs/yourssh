@@ -36,19 +36,22 @@ class P2PSyncService {
   }
 
   void _handleRequests(String encryptedPayload) {
-    _server?.listen((request) async {
-      if (request.uri.path == '/sync' && request.method == 'GET') {
-        request.response
-          ..statusCode = 200
-          ..headers.contentType = ContentType.text
-          ..write(encryptedPayload);
-        await request.response.close();
-        await stop();
-      } else {
-        request.response.statusCode = 404;
-        await request.response.close();
-      }
-    });
+    _server?.listen(
+      (request) async {
+        if (request.uri.path == '/sync' && request.method == 'GET') {
+          request.response
+            ..statusCode = 200
+            ..headers.contentType = ContentType.text
+            ..write(encryptedPayload);
+          await request.response.close();
+          await stop();
+        } else {
+          request.response.statusCode = 404;
+          await request.response.close();
+        }
+      },
+      onError: (_) {},
+    );
   }
 
   Future<void> stop() async {
@@ -65,7 +68,8 @@ class P2PSyncService {
       if (response.statusCode != 200) {
         throw Exception('HTTP ${response.statusCode}');
       }
-      return await response.transform(utf8.decoder).join();
+      return await response.transform(utf8.decoder).join()
+          .timeout(const Duration(seconds: 10));
     } finally {
       client.close();
     }
