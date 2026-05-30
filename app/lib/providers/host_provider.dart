@@ -97,6 +97,15 @@ class HostProvider extends ChangeNotifier {
     return result;
   }
 
+  Future<void> updateDetectedOs(String hostId, String os) async {
+    final idx = _hosts.indexWhere((h) => h.id == hostId);
+    if (idx == -1) return;
+    _hosts[idx] = _hosts[idx].copyWith(detectedOs: os);
+    await _storage.saveHosts(_hosts);
+    notifyListeners();
+    // intentionally does NOT call onMutation — local metadata only
+  }
+
   Future<void> replaceAll(List<Host> hosts, Map<String, String> passwords) async {
     final oldIds = _hosts.map((h) => h.id).toSet();
     final newIds = hosts.map((h) => h.id).toSet();
