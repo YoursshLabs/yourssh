@@ -87,22 +87,11 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'sync_pending_push': true,
         'sync_last_push_at': '2026-01-01T00:00:00.000Z',
-        'sync_enabled': true,
       });
     });
 
-    Future<SyncProvider> buildProvider() async {
-      final p = SyncProvider();
-      final c = Completer<void>();
-      p.addListener(() { if (!c.isCompleted) c.complete(); });
-      await c.future.timeout(const Duration(seconds: 2));
-      return p;
-    }
-
     test('clears local prefs and disables sync even when remote delete throws', () async {
-      final syncProvider = await buildProvider();
-      await syncProvider.setEnabled(true);
-
+      final syncProvider = SyncProvider();
       await syncProvider.setSupabaseConfig('https://test.supabase.co', 'test-anon-key');
       final service = SyncService(syncProvider)
         ..cachedSupabase = _ThrowingSupabase();

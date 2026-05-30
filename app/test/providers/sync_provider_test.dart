@@ -25,12 +25,12 @@ void main() {
       expect(provider.lastSynced, isNull);
     });
 
-    test('setEnabled notifies listeners', () {
-      var notified = false;
-      provider.addListener(() => notified = true);
-      provider.setEnabled(true);
-      expect(notified, true);
+    test('enabled reflects isSupabaseConfigured', () async {
+      expect(provider.enabled, false);
+      await provider.setSupabaseConfig('https://x.supabase.co', 'key');
       expect(provider.enabled, true);
+      await provider.clearSupabaseConfig();
+      expect(provider.enabled, false);
     });
 
     test('setStatus notifies listeners', () {
