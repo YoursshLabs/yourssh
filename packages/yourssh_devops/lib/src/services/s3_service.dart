@@ -64,6 +64,13 @@ class S3Service {
     return entries;
   }
 
+  /// Percent-encodes an object key per-segment so the `/` separators stay
+  /// intact (S3 expects them un-encoded between path components).
+  static String _encodeKey(String key) =>
+      key.split('/').map(Uri.encodeComponent).join('/');
+
+  String _keyPath(String key) => '/$bucket/${_encodeKey(key)}';
+
   /// Generate a pre-signed URL for downloading [key] (valid 1 hour).
   String presignedDownloadUrl(String key, {int expiresInSeconds = 3600}) {
     final now = DateTime.now().toUtc();
@@ -71,7 +78,7 @@ class S3Service {
     final amzDate = _amzDate(now);
     final credentialScope = '$dateStamp/$region/s3/aws4_request';
     final credential = '$accessKey/$credentialScope';
-    final encodedKey = Uri.encodeComponent(key);
+    final path = _keyPath(key);
     final host = _host;
 
     final canonicalQueryString = _buildCanonicalQuery({
@@ -84,7 +91,7 @@ class S3Service {
 
     final canonicalRequest = [
       'GET',
-      '/$bucket/$encodedKey',
+      path,
       canonicalQueryString,
       'host:$host\n',
       'host',
@@ -103,22 +110,42 @@ class S3Service {
         .convert(utf8.encode(stringToSign))
         .toString();
 
-    final baseUrl = '${endpoint.trimRight()}/$bucket/$encodedKey';
-    return '$baseUrl?$canonicalQueryString&X-Amz-Signature=$signature'; // ignore: prefer_interpolation_to_compose_strings
+    return '${endpoint.trimRight()}$path?$canonicalQueryString&X-Amz-Signature=$signature';
   }
 
-  /// Upload [data] to [key]. Optional [onProgress] receives (bytesSent, totalBytes).
+  /// Streamed upload of [data] (already in memory). Callers with large files
+  /// should prefer [putObjectStream] which doesn't require buffering.
   Future<void> putObject(
     String key,
     Uint8List data, {
     String contentType = 'application/octet-stream',
     void Function(int sent, int total)? onProgress,
+  }) {
+    return putObjectStream(
+      key,
+      Stream<List<int>>.value(data),
+      contentLength: data.length,
+      contentType: contentType,
+      onProgress: onProgress,
+    );
+  }
+
+  /// Streamed upload: reads from [body] in chunks without buffering the whole
+  /// payload. Hash must be precomputed (S3 SigV4) or set to UNSIGNED-PAYLOAD;
+  /// here we use UNSIGNED-PAYLOAD to avoid a first-pass file read.
+  Future<void> putObjectStream(
+    String key,
+    Stream<List<int>> body, {
+    required int contentLength,
+    String contentType = 'application/octet-stream',
+    void Function(int sent, int total)? onProgress,
   }) async {
-    final uri = _buildUri(path: '/$bucket/$key');
+    final path = _keyPath(key);
+    final uri = _buildUri(path: path);
     final now = DateTime.now().toUtc();
     final dateStamp = _dateStamp(now);
     final amzDate = _amzDate(now);
-    final bodyHash = sha256.convert(data).toString();
+    const bodyHash = 'UNSIGNED-PAYLOAD';
     final host = _host;
 
     final headers = {
@@ -128,40 +155,33 @@ class S3Service {
       'x-amz-date': amzDate,
     };
 
-    final canonicalRequest =
-        _canonicalRequest('PUT', '/$bucket/$key', '', headers, bodyHash);
-    final authHeader = _authHeader(canonicalRequest, headers, dateStamp, amzDate);
-    headers['Authorization'] = authHeader;
-
-    if (onProgress == null) {
-      final response = await http.put(uri, headers: headers, body: data);
-      if (response.statusCode != 200 && response.statusCode != 204) {
-        throw Exception('S3 upload failed: ${response.statusCode} ${response.body}');
-      }
-      return;
-    }
+    final canonicalRequest = _canonicalRequest('PUT', path, '', headers, bodyHash);
+    headers['Authorization'] = _authHeader(canonicalRequest, headers, dateStamp, amzDate);
 
     final client = http.Client();
     try {
       final request = http.StreamedRequest('PUT', uri);
       headers.forEach((k, v) => request.headers[k] = v);
-      request.contentLength = data.length;
+      request.contentLength = contentLength;
 
       final responseFuture = client.send(request);
-      const chunkSize = 65536;
       var sent = 0;
-      for (var i = 0; i < data.length; i += chunkSize) {
-        final end = (i + chunkSize).clamp(0, data.length);
-        request.sink.add(data.sublist(i, end));
-        sent = end;
-        onProgress(sent, data.length);
-      }
-      await request.sink.close();
+      // Pipe the source stream through, reporting progress per chunk.
+      body.listen(
+        (chunk) {
+          request.sink.add(chunk);
+          sent += chunk.length;
+          onProgress?.call(sent, contentLength);
+        },
+        onDone: request.sink.close,
+        onError: (Object e, StackTrace st) => request.sink.addError(e, st),
+        cancelOnError: true,
+      );
 
       final streamed = await responseFuture;
       if (streamed.statusCode != 200 && streamed.statusCode != 204) {
-        final body = await streamed.stream.bytesToString();
-        throw Exception('S3 upload failed: ${streamed.statusCode} $body');
+        final errBody = await streamed.stream.bytesToString();
+        throw Exception('S3 upload failed: ${streamed.statusCode} $errBody');
       }
     } finally {
       client.close();
@@ -170,7 +190,8 @@ class S3Service {
 
   /// Delete object at [key].
   Future<void> deleteObject(String key) async {
-    final uri = _buildUri(path: '/$bucket/$key');
+    final path = _keyPath(key);
+    final uri = _buildUri(path: path);
     final now = DateTime.now().toUtc();
     final dateStamp = _dateStamp(now);
     final amzDate = _amzDate(now);
@@ -183,9 +204,8 @@ class S3Service {
       'x-amz-date': amzDate,
     };
 
-    final canonicalRequest = _canonicalRequest('DELETE', '/$bucket/$key', '', headers, bodyHash);
-    final authHeader = _authHeader(canonicalRequest, headers, dateStamp, amzDate);
-    headers['Authorization'] = authHeader;
+    final canonicalRequest = _canonicalRequest('DELETE', path, '', headers, bodyHash);
+    headers['Authorization'] = _authHeader(canonicalRequest, headers, dateStamp, amzDate);
 
     final response = await http.delete(uri, headers: headers);
     if (response.statusCode != 204 && response.statusCode != 200) {
@@ -195,26 +215,28 @@ class S3Service {
 
   /// Copy object from [sourceKey] to [destKey] within the same bucket.
   Future<void> copyObject(String sourceKey, String destKey) async {
-    final uri = _buildUri(path: '/$bucket/$destKey');
+    final destPath = _keyPath(destKey);
+    final uri = _buildUri(path: destPath);
     final now = DateTime.now().toUtc();
     final dateStamp = _dateStamp(now);
     final amzDate = _amzDate(now);
     final bodyHash = sha256.convert(<int>[]).toString();
     final host = _host;
-    final encodedSource = Uri.encodeComponent('/$bucket/$sourceKey');
+    // S3 expects /<bucket>/<encoded-key>, with the slashes between segments
+    // un-encoded. The previous Uri.encodeComponent encoded everything including
+    // the slashes, breaking copies of any nested key.
+    final copySource = '/$bucket/${_encodeKey(sourceKey)}';
 
     final headers = {
       'host': host,
       'x-amz-content-sha256': bodyHash,
-      'x-amz-copy-source': encodedSource,
+      'x-amz-copy-source': copySource,
       'x-amz-date': amzDate,
       'x-amz-metadata-directive': 'COPY',
     };
 
-    final canonicalRequest =
-        _canonicalRequest('PUT', '/$bucket/$destKey', '', headers, bodyHash);
-    final authHeader = _authHeader(canonicalRequest, headers, dateStamp, amzDate);
-    headers['Authorization'] = authHeader;
+    final canonicalRequest = _canonicalRequest('PUT', destPath, '', headers, bodyHash);
+    headers['Authorization'] = _authHeader(canonicalRequest, headers, dateStamp, amzDate);
 
     final response = await http.put(uri, headers: headers);
     if (response.statusCode != 200 && response.statusCode != 204) {
@@ -224,7 +246,7 @@ class S3Service {
 
   /// Download object at [key] and return its bytes.
   Future<Uint8List> downloadObject(String key) async {
-    final uri = _buildUri(path: '/$bucket/$key');
+    final uri = _buildUri(path: _keyPath(key));
     final response = await _signedGet(uri);
     if (response.statusCode != 200) {
       throw Exception('S3 download failed: ${response.statusCode} ${response.body}');
@@ -254,7 +276,10 @@ class S3Service {
     final bodyHash = sha256.convert(<int>[]).toString();
     final host = _host;
 
-    final canonicalQuery = uri.query;
+    // SigV4 requires the canonical query to be sorted-by-key with proper
+    // percent-encoding — `uri.query` keeps insertion order, which only
+    // accidentally works for parameter sets that happen to already be sorted.
+    final canonicalQuery = _buildCanonicalQuery(uri.queryParameters);
     final headers = {
       'host': host,
       'x-amz-content-sha256': bodyHash,
@@ -262,12 +287,14 @@ class S3Service {
     };
 
     final canonicalRequest = _canonicalRequest('GET', uri.path, canonicalQuery, headers, bodyHash);
-    final authHeader = _authHeader(canonicalRequest, headers, dateStamp, amzDate);
-    headers['Authorization'] = authHeader;
+    headers['Authorization'] = _authHeader(canonicalRequest, headers, dateStamp, amzDate);
 
     return http.get(uri, headers: headers);
   }
 
+  /// Builds the canonical-request block. [path] is assumed to already be a
+  /// valid URL path with slashes between segments — callers using object keys
+  /// should pass `_keyPath(key)` rather than raw keys.
   String _canonicalRequest(
     String method,
     String path,
@@ -283,9 +310,8 @@ class S3Service {
         .join('\n');
     final canonicalHeadersBlock = '$canonicalHeaders\n';
     final signedHeaders = sortedHeaders.keys.join(';');
-    final encodedPath = Uri.encodeFull(path).replaceAll('%2F', '/');
 
-    return [method, encodedPath, canonicalQuery, canonicalHeadersBlock, signedHeaders, bodyHash].join('\n');
+    return [method, path, canonicalQuery, canonicalHeadersBlock, signedHeaders, bodyHash].join('\n');
   }
 
   String _authHeader(
