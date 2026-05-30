@@ -1,6 +1,6 @@
 import 'package:uuid/uuid.dart';
 
-enum AuthType { password, privateKey, agent }
+enum AuthType { password, privateKey, certificate, agent }
 
 class Host {
   final String id;
