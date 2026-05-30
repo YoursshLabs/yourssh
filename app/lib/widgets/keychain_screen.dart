@@ -185,11 +185,29 @@ class _KeyTile extends StatefulWidget {
 
 class _KeyTileState extends State<_KeyTile> {
   bool _hovered = false;
+  bool? _exists;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkExists();
+  }
+
+  @override
+  void didUpdateWidget(_KeyTile old) {
+    super.didUpdateWidget(old);
+    if (old.entry.privateKeyPath != widget.entry.privateKeyPath) _checkExists();
+  }
+
+  Future<void> _checkExists() async {
+    final exists = await File(widget.entry.privateKeyPath).exists();
+    if (mounted && exists != _exists) setState(() => _exists = exists);
+  }
 
   @override
   Widget build(BuildContext context) {
     final e = widget.entry;
-    final exists = File(e.privateKeyPath).existsSync();
+    final exists = _exists ?? true; // assume OK until first probe completes
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),

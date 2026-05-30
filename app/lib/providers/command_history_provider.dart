@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,8 +7,21 @@ import '../models/command_history.dart';
 class CommandHistoryProvider extends ChangeNotifier {
   static const _prefKey = 'command_history_v1';
   static const _maxPerSession = 500;
+  static const _persistDebounce = Duration(milliseconds: 500);
 
   final Map<String, CommandHistory> _histories = {};
+  Timer? _persistTimer;
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _persistTimer?.cancel();
+    // Flush any pending changes synchronously-ish so a quick app close still
+    // saves the last command.
+    if (_persistTimer != null) unawaited(_persist());
+    super.dispose();
+  }
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -27,7 +41,7 @@ class CommandHistoryProvider extends ChangeNotifier {
 
   void recordCommand(String sessionId, String command) {
     historyFor(sessionId).add(command);
-    _persist();
+    _schedulePersist();
     notifyListeners();
   }
 
@@ -42,6 +56,15 @@ class CommandHistoryProvider extends ChangeNotifier {
         .where((e) => e.startsWith(prefix))
         .take(8)
         .toList();
+  }
+
+  void _schedulePersist() {
+    _persistTimer?.cancel();
+    _persistTimer = Timer(_persistDebounce, () {
+      _persistTimer = null;
+      if (_disposed) return;
+      unawaited(_persist());
+    });
   }
 
   Future<void> _persist() async {

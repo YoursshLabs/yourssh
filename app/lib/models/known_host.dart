@@ -58,5 +58,8 @@ class HostKeyChallenge {
     if (!_completer.isCompleted) _completer.complete(trust);
   }
 
+  /// Marks the challenge as rejected. Idempotent — safe to call multiple times.
+  void reject() => resolve(false);
+
   Future<bool> get result => _completer.future;
 }

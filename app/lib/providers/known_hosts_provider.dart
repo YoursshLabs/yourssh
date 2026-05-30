@@ -54,6 +54,10 @@ class KnownHostsProvider extends ChangeNotifier {
     if (existing.fingerprint == fp) return true;
 
     // Key mismatch — raise challenge; block until UI resolves it.
+    // If a previous challenge is still pending (UI dialog stuck), reject it so
+    // the prior caller doesn't hang forever and gets a clear "rejected" answer.
+    _pendingChallenge?.reject();
+
     final challenge = HostKeyChallenge(
       host: host,
       port: port,
@@ -65,7 +69,8 @@ class KnownHostsProvider extends ChangeNotifier {
     notifyListeners();
 
     final trusted = await challenge.result;
-    _pendingChallenge = null;
+    // Only clear if it's still ours — a newer challenge may have replaced us.
+    if (identical(_pendingChallenge, challenge)) _pendingChallenge = null;
 
     if (trusted) {
       _hosts.removeWhere(

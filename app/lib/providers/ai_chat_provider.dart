@@ -125,6 +125,9 @@ class AiChatProvider extends ChangeNotifier {
   }
 
   Future<void> send(String userMessage, {String? context}) async {
+    // Re-entrancy guard: concurrent send()s would each manage their own
+    // streaming placeholder via removeLast(), which can pop the wrong message.
+    if (_loading) return;
     final config = _configs[_activeProvider];
     if (config == null || config.apiKey.isEmpty) return;
 
@@ -134,7 +137,8 @@ class AiChatProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
 
-    _messages.add(ChatMessage.assistant('', isStreaming: true));
+    final placeholder = ChatMessage.assistant('', isStreaming: true);
+    _messages.add(placeholder);
     notifyListeners();
 
     try {
@@ -147,12 +151,14 @@ class AiChatProvider extends ChangeNotifier {
           await _sendGemini(config);
       }
     } catch (e) {
-      _messages.removeLast();
+      // Remove our specific placeholder by identity, not by position — clear()
+      // could have run between dispatch and error.
+      _messages.remove(placeholder);
       _messages.add(ChatMessage.assistant('Error: $e'));
+    } finally {
+      _loading = false;
+      notifyListeners();
     }
-
-    _loading = false;
-    notifyListeners();
   }
 
   Future<void> _sendAnthropic(AiProviderConfig config) async {
