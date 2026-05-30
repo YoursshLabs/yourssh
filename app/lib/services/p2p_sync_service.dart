@@ -7,8 +7,19 @@ class NetworkInterfaceInfo {
 
   const NetworkInterfaceInfo({required this.name, required this.address});
 
+  String get displayName {
+    final n = name.toLowerCase();
+    if (n == 'en0') return 'Wi-Fi';
+    if (n.startsWith('en')) return 'Ethernet';
+    if (n.startsWith('utun') || n.startsWith('tun') || n.startsWith('tap')) return 'VPN / Tailscale';
+    if (n.startsWith('wlan') || n.startsWith('wlp')) return 'Wi-Fi';
+    if (n.startsWith('eth')) return 'Ethernet';
+    if (n.startsWith('bridge')) return 'Bridge';
+    return name;
+  }
+
   @override
-  String toString() => '$name ($address)';
+  String toString() => '$displayName — $address';
 }
 
 class P2PSyncService {

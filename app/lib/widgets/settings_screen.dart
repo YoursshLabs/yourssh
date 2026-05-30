@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../main.dart' show kAppVersion;
 import 'package:provider/provider.dart';
 import '../models/ai_provider_config.dart';
 import '../providers/ai_chat_provider.dart';
@@ -214,7 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ]),
                 const SizedBox(height: 24),
                 _Section(title: 'About', children: [
-                  const _Row(label: 'Version', trailing: Text('v0.1.0', style: TextStyle(color: AppColors.textTertiary, fontSize: 12))),
+                  _Row(label: 'Version', trailing: Text('v$kAppVersion', style: const TextStyle(color: AppColors.textTertiary, fontSize: 12))),
                   const _Row(label: 'Build', trailing: Text('Flutter + dartssh2', style: TextStyle(color: AppColors.textTertiary, fontSize: 12))),
                 ]),
               ],
@@ -490,6 +491,7 @@ class _SyncSectionState extends State<_SyncSection> {
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
     final sync = widget.sync;
@@ -653,6 +655,62 @@ class _SyncSectionState extends State<_SyncSection> {
                     ),
                   ),
                 ],
+              ],
+            ),
+          ),
+        ),
+        ),
+        const SizedBox(height: 16),
+        const Text('P2P TRANSFER', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+        const SizedBox(height: 8),
+        Material(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(10),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Transfer all hosts and passwords to another device over LAN or Tailscale. No cloud required.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.qr_code, size: 16),
+                        label: const Text('Show QR Code'),
+                        onPressed: () => _showQrExport(context),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textPrimary,
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.content_paste, size: 16),
+                        label: const Text('Import via Code'),
+                        onPressed: () => showDialog<void>(
+                          context: context,
+                          builder: (_) => const QrImportDialog(),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textPrimary,
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),

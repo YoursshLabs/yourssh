@@ -198,6 +198,12 @@ class _SftpScreenState extends State<SftpScreen> {
               ),
             ),
           ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.close, size: 16, color: AppColors.textSecondary),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Close',
+          ),
         ],
       ),
     );
