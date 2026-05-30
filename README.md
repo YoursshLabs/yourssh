@@ -57,7 +57,7 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 - Breadcrumb navigation and file type icons
 
 ### Credentials & Security
-- **4 auth methods**: password, SSH private key, SSH certificate (CA-signed), SSH agent (`SSH_AUTH_SOCK`)
+- **4 auth methods**: password, SSH private key, SSH certificate (CA-signed), SSH agent (`SSH_AUTH_SOCK` on macOS/Linux; `\\.\pipe\openssh-ssh-agent` on Windows 10+)
 - **OS-level secure storage**: credentials encrypted in macOS Keychain / Windows Credential Manager via `flutter_secure_storage`
 - **Known hosts verification**: interactive fingerprint trust dialog on first connect; persistent known-hosts database
 - **Zero-knowledge cloud sync**: host configs encrypted client-side (AES-256-GCM) before syncing to Supabase
@@ -309,7 +309,7 @@ Flutter UI (widgets / screens)
 | `NetworkStatsService` | Real-time network traffic stats for the overlay widget |
 | `WebToolsService` | Runs network diagnostic commands on the active SSH session |
 | `HotkeyService` | Register and dispatch global keyboard shortcuts |
-| `SystemAgentProxy` | Bridge between `SSH_AUTH_SOCK` and dartssh2 for SSH agent auth |
+| `SystemAgentProxy` | SSH agent bridge: Unix socket (`SSH_AUTH_SOCK`) on macOS/Linux, named pipe (`\\.\pipe\openssh-ssh-agent`) on Windows |
 | `CertificateKeyPair` | OpenSSH CA-signed certificate auth (`id_rsa-cert.pub`) |
 | `P2PSyncService` | One-shot LAN HTTP server + client for QR-based P2P host transfer |
 | `P2PSyncEncryption` | AES-256-GCM encrypt/decrypt with raw random key (no PBKDF2) for P2P sync |
@@ -411,7 +411,7 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 
 - [ ] **Jump host / bastion proxy** — `ProxyJump` support for multi-hop connections
 - [ ] **TOTP / keyboard-interactive 2FA** — OTP prompt for servers that require it after password
-- [ ] **Windows SSH agent (Pageant)** — named-pipe agent support alongside `SSH_AUTH_SOCK`
+- [x] **Windows SSH agent (Pageant)** — named-pipe agent support alongside `SSH_AUTH_SOCK`
 
 ### 🔜 Phase 3 — Productivity
 
