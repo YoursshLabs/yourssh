@@ -44,6 +44,9 @@ dependencies:
   # Window management
   window_manager: ^0.3.9
 
+  # System notifications
+  local_notifier: ^0.1.6
+
   # WebView for code editor
   webview_flutter: ^4.8.0
 

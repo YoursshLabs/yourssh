@@ -11,6 +11,7 @@ class SettingsProvider extends ChangeNotifier {
   bool tmuxEnabled = false;
   bool showWebTools = false;
   bool showSnippets = false;
+  bool commandNotificationsEnabled = true;
   String terminalFont = 'MesloLGS NF';
   Map<String, String> hotkeys = {
     'new_session': 'ctrl+t',
@@ -36,6 +37,7 @@ class SettingsProvider extends ChangeNotifier {
     tmuxEnabled = prefs.getBool('tmuxEnabled') ?? false;
     showWebTools = prefs.getBool('showWebTools') ?? false;
     showSnippets = prefs.getBool('showSnippets') ?? false;
+    commandNotificationsEnabled = prefs.getBool('commandNotificationsEnabled') ?? true;
     terminalFont = prefs.getString('terminalFont') ?? 'MesloLGS NF';
     final hotkeysJson = prefs.getString('hotkeys');
     if (hotkeysJson != null) {
@@ -56,6 +58,7 @@ class SettingsProvider extends ChangeNotifier {
     String? terminalFont,
     bool? showWebTools,
     bool? showSnippets,
+    bool? commandNotificationsEnabled,
   }) async {
     if (autoReconnect != null) this.autoReconnect = autoReconnect;
     if (reconnectAttempts != null) this.reconnectAttempts = reconnectAttempts;
@@ -67,6 +70,7 @@ class SettingsProvider extends ChangeNotifier {
     if (terminalFont != null) this.terminalFont = terminalFont;
     if (showWebTools != null) this.showWebTools = showWebTools;
     if (showSnippets != null) this.showSnippets = showSnippets;
+    if (commandNotificationsEnabled != null) this.commandNotificationsEnabled = commandNotificationsEnabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('autoReconnect', this.autoReconnect);
     await prefs.setInt('reconnectAttempts', this.reconnectAttempts);
@@ -78,6 +82,7 @@ class SettingsProvider extends ChangeNotifier {
     await prefs.setString('terminalFont', this.terminalFont);
     await prefs.setBool('showWebTools', this.showWebTools);
     await prefs.setBool('showSnippets', this.showSnippets);
+    await prefs.setBool('commandNotificationsEnabled', this.commandNotificationsEnabled);
     notifyListeners();
   }
 }
