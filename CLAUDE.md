@@ -127,10 +127,10 @@ Each plugin implements `YourSSHPlugin` (from `yourssh_plugin_api`):
 
 ## Sync feature
 
-**Supabase sync** (cloud): opt-in. Host data is AES-256-GCM encrypted (key = HKDF-SHA256 of the Supabase anon key) before upload. `SyncService.push` is triggered via `HostProvider.onMutation` on every host change and retried every 30 s on failure (`sync_pending_push` flag). `SyncService.pull` runs on `WindowFocus` and only applies if `remote.updated_at > last_push_at`.
+**Supabase sync** (cloud): opt-in. Host data is AES-256-GCM encrypted before upload. The payload uses format `v1:` with a per-row random 16-byte salt and PBKDF2-HMAC-SHA256 (100k iterations) over `passphrase + " " + anonKey` (the optional user passphrase mixes into the KDF — without it, anyone holding the public anon key could decrypt). Legacy rows (no `v1:` prefix) still decrypt using the old fixed-salt + anon-key-only derivation, so existing data migrates on next write. `SyncService.push` fires from `HostProvider.onMutation` and retries every 30 s on failure (`sync_pending_push` flag). `SyncService.pull` runs on `WindowFocus` and only applies if `remote.updated_at > last_push_at`. `SyncProvider.enabled` is derived from `isSupabaseConfigured` — no separate flag.
 
 **P2P sync** (LAN): `P2PSyncService` starts a one-shot HTTP server, encrypts the host list payload, and exposes a URL as a QR code. The receiving device scans the QR code and imports the encrypted payload.
 
 ## Credential storage
 
-Passwords use a dual-write strategy: primary is `FlutterSecureStorage` (Keychain on macOS, Credential Manager on Windows); fallback read/write to `SharedPreferences`. Keys: `pw_<hostId>` for passwords, `pp_<keyId>` for key passphrases. SSH certificate paths are stored alongside `SshKeyEntry` (not in secure storage — they're file paths, not secrets).
+Passwords use a secure-first strategy: `StorageService` writes to `FlutterSecureStorage` (Keychain on macOS, Credential Manager on Windows) first, and on success purges any stale plaintext copy from `SharedPreferences` (left over from prior fallbacks). Only if secure storage throws does it fall back to writing plaintext to `SharedPreferences`. Reads prefer secure storage, fall back to prefs. Keys: `pw_<hostId>` for passwords, `pp_<keyId>` for key passphrases, `sync_passphrase` for the optional sync passphrase. SSH certificate paths are stored alongside `SshKeyEntry` (file paths, not secrets).
