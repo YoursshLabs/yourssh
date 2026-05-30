@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../models/ai_provider_config.dart';
+import '../providers/ai_chat_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/sync_provider.dart';
 import '../services/sync_service.dart';
@@ -208,6 +210,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ]),
                 const SizedBox(height: 24),
                 _SyncSection(sync: sync),
+                const SizedBox(height: 24),
+                const _AiProvidersSection(),
                 const SizedBox(height: 24),
                 _Section(title: 'Keyboard', children: [
                   _Row(
@@ -632,6 +636,221 @@ class _SyncStatusRow extends StatelessWidget {
     if (diff.inSeconds < 60) return ' · just now';
     if (diff.inMinutes < 60) return ' · ${diff.inMinutes}m ago';
     return ' · ${diff.inHours}h ago';
+  }
+}
+
+class _AiProvidersSection extends StatefulWidget {
+  const _AiProvidersSection();
+
+  @override
+  State<_AiProvidersSection> createState() => _AiProvidersSectionState();
+}
+
+class _AiProvidersSectionState extends State<_AiProvidersSection> {
+  final _controllers = <AiProvider, TextEditingController>{};
+  final _focusNodes = <AiProvider, FocusNode>{};
+  final _showKey = <AiProvider, bool>{};
+
+  @override
+  void initState() {
+    super.initState();
+    for (final p in AiProvider.values) {
+      _controllers[p] = TextEditingController();
+      _showKey[p] = false;
+      final node = FocusNode();
+      node.addListener(() {
+        if (!node.hasFocus && mounted) _saveKey(p);
+      });
+      _focusNodes[p] = node;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final configs = context.read<AiChatProvider>().configs;
+    for (final p in AiProvider.values) {
+      if (_controllers[p]!.text.isEmpty && configs[p] != null) {
+        _controllers[p]!.text = configs[p]!.apiKey;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers.values) {
+      c.dispose();
+    }
+    for (final f in _focusNodes.values) {
+      f.dispose();
+    }
+    super.dispose();
+  }
+
+  void _saveKey(AiProvider p) {
+    final key = _controllers[p]!.text.trim();
+    if (key.isEmpty) return;
+    context.read<AiChatProvider>().setProviderConfig(p, apiKey: key);
+  }
+
+  String _label(AiProvider p) => switch (p) {
+        AiProvider.anthropic => 'Anthropic',
+        AiProvider.openai => 'OpenAI',
+        AiProvider.gemini => 'Google Gemini',
+      };
+
+  String _hint(AiProvider p) => switch (p) {
+        AiProvider.anthropic => 'sk-ant-...',
+        AiProvider.openai => 'sk-...',
+        AiProvider.gemini => 'AIza...',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final ai = context.watch<AiChatProvider>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'AI PROVIDERS',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...AiProvider.values.map(
+          (p) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildCard(context, ai, p),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCard(BuildContext context, AiChatProvider ai, AiProvider p) {
+    final config = ai.configs[p];
+    final models = AiChatProvider.presetModels[p]!;
+    final selectedModel = config?.model ?? models.first;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                _label(p),
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              if (config != null)
+                const Icon(Icons.check_circle, size: 14, color: Colors.green),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _controllers[p],
+            focusNode: _focusNodes[p],
+            obscureText: !_showKey[p]!,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 12,
+              fontFamily: 'monospace',
+            ),
+            decoration: InputDecoration(
+              hintText: _hint(p),
+              hintStyle:
+                  const TextStyle(color: AppColors.textTertiary, fontSize: 12),
+              filled: true,
+              fillColor: AppColors.bg,
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: AppColors.accent),
+              ),
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      _showKey[p]! ? Icons.visibility_off : Icons.visibility,
+                      size: 16,
+                      color: AppColors.textTertiary,
+                    ),
+                    onPressed: () =>
+                        setState(() => _showKey[p] = !_showKey[p]!),
+                  ),
+                  if (config != null)
+                    IconButton(
+                      icon: const Icon(Icons.clear,
+                          size: 16, color: AppColors.textTertiary),
+                      onPressed: () {
+                        _controllers[p]!.clear();
+                        context.read<AiChatProvider>().clearProviderConfig(p);
+                      },
+                    ),
+                ],
+              ),
+            ),
+            onSubmitted: (_) => _saveKey(p),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text(
+                'Model',
+                style:
+                    TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(width: 12),
+              DropdownButton<String>(
+                value: selectedModel,
+                style: const TextStyle(
+                    color: AppColors.textPrimary, fontSize: 12),
+                dropdownColor: AppColors.card,
+                underline: const SizedBox(),
+                isDense: true,
+                items: models
+                    .map((m) => DropdownMenuItem(
+                          value: m,
+                          child: Text(m, style: const TextStyle(fontSize: 12)),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    context.read<AiChatProvider>().setProviderConfig(p, model: v);
+                  }
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 
