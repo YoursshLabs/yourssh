@@ -468,7 +468,7 @@ class _Sidebar extends StatelessWidget {
   }
 
   Widget _navItem(IconData icon, String label, NavSection section) {
-    final isSelected = selected == section;
+    final isSelected = activePluginId == null && selected == section;
     return _NavItem(icon: icon, label: label, selected: isSelected, onTap: () => onSelect(section));
   }
 

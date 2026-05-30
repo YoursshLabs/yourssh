@@ -36,4 +36,5 @@ app/build
 # Dart package build artifacts (packages/ subdirectories only)
 packages/*/.dart_tool/
 packages/*/pubspec.lock
+packages/*/.flutter-plugins-dependencies
 .dart_tool/
