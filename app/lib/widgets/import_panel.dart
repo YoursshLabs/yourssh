@@ -209,6 +209,7 @@ class _ImportPanelState extends State<ImportPanel> {
   List<Host> _parsed = [];
   final Map<int, bool> _included = {};
   final Map<int, bool> _overwrite = {};
+  List<String> _csvWarnings = [];
 
   @override
   void dispose() {
@@ -222,10 +223,13 @@ class _ImportPanelState extends State<ImportPanel> {
             e.username.toLowerCase() == h.username.toLowerCase(),
       );
 
-  void _applyParsed(List<Host> hosts) {
+  void _applyParsed(List<Host> hosts, {List<String> warnings = const []}) {
     setState(() {
       _parsed = hosts;
-      _parseError = hosts.isEmpty ? 'No hosts found or unrecognized format' : null;
+      _csvWarnings = List.of(warnings);
+      _parseError = hosts.isEmpty && warnings.isEmpty
+          ? 'No hosts found or unrecognized format'
+          : null;
       _included.clear();
       _overwrite.clear();
       for (var i = 0; i < hosts.length; i++) {
@@ -235,19 +239,45 @@ class _ImportPanelState extends State<ImportPanel> {
     });
   }
 
+  void _parseInput(String input) {
+    final trimmed = input.trimLeft();
+    final firstLine = trimmed.split('\n').first;
+    final looksLikeCsv = firstLine.contains(',') &&
+        !trimmed.toLowerCase().startsWith('host ') &&
+        !trimmed.startsWith('[') &&
+        !trimmed.startsWith('{');
+
+    if (looksLikeCsv) {
+      try {
+        final result = parseCsvHosts(input);
+        _applyParsed(result.hosts, warnings: result.warnings);
+      } on FormatException catch (e) {
+        setState(() {
+          _csvWarnings = [];
+          _parsed = [];
+          _parseError = e.message;
+          _included.clear();
+          _overwrite.clear();
+        });
+      }
+    } else {
+      _applyParsed(detectAndParse(input));
+    }
+  }
+
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['json', 'config', 'conf', 'txt'],
+      allowedExtensions: ['json', 'config', 'conf', 'txt', 'csv'],
       withData: true,
     );
     if (result == null || result.files.isEmpty) return;
     final bytes = result.files.first.bytes;
     if (bytes == null) return;
-    _applyParsed(detectAndParse(utf8.decode(bytes)));
+    _parseInput(utf8.decode(bytes));
   }
 
-  void _parsePaste() => _applyParsed(detectAndParse(_pasteCtrl.text));
+  void _parsePaste() => _parseInput(_pasteCtrl.text);
 
   int _effectiveImportCount(List<Host> existing) => _included.entries
       .where((e) => e.value)
@@ -280,6 +310,10 @@ class _ImportPanelState extends State<ImportPanel> {
                 if (_parseError != null) ...[
                   const SizedBox(height: 8),
                   Text(_parseError!, style: const TextStyle(color: AppColors.red, fontSize: 11)),
+                ],
+                if (_csvWarnings.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _buildWarnings(),
                 ],
                 if (_parsed.isNotEmpty) ...[
                   const SizedBox(height: 16),
@@ -349,6 +383,7 @@ class _ImportPanelState extends State<ImportPanel> {
           _mode = mode;
           _parsed = [];
           _parseError = null;
+          _csvWarnings = [];
         }),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -382,7 +417,7 @@ class _ImportPanelState extends State<ImportPanel> {
           children: [
             Icon(Icons.upload_file_outlined, size: 16, color: AppColors.textSecondary),
             SizedBox(width: 8),
-            Text('Choose .json or config file',
+            Text('Choose file (.json, .csv, .config)',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
           ],
         ),
@@ -405,7 +440,7 @@ class _ImportPanelState extends State<ImportPanel> {
             maxLines: 10,
             style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontFamily: 'monospace'),
             decoration: const InputDecoration(
-              hintText: 'Paste .ssh/config or JSON here...',
+              hintText: 'Paste SSH config, JSON, or CSV...',
               hintStyle: TextStyle(color: AppColors.textTertiary, fontSize: 12),
               contentPadding: EdgeInsets.all(12),
               border: InputBorder.none,
@@ -427,6 +462,27 @@ class _ImportPanelState extends State<ImportPanel> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildWarnings() {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        title: Text(
+          '${_csvWarnings.length} row${_csvWarnings.length == 1 ? '' : 's'} skipped — tap to see details',
+          style: const TextStyle(color: Colors.orange, fontSize: 11),
+        ),
+        children: _csvWarnings
+            .map((w) => Padding(
+                  padding: const EdgeInsets.only(left: 8, bottom: 4),
+                  child: Text(w,
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 11)),
+                ))
+            .toList(),
+      ),
     );
   }
 
