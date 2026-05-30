@@ -17,6 +17,8 @@ class SshService {
   final Map<String, SSHClient> _clients = {};
   final Map<String, SSHSession> _shells = {};
   final Map<String, SystemAgentProxy> _agentProxies = {};
+  final Map<String, SSHClient> _jumpClients = {};
+  final Map<String, String> _hostToJump = {}; // target hostId → jump hostId
   RecordingService? _recording;
   set recordingService(RecordingService? service) => _recording = service;
 
@@ -27,6 +29,8 @@ class SshService {
   Future<SSHClient> connect(
     Host host, {
     SshKeyEntry? keyEntry,
+    Host? jumpHost,
+    SshKeyEntry? jumpKeyEntry,
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
   }) async {
     final password = await _storage.loadPassword(host.id);
@@ -76,8 +80,20 @@ class SshService {
 
     final SSHClient client;
     try {
+      final SSHSocket socket;
+      if (jumpHost != null) {
+        final jc = await _ensureJumpClient(
+          jumpHost,
+          keyEntry: jumpKeyEntry,
+          verifyHostKey: verifyHostKey,
+        );
+        socket = await jc.forwardLocal(host.host, host.port);
+        _hostToJump[host.id] = jumpHost.id;
+      } else {
+        socket = await SSHSocket.connect(host.host, host.port);
+      }
       client = SSHClient(
-        await SSHSocket.connect(host.host, host.port),
+        socket,
         username: host.username,
         onPasswordRequest: () => password ?? '',
         identities: identities.isNotEmpty ? identities : null,
@@ -98,19 +114,97 @@ class SshService {
     return client;
   }
 
+  // ── Jump host helper ───────────────────────────────────
+
+  Future<SSHClient> _ensureJumpClient(
+    Host jumpHost, {
+    SshKeyEntry? keyEntry,
+    Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
+  }) async {
+    if (_jumpClients.containsKey(jumpHost.id)) {
+      return _jumpClients[jumpHost.id]!;
+    }
+    final password = await _storage.loadPassword(jumpHost.id);
+
+    List<SSHKeyPair> identities = [];
+    if (jumpHost.authType == AuthType.privateKey && keyEntry != null) {
+      final keyFile = File(keyEntry.privateKeyPath);
+      if (await keyFile.exists()) {
+        final pem = await keyFile.readAsString();
+        final passphrase = await _storage.loadPassphrase(keyEntry.id);
+        identities = SSHKeyPair.fromPem(pem, passphrase ?? '');
+      }
+    } else if (jumpHost.authType == AuthType.certificate && keyEntry != null) {
+      final certPath = keyEntry.certificatePath;
+      if (certPath == null || !await File(certPath).exists()) {
+        throw Exception('Jump host certificate file missing or not linked');
+      }
+      final passphrase = await _storage.loadPassphrase(keyEntry.id);
+      identities = [
+        await CertificateKeyPair.load(
+          keyPath: keyEntry.privateKeyPath,
+          certPath: certPath,
+          passphrase: passphrase,
+        ),
+      ];
+    }
+
+    final jumpClient = SSHClient(
+      await SSHSocket.connect(jumpHost.host, jumpHost.port),
+      username: jumpHost.username,
+      onPasswordRequest: () => password ?? '',
+      identities: identities.isNotEmpty ? identities : null,
+      onVerifyHostKey: (type, fp) async {
+        if (verifyHostKey != null) return verifyHostKey(type.toString(), fp);
+        return true;
+      },
+    );
+    await jumpClient.authenticated;
+    _jumpClients[jumpHost.id] = jumpClient;
+    return jumpClient;
+  }
+
   // ── Test connection (TCP + auth, no shell) ────────────
 
   Future<({bool success, int latencyMs, String? error})> testConnection(
     Host host, {
     String? password,
     SshKeyEntry? keyEntry,
+    Host? jumpHost,
+    SshKeyEntry? jumpKeyEntry,
   }) async {
     final stopwatch = Stopwatch()..start();
     SSHClient? client;
+    SSHClient? jumpClient;
     SystemAgentProxy? agentProxy;
     try {
-      final socket = await SSHSocket.connect(host.host, host.port)
-          .timeout(const Duration(seconds: 10));
+      SSHSocket socket;
+      if (jumpHost != null) {
+        final jumpPassword = await _storage.loadPassword(jumpHost.id);
+        List<SSHKeyPair> jumpIdentities = [];
+        if (jumpHost.authType == AuthType.privateKey && jumpKeyEntry != null) {
+          final keyFile = File(jumpKeyEntry.privateKeyPath);
+          if (await keyFile.exists()) {
+            final pem = await keyFile.readAsString();
+            final passphrase = await _storage.loadPassphrase(jumpKeyEntry.id);
+            jumpIdentities = SSHKeyPair.fromPem(pem, passphrase ?? '');
+          }
+        }
+        jumpClient = SSHClient(
+          await SSHSocket.connect(jumpHost.host, jumpHost.port)
+              .timeout(const Duration(seconds: 10)),
+          username: jumpHost.username,
+          onPasswordRequest: () => jumpPassword ?? '',
+          identities: jumpIdentities.isNotEmpty ? jumpIdentities : null,
+          onVerifyHostKey: (_, _) async => true,
+        );
+        await jumpClient.authenticated.timeout(const Duration(seconds: 10));
+        socket = await jumpClient.forwardLocal(host.host, host.port)
+            .timeout(const Duration(seconds: 10));
+      } else {
+        socket = await SSHSocket.connect(host.host, host.port)
+            .timeout(const Duration(seconds: 10));
+      }
 
       List<SSHKeyPair> identities = [];
       if (host.authType == AuthType.privateKey && keyEntry != null) {
@@ -172,6 +266,7 @@ class SshService {
       );
     } finally {
       client?.close();
+      jumpClient?.close();
       await agentProxy?.close();
     }
   }
@@ -274,6 +369,8 @@ class SshService {
   // ── Disconnect ─────────────────────────────────────────
 
   void disconnect(String hostId) {
+    final jumpHostId = _hostToJump.remove(hostId);
+
     final removed = _shells.keys.where((k) => k.startsWith(hostId)).toList();
     _shells.removeWhere((k, _) => k.startsWith(hostId));
     for (final id in removed) {
@@ -283,6 +380,11 @@ class SshService {
     _clients.remove(hostId);
     unawaited(_agentProxies[hostId]?.close() ?? Future.value());
     _agentProxies.remove(hostId);
+
+    if (jumpHostId != null && !_hostToJump.values.contains(jumpHostId)) {
+      _jumpClients[jumpHostId]?.close();
+      _jumpClients.remove(jumpHostId);
+    }
   }
 
   void disconnectSession(String sessionId) {
