@@ -52,7 +52,9 @@ class _AddHostDialogState extends State<AddHostDialog> {
       port: int.tryParse(_port.text) ?? 22,
       username: _username.text.trim(),
       authType: _authType,
-      keyId: _authType == AuthType.privateKey ? _selectedKeyId : null,
+      keyId: (_authType == AuthType.privateKey || _authType == AuthType.certificate)
+          ? _selectedKeyId
+          : null,
     );
     Navigator.of(context).pop((host: host, password: _password.text));
   }
@@ -95,6 +97,7 @@ class _AddHostDialogState extends State<AddHostDialog> {
                 items: const [
                   DropdownMenuItem(value: AuthType.password, child: Text('Password')),
                   DropdownMenuItem(value: AuthType.privateKey, child: Text('Private Key')),
+                  DropdownMenuItem(value: AuthType.certificate, child: Text('Certificate (Key + CA cert)')),
                   DropdownMenuItem(value: AuthType.agent, child: Text('SSH Agent')),
                 ],
                 onChanged: (v) => setState(() { _authType = v!; _selectedKeyId = null; }),
@@ -123,6 +126,49 @@ class _AddHostDialogState extends State<AddHostDialog> {
                   )).toList(),
                   onChanged: (v) => setState(() => _selectedKeyId = v),
                   validator: (v) => v == null ? 'Select a key' : null,
+                ),
+              ],
+              if (_authType == AuthType.certificate) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedKeyId,
+                  decoration: const InputDecoration(
+                    labelText: 'SSH Key (with linked certificate)',
+                    border: OutlineInputBorder(),
+                  ),
+                  hint: const Text('Select a key'),
+                  items: keys.map((k) => DropdownMenuItem(
+                    value: k.id,
+                    child: Row(
+                      children: [
+                        Text('${k.label} (${k.algorithmLabel})'),
+                        if (k.hasCertificate) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: const Text('CERT',
+                                style: TextStyle(
+                                    color: Colors.green,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ],
+                    ),
+                  )).toList(),
+                  onChanged: (v) => setState(() => _selectedKeyId = v),
+                  validator: (v) {
+                    if (v == null) return 'Select a key';
+                    final key = keys.firstWhere((k) => k.id == v, orElse: () => keys.first);
+                    if (!key.hasCertificate) {
+                      return 'Selected key has no linked certificate. Add one in Keychain.';
+                    }
+                    return null;
+                  },
                 ),
               ],
             ],
