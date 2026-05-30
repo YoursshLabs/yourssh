@@ -12,7 +12,39 @@ class PluginProvider extends ChangeNotifier {
 
   Set<String> _enabledIds = {};
 
-  PluginProvider({required this.plugins});
+  PluginProvider({required this.plugins}) {
+    _checkCompatibility();
+  }
+
+  void _checkCompatibility() {
+    for (final plugin in plugins) {
+      if (!_isCompatible(plugin.minApiVersion)) {
+        debugPrint(
+          '[PluginProvider] Warning: plugin "${plugin.id}" requires API '
+          '${plugin.minApiVersion} but host provides $kYourSSHPluginApiVersion. '
+          'Plugin may not function correctly.',
+        );
+      }
+    }
+  }
+
+  bool _isCompatible(String minVersion) {
+    // Simple major.minor.patch comparison — no semver library needed yet
+    try {
+      final host = kYourSSHPluginApiVersion.split('.').map(int.parse).toList();
+      final req = minVersion.split('.').map(int.parse).toList();
+      for (int i = 0; i < 3; i++) {
+        final h = i < host.length ? host[i] : 0;
+        final r = i < req.length ? req[i] : 0;
+        if (h > r) return true;
+        if (h < r) return false;
+      }
+      return true; // equal
+    } catch (_) {
+      debugPrint('[PluginProvider] Warning: invalid minApiVersion format: "$minVersion"');
+      return false;
+    }
+  }
 
   List<YourSSHPlugin> get enabledPlugins =>
       plugins.where((p) => _enabledIds.contains(p.id)).toList();

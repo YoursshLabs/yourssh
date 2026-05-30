@@ -212,6 +212,7 @@ class _MainScreenState extends State<MainScreen> {
             nav: _nav,
             viewingTerminal: _viewingTerminal && sessions.isNotEmpty,
             onNavSelect: (s) => setState(() {
+              _activePluginId = null;
               _nav = s;
               _viewingTerminal = false;
               _showAiChat = false;
@@ -221,6 +222,7 @@ class _MainScreenState extends State<MainScreen> {
             onSessionTap: (_) => setState(() => _viewingTerminal = true),
             onAddSession: () {
               setState(() {
+                _activePluginId = null;
                 _nav = NavSection.hosts;
                 _viewingTerminal = false;
                 _showAiChat = false;
