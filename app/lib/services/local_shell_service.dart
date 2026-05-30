@@ -52,11 +52,13 @@ class LocalShellService {
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen((data) {
             terminal.write(data);
-            NotificationService.instance.onTerminalData(
-              data,
-              sessionId: session.id,
-              sessionLabel: 'Local Shell',
-            );
+            try {
+              NotificationService.instance.onTerminalData(
+                data,
+                sessionId: session.id,
+                sessionLabel: 'Local Shell',
+              );
+            } catch (_) {}
           });
 
       terminal.onOutput = (data) {
@@ -83,6 +85,7 @@ class LocalShellService {
   void closeSession(String sessionId) {
     _sessions[sessionId]?.kill();
     _sessions.remove(sessionId);
+    NotificationService.instance.removeSession(sessionId);
   }
 
   LocalSession? getSession(String sessionId) => _sessions[sessionId];
