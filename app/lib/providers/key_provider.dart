@@ -19,8 +19,13 @@ class KeyProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
     if (raw != null) {
-      final list = jsonDecode(raw) as List;
-      _keys = list.map((e) => SshKeyEntry.fromJson(e as Map<String, dynamic>)).toList();
+      try {
+        final list = jsonDecode(raw) as List;
+        _keys = list.map((e) => SshKeyEntry.fromJson(e as Map<String, dynamic>)).toList();
+      } catch (e) {
+        debugPrint('[KeyProvider] saved keys JSON malformed, starting empty: $e');
+        _keys = [];
+      }
     }
     // Auto-discover keys from ~/.ssh
     await _discoverSshKeys();

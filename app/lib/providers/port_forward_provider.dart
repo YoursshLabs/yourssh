@@ -7,7 +7,7 @@ class PortForwardProvider extends ChangeNotifier {
   static const _prefsKey = 'yourssh.port_forwards';
   final List<PortForward> _forwards = [];
 
-  List<PortForward> get forwards => _forwards;
+  List<PortForward> get forwards => List.unmodifiable(_forwards);
 
   PortForwardProvider() {
     _load();
@@ -17,8 +17,12 @@ class PortForwardProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
     if (raw != null) {
-      final list = jsonDecode(raw) as List;
-      _forwards.addAll(list.map((e) => PortForward.fromJson(e as Map<String, dynamic>)));
+      try {
+        final list = jsonDecode(raw) as List;
+        _forwards.addAll(list.map((e) => PortForward.fromJson(e as Map<String, dynamic>)));
+      } catch (e) {
+        debugPrint('[PortForwardProvider] JSON malformed, starting empty: $e');
+      }
     }
     notifyListeners();
   }
@@ -36,7 +40,10 @@ class PortForwardProvider extends ChangeNotifier {
   }
 
   void setStatus(String id, ForwardStatus status, {String? error}) {
-    final fwd = _forwards.firstWhere((f) => f.id == id);
+    // Forward may have been deleted between status events (e.g., during
+    // teardown) — silently drop the update instead of throwing StateError.
+    final fwd = _forwards.where((f) => f.id == id).firstOrNull;
+    if (fwd == null) return;
     fwd.status = status;
     fwd.errorMessage = error;
     notifyListeners();

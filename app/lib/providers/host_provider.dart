@@ -15,15 +15,14 @@ class HostProvider extends ChangeNotifier {
     _load();
   }
 
-  List<Host> get hosts => _search.isEmpty
-      ? _hosts
-      : _hosts
-          .where((h) =>
-              h.label.toLowerCase().contains(_search.toLowerCase()) ||
-              h.host.toLowerCase().contains(_search.toLowerCase()))
-          .toList();
+  List<Host> get hosts {
+    if (_search.isEmpty) return List.unmodifiable(_hosts);
+    final q = _search.toLowerCase();
+    return List.unmodifiable(_hosts.where((h) =>
+        h.label.toLowerCase().contains(q) || h.host.toLowerCase().contains(q)));
+  }
 
-  List<Host> get allHosts => _hosts;
+  List<Host> get allHosts => List.unmodifiable(_hosts);
 
   List<String> get pinnedGroups => List.unmodifiable(_pinnedGroups);
 

@@ -29,6 +29,12 @@ class SftpTransferProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Per-byte progress updates rebuild every transfer-list widget; throttle to
+  // ~30fps for byte-only updates. Status/error transitions always notify so
+  // completion / failure shows up immediately.
+  static const _progressNotifyInterval = Duration(milliseconds: 33);
+  DateTime _lastProgressNotify = DateTime.fromMillisecondsSinceEpoch(0);
+
   void updateItem(String id, {int? bytesTransferred, TransferStatus? status, String? errorMessage}) {
     final idx = _items.indexWhere((i) => i.id == id);
     if (idx < 0) return;
@@ -36,7 +42,18 @@ class SftpTransferProvider extends ChangeNotifier {
     if (bytesTransferred != null) item.bytesTransferred = bytesTransferred;
     if (status != null) item.status = status;
     if (errorMessage != null) item.errorMessage = errorMessage;
-    notifyListeners();
+
+    final isStatusChange = status != null || errorMessage != null;
+    if (isStatusChange) {
+      _lastProgressNotify = DateTime.now();
+      notifyListeners();
+      return;
+    }
+    final now = DateTime.now();
+    if (now.difference(_lastProgressNotify) >= _progressNotifyInterval) {
+      _lastProgressNotify = now;
+      notifyListeners();
+    }
   }
 
   void cancel() {

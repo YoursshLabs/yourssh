@@ -13,8 +13,12 @@ class TunnelProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefKey);
     if (raw == null) return;
-    final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
-    _tunnels.addAll(list.map(TunnelConfig.fromJson));
+    try {
+      final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+      _tunnels.addAll(list.map(TunnelConfig.fromJson));
+    } catch (e) {
+      debugPrint('[TunnelProvider] tunnels JSON malformed, starting empty: $e');
+    }
     notifyListeners();
   }
 

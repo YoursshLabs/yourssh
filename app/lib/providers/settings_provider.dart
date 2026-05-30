@@ -45,8 +45,13 @@ class SettingsProvider extends ChangeNotifier {
     recordingPath = prefs.getString('recordingPath') ?? defaultPath;
     final hotkeysJson = prefs.getString('hotkeys');
     if (hotkeysJson != null) {
-      final decoded = jsonDecode(hotkeysJson) as Map<String, dynamic>;
-      hotkeys = decoded.map((k, v) => MapEntry(k, v as String));
+      try {
+        final decoded = jsonDecode(hotkeysJson) as Map<String, dynamic>;
+        hotkeys = decoded.map((k, v) => MapEntry(k, v as String));
+      } catch (e) {
+        // Corrupted prefs: keep the built-in defaults rather than crash boot.
+        debugPrint('[SettingsProvider] hotkeys JSON malformed, using defaults: $e');
+      }
     }
     notifyListeners();
   }

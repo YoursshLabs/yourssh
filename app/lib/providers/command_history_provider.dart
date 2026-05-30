@@ -27,12 +27,16 @@ class CommandHistoryProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefKey);
     if (raw == null) return;
-    final map = jsonDecode(raw) as Map<String, dynamic>;
-    for (final entry in map.entries) {
-      _histories[entry.key] = CommandHistory.fromJson(
-        entry.value as Map<String, dynamic>,
-        maxSize: _maxPerSession,
-      );
+    try {
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      for (final entry in map.entries) {
+        _histories[entry.key] = CommandHistory.fromJson(
+          entry.value as Map<String, dynamic>,
+          maxSize: _maxPerSession,
+        );
+      }
+    } catch (e) {
+      debugPrint('[CommandHistoryProvider] history JSON malformed, ignoring: $e');
     }
   }
 
