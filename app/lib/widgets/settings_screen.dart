@@ -10,6 +10,7 @@ import '../services/supabase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import 'hotkey_settings_screen.dart';
+import 'theme_picker.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -19,7 +20,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  static const _themes = ['Dracula', 'One Dark', 'Tokyo Night', 'Nord', 'Solarized Dark'];
   static const _bundledFonts = [
     'monospace',
     'MesloLGS NF',
@@ -107,10 +107,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _Section(title: 'Terminal', children: [
                   _Row(
                     label: 'Color theme',
-                    trailing: _DropDown<String>(
-                      value: settings.terminalTheme,
-                      items: _themes,
-                      labelOf: (t) => t,
+                    trailing: ThemePickerButton(
+                      currentTheme: settings.terminalTheme,
                       onChanged: (v) => context.read<SettingsProvider>().save(terminalTheme: v),
                     ),
                   ),
