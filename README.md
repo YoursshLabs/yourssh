@@ -416,7 +416,7 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 
 ### 🔜 Phase 3 — Productivity
 
-- [ ] **Session recording** — save terminal sessions to file (asciinema format) with playback
+- [x] **Session recording** — save terminal sessions to file (asciinema format) with playback
 - [x] **Multi-host scripting** — run a script or command across multiple selected hosts in parallel
 - [x] **Smarter tab completion** — history-aware suggestions + remote filesystem path completion
 - [ ] **Vault** — encrypted local store for API keys, tokens, and secrets with biometric unlock
