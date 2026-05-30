@@ -18,6 +18,7 @@ class SshService {
   final Map<String, SSHSession> _shells = {};
   final Map<String, SystemAgentProxy> _agentProxies = {};
   final Map<String, SSHClient> _jumpClients = {};
+  final Map<String, SystemAgentProxy> _jumpAgentProxies = {};
   final Map<String, String> _hostToJump = {}; // target hostId → jump hostId
   RecordingService? _recording;
   set recordingService(RecordingService? service) => _recording = service;
@@ -108,6 +109,7 @@ class SshService {
         unawaited(_agentProxies[host.id]?.close() ?? Future.value());
         _agentProxies.remove(host.id);
       }
+      _hostToJump.remove(host.id);
       rethrow;
     }
     _clients[host.id] = client;
@@ -147,6 +149,23 @@ class SshService {
           passphrase: passphrase,
         ),
       ];
+    } else if (jumpHost.authType == AuthType.agent) {
+      final proxy = await SystemAgentProxy.connect();
+      _jumpAgentProxies[jumpHost.id] = proxy;
+      try {
+        identities = await proxy.getIdentities();
+      } catch (e) {
+        _jumpAgentProxies.remove(jumpHost.id);
+        await proxy.close();
+        rethrow;
+      }
+      if (identities.isEmpty) {
+        _jumpAgentProxies.remove(jumpHost.id);
+        await proxy.close();
+        throw Exception(
+          'SSH agent has no identities for jump host. Run "ssh-add <private-key>" to add one.',
+        );
+      }
     }
 
     final jumpClient = SSHClient(
@@ -159,8 +178,18 @@ class SshService {
         return true;
       },
     );
-    await jumpClient.authenticated;
+    // Eagerly insert before awaiting auth so that a concurrent caller returns
+    // this in-progress client rather than opening a duplicate connection.
     _jumpClients[jumpHost.id] = jumpClient;
+    try {
+      await jumpClient.authenticated;
+    } catch (e) {
+      _jumpClients.remove(jumpHost.id);
+      unawaited(_jumpAgentProxies[jumpHost.id]?.close() ?? Future.value());
+      _jumpAgentProxies.remove(jumpHost.id);
+      jumpClient.close();
+      rethrow;
+    }
     return jumpClient;
   }
 
@@ -189,6 +218,19 @@ class SshService {
             final passphrase = await _storage.loadPassphrase(jumpKeyEntry.id);
             jumpIdentities = SSHKeyPair.fromPem(pem, passphrase ?? '');
           }
+        } else if (jumpHost.authType == AuthType.certificate && jumpKeyEntry != null) {
+          final certPath = jumpKeyEntry.certificatePath;
+          if (certPath == null || !await File(certPath).exists()) {
+            return (success: false, latencyMs: 0, error: 'Jump host certificate file missing or not linked');
+          }
+          final passphrase = await _storage.loadPassphrase(jumpKeyEntry.id);
+          jumpIdentities = [
+            await CertificateKeyPair.load(
+              keyPath: jumpKeyEntry.privateKeyPath,
+              certPath: certPath,
+              passphrase: passphrase,
+            ),
+          ];
         }
         jumpClient = SSHClient(
           await SSHSocket.connect(jumpHost.host, jumpHost.port)
@@ -384,6 +426,8 @@ class SshService {
     if (jumpHostId != null && !_hostToJump.values.contains(jumpHostId)) {
       _jumpClients[jumpHostId]?.close();
       _jumpClients.remove(jumpHostId);
+      unawaited(_jumpAgentProxies[jumpHostId]?.close() ?? Future.value());
+      _jumpAgentProxies.remove(jumpHostId);
     }
   }
 
