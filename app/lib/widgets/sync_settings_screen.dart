@@ -8,7 +8,6 @@ import '../services/sync_encryption.dart';
 import '../services/sync_service.dart';
 import '../theme/app_theme.dart';
 import 'qr_export_dialog.dart';
-import 'qr_import_screen.dart';
 
 class SyncSettingsScreen extends StatefulWidget {
   const SyncSettingsScreen({super.key});
@@ -219,11 +218,9 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton.icon(
-                    icon: const Icon(Icons.qr_code_scanner, size: 16),
-                    label: const Text('Scan QR Code'),
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const QrImportScreen()),
-                    ),
+                    icon: const Icon(Icons.content_paste, size: 16),
+                    label: const Text('Import via Code'),
+                    onPressed: null,
                   ),
                 ),
               ],

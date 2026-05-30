@@ -89,9 +89,6 @@ dependencies:
   # QR code display (P2P sync)
   qr_flutter: ^4.1.0
 
-  # QR code scanning via camera (P2P sync, macOS + Windows)
-  mobile_scanner: ^5.2.0
-
 dependency_overrides:
   dartssh2:
     path: ../packages/dartssh2
