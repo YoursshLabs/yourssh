@@ -7,6 +7,7 @@ class SftpEntryContextMenu extends StatelessWidget {
   final SftpEntry entry;
   final Widget child;
   final VoidCallback onOpen;
+  final VoidCallback? onEdit;
   final VoidCallback onRename;
   final VoidCallback onDelete;
 
@@ -15,6 +16,7 @@ class SftpEntryContextMenu extends StatelessWidget {
     required this.entry,
     required this.child,
     required this.onOpen,
+    this.onEdit,
     required this.onRename,
     required this.onDelete,
   });
@@ -44,6 +46,9 @@ class SftpEntryContextMenu extends StatelessWidget {
           child: _Item(icon: entry.isDirectory ? Icons.folder_open : Icons.open_in_new,
               label: entry.isDirectory ? 'Enter' : 'Open'),
         ),
+        if (!entry.isDirectory && onEdit != null)
+          const PopupMenuItem(value: _Action.edit, height: 34,
+              child: _Item(icon: Icons.edit_outlined, label: 'Edit')),
         const PopupMenuDivider(height: 1),
         const PopupMenuItem(value: _Action.rename, height: 34,
             child: _Item(icon: Icons.drive_file_rename_outline, label: 'Rename')),
@@ -57,6 +62,7 @@ class SftpEntryContextMenu extends StatelessWidget {
       if (a == null) return;
       switch (a) {
         case _Action.open: onOpen();
+        case _Action.edit: onEdit?.call();
         case _Action.rename: onRename();
         case _Action.delete: onDelete();
         case _Action.copyPath: Clipboard.setData(ClipboardData(text: entry.path));
@@ -65,7 +71,7 @@ class SftpEntryContextMenu extends StatelessWidget {
   }
 }
 
-enum _Action { open, rename, delete, copyPath }
+enum _Action { open, edit, rename, delete, copyPath }
 
 class _Item extends StatelessWidget {
   final IconData icon;
