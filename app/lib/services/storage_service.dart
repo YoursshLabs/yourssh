@@ -27,48 +27,58 @@ class StorageService {
   }
 
   // ── Credentials (Keychain / Credential Manager) ────────
+  // Strategy: write to secure storage FIRST. Only fall back to SharedPreferences
+  // if secure storage throws. On successful secure write, purge any stale
+  // plaintext copy in SharedPreferences (e.g., left from a prior fallback).
 
-  Future<void> savePassword(String hostId, String password) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('pw_$hostId', password);
+  Future<void> _saveSecret(String key, String value) async {
     try {
-      await _storage.write(key: 'pw_$hostId', value: password);
-    } catch (_) {}
+      await _storage.write(key: key, value: value);
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.containsKey(key)) await prefs.remove(key);
+    } catch (_) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, value);
+    }
   }
 
-  Future<String?> loadPassword(String hostId) async {
+  Future<String?> _loadSecret(String key) async {
     try {
-      final val = await _storage.read(key: 'pw_$hostId');
+      final val = await _storage.read(key: key);
       if (val != null) return val;
     } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('pw_$hostId');
+    return prefs.getString(key);
   }
 
-  Future<void> deletePassword(String hostId) async {
+  Future<void> _deleteSecret(String key) async {
     try {
-      await _storage.delete(key: 'pw_$hostId');
+      await _storage.delete(key: key);
     } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('pw_$hostId');
+    await prefs.remove(key);
   }
 
-  Future<void> savePassphrase(String keyId, String passphrase) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('pp_$keyId', passphrase);
-    try {
-      await _storage.write(key: 'pp_$keyId', value: passphrase);
-    } catch (_) {}
-  }
+  Future<void> savePassword(String hostId, String password) =>
+      _saveSecret('pw_$hostId', password);
 
-  Future<String?> loadPassphrase(String keyId) async {
-    try {
-      final val = await _storage.read(key: 'pp_$keyId');
-      if (val != null) return val;
-    } catch (_) {}
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('pp_$keyId');
-  }
+  Future<String?> loadPassword(String hostId) => _loadSecret('pw_$hostId');
+
+  Future<void> deletePassword(String hostId) => _deleteSecret('pw_$hostId');
+
+  Future<void> savePassphrase(String keyId, String passphrase) =>
+      _saveSecret('pp_$keyId', passphrase);
+
+  Future<String?> loadPassphrase(String keyId) => _loadSecret('pp_$keyId');
+
+  /// Generic secret store for app-scoped secrets (e.g., sync passphrase).
+  /// Caller is responsible for key namespacing.
+  Future<void> saveGenericSecret(String key, String value) =>
+      _saveSecret(key, value);
+
+  Future<String?> loadGenericSecret(String key) => _loadSecret(key);
+
+  Future<void> deleteGenericSecret(String key) => _deleteSecret(key);
 
   // ── Known Hosts ────────────────────────────────────────────
 

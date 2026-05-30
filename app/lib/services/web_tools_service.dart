@@ -7,6 +7,11 @@ class WebToolsService {
 
   WebToolsService(this._sshService);
 
+  /// POSIX single-quote escape: wraps in `'…'` and rewrites embedded `'` as
+  /// `'\''`. Always use this for any user-supplied value interpolated into a
+  /// remote shell command — including URL targets, headers, paths.
+  static String shellQuote(String s) => "'${s.replaceAll("'", "'\\''")}'";
+
   Future<ToolResult> run(Host host, String command) async {
     final sw = Stopwatch()..start();
     try {
@@ -40,13 +45,13 @@ class WebToolsService {
       run(host, buildPortScanCommand(target, ports: ports));
 
   Future<ToolResult> whois(Host host, String target) =>
-      run(host, 'whois $target 2>&1');
+      run(host, 'whois ${shellQuote(target)} 2>&1');
 
   Future<ToolResult> netstat(Host host) =>
       run(host, 'ss -tulpn 2>&1 || netstat -tulpn 2>&1');
 
   Future<ToolResult> diskUsage(Host host, String path) =>
-      run(host, 'df -h $path 2>&1');
+      run(host, 'df -h ${shellQuote(path)} 2>&1');
 
   Future<ToolResult> topProcesses(Host host) =>
       run(host, 'ps aux --sort=-%cpu 2>&1 | head -20');
@@ -55,17 +60,20 @@ class WebToolsService {
       run(host, 'free -h 2>&1 || vm_stat 2>&1');
 
   Future<ToolResult> httpHeaders(Host host, String url) =>
-      run(host, 'curl -sI $url 2>&1');
+      run(host, 'curl -sI ${shellQuote(url)} 2>&1');
 
-  Future<ToolResult> sslCert(Host host, String target, {int port = 443}) => run(
-        host,
-        'echo | openssl s_client -connect $target:$port -servername $target 2>&1 | openssl x509 -noout -text 2>&1 | head -40',
-      );
+  Future<ToolResult> sslCert(Host host, String target, {int port = 443}) {
+    final t = shellQuote(target);
+    return run(
+      host,
+      'echo | openssl s_client -connect $t:$port -servername $t 2>&1 | openssl x509 -noout -text 2>&1 | head -40',
+    );
+  }
 
   // Static command builders (tested in isolation)
 
   static String buildPingCommand(String host, {int count = 4}) =>
-      'ping -c $count $host 2>&1';
+      'ping -c $count ${shellQuote(host)} 2>&1';
 
   static String buildCurlCommand(
     String url, {
@@ -73,31 +81,42 @@ class WebToolsService {
     Map<String, String> headers = const {},
     String? body,
   }) {
-    final parts = [
+    final parts = <String>[
       'curl',
       '-s',
       '-w',
-      r'"\n---\nHTTP Status: %{http_code}\nTime: %{time_total}s"',
+      shellQuote(r'\n---\nHTTP Status: %{http_code}\nTime: %{time_total}s'),
+      '-X',
+      shellQuote(method),
     ];
-    parts.add('-X $method');
     for (final h in headers.entries) {
-      parts.add('-H "${h.key}: ${h.value}"');
+      parts.add('-H');
+      parts.add(shellQuote('${h.key}: ${h.value}'));
     }
     if (body != null) {
-      parts.add("-d '${body.replaceAll("'", "'\\''")}'");
+      parts.add('-d');
+      parts.add(shellQuote(body));
     }
-    parts.add(url);
+    parts.add(shellQuote(url));
     parts.add('2>&1');
     return parts.join(' ');
   }
 
-  static String buildDnsLookupCommand(String host, {String type = 'A'}) =>
-      'dig $host $type 2>&1 || nslookup $host 2>&1';
+  static String buildDnsLookupCommand(String host, {String type = 'A'}) {
+    final h = shellQuote(host);
+    final t = shellQuote(type);
+    return 'dig $h $t 2>&1 || nslookup $h 2>&1';
+  }
 
-  static String buildTracerouteCommand(String host) =>
-      'traceroute $host 2>&1 || tracepath $host 2>&1';
+  static String buildTracerouteCommand(String host) {
+    final h = shellQuote(host);
+    return 'traceroute $h 2>&1 || tracepath $h 2>&1';
+  }
 
-  static String buildPortScanCommand(String host, {List<int> ports = const [80, 443]}) =>
-      'nc -zv $host ${ports.join(' ')} 2>&1 || '
-      'for p in ${ports.join(' ')}; do (echo >/dev/tcp/$host/\$p) 2>/dev/null && echo "Port \$p: open" || echo "Port \$p: closed"; done 2>&1';
+  static String buildPortScanCommand(String host, {List<int> ports = const [80, 443]}) {
+    final h = shellQuote(host);
+    final p = ports.join(' ');
+    return 'nc -zv $h $p 2>&1 || '
+        'for port in $p; do (echo >/dev/tcp/$h/\$port) 2>/dev/null && echo "Port \$port: open" || echo "Port \$port: closed"; done 2>&1';
+  }
 }

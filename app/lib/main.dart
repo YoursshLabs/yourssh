@@ -88,6 +88,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _knownHostsProvider = KnownHostsProvider(_storage);
     _knownHostsProvider.load();
     _sessionProvider.hostKeyVerifier = _knownHostsProvider.verifyHostKey;
+    _ssh.defaultHostKeyVerifier = _knownHostsProvider.verifyHostKey;
     _sessionProvider.onOsDetected = (hostId, os) =>
         _hostProvider.updateDetectedOs(hostId, os);
     _pluginProvider = PluginProvider(plugins: kRegisteredPlugins);

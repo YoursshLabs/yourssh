@@ -37,10 +37,8 @@ class McpGatewayService {
   Future<void> stop(Host host) async {
     final endpoint = _endpoints[host.id];
     if (endpoint == null) return;
-    await _sshService.exec(
-      host,
-      "pkill -f '${endpoint.mcpCommand.split(' ').first}'",
-    );
+    final binary = endpoint.mcpCommand.split(' ').first.replaceAll("'", '');
+    await _sshService.exec(host, "pkill -f '$binary'");
     endpoint.isRunning = false;
     _endpoints.remove(host.id);
   }

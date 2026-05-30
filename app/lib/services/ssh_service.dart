@@ -16,12 +16,20 @@ class SshService {
   final StorageService _storage;
   final Map<String, SSHClient> _clients = {};
   final Map<String, SSHSession> _shells = {};
+  final Map<String, String> _shellToHost = {}; // sessionId → hostId
   final Map<String, SystemAgentProxy> _agentProxies = {};
   final Map<String, SSHClient> _jumpClients = {};
   final Map<String, SystemAgentProxy> _jumpAgentProxies = {};
   final Map<String, String> _hostToJump = {}; // target hostId → jump hostId
   RecordingService? _recording;
   set recordingService(RecordingService? service) => _recording = service;
+
+  /// Verifier used when [exec]/[openSftp] auto-connect without an explicit
+  /// verifier (e.g., DevOps tools invoking a one-off command). Set from main.dart
+  /// to KnownHostsProvider.verifyHostKey used by interactive connects;
+  /// without this, auto-connect throws to prevent silent TOFU bypass.
+  Future<bool> Function(String host, int port, String keyType, Uint8List fp)?
+      defaultHostKeyVerifier;
 
   SshService(this._storage);
 
@@ -344,6 +352,7 @@ class SshService {
     );
 
     _shells[session.id] = shell;
+    _shellToHost[session.id] = session.host.id;
 
     if (useTmux) {
       shell.write(Uint8List.fromList('tmux new-session -A -s yourssh\n'.codeUnits));
@@ -397,9 +406,26 @@ class SshService {
 
   void _onShellClosed(SshSession session) {
     _shells.remove(session.id);
+    _shellToHost.remove(session.id);
     session.terminal.write('\r\n\x1b[31m[Connection closed]\x1b[0m\r\n');
     NotificationService.instance.removeSession(session.id);
     _recording?.onShellClosed(session.id);
+  }
+
+  Future<SSHClient> _ensureClient(Host host) async {
+    final existing = _clients[host.id];
+    if (existing != null) return existing;
+    final verifier = defaultHostKeyVerifier;
+    if (verifier == null) {
+      throw StateError(
+        'Not connected to ${host.host}. Call connect() first, or wire '
+        'SshService.defaultHostKeyVerifier to allow auto-connect.',
+      );
+    }
+    return connect(
+      host,
+      verifyHostKey: (keyType, fp) => verifier(host.host, host.port, keyType, fp),
+    );
   }
 
   // ── Exec ───────────────────────────────────────────────
@@ -408,19 +434,19 @@ class SshService {
     Host host,
     String command,
   ) async {
-    final client = _clients[host.id] ?? await connect(host);
-    final result = await client.run(command);
+    final client = await _ensureClient(host);
+    final result = await client.runWithResult(command);
     return (
-      stdout: String.fromCharCodes(result),
-      stderr: '',
-      exitCode: 0,
+      stdout: String.fromCharCodes(result.stdout),
+      stderr: String.fromCharCodes(result.stderr),
+      exitCode: result.exitCode ?? -1,
     );
   }
 
   // ── SFTP ───────────────────────────────────────────────
 
   Future<SftpClient> openSftp(Host host) async {
-    final client = _clients[host.id] ?? await connect(host);
+    final client = await _ensureClient(host);
     return client.sftp();
   }
 
@@ -429,9 +455,13 @@ class SshService {
   void disconnect(String hostId) {
     final jumpHostId = _hostToJump.remove(hostId);
 
-    final removed = _shells.keys.where((k) => k.startsWith(hostId)).toList();
-    _shells.removeWhere((k, _) => k.startsWith(hostId));
-    for (final id in removed) {
+    final sessionIds = _shellToHost.entries
+        .where((e) => e.value == hostId)
+        .map((e) => e.key)
+        .toList();
+    for (final id in sessionIds) {
+      _shells.remove(id);
+      _shellToHost.remove(id);
       NotificationService.instance.removeSession(id);
     }
     _clients[hostId]?.close();
@@ -450,6 +480,7 @@ class SshService {
   void disconnectSession(String sessionId) {
     _shells[sessionId]?.close();
     _shells.remove(sessionId);
+    _shellToHost.remove(sessionId);
     NotificationService.instance.removeSession(sessionId);
   }
 
