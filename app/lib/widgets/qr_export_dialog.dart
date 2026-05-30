@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../services/p2p_sync_encryption.dart';
 import '../services/p2p_sync_service.dart';
@@ -158,6 +159,20 @@ class _QrExportDialogState extends State<QrExportDialog> {
         ),
       ),
       actions: [
+        if (_qrData != null)
+          TextButton.icon(
+            icon: const Icon(Icons.copy, size: 16),
+            label: const Text('Copy transfer code'),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: _qrData!));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Transfer code copied'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
         TextButton(
           onPressed: () {
             _countdown?.cancel();
