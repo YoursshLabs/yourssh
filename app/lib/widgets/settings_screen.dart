@@ -186,6 +186,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       settings.save();
                     },
                   ),
+                  SwitchListTile(
+                    title: const Text('Command finish notification', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+                    subtitle: const Text('Alert when a command completes in an unfocused session', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    value: settings.commandNotificationsEnabled,
+                    onChanged: (v) => context.read<SettingsProvider>().save(commandNotificationsEnabled: v),
+                  ),
                 ]),
                 const SizedBox(height: 24),
                 _Section(title: 'Features', children: [
