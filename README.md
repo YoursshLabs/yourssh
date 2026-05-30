@@ -97,7 +97,27 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 
 ## Screenshots
 
-> _Coming soon — contributions welcome!_
+<table>
+  <tr>
+    <td align="center"><b>Home — Host List</b><br/><img src="screenshots/01-home-hosts.png"/></td>
+    <td align="center"><b>SSH Terminal with AI Assistant</b><br/><img src="screenshots/02-ssh-terminal-ai.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>SFTP File Browser</b><br/><img src="screenshots/03-sftp-browser.png"/></td>
+    <td align="center"><b>Plugins</b><br/><img src="screenshots/04-plugins.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>DevOps Hub — Network Tools</b><br/><img src="screenshots/05-devops-hub-network-tools.png"/></td>
+    <td align="center"><b>Web Tools — HTTP Client</b><br/><img src="screenshots/08-web-tools-http-client.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Snippets</b><br/><img src="screenshots/09-snippets.png"/></td>
+    <td align="center"><b>Settings — Sync</b><br/><img src="screenshots/06-settings-sync.png"/></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><b>Settings — Terminal Themes</b><br/><img src="screenshots/07-settings-terminal-themes.png" width="50%"/></td>
+  </tr>
+</table>
 
 ---
 
@@ -387,7 +407,7 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 
 - [x] **SSH config import** — paste `~/.ssh/config` or JSON to bulk-import hosts
 - [x] **Host import from CSV** — bulk import connection profiles from a spreadsheet
-- [ ] **Command finish notification** — system alert when a long-running command completes while the window is not focused
+- [x] **Command finish notification** — system alert when a long-running command completes while the window is not focused
 
 ### 🔜 Phase 2 — Core SSH improvements
 
@@ -398,8 +418,8 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 ### 🔜 Phase 3 — Productivity
 
 - [ ] **Session recording** — save terminal sessions to file (asciinema format) with playback
-- [ ] **Multi-host scripting** — run a script or command across multiple selected hosts in parallel
-- [ ] **Smarter tab completion** — history-aware suggestions + remote filesystem path completion
+- [x] **Multi-host scripting** — run a script or command across multiple selected hosts in parallel
+- [x] **Smarter tab completion** — history-aware suggestions + remote filesystem path completion
 
 ### 🔜 Phase 4 — DevOps tooling
 
