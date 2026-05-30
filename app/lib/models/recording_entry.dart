@@ -17,7 +17,10 @@ class RecordingEntry {
 
   String get fileName => filePath.split(Platform.pathSeparator).last;
 
-  static RecordingEntry fromPath(String filePath) {
+  /// Builds an entry from a path without touching the filesystem. Use
+  /// [fromPathWithStat] (async) when you need [fileSize] populated — callers
+  /// listing many recordings should not block the UI thread on lengthSync().
+  static RecordingEntry fromPath(String filePath, {int? fileSize}) {
     final segments = filePath.split(Platform.pathSeparator);
     final hostTitle = segments.length >= 2 ? segments[segments.length - 2] : 'unknown';
     final name = segments.last;
@@ -39,14 +42,17 @@ class RecordingEntry {
       recordedAt = DateTime.fromMillisecondsSinceEpoch(0);
     }
 
-    final file = File(filePath);
-    final fileSize = file.existsSync() ? file.lengthSync() : null;
-
     return RecordingEntry(
       filePath: filePath,
       hostTitle: hostTitle,
       recordedAt: recordedAt,
       fileSize: fileSize,
     );
+  }
+
+  static Future<RecordingEntry> fromPathWithStat(String filePath) async {
+    final file = File(filePath);
+    final size = await file.exists() ? await file.length() : null;
+    return fromPath(filePath, fileSize: size);
   }
 }

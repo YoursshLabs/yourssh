@@ -67,16 +67,21 @@ class RecordingProvider extends ChangeNotifier {
       return;
     }
 
-    final files = <File>[];
+    final entries = <RecordingEntry>[];
     await for (final entity in dir.list(recursive: true)) {
       if (entity is File && entity.path.endsWith('.cast')) {
-        files.add(entity);
+        try {
+          final size = await entity.length();
+          entries.add(RecordingEntry.fromPath(entity.path, fileSize: size));
+        } catch (_) {
+          entries.add(RecordingEntry.fromPath(entity.path));
+        }
       }
     }
 
     _recordings
       ..clear()
-      ..addAll(files.map((f) => RecordingEntry.fromPath(f.path)));
+      ..addAll(entries);
     _recordings.sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
     notifyListeners();
   }

@@ -408,6 +408,10 @@ class SshService {
     _shells.remove(session.id);
     _shellToHost.remove(session.id);
     session.terminal.write('\r\n\x1b[31m[Connection closed]\x1b[0m\r\n');
+    // Drop the closures that pin the closed shell — otherwise it lingers in
+    // memory until the widget tree releases the terminal.
+    session.terminal.onOutput = null;
+    session.terminal.onResize = null;
     NotificationService.instance.removeSession(session.id);
     _recording?.onShellClosed(session.id);
   }
