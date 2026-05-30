@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsProvider extends ChangeNotifier {
@@ -11,6 +13,7 @@ class SettingsProvider extends ChangeNotifier {
   bool tmuxEnabled = false;
   bool commandNotificationsEnabled = true;
   String terminalFont = 'MesloLGS NF';
+  String recordingPath = '';
   Map<String, String> hotkeys = {
     'new_session': 'ctrl+t',
     'close_session': 'ctrl+w',
@@ -35,6 +38,9 @@ class SettingsProvider extends ChangeNotifier {
     tmuxEnabled = prefs.getBool('tmuxEnabled') ?? false;
     commandNotificationsEnabled = prefs.getBool('commandNotificationsEnabled') ?? true;
     terminalFont = prefs.getString('terminalFont') ?? 'MesloLGS NF';
+    final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? '';
+    final defaultPath = p.join(home, 'Documents', 'YourSSH', 'Recordings');
+    recordingPath = prefs.getString('recordingPath') ?? defaultPath;
     final hotkeysJson = prefs.getString('hotkeys');
     if (hotkeysJson != null) {
       final decoded = jsonDecode(hotkeysJson) as Map<String, dynamic>;
@@ -53,6 +59,7 @@ class SettingsProvider extends ChangeNotifier {
     bool? tmuxEnabled,
     String? terminalFont,
     bool? commandNotificationsEnabled,
+    String? recordingPath,
   }) async {
     if (autoReconnect != null) this.autoReconnect = autoReconnect;
     if (reconnectAttempts != null) this.reconnectAttempts = reconnectAttempts;
@@ -63,6 +70,7 @@ class SettingsProvider extends ChangeNotifier {
     if (tmuxEnabled != null) this.tmuxEnabled = tmuxEnabled;
     if (terminalFont != null) this.terminalFont = terminalFont;
     if (commandNotificationsEnabled != null) this.commandNotificationsEnabled = commandNotificationsEnabled;
+    if (recordingPath != null) this.recordingPath = recordingPath;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('autoReconnect', this.autoReconnect);
     await prefs.setInt('reconnectAttempts', this.reconnectAttempts);
@@ -73,6 +81,7 @@ class SettingsProvider extends ChangeNotifier {
     await prefs.setBool('tmuxEnabled', this.tmuxEnabled);
     await prefs.setString('terminalFont', this.terminalFont);
     await prefs.setBool('commandNotificationsEnabled', this.commandNotificationsEnabled);
+    await prefs.setString('recordingPath', this.recordingPath);
     notifyListeners();
   }
 }
