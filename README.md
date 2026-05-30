@@ -15,6 +15,33 @@ A professional, open-source SSH client for **macOS**, **Windows**, and **Linux**
 
 ---
 
+## Download
+
+Get the latest release from the [Releases page](https://github.com/thangnm93/yourssh/releases).
+
+| Platform | File |
+|---|---|
+| macOS (Apple Silicon) | `YourSSH-x.x.x-arm64.dmg` |
+| Windows | `YourSSH.Setup.x.x.x.exe` |
+| Linux (Debian/Ubuntu) | `yourssh_x.x.x_amd64.deb` |
+| Linux (AppImage) | `YourSSH-x.x.x.AppImage` |
+
+### macOS — First Launch
+
+macOS may block the app on first open because it is not yet notarized with Apple. To open it:
+
+1. **Right-click** (or Control-click) the app → **Open**
+2. Click **Open** in the dialog that appears
+
+You only need to do this once. After that, the app opens normally.
+
+Alternatively, run this in Terminal:
+```bash
+xattr -dr com.apple.quarantine /Applications/YourSSH.app
+```
+
+---
+
 ## Features
 
 ### Terminal & Connectivity
