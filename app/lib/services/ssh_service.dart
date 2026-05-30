@@ -212,6 +212,7 @@ class SshService {
     SSHClient? client;
     SSHClient? jumpClient;
     SystemAgentProxy? agentProxy;
+    SystemAgentProxy? jumpAgentProxyForTest;
     try {
       SSHSocket socket;
       if (jumpHost != null) {
@@ -237,6 +238,14 @@ class SshService {
               passphrase: passphrase,
             ),
           ];
+        } else if (jumpHost.authType == AuthType.agent) {
+          jumpAgentProxyForTest = await SystemAgentProxy.connect();
+          jumpIdentities = await jumpAgentProxyForTest.getIdentities();
+          if (jumpIdentities.isEmpty) {
+            await jumpAgentProxyForTest.close();
+            jumpAgentProxyForTest = null;
+            return (success: false, latencyMs: 0, error: 'SSH agent has no identities for jump host');
+          }
         }
         jumpClient = SSHClient(
           await SSHSocket.connect(jumpHost.host, jumpHost.port)
@@ -316,6 +325,7 @@ class SshService {
       client?.close();
       jumpClient?.close();
       await agentProxy?.close();
+      await jumpAgentProxyForTest?.close();
     }
   }
 

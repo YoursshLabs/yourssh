@@ -117,11 +117,19 @@ class SessionProvider extends ChangeNotifier {
   }
 
   void closeSession(String sessionId) {
+    final hostId = _sessions.where((s) => s.id == sessionId).firstOrNull?.host.id;
+
     _ssh.disconnectSession(sessionId);
     _sessions.removeWhere((s) => s.id == sessionId);
     if (_activeSessionId == sessionId) {
       _activeSessionId = _sessions.isNotEmpty ? _sessions.last.id : null;
     }
+
+    // If no more sessions for this host remain, tear down the SSH client and jump client.
+    if (hostId != null && !_sessions.any((s) => s.host.id == hostId)) {
+      _ssh.disconnect(hostId);
+    }
+
     notifyListeners();
   }
 
