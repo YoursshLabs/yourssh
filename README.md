@@ -48,6 +48,7 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 - **Multi-tab SSH sessions** with named tabs and per-tab connection state
 - **Split terminal view** — horizontal/vertical pane splitting within a session
 - **Port forwarding** — local, remote, and dynamic SOCKS5 tunnels
+- **Jump host / bastion proxy** — connect to internal servers via a bastion host; select any saved host as the jump hop in the host detail panel
 - **Local shell** — spawn native macOS/Windows/Linux shell alongside SSH sessions
 - **xterm-256color** terminal emulation with full PTY support
 

@@ -78,7 +78,7 @@ yourssh/
 ### Connection Management
 - [x] Host manager (add/edit/delete/search)
 - [ ] SSH key manager
-- [ ] Jump host / bastion support
+- [x] Jump host / bastion support (v0.1.5+)
 - [ ] Port forwarding (Local / Remote / Dynamic)
 - [x] Connection profiles
 
