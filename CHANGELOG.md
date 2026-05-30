@@ -1,0 +1,134 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased] — 0.1.6
+
+### Added
+- **Command Palette** (Cmd/Ctrl+K) — fuzzy search over all app actions with keyboard navigation and match highlighting
+- **Jump Host (SSH proxy)** — chain through a bastion host to reach targets behind firewalls; configurable per host profile
+- `command_palette` hotkey wired to `SettingsProvider`
+
+### Changed
+- Sync encryption upgraded to per-row random salt + optional user passphrase (PBKDF2-HMAC-SHA256, 100k iterations, AES-256-GCM); legacy rows auto-migrate on next write
+
+### Fixed
+- Closed TOFU bypass, escaped shell args, hardened credential storage
+- Surfaced previously-silent errors; added `AppSnack` helper for in-app error display
+- S3: SigV4 path/copy-source encoding; uploads now streamed
+- WebTools: restricted WebView to `http(s)`, added request timeouts
+- DevOps: required URL token; RFC 6266-encoded filename in LAN share
+- Providers: defensive JSON parsing, immutable getters, throttled `notifyListeners`
+- Models: tolerant JSON, no-leak terminal, TOFU challenge timeout, async `stat`
+- SSH: idempotent dispose, `_safeNotify` throughout; extracted identity resolution
+- Plugin lifecycle, `execCommand`, scoped pref namespace now correctly wired
+- Jump client disconnected on session close; agent auth added to `testConnection` jump path
+
+### Performance
+- Eliminated main-screen rebuild loop; deduplicated `SessionProvider` watches
+- SFTP transfers streamed; command-history writes debounced; small race fixes
+
+---
+
+## [0.1.5] — 2026-05-30
+
+### Added
+- **Session recording** — automatic or manual asciicast v2 (`.cast`) file recording per SSH session
+  - `RecordingService` writes files to a configurable path; `RecordingProvider` manages library state
+  - REC button overlay and red-dot indicator on session tabs during active recording
+  - Auto-record toggle per host profile
+  - Recording Library screen with in-app asciicast playback (`RecordingPlayerWidget`)
+  - Recording path preference in Settings
+- **SSH certificate authentication** — `AuthType.certificate`; `CertificateKeyPair` pairs a PEM private key with an OpenSSH CA-signed certificate; UI in KeychainScreen and AddHostDialog
+- **Windows OpenSSH agent** — auto-connects to the Windows OpenSSH agent via named pipe (`\\.\pipe\openssh-ssh-agent`) using kernel32 FFI; `_WindowsPipeTransport` + `_AgentTransport` abstraction
+- SFTP file editing — Edit option in context menu; `createFile` in `SftpFileOpsService`; Monaco editor gains dirty-tracking and unsaved-changes dialog
+- New File button in SFTP panel toolbar
+
+### Fixed
+- Mounted guards added to `RecordingPlayerWidget` and `RecordingLibraryScreen`
+- Optimistic locking in `startRecording`; delete errors propagated in `RecordingProvider`
+- IO exceptions and sink leak in `RecordingService.startRecording`
+- Fallback path in `SettingsProvider` when `HOME` env var is unset
+
+---
+
+## [0.1.4] — 2026-05-30
+
+### Added
+- **OS detection** — detects remote OS via `uname` after SSH connect; shows OS-specific SVG icon on host cards; `detectedOs` field on `Host` model
+- **P2P LAN sync** — exports encrypted host payload as QR code; receiving device scans and imports; `P2PSyncService` (one-shot HTTP server) + `P2PSyncEncryption` (AES-256-GCM)
+- **Desktop notifications** — `NotificationService` detects shell prompts and command completion; configurable per-session toggle in Settings
+- **CSV host import** — RFC 4180 quoting, row-level warnings; wired into import panel UI
+- **SSH agent auth** (`AuthType.agent`) — `SystemAgentProxy` proxies `SSH_AUTH_SOCK`; agent kept alive during auth
+- **AI chat multi-provider** — supports Anthropic, OpenAI, and Gemini; provider picker in chat sidebar; API keys per-provider in Settings; `AiProvider` enum + `AiProviderConfig` model
+- **Plugin system** — `yourssh_plugin_api` package defines `YourSSHPlugin` / `YourSSHPluginContext`; `yourssh_devops`, `yourssh_web_tools`, `yourssh_snippets` plugins registered at build time; Plugin Marketplace screen; `PluginProvider` manages lifecycle
+- S3 browser and LAN Share moved into `yourssh_devops` package
+- WebTools screens moved into `yourssh_web_tools` package
+- QR export shortcut added to HostListPanel toolbar
+- P2P Transfer section in SyncSettingsScreen; unified Cloud/P2P tab selector
+- HTTP client enhancements (query params, auth, body types, history, improved UX)
+- Dynamic version display; SFTP close button; settings polish
+
+### Fixed
+- Duplicate `_showQrExport` method removed; leftover P2P section cleaned up
+- Removed duplicate `qr_flutter` entry from pubspec
+- Agent proxy kept alive during auth; cleaned up on `connect()` failure
+- `firstOrNull` used in certificate key picker validator
+- Network client entitlement added to fix outgoing connections in production build
+- Typed exception catches, reset processing on success, `await _startServer`
+
+### CI
+- PR test workflow added: runs `flutter analyze` + `flutter test` on every pull request
+
+---
+
+## [0.1.2] — 2026-05-30
+
+### Added
+- **35 terminal color theme presets** — visual picker in Settings; covers popular themes (Dracula, Solarized, Nord, One Dark, and more)
+
+---
+
+## [0.1.1] — 2026-05-30
+
+### Added
+- **Linux support** — builds and releases for Linux desktop
+- MIT License
+
+### CI
+- Added `libkeybinder-3.0-dev`, `libsecret-1-dev`, and `libjsoncpp-dev` to Linux build dependencies
+
+---
+
+## [0.1.0] — 2026-05-29
+
+### Added
+Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, and Linux.
+
+- **SSH connections** — password, private key, and agent authentication; multi-session tabbed interface
+- **Test Connection** — TCP + auth verification without opening a shell
+- **Split terminal** — horizontal / vertical / quad layouts with session broadcast
+- **Terminal input bar** — command history navigation, Tab completion, suggestion popup with arrow-key selection
+- **Shell autocomplete** — keystroke-tracked overlay with per-session history (`CommandHistoryProvider`)
+- **SFTP dual-panel** — directory navigation, file listing, checkbox selection, context menu, folder transfer, progress dialog, 3-column layout with remote-B panel
+- **SFTP file ops** — rename, delete, mkdir, permissions (`SftpFileOpsService`)
+- **Monaco code editor** — in-app editor for remote file editing via SFTP; bundled `assets/monaco_editor.html`
+- **Local terminal** — built-in local shell via `flutter_pty`; multi-tab support
+- **tmux integration** — optional tmux attachment per session
+- **Network stats overlay** — Rx/Tx per-second display via remote `/proc/net/dev` polling
+- **Multi-window** — launch additional app windows via new process
+- **Global hotkeys** — configurable shortcuts (new session, close, next/prev, split, toggle input bar) via `hotkey_manager`
+- **Supabase cloud sync** — AES-256-GCM encrypted host-list sync to Supabase; push on mutation, pull on window focus; `SyncService` + `SupabaseService`
+- **Credential storage** — secure-first strategy: Keychain (macOS) / Credential Manager (Windows), fallback to `SharedPreferences`
+- **Host management** — CRUD for SSH host profiles with `StorageService`
+- **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
+
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/YoursshLabs/yourssh/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/YoursshLabs/yourssh/compare/v0.1.2...v0.1.4
+[0.1.2]: https://github.com/YoursshLabs/yourssh/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/YoursshLabs/yourssh/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/YoursshLabs/yourssh/releases/tag/v0.1.0
