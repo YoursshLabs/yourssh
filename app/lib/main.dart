@@ -154,15 +154,18 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   void dispose() {
     _settingsProvider.removeListener(_syncNotificationSetting);
     windowManager.removeListener(this);
+    // Tear down in reverse-dependency order: consumers first (sessions, plugins,
+    // recording, sync service — they read host/key/settings via callbacks), then
+    // the producers they depend on.
+    _pluginProvider.dispose();
+    _recordingProvider.dispose();
+    _sessionProvider.dispose();
     _syncService.dispose();
+    _syncProvider.dispose();
+    _knownHostsProvider.dispose();
     _hostProvider.dispose();
     _keyProvider.dispose();
     _settingsProvider.dispose();
-    _sessionProvider.dispose();
-    _syncProvider.dispose();
-    _knownHostsProvider.dispose();
-    _pluginProvider.dispose();
-    _recordingProvider.dispose();
     super.dispose();
   }
 

@@ -72,28 +72,29 @@ class SyncProvider extends ChangeNotifier {
   }
 
   Future<void> setPassphrase(String value) async {
+    if (_storage != null) {
+      if (value.isEmpty) {
+        await _storage.deleteGenericSecret(_passphraseKey);
+      } else {
+        await _storage.saveGenericSecret(_passphraseKey, value);
+      }
+    }
     _passphrase = value;
     notifyListeners();
-    if (_storage == null) return;
-    if (value.isEmpty) {
-      await _storage.deleteGenericSecret(_passphraseKey);
-    } else {
-      await _storage.saveGenericSecret(_passphraseKey, value);
-    }
   }
 
   Future<void> clearSupabaseConfig() async {
-    _supabaseUrl = '';
-    _supabaseAnonKey = '';
-    _supabaseConfigExplicitlySet = false;
-    notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_supabaseUrlKey);
     await prefs.remove(_supabaseAnonKeyKey);
     if (_storage != null) {
       await _storage.deleteGenericSecret(_passphraseKey);
     }
+    _supabaseUrl = '';
+    _supabaseAnonKey = '';
     _passphrase = '';
+    _supabaseConfigExplicitlySet = false;
+    notifyListeners();
   }
 
   void setStatus(SyncStatus status) {
