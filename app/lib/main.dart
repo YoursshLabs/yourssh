@@ -21,8 +21,10 @@ import 'services/notification_service.dart';
 import 'services/ssh_service.dart';
 import 'services/storage_service.dart';
 import 'services/sync_service.dart';
+import 'services/recording_service.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
+import 'providers/recording_provider.dart';
 
 String kAppVersion = '';
 
@@ -55,6 +57,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final SyncService _syncService;
   late final KnownHostsProvider _knownHostsProvider;
   late final PluginProvider _pluginProvider;
+  late final RecordingService _recordingService;
+  late final RecordingProvider _recordingProvider;
 
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
 
@@ -63,7 +67,13 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     super.initState();
     windowManager.addListener(this);
     _storage = StorageService();
+    _recordingService = RecordingService();
+    _recordingProvider = RecordingProvider(
+      _recordingService,
+      getPath: () => _settingsProvider.recordingPath,
+    );
     _ssh = SshService(_storage);
+    _ssh.recordingService = _recordingService;
     _hostProvider = HostProvider(_storage);
     _keyProvider = KeyProvider();
     _settingsProvider = SettingsProvider();
@@ -72,6 +82,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _sessionProvider.autoReconnectEnabled = () => _settingsProvider.autoReconnect;
     _sessionProvider.reconnectAttempts = () => _settingsProvider.reconnectAttempts;
     _sessionProvider.tmuxEnabled = () => _settingsProvider.tmuxEnabled;
+    _sessionProvider.recordingStart = (s) => _recordingProvider.startRecording(s);
     _knownHostsProvider = KnownHostsProvider(_storage);
     _knownHostsProvider.load();
     _sessionProvider.hostKeyVerifier = _knownHostsProvider.verifyHostKey;
@@ -148,6 +159,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _syncProvider.dispose();
     _knownHostsProvider.dispose();
     _pluginProvider.dispose();
+    _recordingProvider.dispose();
     super.dispose();
   }
 
@@ -175,6 +187,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         ChangeNotifierProvider(create: (_) => LocalSessionProvider()),
         ChangeNotifierProvider(create: (_) => AiChatProvider()),
         ChangeNotifierProvider.value(value: _pluginProvider),
+        ChangeNotifierProvider.value(value: _recordingProvider),
       ],
       child: MaterialApp(
         title: 'YourSSH',
