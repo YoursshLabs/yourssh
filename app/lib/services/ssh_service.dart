@@ -8,6 +8,7 @@ import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
 import 'certificate_key_pair.dart';
 import 'notification_service.dart';
+import 'recording_service.dart';
 import 'storage_service.dart';
 import 'system_agent_proxy.dart';
 
@@ -16,6 +17,8 @@ class SshService {
   final Map<String, SSHClient> _clients = {};
   final Map<String, SSHSession> _shells = {};
   final Map<String, SystemAgentProxy> _agentProxies = {};
+  RecordingService? _recording;
+  set recordingService(RecordingService? service) => _recording = service;
 
   SshService(this._storage);
 
@@ -203,6 +206,7 @@ class SshService {
       (data) {
         final text = utf8.convert(data);
         session.terminal.write(text);
+        _recording?.writeOutput(session.id, text);
         try {
           NotificationService.instance.onTerminalData(
             text,
@@ -242,6 +246,7 @@ class SshService {
     _shells.remove(session.id);
     session.terminal.write('\r\n\x1b[31m[Connection closed]\x1b[0m\r\n');
     NotificationService.instance.removeSession(session.id);
+    _recording?.onShellClosed(session.id);
   }
 
   // ── Exec ───────────────────────────────────────────────
