@@ -2,7 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/lan_share_service.dart';
-import '../theme/app_theme.dart';
+import '../theme.dart';
 
 class LanShareScreen extends StatefulWidget {
   const LanShareScreen({super.key});
@@ -66,13 +66,13 @@ class _LanShareScreenState extends State<LanShareScreen> {
           width: 24,
           height: 24,
           decoration: BoxDecoration(
-            color: AppColors.accent.withValues(alpha: 0.15),
+            color: DevOpsColors.accent.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(12),
           ),
           alignment: Alignment.center,
           child: Text(num,
               style: const TextStyle(
-                  color: AppColors.accent,
+                  color: DevOpsColors.accent,
                   fontSize: 11,
                   fontWeight: FontWeight.w700)),
         ),
@@ -83,13 +83,13 @@ class _LanShareScreenState extends State<LanShareScreen> {
             children: [
               Text(title,
                   style: const TextStyle(
-                      color: AppColors.textPrimary,
+                      color: DevOpsColors.textPrimary,
                       fontSize: 13,
                       fontWeight: FontWeight.w500)),
               const SizedBox(height: 2),
               Text(desc,
                   style: const TextStyle(
-                      color: AppColors.textTertiary, fontSize: 12)),
+                      color: DevOpsColors.textTertiary, fontSize: 12)),
             ],
           ),
         ),
@@ -106,20 +106,20 @@ class _LanShareScreenState extends State<LanShareScreen> {
         children: [
           if (_sharing) ...[
             const Center(
-                child: CircularProgressIndicator(color: AppColors.accent)),
+                child: CircularProgressIndicator(color: DevOpsColors.accent)),
           ] else if (_shareUrl == null) ...[
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('LocalShare',
                     style: TextStyle(
-                        color: AppColors.textPrimary,
+                        color: DevOpsColors.textPrimary,
                         fontSize: 20,
                         fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 const Text('Share files on your local network over HTTP.',
                     style:
-                        TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                        TextStyle(color: DevOpsColors.textSecondary, fontSize: 13)),
                 const SizedBox(height: 28),
                 _step('1', 'Pick a file',
                     'Any file on your Mac — image, archive, document'),
@@ -135,7 +135,7 @@ class _LanShareScreenState extends State<LanShareScreen> {
                   icon: const Icon(Icons.folder_open, size: 16),
                   label: const Text('Pick File to Share'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accent,
+                    backgroundColor: DevOpsColors.accent,
                     foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 12),
@@ -147,9 +147,9 @@ class _LanShareScreenState extends State<LanShareScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.card,
+                color: DevOpsColors.card,
                 border: Border.all(
-                    color: AppColors.accent.withValues(alpha: 0.4)),
+                    color: DevOpsColors.accent.withValues(alpha: 0.4)),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -158,10 +158,10 @@ class _LanShareScreenState extends State<LanShareScreen> {
                   Row(
                     children: [
                       const Icon(Icons.check_circle,
-                          color: AppColors.accent, size: 16),
+                          color: DevOpsColors.accent, size: 16),
                       const SizedBox(width: 8),
                       Text(_fileName ?? '',
-                          style: const TextStyle(color: AppColors.textPrimary)),
+                          style: const TextStyle(color: DevOpsColors.textPrimary)),
                     ],
                   ),
                   if (_fileSize != null) ...[
@@ -169,13 +169,13 @@ class _LanShareScreenState extends State<LanShareScreen> {
                     Text(
                       _fmtSize(_fileSize!),
                       style: const TextStyle(
-                          color: AppColors.textTertiary, fontSize: 11),
+                          color: DevOpsColors.textTertiary, fontSize: 11),
                     ),
                   ],
                   const SizedBox(height: 12),
                   const Text('Share URL:',
                       style: TextStyle(
-                          color: AppColors.textSecondary, fontSize: 12)),
+                          color: DevOpsColors.textSecondary, fontSize: 12)),
                   const SizedBox(height: 4),
                   Row(
                     children: [
@@ -183,7 +183,7 @@ class _LanShareScreenState extends State<LanShareScreen> {
                         child: SelectableText(
                           _shareUrl!,
                           style: const TextStyle(
-                            color: AppColors.blue,
+                            color: DevOpsColors.blue,
                             fontFamily: 'monospace',
                             fontSize: 13,
                           ),
@@ -191,7 +191,7 @@ class _LanShareScreenState extends State<LanShareScreen> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.copy,
-                            size: 16, color: AppColors.textSecondary),
+                            size: 16, color: DevOpsColors.textSecondary),
                         onPressed: () {
                           Clipboard.setData(ClipboardData(text: _shareUrl!));
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -207,9 +207,9 @@ class _LanShareScreenState extends State<LanShareScreen> {
                   TextButton.icon(
                     onPressed: _stop,
                     icon: const Icon(Icons.stop,
-                        size: 16, color: AppColors.red),
+                        size: 16, color: DevOpsColors.red),
                     label: const Text('Stop Sharing',
-                        style: TextStyle(color: AppColors.red)),
+                        style: TextStyle(color: DevOpsColors.red)),
                   ),
                 ],
               ),

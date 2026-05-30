@@ -47,6 +47,10 @@ class KeyProvider extends ChangeNotifier {
         publicKey: pubKey,
         privateKeyPath: keyFile.path,
       ));
+      final certFile = File(p.join(sshDir.path, '$name-cert.pub'));
+      if (certFile.existsSync()) {
+        _keys.last.certificatePath = certFile.path;
+      }
     }
     await _save();
   }
@@ -72,6 +76,10 @@ class KeyProvider extends ChangeNotifier {
       privateKeyPath: path,
     );
     _keys.add(entry);
+    final certFile = File('$path-cert.pub');
+    if (certFile.existsSync()) {
+      _keys.last.certificatePath = certFile.path;
+    }
     await _save();
     notifyListeners();
   }
@@ -84,6 +92,22 @@ class KeyProvider extends ChangeNotifier {
 
   Future<void> deleteKey(String id) async {
     _keys.removeWhere((k) => k.id == id);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> setCertificate(String keyId, String certPath) async {
+    final idx = _keys.indexWhere((k) => k.id == keyId);
+    if (idx == -1) return;
+    _keys[idx].certificatePath = certPath;
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> removeCertificate(String keyId) async {
+    final idx = _keys.indexWhere((k) => k.id == keyId);
+    if (idx == -1) return;
+    _keys[idx].certificatePath = null;
     await _save();
     notifyListeners();
   }

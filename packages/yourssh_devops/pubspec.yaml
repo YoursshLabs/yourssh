@@ -1,0 +1,29 @@
+name: yourssh_devops
+description: DevOps Hub plugin for YourSSH — network tools, S3 browser, LAN share, and more.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  yourssh_plugin_api:
+    path: ../yourssh_plugin_api
+
+  # S3 browser deps
+  http: ^1.2.0
+  crypto: ^3.0.3
+  xml: ^6.5.0
+  path: ^1.9.0
+
+  # LAN share deps
+  network_info_plus: ^6.0.0
+  shelf: ^1.4.1
+
+  # UI deps
+  file_picker: ^8.1.2
+  flutter_secure_storage: ^9.2.2
+  url_launcher: ^6.3.0

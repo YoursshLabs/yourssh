@@ -140,10 +140,9 @@ packages:
   dartssh2:
     dependency: "direct main"
     description:
-      name: dartssh2
-      sha256: c139babed0d6851449100010639115e1ed88decf0db7eb714ce13935c7eb590c
-      url: "https://pub.dev"
-    source: hosted
+      path: "../packages/dartssh2"
+      relative: true
+    source: path
     version: "2.17.1"
   dbus:
     dependency: transitive
@@ -1125,6 +1124,20 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.0"
+  yourssh_devops:
+    dependency: "direct main"
+    description:
+      path: "../packages/yourssh_devops"
+      relative: true
+    source: path
+    version: "1.0.0"
+  yourssh_plugin_api:
+    dependency: "direct main"
+    description:
+      path: "../packages/yourssh_plugin_api"
+      relative: true
+    source: path
+    version: "1.0.0"
   zmodem:
     dependency: transitive
     description:

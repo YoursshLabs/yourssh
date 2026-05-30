@@ -330,8 +330,8 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 
 ## Roadmap
 
-- [ ] Custom terminal color themes (30+ presets)
-- [ ] SSH certificate authentication
+- [x] Custom terminal color themes (30+ presets)
+- [x] SSH certificate authentication
 - [ ] Jump host / bastion proxy support
 - [x] Linux desktop target
 - [ ] iOS / iPadOS target (experimental)

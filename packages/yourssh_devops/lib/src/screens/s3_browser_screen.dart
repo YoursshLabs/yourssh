@@ -8,7 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/s3_bucket_config.dart';
 import '../models/s3_bucket_entry.dart';
 import '../services/s3_service.dart';
-import '../theme/app_theme.dart';
+import '../theme.dart';
 
 class S3BrowserScreen extends StatefulWidget {
   const S3BrowserScreen({super.key});
@@ -121,10 +121,10 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          backgroundColor: AppColors.sidebar,
+          backgroundColor: DevOpsColors.sidebar,
           title: Text(
             existing == null ? 'Add Bucket' : 'Edit Bucket',
-            style: const TextStyle(color: AppColors.textPrimary),
+            style: const TextStyle(color: DevOpsColors.textPrimary),
           ),
           content: SizedBox(
             width: 400,
@@ -186,11 +186,11 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: AppColors.sidebar,
-        title: const Text('Remove Bucket', style: TextStyle(color: AppColors.textPrimary)),
+        backgroundColor: DevOpsColors.sidebar,
+        title: const Text('Remove Bucket', style: TextStyle(color: DevOpsColors.textPrimary)),
         content: Text(
           'Remove "${_configs[index].name}"?',
-          style: const TextStyle(color: AppColors.textSecondary),
+          style: const TextStyle(color: DevOpsColors.textSecondary),
         ),
         actions: [
           TextButton(
@@ -199,7 +199,7 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.red),
+            style: TextButton.styleFrom(foregroundColor: DevOpsColors.red),
             child: const Text('Remove'),
           ),
         ],
@@ -230,8 +230,8 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          backgroundColor: AppColors.sidebar,
-          title: const Text('New Folder', style: TextStyle(color: AppColors.textPrimary)),
+          backgroundColor: DevOpsColors.sidebar,
+          title: const Text('New Folder', style: TextStyle(color: DevOpsColors.textPrimary)),
           content: _field(ctrl, 'Folder Name', 'images'),
           actions: [
             TextButton(
@@ -273,8 +273,8 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          backgroundColor: AppColors.sidebar,
-          title: const Text('Rename / Move', style: TextStyle(color: AppColors.textPrimary)),
+          backgroundColor: DevOpsColors.sidebar,
+          title: const Text('Rename / Move', style: TextStyle(color: DevOpsColors.textPrimary)),
           content: SizedBox(
             width: 400,
             child: Column(
@@ -390,15 +390,15 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: AppColors.sidebar,
-        title: const Text('Delete object', style: TextStyle(color: AppColors.textPrimary)),
+        backgroundColor: DevOpsColors.sidebar,
+        title: const Text('Delete object', style: TextStyle(color: DevOpsColors.textPrimary)),
         content: Text('Delete "${entry.name}"?',
-            style: const TextStyle(color: AppColors.textSecondary)),
+            style: const TextStyle(color: DevOpsColors.textSecondary)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.red),
+            style: TextButton.styleFrom(foregroundColor: DevOpsColors.red),
             child: const Text('Delete'),
           ),
         ],
@@ -466,12 +466,12 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
     return Column(
       children: [
         _buildToolbar(),
-        Container(height: 1, color: AppColors.border),
+        Container(height: 1, color: DevOpsColors.border),
         if (!hasConfig)
           Expanded(child: _buildEmptyState())
         else ...[
           _buildBreadcrumbs(),
-          Container(height: 1, color: AppColors.border),
+          Container(height: 1, color: DevOpsColors.border),
           if (_uploadProgress != null)
             LinearProgressIndicator(value: _uploadProgress, minHeight: 2),
           Expanded(child: _buildFileList()),
@@ -484,18 +484,18 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
     final hasConfig = _configs.isNotEmpty && _activeIndex >= 0;
     return Container(
       height: 44,
-      color: AppColors.sidebar,
+      color: DevOpsColors.sidebar,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          const Icon(Icons.cloud_outlined, size: 16, color: AppColors.textSecondary),
+          const Icon(Icons.cloud_outlined, size: 16, color: DevOpsColors.textSecondary),
           const SizedBox(width: 8),
           if (hasConfig)
             _buildBucketSelector()
           else
             const Text(
               'S3 Browser',
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
+              style: TextStyle(color: DevOpsColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
             ),
           const Spacer(),
           _toolBtn(Icons.add, 'Add Bucket', () => _showConfigDialog()),
@@ -519,9 +519,9 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
         DropdownButton<int>(
           value: _activeIndex,
           underline: const SizedBox(),
-          dropdownColor: AppColors.card,
+          dropdownColor: DevOpsColors.card,
           style: const TextStyle(
-            color: AppColors.textPrimary,
+            color: DevOpsColors.textPrimary,
             fontSize: 13,
             fontWeight: FontWeight.w500,
           ),
@@ -552,11 +552,11 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.cloud_outlined, color: AppColors.textTertiary, size: 48),
+          const Icon(Icons.cloud_outlined, color: DevOpsColors.textTertiary, size: 48),
           const SizedBox(height: 12),
           const Text(
             'No buckets configured',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            style: TextStyle(color: DevOpsColors.textSecondary, fontSize: 14),
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
@@ -577,7 +577,7 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
         borderRadius: BorderRadius.circular(4),
         child: Padding(
           padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 16, color: AppColors.textSecondary),
+          child: Icon(icon, size: 16, color: DevOpsColors.textSecondary),
         ),
       ),
     );
@@ -587,7 +587,7 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
     final bucketName = _activeIndex >= 0 ? _configs[_activeIndex].bucket : '';
     return Container(
       height: 36,
-      color: AppColors.bg,
+      color: DevOpsColors.bg,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
@@ -596,7 +596,7 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
             child: Text(
               bucketName,
               style: TextStyle(
-                color: _prefix.isEmpty ? AppColors.textPrimary : AppColors.accent,
+                color: _prefix.isEmpty ? DevOpsColors.textPrimary : DevOpsColors.accent,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
@@ -608,13 +608,13 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(' / ', style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+                const Text(' / ', style: TextStyle(color: DevOpsColors.textTertiary, fontSize: 12)),
                 InkWell(
                   onTap: isLast ? null : () => _navigateTo(partPrefix),
                   child: Text(
                     e.value,
                     style: TextStyle(
-                      color: isLast ? AppColors.textPrimary : AppColors.accent,
+                      color: isLast ? DevOpsColors.textPrimary : DevOpsColors.accent,
                       fontSize: 12,
                     ),
                   ),
@@ -636,9 +636,9 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, color: AppColors.red, size: 32),
+            Icon(Icons.error_outline, color: DevOpsColors.red, size: 32),
             const SizedBox(height: 8),
-            Text(_error!, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+            Text(_error!, style: const TextStyle(color: DevOpsColors.textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
             TextButton(onPressed: _listObjects, child: const Text('Retry')),
           ],
@@ -650,9 +650,9 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.folder_open_outlined, color: AppColors.textTertiary, size: 40),
+            const Icon(Icons.folder_open_outlined, color: DevOpsColors.textTertiary, size: 40),
             const SizedBox(height: 8),
-            const Text('Empty folder', style: TextStyle(color: AppColors.textTertiary, fontSize: 13)),
+            const Text('Empty folder', style: TextStyle(color: DevOpsColors.textTertiary, fontSize: 13)),
             if (_prefix.isNotEmpty) ...[
               const SizedBox(height: 8),
               TextButton.icon(
@@ -672,8 +672,8 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
         if (_prefix.isNotEmpty && i == 0) {
           return ListTile(
             dense: true,
-            leading: const Icon(Icons.arrow_upward, size: 16, color: AppColors.textTertiary),
-            title: const Text('..', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+            leading: const Icon(Icons.arrow_upward, size: 16, color: DevOpsColors.textTertiary),
+            title: const Text('..', style: TextStyle(color: DevOpsColors.textSecondary, fontSize: 13)),
             onTap: _navigateUp,
           );
         }
@@ -697,26 +697,26 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          Text(label, style: const TextStyle(color: DevOpsColors.textSecondary, fontSize: 12)),
           const SizedBox(height: 4),
           TextField(
             controller: ctrl,
             obscureText: obscure,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+            style: const TextStyle(color: DevOpsColors.textPrimary, fontSize: 13),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
+              hintStyle: const TextStyle(color: DevOpsColors.textTertiary, fontSize: 13),
               filled: true,
-              fillColor: AppColors.card,
+              fillColor: DevOpsColors.card,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: AppColors.border),
+                borderSide: const BorderSide(color: DevOpsColors.border),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: AppColors.border),
+                borderSide: const BorderSide(color: DevOpsColors.border),
               ),
             ),
           ),
@@ -759,20 +759,20 @@ class _EntryTileState extends State<_EntryTile> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: Container(
-        color: _hovered ? AppColors.card.withValues(alpha: 0.6) : Colors.transparent,
+        color: _hovered ? DevOpsColors.card.withValues(alpha: 0.6) : Colors.transparent,
         child: ListTile(
           dense: true,
           leading: Icon(
             entry.isPrefix ? Icons.folder_outlined : _fileIcon(entry.name),
             size: 16,
-            color: entry.isPrefix ? const Color(0xFFE8B84D) : AppColors.textSecondary,
+            color: entry.isPrefix ? const Color(0xFFE8B84D) : DevOpsColors.textSecondary,
           ),
           title: Text(entry.name,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+              style: const TextStyle(color: DevOpsColors.textPrimary, fontSize: 13)),
           subtitle: !entry.isPrefix && entry.lastModified != null
               ? Text(
                   '${_fmtDate(entry.lastModified!)}  •  ${entry.displaySize}',
-                  style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+                  style: const TextStyle(color: DevOpsColors.textTertiary, fontSize: 11),
                 )
               : null,
           onTap: widget.onNavigate,
@@ -789,7 +789,7 @@ class _EntryTileState extends State<_EntryTile> {
                     if (widget.onRenameMove != null)
                       _actionBtn(Icons.drive_file_rename_outline, 'Rename / Move', widget.onRenameMove!),
                     if (widget.onDelete != null)
-                      _actionBtn(Icons.delete_outlined, 'Delete', widget.onDelete!, color: AppColors.red),
+                      _actionBtn(Icons.delete_outlined, 'Delete', widget.onDelete!, color: DevOpsColors.red),
                   ],
                 )
               : null,
@@ -806,7 +806,7 @@ class _EntryTileState extends State<_EntryTile> {
         borderRadius: BorderRadius.circular(4),
         child: Padding(
           padding: const EdgeInsets.all(4),
-          child: Icon(icon, size: 14, color: color ?? AppColors.textSecondary),
+          child: Icon(icon, size: 14, color: color ?? DevOpsColors.textSecondary),
         ),
       ),
     );

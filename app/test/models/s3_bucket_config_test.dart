@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:yourssh/models/s3_bucket_config.dart';
+import 'package:yourssh_devops/yourssh_devops.dart';
 
 void main() {
   const config = S3BucketConfig(
