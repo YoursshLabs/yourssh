@@ -70,6 +70,7 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 - **Host groups** — organize connection profiles into logical folders
 - **Broadcast mode** — send the same input to multiple sessions at once
 - **Code editor** — edit remote files inline with a Monaco-powered editor
+- **Session recording** — record terminal output to Asciinema v2 (`.cast`) files; per-host auto-record setting; manual start/stop from the toolbar; Recording Library with in-app playback (play/pause, speed control 0.5×–5×)
 
 ### Design
 - Dark-only interface with a cohesive green-accent palette

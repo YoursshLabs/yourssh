@@ -74,6 +74,7 @@ Flutter UI (widgets/screens)
 - `CommandHistoryProvider` — per-host command history for terminal autocomplete
 - `AiChatProvider` — AI chat sidebar; supports multiple providers (`AiProvider` enum: `anthropic`, `openai`, `gemini`); API keys and model selection stored per-provider in `SharedPreferences`
 - `PluginProvider` — activates/deactivates registered plugins; wraps `PluginContextImpl` for each
+- `RecordingProvider` — recording library state; `startRecording(session)` / `stopRecording(sessionId)`; `refreshLibrary()` scans disk for `.cast` files; `isRecording(sessionId)` for UI indicators; wired to `SessionProvider` via `recordingStart` callback in `main.dart`
 
 **Services** (`app/lib/services/`):
 - `SshService` — owns `SSHClient` and `SSHSession` maps keyed by host ID; handles connect, shell, exec, sftp, `testConnection` (TCP+auth without opening a shell), disconnect
@@ -94,6 +95,7 @@ Flutter UI (widgets/screens)
 - `NotificationService` — wraps `local_notifier` for desktop notifications
 - `WebToolsService` — in-app HTTP requests through a port-forwarded connection
 - `SystemAgentProxy` — proxies SSH agent socket for `AuthType.agent`
+- `RecordingService` — writes asciicast v2 (`.cast`) files; tracks active recordings keyed by `sessionId`; passive intercept pattern — `SshService` always calls `writeOutput()` / `onShellClosed()`, which no-op when not recording
 
 **Key models** (`app/lib/models/`):
 - `Host` — connection profile (host, port, username, `AuthType`: `password` / `privateKey` / `certificate` / `agent`)
@@ -102,10 +104,11 @@ Flutter UI (widgets/screens)
 - `PortForward`, `TunnelConfig`, `Snippet`, `KnownHost`, `NetworkStats`, `LocalEntry`, `SftpEntry`, `SftpTransferItem`
 - `ChatMessage`, `AiProviderConfig` — AI chat models
 - `ToolResult` — structured result from AI tool calls
+- `RecordingEntry` — immutable metadata for one `.cast` file; `hostTitle` and `recordedAt` parsed from path (`{basePath}/{user}@{host}/session_YYYY-MM-DD_HH-mm-ss.cast`)
 
 **UI entry point:** `app/lib/main.dart` — instantiates services and long-lived providers, wires callbacks between them (key lookup, host-key verifier, sync-on-mutation), then mounts `MainScreen` under `MultiProvider`. The app is dark-only (`ThemeMode.dark`); theme constants live in `app/lib/theme/app_theme.dart` (`AppColors`).
 
-**Navigation:** `MainScreen` (`app/lib/screens/main_screen.dart`) renders a top tab bar (pinned Home/SFTP + scrollable SSH session tabs) and a left sidebar. `NavSection` enum: `hosts`, `keychain`, `portForwarding`, `sftp`, `localTerminal`, `knownHosts`, `settings`, `plugins`. Each maps to a top-level screen widget under `app/lib/widgets/`.
+**Navigation:** `MainScreen` (`app/lib/screens/main_screen.dart`) renders a top tab bar (pinned Home/SFTP + scrollable SSH session tabs) and a left sidebar. `NavSection` enum: `hosts`, `keychain`, `portForwarding`, `sftp`, `localTerminal`, `knownHosts`, `recordings`, `settings`, `plugins`. Each maps to a top-level screen widget under `app/lib/widgets/`.
 
 **Code editor:** `CodeEditorScreen` renders a Monaco editor via `webview_flutter` using the bundled `assets/monaco_editor.html`.
 

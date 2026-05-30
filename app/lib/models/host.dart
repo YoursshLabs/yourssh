@@ -14,6 +14,7 @@ class Host {
   List<String> tags;
   DateTime createdAt;
   String? detectedOs;
+  bool autoRecord;
 
   Host({
     String? id,
@@ -27,6 +28,7 @@ class Host {
     this.tags = const [],
     DateTime? createdAt,
     this.detectedOs,
+    this.autoRecord = false,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -42,6 +44,7 @@ class Host {
         'tags': tags,
         'createdAt': createdAt.toIso8601String(),
         'detectedOs': detectedOs,
+        'autoRecord': autoRecord,
       };
 
   factory Host.fromJson(Map<String, dynamic> json) => Host(
@@ -56,6 +59,7 @@ class Host {
         tags: List<String>.from(json['tags'] ?? []),
         createdAt: DateTime.parse(json['createdAt']),
         detectedOs: json['detectedOs'] as String?,
+        autoRecord: (json['autoRecord'] as bool?) ?? false,
       );
 
   Host copyWith({
@@ -67,6 +71,7 @@ class Host {
     String? keyId,
     String? group,
     String? detectedOs,
+    bool? autoRecord,
   }) =>
       Host(
         id: id,
@@ -80,5 +85,6 @@ class Host {
         tags: tags,
         createdAt: createdAt,
         detectedOs: detectedOs ?? this.detectedOs,
+        autoRecord: autoRecord ?? this.autoRecord,
       );
 }

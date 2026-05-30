@@ -16,6 +16,7 @@ import 'hotkey_settings_screen.dart';
 import 'theme_picker.dart';
 import 'qr_export_dialog.dart';
 import 'qr_import_dialog.dart';
+import 'package:file_picker/file_picker.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -177,6 +178,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                     ),
+                ]),
+                const SizedBox(height: 24),
+                _Section(title: 'Recording', children: [
+                  Consumer<SettingsProvider>(
+                    builder: (context, settings, _) => _Row(
+                      label: 'Recording path',
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              settings.recordingPath,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                                fontFamily: 'monospace',
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton(
+                            onPressed: () async {
+                              final result = await FilePicker.platform.getDirectoryPath(
+                                dialogTitle: 'Choose recordings folder',
+                              );
+                              if (result != null && context.mounted) {
+                                await context.read<SettingsProvider>().save(recordingPath: result);
+                              }
+                            },
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              side: const BorderSide(color: AppColors.border),
+                              foregroundColor: AppColors.textSecondary,
+                              textStyle: const TextStyle(fontSize: 12),
+                            ),
+                            child: const Text('Change…'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ]),
                 const SizedBox(height: 24),
                 _Section(title: 'Monitoring', children: [

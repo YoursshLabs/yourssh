@@ -6,6 +6,7 @@ import '../models/ssh_session.dart';
 import '../providers/host_provider.dart';
 import '../providers/known_hosts_provider.dart';
 import '../providers/session_provider.dart';
+import '../providers/recording_provider.dart';
 import '../main.dart' show kAppVersion;
 import '../theme/app_theme.dart';
 import '../widgets/host_detail_panel.dart';
@@ -22,6 +23,7 @@ import '../widgets/new_group_panel.dart';
 import '../widgets/import_panel.dart';
 import '../widgets/ai_chat_sidebar.dart';
 import '../widgets/plugin_marketplace_screen.dart';
+import '../widgets/recording_library_screen.dart';
 import '../plugins/plugin_context_impl.dart';
 import '../providers/plugin_provider.dart';
 import '../services/ssh_service.dart';
@@ -30,7 +32,7 @@ import '../providers/settings_provider.dart';
 import '../providers/terminal_layout_provider.dart';
 import '../services/hotkey_service.dart';
 
-enum NavSection { hosts, keychain, portForwarding, sftp, localTerminal, knownHosts, settings, plugins }
+enum NavSection { hosts, keychain, portForwarding, sftp, localTerminal, knownHosts, recordings, settings, plugins }
 
 enum _SidePanel { none, host, newGroup, import }
 
@@ -357,6 +359,7 @@ class _MainScreenState extends State<MainScreen> {
           connectionNotifier: _sftpConnectionNotifier,
         ),
       NavSection.localTerminal => const LocalTerminalScreen(),
+      NavSection.recordings => const RecordingLibraryScreen(),
       NavSection.knownHosts => const KnownHostsScreen(),
       NavSection.settings => const SettingsScreen(),
       NavSection.plugins => const PluginMarketplaceScreen(),
@@ -410,6 +413,7 @@ class _Sidebar extends StatelessWidget {
 
           const _SectionLabel('TOOLS'),
           _navItem(Icons.laptop_mac, 'Local Terminal', NavSection.localTerminal),
+          _navItem(Icons.video_library_outlined, 'Recordings', NavSection.recordings),
           ...context.watch<PluginProvider>().enabledPlugins.map(
             (plugin) => _pluginNavItem(context, plugin),
           ),
@@ -743,6 +747,20 @@ class _SessionTabState extends State<_SessionTab> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Red recording indicator
+              Consumer<RecordingProvider>(
+                builder: (context, rec, _) => rec.isRecording(widget.session.id)
+                    ? Container(
+                        width: 7,
+                        height: 7,
+                        margin: const EdgeInsets.only(right: 5),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
               // X close button (left, per image)
               GestureDetector(
                 onTap: () => widget.provider.closeSession(widget.session.id),

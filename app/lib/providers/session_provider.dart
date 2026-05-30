@@ -15,6 +15,7 @@ class SessionProvider extends ChangeNotifier {
   bool Function()? tmuxEnabled;
   Future<bool> Function(String host, int port, String keyType, Uint8List fp)? hostKeyVerifier;
   Future<void> Function(String hostId, String os)? onOsDetected;
+  Future<void> Function(SshSession session)? recordingStart;
 
   SessionProvider(this._ssh);
 
@@ -61,6 +62,10 @@ class SessionProvider extends ChangeNotifier {
       }
       session.errorMessage = null;
       notifyListeners();
+
+      if (host.autoRecord) {
+        unawaited(recordingStart?.call(session) ?? Future.value());
+      }
 
       await _ssh.openShell(session, useTmux: tmuxEnabled?.call() ?? false);
       notifyListeners();

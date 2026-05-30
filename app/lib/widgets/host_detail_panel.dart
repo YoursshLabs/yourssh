@@ -41,6 +41,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   bool _saving = false;
   bool _testing = false;
   ({bool success, int latencyMs, String? error})? _testResult;
+  bool _autoRecord = false;
 
   bool get _isNew => widget.existing == null;
 
@@ -57,6 +58,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     _passwordCtrl = TextEditingController();
     _authType = h?.authType ?? AuthType.password;
     _selectedKeyId = h?.keyId;
+    _autoRecord = h?.autoRecord ?? false;
     for (final c in [_hostCtrl, _portCtrl, _usernameCtrl, _passwordCtrl]) {
       c.addListener(_clearTestResult);
     }
@@ -88,6 +90,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       keyId: _authType == AuthType.privateKey ? _selectedKeyId : null,
       group: _groupCtrl.text.trim(),
       tags: tags,
+      autoRecord: _autoRecord,
     );
     try {
       await widget.onSave(host, _passwordCtrl.text);
@@ -271,6 +274,27 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                         ),
                       ),
                     ],
+                  ]),
+
+                  const SizedBox(height: 16),
+                  _sectionLabel('RECORDING'),
+                  const SizedBox(height: 6),
+                  _Card(children: [
+                    SwitchListTile(
+                      value: _autoRecord,
+                      onChanged: (v) => setState(() => _autoRecord = v),
+                      title: const Text(
+                        'Auto-record sessions',
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                      ),
+                      subtitle: const Text(
+                        'Start recording automatically on connect',
+                        style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
+                      ),
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      activeThumbColor: AppColors.accent,
+                    ),
                   ]),
 
                   const SizedBox(height: 24),
