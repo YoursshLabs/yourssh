@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
+import '../models/ai_provider_config.dart';
 import '../models/chat_message.dart';
 import '../providers/ai_chat_provider.dart';
 import '../theme/app_theme.dart';
@@ -51,7 +52,7 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
       child: Column(
         children: [
           _buildHeader(context, provider),
-          if (!provider.configured) _buildApiKeyPrompt(context, provider),
+          if (!provider.configured) _buildUnconfiguredBanner(),
           Expanded(child: _buildMessageList(provider)),
           _buildInput(provider),
         ],
@@ -60,6 +61,7 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
   }
 
   Widget _buildHeader(BuildContext context, AiChatProvider provider) {
+    final configured = provider.configuredProviders;
     return Container(
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -75,6 +77,35 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
           const Text('AI Assistant',
               style: TextStyle(
                   color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+          if (configured.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            DropdownButton<AiProvider>(
+              value: configured.contains(provider.activeProvider)
+                  ? provider.activeProvider
+                  : configured.first,
+              style: const TextStyle(
+                  color: AppColors.textSecondary, fontSize: 11),
+              dropdownColor: AppColors.card,
+              underline: const SizedBox(),
+              isDense: true,
+              items: configured
+                  .map((p) => DropdownMenuItem(
+                        value: p,
+                        child: Text(
+                          _providerLabel(p),
+                          style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary),
+                        ),
+                      ))
+                  .toList(),
+              onChanged: (p) {
+                if (p != null) {
+                  context.read<AiChatProvider>().setActiveProvider(p);
+                }
+              },
+            ),
+          ],
           const Spacer(),
           if (provider.messages.isNotEmpty)
             IconButton(
@@ -93,52 +124,25 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
     );
   }
 
-  Widget _buildApiKeyPrompt(BuildContext context, AiChatProvider provider) {
-    final keyController = TextEditingController();
+  String _providerLabel(AiProvider p) => switch (p) {
+        AiProvider.anthropic => 'Anthropic',
+        AiProvider.openai => 'OpenAI',
+        AiProvider.gemini => 'Gemini',
+      };
+
+  Widget _buildUnconfiguredBanner() {
     return Container(
+      margin: const EdgeInsets.all(12),
       padding: const EdgeInsets.all(12),
-      color: AppColors.card,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Enter your Anthropic API key to enable AI assistance:',
-              style:
-                  TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: keyController,
-                  obscureText: true,
-                  style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 12,
-                      fontFamily: 'monospace'),
-                  decoration: const InputDecoration(
-                    hintText: 'sk-ant-...',
-                    hintStyle: TextStyle(color: AppColors.textTertiary),
-                    filled: true,
-                    fillColor: AppColors.bg,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                    border: OutlineInputBorder(
-                        borderSide: BorderSide(color: AppColors.border)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: () =>
-                    provider.setApiKey(keyController.text.trim()),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accent,
-                    foregroundColor: Colors.black),
-                child: const Text('Save', style: TextStyle(fontSize: 12)),
-              ),
-            ],
-          ),
-        ],
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Text(
+        'Configure API keys in Settings → AI Providers to enable AI assistance.',
+        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        textAlign: TextAlign.center,
       ),
     );
   }
