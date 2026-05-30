@@ -317,7 +317,9 @@ enum _SyncMode { cloud, p2p }
 class _SyncSectionState extends State<_SyncSection> {
   final _urlController = TextEditingController();
   final _anonKeyController = TextEditingController();
+  final _passphraseController = TextEditingController();
   bool _showAnonKey = false;
+  bool _showPassphrase = false;
   bool _urlHasText = false;
   bool _testing = false;
   bool _testOk = false;
@@ -331,6 +333,7 @@ class _SyncSectionState extends State<_SyncSection> {
     super.initState();
     _urlController.text = widget.sync.supabaseUrl;
     _anonKeyController.text = widget.sync.supabaseAnonKey;
+    _passphraseController.text = widget.sync.passphrase;
     if (widget.sync.isSupabaseConfigured) _testOk = true;
     _urlHasText = _urlController.text.isNotEmpty;
     _urlController.addListener(() {
@@ -340,10 +343,28 @@ class _SyncSectionState extends State<_SyncSection> {
   }
 
   @override
+  void didUpdateWidget(_SyncSection old) {
+    super.didUpdateWidget(old);
+    if (_passphraseController.text != widget.sync.passphrase) {
+      _passphraseController.text = widget.sync.passphrase;
+    }
+  }
+
+  @override
   void dispose() {
     _urlController.dispose();
     _anonKeyController.dispose();
+    _passphraseController.dispose();
     super.dispose();
+  }
+
+  Future<void> _savePassphrase() async {
+    await context.read<SyncProvider>().setPassphrase(_passphraseController.text);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Passphrase saved. New data will use it; existing rows still decrypt with the legacy key.'),
+      duration: Duration(seconds: 4),
+    ));
   }
 
   Future<void> _pushNow() async {
@@ -646,6 +667,64 @@ class _SyncSectionState extends State<_SyncSection> {
                           _buildTestStatus(),
                         ],
                         if (sync.isSupabaseConfigured) ...[
+                          const SizedBox(height: 16),
+                          const Divider(height: 1, color: AppColors.border),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Encryption passphrase (recommended)',
+                            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            sync.hasPassphrase
+                                ? 'A passphrase is set. Without it, anyone with your anon key can decrypt synced data.'
+                                : 'No passphrase set. Anyone with your anon key can decrypt synced data.',
+                            style: TextStyle(
+                              color: sync.hasPassphrase ? AppColors.textTertiary : Colors.orange,
+                              fontSize: 11,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _passphraseController,
+                                  obscureText: !_showPassphrase,
+                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                                  decoration: InputDecoration(
+                                    hintText: 'Passphrase (leave empty to disable)',
+                                    hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
+                                    filled: true,
+                                    fillColor: AppColors.bg,
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
+                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(_showPassphrase ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
+                                      onPressed: () => setState(() => _showPassphrase = !_showPassphrase),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                height: 36,
+                                child: ElevatedButton(
+                                  onPressed: _savePassphrase,
+                                  style: ElevatedButton.styleFrom(
+                                    minimumSize: Size.zero,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                  ),
+                                  child: const Text('Save', style: TextStyle(fontSize: 12)),
+                                ),
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: 16),
                           const Divider(height: 1, color: AppColors.border),
                           const SizedBox(height: 16),

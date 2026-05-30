@@ -97,7 +97,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     // YourSSHPluginContext, which needs SessionProvider from the widget tree.
     // Actual lifecycle wiring is done in MainScreen after the widget tree is built.
     _pluginProvider.onToggled = (plugin, enabled) {};
-    _syncProvider = SyncProvider();
+    _syncProvider = SyncProvider(storage: _storage);
     _syncService = SyncService(_syncProvider);
 
     _hostProvider.onMutation = () => _syncService.push(
