@@ -46,6 +46,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   NavSection _nav = NavSection.hosts;
   String? _activePluginId;
+  bool _pluginResetScheduled = false;
   _SidePanel _sidePanel = _SidePanel.none;
   final Map<String, PluginContextImpl> _pluginContexts = {};
   Host? _editingHost;
@@ -200,8 +201,9 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final sessions = context.watch<SessionProvider>().sessions;
-    final activeSession = context.watch<SessionProvider>().activeSession;
+    final sessionProvider = context.watch<SessionProvider>();
+    final sessions = sessionProvider.sessions;
+    final activeSession = sessionProvider.activeSession;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -338,10 +340,16 @@ class _MainScreenState extends State<MainScreen> {
           pluginCtx: _pluginContext(plugin.id),
         );
       }
-      // Plugin was disabled while viewing it — reset
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _activePluginId = null);
-      });
+      // Plugin was disabled while viewing it — reset once after this frame.
+      // Without the guard, the post-frame callback re-runs every build, causing
+      // an infinite rebuild loop until the plugin re-enables.
+      if (!_pluginResetScheduled) {
+        _pluginResetScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _pluginResetScheduled = false;
+          if (mounted) setState(() => _activePluginId = null);
+        });
+      }
       return const SizedBox.shrink();
     }
 
