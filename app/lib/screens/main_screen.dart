@@ -22,6 +22,7 @@ import '../widgets/split_terminal_view.dart';
 import '../widgets/new_group_panel.dart';
 import '../widgets/import_panel.dart';
 import '../widgets/ai_chat_sidebar.dart';
+import '../widgets/command_palette.dart';
 import '../widgets/plugin_marketplace_screen.dart';
 import '../widgets/recording_library_screen.dart';
 import '../plugins/plugin_context_impl.dart';
@@ -31,6 +32,7 @@ import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
 import '../providers/settings_provider.dart';
 import '../providers/terminal_layout_provider.dart';
 import '../services/hotkey_service.dart';
+import 'package:yourssh_snippets/yourssh_snippets.dart';
 
 enum NavSection { hosts, keychain, portForwarding, sftp, localTerminal, knownHosts, recordings, settings, plugins }
 
@@ -129,6 +131,8 @@ class _MainScreenState extends State<MainScreen> {
         context.read<TerminalLayoutProvider>().setLayout(SplitLayout.horizontal);
       case 'split_vertical':
         context.read<TerminalLayoutProvider>().setLayout(SplitLayout.vertical);
+      case 'command_palette':
+        _openCommandPalette();
     }
   }
 
@@ -227,6 +231,135 @@ class _MainScreenState extends State<MainScreen> {
         _editingHost = null;
         _initialGroup = null;
       });
+
+  void _openCommandPalette() {
+    final hosts = context.read<HostProvider>().allHosts;
+    final snippetProvider = context.read<SnippetProvider>();
+
+    final items = <CommandItem>[
+      // Actions
+      CommandItem(
+        id: 'action_new_host',
+        title: 'New Host',
+        subtitle: 'Add a new SSH connection',
+        icon: Icons.add_circle_outline,
+        type: CommandType.action,
+        execute: () => WidgetsBinding.instance.addPostFrameCallback((_) => _openHostPanel()),
+      ),
+      CommandItem(
+        id: 'action_import',
+        title: 'Import SSH Config',
+        subtitle: 'Import from ~/.ssh/config',
+        icon: Icons.upload_file_outlined,
+        type: CommandType.action,
+        execute: () => WidgetsBinding.instance.addPostFrameCallback((_) => _openImportPanel()),
+      ),
+      // Nav sections
+      CommandItem(
+        id: 'nav_hosts',
+        title: 'Hosts',
+        subtitle: 'Manage SSH connections',
+        icon: Icons.dns_outlined,
+        type: CommandType.navSection,
+        execute: () => setState(() { _nav = NavSection.hosts; _viewingTerminal = false; }),
+      ),
+      CommandItem(
+        id: 'nav_sftp',
+        title: 'SFTP',
+        subtitle: 'File transfer',
+        icon: Icons.folder_open,
+        type: CommandType.navSection,
+        execute: () => setState(() { _nav = NavSection.sftp; _viewingTerminal = false; }),
+      ),
+      CommandItem(
+        id: 'nav_keychain',
+        title: 'Keychain',
+        subtitle: 'SSH keys',
+        icon: Icons.vpn_key_outlined,
+        type: CommandType.navSection,
+        execute: () => setState(() { _nav = NavSection.keychain; _viewingTerminal = false; }),
+      ),
+      CommandItem(
+        id: 'nav_port_forwarding',
+        title: 'Port Forwarding',
+        subtitle: 'Tunnel rules',
+        icon: Icons.swap_horiz,
+        type: CommandType.navSection,
+        execute: () => setState(() { _nav = NavSection.portForwarding; _viewingTerminal = false; }),
+      ),
+      CommandItem(
+        id: 'nav_local_terminal',
+        title: 'Local Terminal',
+        subtitle: 'Local shell',
+        icon: Icons.laptop_mac,
+        type: CommandType.navSection,
+        execute: () => setState(() { _nav = NavSection.localTerminal; _viewingTerminal = false; }),
+      ),
+      CommandItem(
+        id: 'nav_recordings',
+        title: 'Recordings',
+        subtitle: 'Session recordings',
+        icon: Icons.video_library_outlined,
+        type: CommandType.navSection,
+        execute: () => setState(() { _nav = NavSection.recordings; _viewingTerminal = false; }),
+      ),
+      CommandItem(
+        id: 'nav_known_hosts',
+        title: 'Known Hosts',
+        subtitle: 'Host key verification',
+        icon: Icons.fact_check_outlined,
+        type: CommandType.navSection,
+        execute: () => setState(() { _nav = NavSection.knownHosts; _viewingTerminal = false; }),
+      ),
+      CommandItem(
+        id: 'nav_settings',
+        title: 'Settings',
+        subtitle: 'App preferences',
+        icon: Icons.settings_outlined,
+        type: CommandType.navSection,
+        execute: () => setState(() { _nav = NavSection.settings; _viewingTerminal = false; }),
+      ),
+      CommandItem(
+        id: 'nav_plugins',
+        title: 'Plugins',
+        subtitle: 'Plugin marketplace',
+        icon: Icons.extension_outlined,
+        type: CommandType.navSection,
+        execute: () => setState(() { _nav = NavSection.plugins; _viewingTerminal = false; }),
+      ),
+      // Hosts
+      ...hosts.map((h) => CommandItem(
+        id: 'host_${h.id}',
+        title: h.label,
+        subtitle: '${h.username}@${h.host}:${h.port}',
+        icon: Icons.dns,
+        type: CommandType.host,
+        execute: () async {
+          setState(() => _viewingTerminal = true);
+          await context.read<SessionProvider>().connect(h);
+        },
+      )),
+      // Snippets
+      ...snippetProvider.snippets.map((s) => CommandItem(
+        id: 'snippet_${s.id}',
+        title: s.label,
+        subtitle: s.command,
+        icon: Icons.code,
+        type: CommandType.snippet,
+        execute: () {
+          final active = context.read<SessionProvider>().activeSession;
+          if (active == null) return;
+          active.terminal.textInput('${s.command}\n');
+        },
+      )),
+    ];
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => CommandPaletteDialog(items: items),
+    );
+  }
 
   PluginContextImpl _pluginContext(String pluginId) {
     return _pluginContexts.putIfAbsent(pluginId, () => PluginContextImpl(
