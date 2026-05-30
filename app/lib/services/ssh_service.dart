@@ -57,7 +57,9 @@ class SshService {
         return _IdentityResolution(SSHKeyPair.fromPem(pem, passphrase ?? ''));
       case AuthType.certificate:
         if (keyEntry == null) {
-          throw Exception('No key linked for certificate auth');
+          throw Exception(jumpHostLabel == null
+              ? 'No key linked for certificate auth'
+              : 'No key linked for jump host "$jumpHostLabel" certificate auth');
         }
         final certPath = keyEntry.certificatePath;
         if (certPath == null) {
@@ -66,7 +68,9 @@ class SshService {
               : 'Jump host certificate file missing or not linked');
         }
         if (!await File(certPath).exists()) {
-          throw Exception('Certificate file not found: $certPath');
+          throw Exception(jumpHostLabel == null
+              ? 'Certificate file not found: $certPath'
+              : 'Jump host certificate file not found: $certPath');
         }
         final passphrase = await _storage.loadPassphrase(keyEntry.id);
         return _IdentityResolution([
