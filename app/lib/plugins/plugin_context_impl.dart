@@ -39,12 +39,12 @@ class PluginContextImpl implements YourSSHPluginContext {
   @override
   Future<void> savePreference(String key, String value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('plugin_${_pluginId}_$key', value);
+    await prefs.setString('plugin::$_pluginId::$key', value);
   }
 
   @override
   Future<String?> getPreference(String key) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('plugin_${_pluginId}_$key');
+    return prefs.getString('plugin::$_pluginId::$key');
   }
 }
