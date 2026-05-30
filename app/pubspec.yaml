@@ -1,4 +1,4 @@
-name: YourSSH
+name: yourssh
 description: YourSSH - A professional SSH client for macOS and Windows with advanced features like SFTP, port forwarding, and a built-in code editor.
 publish_to: 'none'
 version: 0.1.4+1
