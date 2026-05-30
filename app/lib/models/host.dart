@@ -13,6 +13,7 @@ class Host {
   String group;
   List<String> tags;
   DateTime createdAt;
+  String? detectedOs;
 
   Host({
     String? id,
@@ -25,6 +26,7 @@ class Host {
     this.group = '',
     this.tags = const [],
     DateTime? createdAt,
+    this.detectedOs,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -39,6 +41,7 @@ class Host {
         'group': group,
         'tags': tags,
         'createdAt': createdAt.toIso8601String(),
+        'detectedOs': detectedOs,
       };
 
   factory Host.fromJson(Map<String, dynamic> json) => Host(
@@ -52,6 +55,7 @@ class Host {
         group: json['group'] ?? '',
         tags: List<String>.from(json['tags'] ?? []),
         createdAt: DateTime.parse(json['createdAt']),
+        detectedOs: json['detectedOs'] as String?,
       );
 
   Host copyWith({
@@ -62,6 +66,7 @@ class Host {
     AuthType? authType,
     String? keyId,
     String? group,
+    String? detectedOs,
   }) =>
       Host(
         id: id,
@@ -74,5 +79,6 @@ class Host {
         group: group ?? this.group,
         tags: tags,
         createdAt: createdAt,
+        detectedOs: detectedOs ?? this.detectedOs,
       );
 }

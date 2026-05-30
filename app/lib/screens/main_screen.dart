@@ -6,6 +6,7 @@ import '../models/ssh_session.dart';
 import '../providers/host_provider.dart';
 import '../providers/known_hosts_provider.dart';
 import '../providers/session_provider.dart';
+import '../main.dart' show kAppVersion;
 import '../theme/app_theme.dart';
 import '../widgets/host_detail_panel.dart';
 import '../widgets/hosts_dashboard.dart';
@@ -439,7 +440,7 @@ class _Sidebar extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('YourSSH', style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w500)),
-                    const Text('v0.1.0', style: TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+                    Text('v$kAppVersion', style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
                   ],
                 ),
               ],

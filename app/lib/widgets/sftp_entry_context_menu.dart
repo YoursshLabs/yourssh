@@ -28,9 +28,10 @@ class SftpEntryContextMenu extends StatelessWidget {
   }
 
   void _show(BuildContext context, Offset pos) {
+    final size = MediaQuery.of(context).size;
     showMenu<_Action>(
       context: context,
-      position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
+      position: RelativeRect.fromLTRB(pos.dx, pos.dy, size.width - pos.dx, size.height - pos.dy),
       color: const Color(0xFF1E1E1E),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),

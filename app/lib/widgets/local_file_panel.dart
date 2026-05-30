@@ -416,9 +416,9 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
         onDoubleTap: () {
           if (entry.isDirectory) prov.loadDirectory(entry.path);
         },
-        onSecondaryTap: () {
+        onSecondaryTapUp: (d) {
           prov.selectOnly(entry);
-          _showContextMenu(entry, prov);
+          _showContextMenu(entry, prov, d.globalPosition);
         },
         child: Container(
           color: isSelected
@@ -497,10 +497,11 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
     );
   }
 
-  void _showContextMenu(LocalEntry entry, LocalFilePanelProvider prov) {
+  void _showContextMenu(LocalEntry entry, LocalFilePanelProvider prov, Offset pos) {
+    final size = MediaQuery.of(context).size;
     showMenu(
       context: context,
-      position: const RelativeRect.fromLTRB(100, 100, 0, 0),
+      position: RelativeRect.fromLTRB(pos.dx, pos.dy, size.width - pos.dx, size.height - pos.dy),
       color: const Color(0xFF1E1E1E),
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(6),

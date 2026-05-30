@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../main.dart' show kAppVersion;
 import 'package:provider/provider.dart';
 import '../models/ai_provider_config.dart';
 import '../providers/ai_chat_provider.dart';
@@ -214,7 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ]),
                 const SizedBox(height: 24),
                 _Section(title: 'About', children: [
-                  const _Row(label: 'Version', trailing: Text('v0.1.0', style: TextStyle(color: AppColors.textTertiary, fontSize: 12))),
+                  _Row(label: 'Version', trailing: Text('v$kAppVersion', style: const TextStyle(color: AppColors.textTertiary, fontSize: 12))),
                   const _Row(label: 'Build', trailing: Text('Flutter + dartssh2', style: TextStyle(color: AppColors.textTertiary, fontSize: 12))),
                 ]),
               ],
@@ -489,6 +490,7 @@ class _SyncSectionState extends State<_SyncSection> {
       ),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {

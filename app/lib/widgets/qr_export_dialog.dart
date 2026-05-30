@@ -120,9 +120,17 @@ class _QrExportDialogState extends State<QrExportDialog> {
               DropdownButtonFormField<NetworkInterfaceInfo>(
                 initialValue: _selectedInterface,
                 decoration: const InputDecoration(labelText: 'Network interface'),
-                items: _interfaces
-                    .map((i) => DropdownMenuItem(value: i, child: Text(i.toString())))
-                    .toList(),
+                items: _interfaces.map((i) => DropdownMenuItem(
+                  value: i,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(i.displayName, style: const TextStyle(fontSize: 13)),
+                      const SizedBox(width: 8),
+                      Text(i.address, style: const TextStyle(fontSize: 11, color: Color(0xFF888888))),
+                    ],
+                  ),
+                )).toList(),
                 onChanged: (v) async {
                   if (v == null) return;
                   setState(() => _selectedInterface = v);

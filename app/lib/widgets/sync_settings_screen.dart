@@ -235,21 +235,6 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
     );
   }
 
-  Future<void> _showQrExport(BuildContext context) async {
-    final hostProvider = context.read<HostProvider>();
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => QrExportDialog(
-        getPayload: () async {
-          final hosts = hostProvider.allHosts;
-          final passwords = await hostProvider.loadAllPasswords();
-          return SyncService.buildPayload(hosts: hosts, passwords: passwords);
-        },
-      ),
-    );
-  }
-
   Widget _field(TextEditingController ctrl, String label, String hint,
       {bool obscure = false}) {
     return Padding(

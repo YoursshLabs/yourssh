@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'providers/ai_chat_provider.dart';
@@ -23,8 +24,11 @@ import 'services/sync_service.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
 
+String kAppVersion = '';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  kAppVersion = (await PackageInfo.fromPlatform()).version;
   await windowManager.ensureInitialized();
   await windowManager.setTitle('YourSSH');
   await windowManager.setMinimumSize(const Size(800, 600));
@@ -71,6 +75,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _knownHostsProvider = KnownHostsProvider(_storage);
     _knownHostsProvider.load();
     _sessionProvider.hostKeyVerifier = _knownHostsProvider.verifyHostKey;
+    _sessionProvider.onOsDetected = (hostId, os) =>
+        _hostProvider.updateDetectedOs(hostId, os);
     _pluginProvider = PluginProvider(plugins: kRegisteredPlugins);
     _pluginProvider.loadFromPrefs();
     // NOTE: onToggled lifecycle hooks (onActivate/onDeactivate) require a

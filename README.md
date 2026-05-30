@@ -62,7 +62,6 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 - **Known hosts verification**: interactive fingerprint trust dialog on first connect; persistent known-hosts database
 - **Zero-knowledge cloud sync**: host configs encrypted client-side (AES-256-GCM) before syncing to Supabase
 - **P2P QR sync**: transfer all hosts and passwords to another device via QR code over LAN or Tailscale — no cloud required
-- **Vault** — encrypted local credential store for API keys, tokens, and secrets (biometric unlock)
 
 ### Productivity
 - **Command snippets** — save and inject reusable command templates
@@ -138,7 +137,6 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 | Local Persistence | `shared_preferences`, `file_picker` |
 | HTTP Server | `shelf` (LAN Share) |
 | Network Info | `network_info_plus` |
-| Biometric Auth | `local_auth` (Vault) |
 | Markdown Rendering | `flutter_markdown` (AI chat) |
 | S3 XML Parsing | `xml` |
 | QR Code | `qr_flutter`, `mobile_scanner` (P2P sync) |
@@ -420,6 +418,7 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 - [ ] **Session recording** — save terminal sessions to file (asciinema format) with playback
 - [x] **Multi-host scripting** — run a script or command across multiple selected hosts in parallel
 - [x] **Smarter tab completion** — history-aware suggestions + remote filesystem path completion
+- [ ] **Vault** — encrypted local store for API keys, tokens, and secrets with biometric unlock
 
 ### 🔜 Phase 4 — DevOps tooling
 

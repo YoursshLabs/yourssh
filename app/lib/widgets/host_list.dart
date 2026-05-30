@@ -116,21 +116,6 @@ class HostListPanel extends StatelessWidget {
       password: result.password,
     );
   }
-
-  Future<void> _showQrExport(BuildContext context) async {
-    final hostProvider = context.read<HostProvider>();
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => QrExportDialog(
-        getPayload: () async {
-          final hosts = hostProvider.allHosts;
-          final passwords = await hostProvider.loadAllPasswords();
-          return SyncService.buildPayload(hosts: hosts, passwords: passwords);
-        },
-      ),
-    );
-  }
 }
 
 class _HostTile extends StatelessWidget {

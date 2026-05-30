@@ -14,6 +14,7 @@ class SessionProvider extends ChangeNotifier {
   int Function()? reconnectAttempts;
   bool Function()? tmuxEnabled;
   Future<bool> Function(String host, int port, String keyType, Uint8List fp)? hostKeyVerifier;
+  Future<void> Function(String hostId, String os)? onOsDetected;
 
   SessionProvider(this._ssh);
 
@@ -52,6 +53,12 @@ class SessionProvider extends ChangeNotifier {
             : null,
       );
       session.status = SessionStatus.connected;
+      // Fire-and-forget: only detect if OS not yet known
+      if (host.detectedOs == null) {
+        _ssh.detectOs(host).then((os) {
+          if (os != null) onOsDetected?.call(host.id, os);
+        });
+      }
       session.errorMessage = null;
       notifyListeners();
 
