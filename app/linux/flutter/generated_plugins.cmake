@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   flutter_secure_storage_linux
   gtk
   hotkey_manager_linux
+  local_notifier
   screen_retriever
   url_launcher_linux
   window_manager

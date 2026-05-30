@@ -15,9 +15,9 @@ class NotificationService {
     Duration debounce = Duration.zero,
     Duration cooldown = const Duration(seconds: 5),
     void Function(String title, String body)? onSystemNotify,
-  })  : _debounce = debounce,
-        _cooldown = cooldown,
-        _onSystemNotify = onSystemNotify;
+  })  : _debounce = debounce, // ignore: prefer_initializing_formals
+        _cooldown = cooldown, // ignore: prefer_initializing_formals
+        _onSystemNotify = onSystemNotify; // ignore: prefer_initializing_formals
 
   final Duration _debounce;
   final Duration _cooldown;
@@ -80,8 +80,9 @@ class NotificationService {
   }
 
   void _dispatchSystem(String title, String body) {
-    if (_onSystemNotify != null) {
-      _onSystemNotify!(title, body);
+    final notify = _onSystemNotify;
+    if (notify != null) {
+      notify(title, body);
     } else {
       LocalNotification(title: title, body: body).show();
     }
