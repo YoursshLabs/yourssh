@@ -39,16 +39,27 @@
 
       document.getElementById('editor').style.height = 'calc(100% - 24px)';
 
+      let _contentLoaded = false;
+
       editor.onDidChangeCursorPosition(e => {
         document.getElementById('status-pos').textContent =
           `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
       });
 
+      editor.onDidChangeModelContent(function() {
+        if (!_contentLoaded) return;
+        if (window.FlutterChannel) {
+          window.FlutterChannel.postMessage(JSON.stringify({ type: 'change' }));
+        }
+      });
+
       window.loadContent = function(content, language) {
+        _contentLoaded = false;
         monaco.editor.setModelLanguage(editor.getModel(), language || 'plaintext');
         editor.setValue(content);
         document.getElementById('status-lang').textContent = language || 'Plain Text';
         editor.setScrollPosition({ scrollTop: 0 });
+        _contentLoaded = true;
       };
 
       window.getContent = function() {
