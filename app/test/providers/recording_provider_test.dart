@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yourssh/models/host.dart';
+import 'package:yourssh/models/ssh_session.dart';
 import 'package:yourssh/providers/recording_provider.dart';
 import 'package:yourssh/services/recording_service.dart';
 
@@ -40,5 +42,27 @@ void main() {
     await provider.deleteRecording(f.path);
     expect(provider.recordings.isEmpty, isTrue);
     expect(f.existsSync(), isFalse);
+  });
+
+  test('startRecording failure invokes onStartFailed callback', () async {
+    // Pin the round-3 fix: when the recording service throws (here because the
+    // path is unwritable), the provider must surface it via onStartFailed
+    // instead of silently dropping the session — otherwise `autoRecord` looks
+    // like it disabled itself.
+    final unwritable = Platform.isWindows ? 'Z:\\\\nowhere\\\\impossible' : '/dev/null/impossible';
+    final provider = RecordingProvider(
+      RecordingService(),
+      getPath: () => unwritable,
+    );
+    Object? capturedError;
+    provider.onStartFailed = (_, error) => capturedError = error;
+
+    final session = SshSession(
+      host: Host(label: 'h', host: 'h', username: 'u'),
+    );
+    await provider.startRecording(session);
+
+    expect(provider.isRecording(session.id), isFalse);
+    expect(capturedError, isNotNull);
   });
 }
