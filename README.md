@@ -57,10 +57,10 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 - Breadcrumb navigation and file type icons
 
 ### Credentials & Security
-- **Multiple auth methods**: password, SSH private key
+- **4 auth methods**: password, SSH private key, SSH certificate (CA-signed), SSH agent (`SSH_AUTH_SOCK`)
 - **OS-level secure storage**: credentials encrypted in macOS Keychain / Windows Credential Manager via `flutter_secure_storage`
 - **Known hosts verification**: interactive fingerprint trust dialog on first connect; persistent known-hosts database
-- **Zero-knowledge cloud sync**: host configs encrypted client-side (AES) before syncing to Supabase
+- **Zero-knowledge cloud sync**: host configs encrypted client-side (AES-256-GCM) before syncing to Supabase
 - **Vault** — encrypted local credential store for API keys, tokens, and secrets (biometric unlock)
 
 ### Productivity
@@ -73,7 +73,9 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 
 ### Design
 - Dark-only interface with a cohesive green-accent palette
+- **35 terminal color themes** with a visual picker (Dracula, Solarized, Gruvbox, One Dark, Nord, and more)
 - 7 bundled monospace fonts: 6 Powerline-compatible (DejaVu, Inconsolata, Meslo LGS, Source Code Pro, Ubuntu Mono, Roboto Mono) + MesloLGS NF (Nerd Font)
+- Network stats overlay — real-time traffic counter widget per session
 - Minimum window size enforced (800×600); fully resizable
 
 ### DevOps & Developer Tools
@@ -83,7 +85,12 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 - **Mail Catcher** — spin up a local SMTP capture server via SSH; inspect emails in a built-in two-panel viewer
 - **MCP Server Gateway** — run an MCP server on a remote host and forward it locally for AI tool access
 - **S3 Browser** — browse, upload, and delete objects in any S3-compatible bucket (AWS, MinIO, Cloudflare R2, etc.)
-- **AI Chat Sidebar** — toggle a Claude-powered assistant sidebar for command help and debugging
+- **AI Chat Sidebar** — toggle an AI assistant sidebar for command help and debugging; supports **Anthropic Claude**, **OpenAI**, and **Google Gemini** with configurable model selection
+
+### Plugin System
+- **Plugin API** (`yourssh_plugin_api`) — stable Dart interface for building first- and third-party plugins; exposes SSH session proxy, secure prefs, navigation slots, and config UI hooks
+- **Plugin Marketplace** — in-app screen to discover, enable, and configure installed plugins
+- **YourSSH DevOps plugin** (`yourssh_devops`) — reference plugin bundling S3 Browser and LAN Share as plugin-provided nav sections
 
 ---
 
@@ -99,12 +106,12 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 |---|---|
 | UI Framework | Flutter (Material 3, dark theme) |
 | State Management | `provider` (ChangeNotifier) |
-| SSH / SFTP / Port Forwarding | `dartssh2` |
+| SSH / SFTP / Port Forwarding | `dartssh2` (local fork with `signAsync`) |
 | Terminal Emulation | `xterm` |
 | Local PTY | `flutter_pty` |
 | Secure Storage | `flutter_secure_storage` |
 | Cloud Sync Backend | `supabase_flutter` |
-| Encryption | `cryptography` (AES-GCM), `crypto` (AWS Sig V4) |
+| Encryption | `cryptography` (AES-GCM, HKDF), `crypto` (AWS Sig V4) |
 | Code Editor | Monaco editor via `webview_flutter` |
 | Window Control | `window_manager`, `hotkey_manager` |
 | Local Persistence | `shared_preferences`, `file_picker` |
@@ -113,6 +120,7 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 | Biometric Auth | `local_auth` (Vault) |
 | Markdown Rendering | `flutter_markdown` (AI chat) |
 | S3 XML Parsing | `xml` |
+| QR Code | `qr_flutter`, `mobile_scanner` (P2P sync) |
 
 ---
 
@@ -197,6 +205,7 @@ yourssh/
 │   │   ├── providers/            # ChangeNotifier state managers
 │   │   ├── services/             # Business logic & external integrations
 │   │   ├── screens/              # Top-level screen (main_screen.dart)
+│   │   ├── plugins/              # Plugin registry and context implementation
 │   │   ├── widgets/              # UI components
 │   │   │   └── web_tools/        # Embedded browser, HTTP client, utility tools
 │   │   └── theme/                # Dark theme definition (app_theme.dart)
@@ -211,6 +220,10 @@ yourssh/
 │   ├── linux/                    # Flutter Linux build configuration (CMake)
 │   └── pubspec.yaml
 │
+├── packages/
+│   ├── yourssh_plugin_api/       # Plugin interface package (stable public API)
+│   ├── yourssh_devops/           # DevOps plugin (S3, LAN Share)
+│   └── dartssh2/                 # Local fork — adds signAsync() for SSH agent auth
 ├── macos/                        # Xcode project files (xcodegen — project.yml)
 ├── supabase/migrations/          # Database schema migrations
 ├── scripts/                      # Build and release automation
@@ -241,7 +254,7 @@ Flutter UI (widgets / screens)
 | `HostProvider` | CRUD for saved SSH connection profiles, persisted via `StorageService` |
 | `SessionProvider` | Lifecycle of active `SshSession` objects; auto-reconnect logic |
 | `LocalSessionProvider` | Lifecycle of local PTY shell sessions |
-| `KeyProvider` | SSH key entries (path + passphrase) |
+| `KeyProvider` | SSH key entries (path + passphrase + optional CA certificate) |
 | `KnownHostsProvider` | Host fingerprint trust database |
 | `PortForwardProvider` | Tunnel configuration and active forward tracking |
 | `TunnelProvider` | Cloudflare and MCP gateway tunnel state |
@@ -253,7 +266,8 @@ Flutter UI (widgets / screens)
 | `SftpTransferProvider` | Active transfer queue and progress tracking |
 | `LocalFilePanelProvider` | Local filesystem panel state for dual-panel SFTP |
 | `TerminalLayoutProvider` | Split-terminal layout (horizontal/vertical panes) |
-| `AiChatProvider` | AI chat sidebar state and message history |
+| `AiChatProvider` | AI chat sidebar — multi-provider (Anthropic, OpenAI, Gemini) |
+| `PluginProvider` | Installed plugins, enable/disable state, config slot wiring |
 
 ### Key Services
 
@@ -263,7 +277,7 @@ Flutter UI (widgets / screens)
 | `StorageService` | Hosts as JSON in `SharedPreferences`; passwords/passphrases in secure storage |
 | `SyncService` | Encrypts host list and pushes/pulls from Supabase |
 | `SyncEncryption` | AES-GCM encrypt/decrypt for sync data |
-| `SupabaseService` | Supabase client wrapper (auth, RPC calls) |
+| `SupabaseService` | Supabase HTTP wrapper (upsert/fetch/delete in `sync_data` table) |
 | `LocalShellService` | Spawns native PTY sessions on macOS/Windows/Linux |
 | `PtyRunner` | Low-level PTY wrapper used by `LocalShellService` |
 | `SftpFileOpsService` | SFTP file operations (copy, move, rename, delete) |
@@ -276,6 +290,19 @@ Flutter UI (widgets / screens)
 | `NetworkStatsService` | Real-time network traffic stats for the overlay widget |
 | `WebToolsService` | Runs network diagnostic commands on the active SSH session |
 | `HotkeyService` | Register and dispatch global keyboard shortcuts |
+| `SystemAgentProxy` | Bridge between `SSH_AUTH_SOCK` and dartssh2 for SSH agent auth |
+| `CertificateKeyPair` | OpenSSH CA-signed certificate auth (`id_rsa-cert.pub`) |
+
+### Plugin System
+
+The plugin API is defined in `packages/yourssh_plugin_api`. Plugins implement the `YourSSHPlugin` interface and receive a `PluginContext` that exposes:
+
+- `sshSession` — proxy to the active SSH session (exec, shell, SFTP)
+- `securePrefs` — namespaced key-value store (isolated per plugin)
+- Navigation slot registration — plugins can add items to the left sidebar
+- Config UI hook — plugins provide a settings widget rendered in the sidebar
+
+`PluginRegistry` in `app/lib/plugins/` loads plugins at startup. `PluginProvider` manages enable/disable state. The `YourSSHDevOpsPlugin` in `packages/yourssh_devops` serves as the reference implementation.
 
 ---
 
@@ -308,6 +335,7 @@ git checkout -b feat/your-feature-name
 - **Providers** in `app/lib/providers/` — extend `ChangeNotifier`, delegate I/O to services.
 - **Services** in `app/lib/services/` — pure logic, no Flutter widget dependencies.
 - **Widgets** in `app/lib/widgets/` — stateless where possible; use `Consumer`/`context.watch` to bind to providers.
+- **Plugins** in `packages/` — implement `YourSSHPlugin`; use `PluginContext` for SSH and storage access.
 
 ### 3. Code style
 
@@ -330,12 +358,15 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 
 ## Roadmap
 
-- [x] Custom terminal color themes (30+ presets)
-- [x] SSH certificate authentication
-- [ ] Jump host / bastion proxy support
+- [x] Custom terminal color themes (35 presets)
+- [x] SSH certificate authentication (CA-signed certs)
+- [x] SSH agent authentication (`SSH_AUTH_SOCK`)
 - [x] Linux desktop target
+- [x] Plugin / extension system
+- [x] Multi-provider AI assistant (Claude, OpenAI, Gemini)
+- [ ] Jump host / bastion proxy support
 - [ ] iOS / iPadOS target (experimental)
-- [ ] Plugin / extension system
+- [ ] P2P host sync via QR code
 
 ---
 
