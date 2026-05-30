@@ -103,4 +103,13 @@ class HostProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  Future<Map<String, String>> loadAllPasswords() async {
+    final result = <String, String>{};
+    for (final host in _hosts) {
+      final pw = await _storage.loadPassword(host.id);
+      if (pw != null) result['pw_${host.id}'] = pw;
+    }
+    return result;
+  }
 }
