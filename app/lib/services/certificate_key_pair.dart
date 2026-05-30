@@ -2,13 +2,20 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
+// ignore: implementation_imports — SSHHostKey is not publicly exported by dartssh2.
+// This will be resolved when the local fork (Task 8) exports it from lib/dartssh2.dart.
 import 'package:dartssh2/src/ssh_hostkey.dart';
 
 class CertificateKeyPair implements SSHKeyPair {
   final SSHKeyPair _inner;
   final Uint8List _certBytes;
 
-  CertificateKeyPair(this._inner, this._certBytes);
+  CertificateKeyPair(this._inner, this._certBytes) {
+    if (_certBytes.length < 4) throw FormatException('Cert blob too short');
+    final nameLen = ByteData.view(_certBytes.buffer, _certBytes.offsetInBytes, 4)
+        .getUint32(0, Endian.big);
+    if (_certBytes.length < 4 + nameLen) throw FormatException('Cert blob truncated');
+  }
 
   static Future<CertificateKeyPair> load({
     required String keyPath,
@@ -16,7 +23,11 @@ class CertificateKeyPair implements SSHKeyPair {
     String? passphrase,
   }) async {
     final pem = await File(keyPath).readAsString();
-    final inner = SSHKeyPair.fromPem(pem, passphrase ?? '').first;
+    final pairs = SSHKeyPair.fromPem(pem, passphrase ?? '');
+    if (pairs.isEmpty) {
+      throw FormatException('No key pair found in: $keyPath (wrong passphrase?)');
+    }
+    final inner = pairs.first;
 
     final certLine = await File(certPath).readAsString();
     final parts = certLine.trim().split(RegExp(r'\s+'));
@@ -32,13 +43,8 @@ class CertificateKeyPair implements SSHKeyPair {
 
   @override
   String get type {
-    if (_certBytes.length < 4) throw FormatException('Cert blob too short');
-    final nameLen = ByteData.view(
-      _certBytes.buffer, _certBytes.offsetInBytes, 4,
-    ).getUint32(0, Endian.big);
-    if (_certBytes.length < 4 + nameLen) {
-      throw FormatException('Cert blob truncated');
-    }
+    final nameLen = ByteData.view(_certBytes.buffer, _certBytes.offsetInBytes, 4)
+        .getUint32(0, Endian.big);
     return utf8.decode(_certBytes.sublist(4, 4 + nameLen));
   }
 
