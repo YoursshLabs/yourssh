@@ -123,11 +123,11 @@ class _QrExportDialogState extends State<QrExportDialog> {
                 items: _interfaces
                     .map((i) => DropdownMenuItem(value: i, child: Text(i.toString())))
                     .toList(),
-                onChanged: (v) {
+                onChanged: (v) async {
                   if (v == null) return;
                   setState(() => _selectedInterface = v);
                   _service.stop();
-                  _startServer();
+                  await _startServer();
                 },
               ),
               const SizedBox(height: 16),

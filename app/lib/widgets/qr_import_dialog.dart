@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
@@ -63,6 +64,7 @@ class _QrImportDialogState extends State<QrImportDialog> {
       await context.read<HostProvider>().replaceAll(payload.hosts, payload.passwords);
 
       if (mounted) {
+        setState(() => _processing = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
             'Imported ${payload.hosts.length} host${payload.hosts.length == 1 ? '' : 's'}. '
@@ -73,14 +75,12 @@ class _QrImportDialogState extends State<QrImportDialog> {
       }
     } on FormatException {
       if (mounted) setState(() { _processing = false; _error = 'Invalid transfer code.'; });
+    } on SocketException {
+      if (mounted) setState(() { _processing = false; _error = 'Cannot reach device. Make sure both are on the same network.'; });
+    } on TimeoutException {
+      if (mounted) setState(() { _processing = false; _error = 'Cannot reach device. Make sure both are on the same network.'; });
     } catch (e) {
-      final msg = (e.toString().contains('HTTP') ||
-              e.toString().contains('Connection') ||
-              e.toString().contains('refused') ||
-              e.toString().contains('timeout'))
-          ? 'Cannot reach device. Make sure both are on the same network.'
-          : e.toString().replaceFirst('Exception: ', '');
-      if (mounted) setState(() { _processing = false; _error = msg; });
+      if (mounted) setState(() { _processing = false; _error = e.toString().replaceFirst('Exception: ', ''); });
     }
   }
 
