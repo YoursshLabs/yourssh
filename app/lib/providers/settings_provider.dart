@@ -22,6 +22,7 @@ class SettingsProvider extends ChangeNotifier {
     'toggle_input_bar': 'ctrl+shift+i',
     'split_horizontal': 'ctrl+shift+h',
     'split_vertical': 'ctrl+shift+v',
+    'command_palette': Platform.isMacOS ? 'meta+k' : 'ctrl+k',
   };
 
   SettingsProvider() {

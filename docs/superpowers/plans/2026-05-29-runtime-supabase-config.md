@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-**Goal:** User điền Supabase Project URL + anon key trong Settings UI; app lưu vào SharedPreferences và khởi tạo `SupabaseClient` tại runtime — không cần `--dart-define` hay rebuild.
+**Goal:** User enters Supabase Project URL + anon key in the Settings UI; the app saves them to SharedPreferences and initializes `SupabaseClient` at runtime — no `--dart-define` or rebuild needed.
 
-**Architecture:** `SupabaseService` được refactor thành instance class nhận `(url, anonKey)` qua constructor, dùng `SupabaseClient` trực tiếp thay vì `Supabase.initialize()` singleton. `SyncService` lazy-create `SupabaseService` từ credentials trong `SyncProvider`. Settings UI thêm config section với Save & Test.
+**Architecture:** `SupabaseService` is refactored into an instance class that receives `(url, anonKey)` via constructor, using `SupabaseClient` directly instead of the `Supabase.initialize()` singleton. `SyncService` lazy-creates `SupabaseService` from credentials in `SyncProvider`. Settings UI adds a config section with Save & Test.
 
 **Tech Stack:** Flutter, provider, supabase_flutter (`SupabaseClient` direct), shared_preferences, flutter_test
 
@@ -12,16 +12,16 @@
 
 ## File Map
 
-| File | Action | Mô tả |
+| File | Action | Description |
 |---|---|---|
-| `app/lib/services/supabase_service.dart` | Rewrite | Runtime constructor, `testConnection()`, bỏ singleton |
-| `app/lib/providers/sync_provider.dart` | Modify | Thêm `supabaseUrl`/`supabaseAnonKey` + `setSupabaseConfig()` |
-| `app/lib/services/sync_service.dart` | Modify | Bỏ `SupabaseService` khỏi constructor, thêm `_getSupabase()` lazy init |
-| `app/lib/main.dart` | Modify | Bỏ `SupabaseService.initialize()`, đơn giản hóa constructor |
-| `app/lib/widgets/settings_screen.dart` | Modify | Thêm Supabase config section trong `_SyncSection` |
-| `docs/SYNC_SETUP.md` | Rewrite | Hướng dẫn runtime thay vì dart-define |
-| `app/test/supabase_service_test.dart` | Create | Unit test cho SupabaseService constructor/getters |
-| `app/test/sync_provider_supabase_test.dart` | Create | Unit test cho SyncProvider Supabase config |
+| `app/lib/services/supabase_service.dart` | Rewrite | Runtime constructor, `testConnection()`, drop singleton |
+| `app/lib/providers/sync_provider.dart` | Modify | Add `supabaseUrl`/`supabaseAnonKey` + `setSupabaseConfig()` |
+| `app/lib/services/sync_service.dart` | Modify | Remove `SupabaseService` from constructor, add `_getSupabase()` lazy init |
+| `app/lib/main.dart` | Modify | Remove `SupabaseService.initialize()`, simplify constructor |
+| `app/lib/widgets/settings_screen.dart` | Modify | Add Supabase config section in `_SyncSection` |
+| `docs/SYNC_SETUP.md` | Rewrite | Runtime setup guide instead of dart-define |
+| `app/test/supabase_service_test.dart` | Create | Unit tests for SupabaseService constructor/getters |
+| `app/test/sync_provider_supabase_test.dart` | Create | Unit tests for SyncProvider Supabase config |
 
 ---
 
@@ -53,11 +53,11 @@ void main() {
 cd app && flutter test test/supabase_service_test.dart
 ```
 
-Expected: compile error — `SupabaseService` không nhận constructor params và không có `url`/`anonKey` getters.
+Expected: compile error — `SupabaseService` does not accept constructor params and has no `url`/`anonKey` getters.
 
 - [x] **Step 3: Rewrite `supabase_service.dart`**
 
-Thay toàn bộ nội dung file:
+Replace the entire file content:
 
 ```dart
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -197,11 +197,11 @@ void main() {
 cd app && flutter test test/sync_provider_supabase_test.dart
 ```
 
-Expected: compile error — `supabaseUrl`, `supabaseAnonKey`, `isSupabaseConfigured`, `setSupabaseConfig` không tồn tại.
+Expected: compile error — `supabaseUrl`, `supabaseAnonKey`, `isSupabaseConfigured`, `setSupabaseConfig` do not exist.
 
 - [x] **Step 3: Add constants to `sync_provider.dart`**
 
-Sau `static const _enabledKey = 'sync_enabled';` thêm:
+After `static const _enabledKey = 'sync_enabled';` add:
 
 ```dart
 static const _supabaseUrlKey = 'supabase_url';
@@ -210,7 +210,7 @@ static const _supabaseAnonKeyKey = 'supabase_anon_key';
 
 - [x] **Step 4: Add fields**
 
-Sau `String _syncId = '';` thêm:
+After `String _syncId = '';` add:
 
 ```dart
 String _supabaseUrl = '';
@@ -219,7 +219,7 @@ String _supabaseAnonKey = '';
 
 - [x] **Step 5: Add getters**
 
-Sau `String get syncId => _syncId;` thêm:
+After `String get syncId => _syncId;` add:
 
 ```dart
 String get supabaseUrl => _supabaseUrl;
@@ -229,7 +229,7 @@ bool get isSupabaseConfigured => _supabaseUrl.isNotEmpty && _supabaseAnonKey.isN
 
 - [x] **Step 6: Add `setSupabaseConfig` method**
 
-Sau `Future<void> setEnabled(bool value)` thêm:
+After `Future<void> setEnabled(bool value)` add:
 
 ```dart
 Future<void> setSupabaseConfig(String url, String anonKey) async {
@@ -244,7 +244,7 @@ Future<void> setSupabaseConfig(String url, String anonKey) async {
 
 - [x] **Step 7: Load from prefs in `_init()`**
 
-Trong `_init()`, sau dòng `_enabled = prefs.getBool(_enabledKey) ?? false;` thêm:
+In `_init()`, after `_enabled = prefs.getBool(_enabledKey) ?? false;` add:
 
 ```dart
 _supabaseUrl = prefs.getString(_supabaseUrlKey) ?? '';
@@ -273,9 +273,9 @@ git commit -m "feat: add Supabase runtime config to SyncProvider"
 **Files:**
 - Modify: `app/lib/services/sync_service.dart`
 
-- [x] **Step 1: Replace constructor và `_supabase` field**
+- [x] **Step 1: Replace constructor and `_supabase` field**
 
-Tìm:
+Find:
 ```dart
 final SyncProvider _syncProvider;
 final SupabaseService _supabase;
@@ -284,7 +284,7 @@ Timer? _retryTimer;
 SyncService(this._syncProvider, this._supabase);
 ```
 
-Thay bằng:
+Replace with:
 ```dart
 final SyncProvider _syncProvider;
 SupabaseService? _cachedSupabase;
@@ -429,14 +429,14 @@ git commit -m "refactor: SyncService lazy-creates SupabaseService from SyncProvi
 **Files:**
 - Modify: `app/lib/main.dart`
 
-- [x] **Step 1: Remove `SupabaseService` import và initialize call**
+- [x] **Step 1: Remove `SupabaseService` import and initialize call**
 
-Xóa dòng import:
+Remove the import line:
 ```dart
 import 'services/supabase_service.dart';
 ```
 
-Đổi `main()` từ:
+Change `main()` from:
 ```dart
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -447,7 +447,7 @@ void main() async {
 }
 ```
 
-Thành:
+To:
 ```dart
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -457,14 +457,14 @@ void main() async {
 }
 ```
 
-- [x] **Step 2: Update SyncService constructor trong `initState()`**
+- [x] **Step 2: Update SyncService constructor in `initState()`**
 
-Đổi:
+Change:
 ```dart
 _syncService = SyncService(_syncProvider, SupabaseService());
 ```
 
-Thành:
+To:
 ```dart
 _syncService = SyncService(_syncProvider);
 ```
@@ -491,17 +491,17 @@ git commit -m "refactor: remove SupabaseService.initialize, no longer needed at 
 **Files:**
 - Modify: `app/lib/widgets/settings_screen.dart`
 
-- [x] **Step 1: Add import cho `SupabaseService`**
+- [x] **Step 1: Add import for `SupabaseService`**
 
-Sau dòng `import '../services/storage_service.dart';` thêm:
+After `import '../services/storage_service.dart';` add:
 
 ```dart
 import '../services/supabase_service.dart';
 ```
 
-- [x] **Step 2: Thêm fields và `initState` vào `_SyncSectionState`**
+- [x] **Step 2: Add fields and `initState` to `_SyncSectionState`**
 
-Thêm vào đầu class (sau `final _codeController`):
+Add at the top of the class (after `final _codeController`):
 
 ```dart
 final _urlController = TextEditingController();
@@ -512,7 +512,7 @@ bool _testOk = false;
 String? _testError;
 ```
 
-Thêm `initState()` (trước `dispose()`):
+Add `initState()` (before `dispose()`):
 
 ```dart
 @override
@@ -524,7 +524,7 @@ void initState() {
 }
 ```
 
-Cập nhật `dispose()`:
+Update `dispose()`:
 
 ```dart
 @override
@@ -536,9 +536,9 @@ void dispose() {
 }
 ```
 
-- [x] **Step 3: Thêm `_testAndSave()` method**
+- [x] **Step 3: Add `_testAndSave()` method**
 
-Thêm sau `_connect()`:
+Add after `_connect()`:
 
 ```dart
 Future<void> _testAndSave() async {
@@ -562,7 +562,7 @@ Future<void> _testAndSave() async {
 }
 ```
 
-- [x] **Step 4: Cập nhật `_onToggle()` — guard khi chưa config**
+- [x] **Step 4: Update `_onToggle()` — guard when not yet configured**
 
 ```dart
 Future<void> _onToggle(bool value) async {
@@ -590,9 +590,9 @@ Future<void> _onToggle(bool value) async {
 }
 ```
 
-- [x] **Step 5: Thêm `_buildTestStatus()` helper**
+- [x] **Step 5: Add `_buildTestStatus()` helper**
 
-Thêm sau `_testAndSave()`:
+Add after `_testAndSave()`:
 
 ```dart
 Widget _buildTestStatus() {
@@ -615,7 +615,7 @@ Widget _buildTestStatus() {
 }
 ```
 
-- [x] **Step 6: Thay toàn bộ `build()` của `_SyncSectionState`**
+- [x] **Step 6: Replace the entire `build()` of `_SyncSectionState`**
 
 ```dart
 @override
@@ -821,32 +821,32 @@ git commit -m "feat: add Supabase runtime config UI in Settings → Sync"
 **Files:**
 - Modify: `docs/SYNC_SETUP.md`
 
-- [x] **Step 1: Rewrite nội dung**
+- [x] **Step 1: Rewrite content**
 
-Thay toàn bộ `docs/SYNC_SETUP.md` bằng:
+Replace the entire `docs/SYNC_SETUP.md` with:
 
 ```markdown
 # Sync Setup Guide
 
-YourSSH sync dùng Supabase làm backend lưu trữ. Dữ liệu được mã hoá AES-GCM ngay trên client — Supabase chỉ thấy ciphertext.
+YourSSH sync uses Supabase as a storage backend. Data is AES-GCM encrypted on the client — Supabase only sees ciphertext.
 
-**Không cần build lại app hay cấu hình dart-define.** Điền credentials trực tiếp trong app.
+**No app rebuild or dart-define configuration needed.** Enter credentials directly in the app.
 
-## 1. Tạo Supabase project
+## 1. Create a Supabase project
 
-1. Vào [supabase.com](https://supabase.com) → **New project**
-2. Chọn region gần nhất (Singapore hoặc Tokyo cho SEA)
-3. Đặt database password mạnh → **Create project**
+1. Go to [supabase.com](https://supabase.com) → **New project**
+2. Choose the nearest region (Singapore or Tokyo for SEA)
+3. Set a strong database password → **Create project**
 
-## 2. Chạy migration tạo bảng
+## 2. Run the migration to create the table
 
-### Cách A — Supabase Dashboard (dễ nhất)
+### Option A — Supabase Dashboard (easiest)
 
-1. Vào **SQL Editor** trong dashboard
-2. Copy nội dung file `supabase/migrations/20260529000000_sync_data.sql`
+1. Go to **SQL Editor** in the dashboard
+2. Copy the contents of `supabase/migrations/20260529000000_sync_data.sql`
 3. Paste → **Run**
 
-### Cách B — Supabase CLI
+### Option B — Supabase CLI
 
 ```bash
 brew install supabase/tap/supabase
@@ -854,41 +854,41 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-## 3. Lấy credentials
+## 3. Get credentials
 
-Vào **Project Settings → API**:
+Go to **Project Settings → API**:
 
 - **Project URL**: `https://<project-ref>.supabase.co`
-- **anon public** key: chuỗi JWT dài bên dưới "Project API keys"
+- **anon public** key: the long JWT string under "Project API keys"
 
-## 4. Cấu hình trong app
+## 4. Configure in the app
 
 **Settings → Sync → Supabase Backend:**
 
-1. Điền **Project URL**
-2. Điền **Anon Key**
-3. Nhấn **Save & Test**
-4. Nếu thấy **"Connected"** → bật **Enable Sync**
+1. Enter **Project URL**
+2. Enter **Anon Key**
+3. Click **Save & Test**
+4. If you see **"Connected"** → enable **Enable Sync**
 
-## 5. Kết nối thiết bị khác
+## 5. Connect another device
 
-1. **Thiết bị A** (có sẵn data):
-   - Settings → Sync → copy **Sync Code** (ví dụ: `ABCD-EFGH-JKLM`)
+1. **Device A** (with existing data):
+   - Settings → Sync → copy **Sync Code** (e.g. `ABCD-EFGH-JKLM`)
 
-2. **Thiết bị B** (mới):
-   - Settings → Sync → điền **cùng Supabase credentials** → Save & Test
-   - Paste sync code vào ô **Enter sync code…** → **Connect**
-   - App pull và thay thế toàn bộ danh sách hosts
+2. **Device B** (new):
+   - Settings → Sync → enter **the same Supabase credentials** → Save & Test
+   - Paste the sync code into the **Enter sync code…** field → **Connect**
+   - The app pulls and replaces the entire host list
 
-> **Lưu ý:** Cả hai thiết bị phải dùng cùng Supabase project. Sync code là encryption key — không chia sẻ qua kênh không bảo mật.
+> **Note:** Both devices must use the same Supabase project. The sync code is an encryption key — do not share it over insecure channels.
 
 ## Troubleshooting
 
-| Lỗi | Nguyên nhân | Fix |
+| Error | Cause | Fix |
 |---|---|---|
-| `Table "sync_data" not found` | Migration chưa chạy | Chạy SQL migration (Bước 2) |
-| `Invalid API key` | Anon key sai | Kiểm tra lại Project Settings → API |
-| `Invalid sync code` | Code sai hoặc khác project | Đảm bảo nhập đúng 12 ký tự |
+| `Table "sync_data" not found` | Migration not yet run | Run the SQL migration (Step 2) |
+| `Invalid API key` | Incorrect anon key | Check Project Settings → API |
+| `Invalid sync code` | Wrong code or different project | Make sure to enter the correct 12 characters |
 ```
 
 - [x] **Step 2: Commit**
@@ -908,9 +908,9 @@ git commit -m "docs: update SYNC_SETUP for runtime configuration (no dart-define
 cd app && flutter test
 ```
 
-Expected: PASS — không có failures
+Expected: PASS — no failures
 
-- [x] **Step 2: Analyze toàn bộ project**
+- [x] **Step 2: Analyze the entire project**
 
 ```bash
 cd app && flutter analyze
@@ -924,4 +924,4 @@ Expected: no errors
 cd app && flutter build macos
 ```
 
-Expected: build thành công, không cần `--dart-define`
+Expected: build succeeds, no `--dart-define` needed

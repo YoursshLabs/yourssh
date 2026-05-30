@@ -467,27 +467,27 @@ git commit -m "feat: auto-run migration when service role key provided and table
 
 - [x] **Step 1: Update the migration section to mention auto-setup**
 
-Find the `## 2. Chạy migration tạo bảng` section. Replace it with:
+Find the `## 2. Run the migration to create the table` section. Replace it with:
 
 ```markdown
-## 2. Tạo bảng sync_data
+## 2. Create the sync_data table
 
-### Cách A — Tự động trong app (khuyến nghị)
+### Option A — Automatic in the app (recommended)
 
-Khi điền **Project URL** và **Anon Key**, thêm **Service Role Key** vào field phía dưới và nhấn **Save & Test**.
-App sẽ tự động tạo bảng `sync_data` và cấu hình RLS policy — không cần thao tác tay.
+When entering **Project URL** and **Anon Key**, also add the **Service Role Key** in the field below and click **Save & Test**.
+The app will automatically create the `sync_data` table and configure the RLS policy — no manual steps needed.
 
-Lấy Service Role Key tại: **Project Settings → API → Project API keys → `service_role`** (nhấn Reveal).
+Get the Service Role Key at: **Project Settings → API → Project API keys → `service_role`** (click Reveal).
 
-> Service Role Key chỉ dùng một lần để setup — app không lưu lại sau khi migration thành công.
+> The Service Role Key is only used once for setup — the app does not store it after the migration succeeds.
 
-### Cách B — Supabase Dashboard (thủ công)
+### Option B — Supabase Dashboard (manual)
 
-1. Vào **SQL Editor** trong dashboard
-2. Copy nội dung file `supabase/migrations/20260529000000_sync_data.sql`
+1. Go to **SQL Editor** in the dashboard
+2. Copy the contents of `supabase/migrations/20260529000000_sync_data.sql`
 3. Paste → **Run**
 
-### Cách C — Supabase CLI
+### Option C — Supabase CLI
 
 ```bash
 brew install supabase/tap/supabase

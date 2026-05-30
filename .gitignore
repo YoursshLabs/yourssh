@@ -25,12 +25,9 @@ macos/YourSSH/Generated/
 
 # Env
 .env
-.claude/
+.claude/worktrees/
 .superpowers/
 .idea/
-.superpowers
-docs
-.idea
 app/build
 
 # Dart package build artifacts (packages/ subdirectories only)

@@ -104,7 +104,7 @@ yourssh/
 - **[PIVOT]** Switching to Flutter + dartssh2
 
 ### Sprint 2 — Flutter MVP (current)
-**Goal: App chạy, connect SSH, terminal hoạt động trên macOS**
+**Goal: App runs, connects via SSH, terminal works on macOS**
 
 - [x] Flutter project created
 - [ ] SSH connect (dartssh2, password auth)
@@ -113,7 +113,7 @@ yourssh/
 - [ ] Host manager (add/edit/delete)
 - [ ] Secure credential storage
 
-**Done when:** Connect SSH, gõ lệnh thấy output trên macOS.
+**Done when:** SSH connects and commands produce visible output on macOS.
 
 ---
 

@@ -1,45 +1,45 @@
 # Sync Setup Guide
 
-YourSSH sync dùng Supabase làm backend lưu trữ. Dữ liệu được mã hoá AES-GCM ngay trên client — Supabase chỉ thấy ciphertext.
+YourSSH sync uses Supabase as the storage backend. Data is AES-GCM encrypted on the client — Supabase only sees ciphertext.
 
-**Không cần build lại app hay cấu hình dart-define.** Điền credentials trực tiếp trong app.
+**No app rebuild or dart-define configuration is required.** Enter credentials directly inside the app.
 
-## 1. Tạo Supabase project
+## 1. Create a Supabase project
 
-1. Vào [supabase.com](https://supabase.com) → **New project**
-2. Chọn region gần nhất (Singapore hoặc Tokyo cho SEA)
-3. Đặt database password mạnh → **Create project**
+1. Go to [supabase.com](https://supabase.com) → **New project**
+2. Choose the nearest region (Singapore or Tokyo for SEA)
+3. Set a strong database password → **Create project**
 
-## 2. Lấy credentials
+## 2. Get credentials
 
-Vào **Project Settings → API**:
+Go to **Project Settings → API**:
 
 - **Project URL**: `https://<project-ref>.supabase.co`
-- **Publishable (anon) key**: chuỗi JWT bên dưới "Project API keys" — còn gọi là "anon key"
-- **Service Role Key** *(chỉ cần lần đầu)*: chuỗi JWT bên dưới "service_role" → nhấn **Reveal**
+- **Publishable (anon) key**: the JWT string under "Project API keys" — also called the "anon key"
+- **Service Role Key** *(first-time setup only)*: the JWT string under "service_role" → click **Reveal**
 
-> Service Role Key chỉ dùng một lần để tạo bảng — app không lưu lại sau khi setup xong.
+> The Service Role Key is only used once to create the table — the app does not store it after setup is complete.
 
-## 3. Cấu hình trong app (tự động tạo bảng)
+## 3. Configure in the app (auto table creation)
 
-**Settings → Sync → bật Enable Sync → Supabase Backend:**
+**Settings → Sync → enable Enable Sync → Supabase Backend:**
 
-1. Điền **Project URL**
-2. Điền **Anon Key**
-3. Điền **Service Role Key** vào field phía dưới *(lần đầu setup)*
-4. Nhấn **Save & Test**
-   - Nếu bảng chưa tồn tại → app tự động chạy migration và hiện **"Connected (table created)"**
-   - Lần sau không cần nhập Service Role Key nữa — bảng đã có sẵn
+1. Enter **Project URL**
+2. Enter **Anon Key**
+3. Enter **Service Role Key** in the field below *(first-time setup)*
+4. Click **Save & Test**
+   - If the table does not exist → the app runs the migration automatically and shows **"Connected (table created)"**
+   - Subsequent logins do not require the Service Role Key — the table is already in place
 
-## 4. Tạo bảng thủ công (nếu không dùng Service Role Key)
+## 4. Create the table manually (if not using the Service Role Key)
 
-### Cách A — Supabase Dashboard
+### Option A — Supabase Dashboard
 
-1. Vào **SQL Editor** trong dashboard
-2. Copy nội dung file `supabase/migrations/20260529000000_sync_data.sql`
+1. Go to **SQL Editor** in the dashboard
+2. Copy the contents of `supabase/migrations/20260529000000_sync_data.sql`
 3. Paste → **Run**
 
-### Cách B — Supabase CLI
+### Option B — Supabase CLI
 
 ```bash
 brew install supabase/tap/supabase
@@ -47,22 +47,22 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-## 5. Kết nối thêm thiết bị
+## 5. Connect additional devices
 
-1. **Thiết bị A** (có sẵn data):
-   - Settings → Sync → copy **Sync Code** (ví dụ: `ABCD-EFGH-JKLM`)
+1. **Device A** (has existing data):
+   - Settings → Sync → copy the **Sync Code** (e.g. `ABCD-EFGH-JKLM`)
 
-2. **Thiết bị B** (mới):
-   - Settings → Sync → điền **cùng Supabase credentials** → Save & Test
-   - Paste sync code vào ô **Enter sync code…** → **Connect**
-   - App pull và thay thế toàn bộ danh sách hosts
+2. **Device B** (new):
+   - Settings → Sync → enter the **same Supabase credentials** → Save & Test
+   - Paste the sync code into the **Enter sync code…** field → **Connect**
+   - The app pulls and replaces the entire host list
 
-> **Lưu ý:** Cả hai thiết bị phải dùng cùng Supabase project. Sync code là encryption key — không chia sẻ qua kênh không bảo mật.
+> **Note:** Both devices must use the same Supabase project. The sync code is the encryption key — do not share it over an insecure channel.
 
 ## Troubleshooting
 
-| Lỗi | Nguyên nhân | Fix |
+| Error | Cause | Fix |
 |---|---|---|
-| `Table not found. Add your Service Role Key…` | Migration chưa chạy | Điền Service Role Key vào field phía dưới anon key rồi Save & Test lại |
-| `Invalid API key` | Anon key sai | Kiểm tra lại Project Settings → API |
-| `Invalid sync code` | Code sai hoặc khác project | Đảm bảo nhập đúng 12 ký tự |
+| `Table not found. Add your Service Role Key…` | Migration has not run | Enter the Service Role Key in the field below the anon key and Save & Test again |
+| `Invalid API key` | Incorrect anon key | Check Project Settings → API |
+| `Invalid sync code` | Wrong code or different project | Make sure you enter exactly 12 characters from the correct project |

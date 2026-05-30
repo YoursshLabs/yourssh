@@ -17,6 +17,7 @@ class _HotkeySettingsScreenState extends State<HotkeySettingsScreen> {
   final _focusNode = FocusNode();
 
   static const _labels = {
+    'command_palette': 'Command Palette',
     'new_session': 'New Session',
     'close_session': 'Close Session',
     'next_session': 'Next Session',
