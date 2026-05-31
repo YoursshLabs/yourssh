@@ -87,4 +87,33 @@ void main() {
       expect(HostQuery.parse('WEB').matches(h(label: 'Web-1')), isTrue);
     });
   });
+
+  group('HostQuery.availableFacets', () {
+    Host h(List<String> tags) => Host(label: 'l', host: 'h', username: 'u', tags: tags);
+
+    test('returns distinct key:value tags, sorted, lower-cased', () {
+      final facets = HostQuery.availableFacets([
+        h(['env:prod', 'role:db']),
+        h(['Env:Prod', 'plainlabel']),
+        h(['region:sg']),
+      ]);
+      expect(facets, ['env:prod', 'region:sg', 'role:db']);
+    });
+
+    test('ignores tags without a colon', () {
+      expect(HostQuery.availableFacets([h(['legacy', 'env:dev'])]), ['env:dev']);
+    });
+  });
+
+  group('HostQuery.toggleToken', () {
+    test('appends when absent', () {
+      expect(HostQuery.toggleToken('', 'env:prod'), 'env:prod');
+      expect(HostQuery.toggleToken('role:db', 'env:prod'), 'role:db env:prod');
+    });
+
+    test('removes when present (case-insensitive)', () {
+      expect(HostQuery.toggleToken('env:prod role:db', 'env:prod'), 'role:db');
+      expect(HostQuery.toggleToken('ENV:PROD', 'env:prod'), '');
+    });
+  });
 }

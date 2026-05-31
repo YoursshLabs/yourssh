@@ -60,4 +60,31 @@ class HostQuery {
     }
     return true;
   }
+
+  /// Distinct `key:value` tags across [hosts], deduped (case-insensitive) and
+  /// sorted — used to render suggestion chips.
+  static List<String> availableFacets(List<Host> hosts) {
+    final seen = <String>{};
+    for (final host in hosts) {
+      for (final tag in host.tags) {
+        if (tag.contains(':')) seen.add(tag.toLowerCase());
+      }
+    }
+    return seen.toList()..sort();
+  }
+
+  /// Toggles [token] in [query]: removes it if present (case-insensitive),
+  /// otherwise appends it. Returns the new whitespace-joined query string.
+  static String toggleToken(String query, String token) {
+    final tokens =
+        query.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+    final lower = token.toLowerCase();
+    final idx = tokens.indexWhere((t) => t.toLowerCase() == lower);
+    if (idx >= 0) {
+      tokens.removeAt(idx);
+    } else {
+      tokens.add(token);
+    }
+    return tokens.join(' ');
+  }
 }
