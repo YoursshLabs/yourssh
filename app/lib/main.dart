@@ -4,6 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
+import 'utils/bundled_plugin_installer.dart';
 import 'providers/ai_chat_provider.dart';
 import 'providers/command_history_provider.dart';
 import 'providers/host_provider.dart';
@@ -174,6 +175,10 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
       hookBus: _hookBus,
       uiRegistry: _uiRegistry,
     );
+    // Install bundled plugins to ~/.yourssh/plugins/ on first run
+    await BundledPluginInstaller.ensureInstalled('snippets');
+    // Warm up SharedPreferences cache for migration bridge
+    await MigrationBridge.warmup();
     // Fire-and-forget: scan ~/.yourssh/plugins and hot-watch for changes.
     loader.scanAndLoad();
 
