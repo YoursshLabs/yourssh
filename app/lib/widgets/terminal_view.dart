@@ -264,6 +264,30 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
     final ctrl = HardwareKeyboard.instance.isControlPressed;
     final meta = HardwareKeyboard.instance.isMetaPressed;
 
+    // Open search (Cmd+F on macOS, Ctrl+F elsewhere)
+    if ((meta || ctrl) && key == LogicalKeyboardKey.keyF) {
+      setState(() => _searchVisible = true);
+      return KeyEventResult.handled;
+    }
+
+    // While search bar is visible: intercept Escape and Enter only;
+    // all other keys flow to the TextField via its own focus.
+    if (_searchVisible) {
+      if (key == LogicalKeyboardKey.escape) {
+        _closeSearch();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.enter) {
+        if (HardwareKeyboard.instance.isShiftPressed) {
+          _goPrev();
+        } else {
+          _goNext();
+        }
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
     if (key == LogicalKeyboardKey.tab) {
       if (_suggestions.isNotEmpty) {
         _completeTo(_suggestions[_selectedIdx]);
