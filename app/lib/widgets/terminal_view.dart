@@ -332,8 +332,32 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
           autofocus: !_searchVisible,
           onKeyEvent: _handleKey,
         ),
+        if (_searchVisible)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _SearchBar(
+              controller: _searchTextController,
+              useRegex: _searchRegex,
+              hasError: _searchError,
+              matchCount: _matches.length,
+              currentMatch: _currentMatch,
+              onQueryChanged: (q) {
+                _searchQuery = q;
+                _runSearch();
+              },
+              onToggleRegex: () {
+                setState(() => _searchRegex = !_searchRegex);
+                _runSearch();
+              },
+              onNext: _goNext,
+              onPrev: _goPrev,
+              onClose: _closeSearch,
+            ),
+          ),
         Positioned(
-          top: 8,
+          top: _searchVisible ? 44 : 8,
           left: 8,
           child: _RecordButton(session: widget.session),
         ),
@@ -413,4 +437,178 @@ class _SearchMatch {
   final int startCol;
   final int endCol;
   const _SearchMatch(this.lineIdx, this.startCol, this.endCol);
+}
+
+class _SearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  final bool useRegex;
+  final bool hasError;
+  final int matchCount;
+  final int currentMatch;
+  final ValueChanged<String> onQueryChanged;
+  final VoidCallback onToggleRegex;
+  final VoidCallback onNext;
+  final VoidCallback onPrev;
+  final VoidCallback onClose;
+
+  const _SearchBar({
+    required this.controller,
+    required this.useRegex,
+    required this.hasError,
+    required this.matchCount,
+    required this.currentMatch,
+    required this.onQueryChanged,
+    required this.onToggleRegex,
+    required this.onNext,
+    required this.onPrev,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasResults = matchCount > 0;
+    final countLabel = controller.text.isEmpty
+        ? ''
+        : hasError
+            ? 'Invalid regex'
+            : hasResults
+                ? '${currentMatch + 1} of $matchCount'
+                : 'No results';
+    final countColor = hasError
+        ? Colors.red
+        : hasResults
+            ? const Color(0xFF888888)
+            : Colors.orange;
+
+    return Container(
+      height: 36,
+      color: const Color(0xFF141414),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              autofocus: true,
+              onChanged: onQueryChanged,
+              style: const TextStyle(
+                color: Color(0xFFEEEEEE),
+                fontSize: 12,
+                fontFamily: 'monospace',
+              ),
+              decoration: InputDecoration(
+                hintText: useRegex ? 'Search (regex)…' : 'Search…',
+                hintStyle:
+                    const TextStyle(color: Color(0xFF555555), fontSize: 12),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (countLabel.isNotEmpty)
+            Text(
+              countLabel,
+              style: TextStyle(
+                color: countColor,
+                fontSize: 11,
+                fontFamily: 'monospace',
+              ),
+            ),
+          const SizedBox(width: 8),
+          _SearchBtn(
+            tooltip: 'Use regex',
+            active: useRegex,
+            label: '.*',
+            onTap: onToggleRegex,
+          ),
+          const SizedBox(width: 4),
+          _SearchBtn(
+            tooltip: 'Previous match (Shift+Enter)',
+            icon: Icons.keyboard_arrow_up,
+            onTap: onPrev,
+          ),
+          const SizedBox(width: 2),
+          _SearchBtn(
+            tooltip: 'Next match (Enter)',
+            icon: Icons.keyboard_arrow_down,
+            onTap: onNext,
+          ),
+          const SizedBox(width: 4),
+          _SearchBtn(
+            tooltip: 'Close search (Escape)',
+            icon: Icons.close,
+            onTap: onClose,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchBtn extends StatefulWidget {
+  final String? tooltip;
+  final String? label;
+  final IconData? icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _SearchBtn({
+    this.tooltip,
+    this.label,
+    this.icon,
+    this.active = false,
+    required this.onTap,
+  }) : assert(label != null || icon != null);
+
+  @override
+  State<_SearchBtn> createState() => _SearchBtnState();
+}
+
+class _SearchBtnState extends State<_SearchBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.active
+        ? const Color(0xFF4FC3F7)
+        : _hovered
+            ? const Color(0xFFAAAAAA)
+            : const Color(0xFF666666);
+
+    final child = widget.label != null
+        ? Text(
+            widget.label!,
+            style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w600),
+          )
+        : Icon(widget.icon, size: 14, color: color);
+
+    return Tooltip(
+      message: widget.tooltip ?? '',
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: widget.active
+                  ? const Color(0xFF4FC3F7).withValues(alpha: 0.12)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
 }
