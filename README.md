@@ -47,6 +47,7 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 ### Terminal & Connectivity
 - **Multi-tab SSH sessions** with named tabs and per-tab connection state
 - **Split terminal view** — horizontal/vertical pane splitting within a session
+- **Search-in-scrollback (Cmd/Ctrl+F)** — regex-powered search across the full terminal buffer; highlights all matches, navigate with Enter / Shift+Enter
 - **Port forwarding** — local, remote, and dynamic SOCKS5 tunnels
 - **Jump host / bastion proxy** — connect to internal servers via a bastion host; select any saved host as the jump hop in the host detail panel
 - **Local shell** — spawn native macOS/Windows/Linux shell alongside SSH sessions
@@ -65,6 +66,8 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 - **P2P QR sync**: transfer all hosts and passwords to another device via QR code over LAN or Tailscale — no cloud required
 
 ### Productivity
+- **Command Palette (Cmd/Ctrl+K)** — fuzzy-search all hosts, navigation sections, snippets, and app actions from a single keyboard shortcut
+- **Workspace persistence** — open SSH tabs, layout, and active session automatically restored on relaunch; no need to reconnect after restart
 - **Command snippets** — save and inject reusable command templates
 - **Command history** — searchable history per session
 - **Hotkeys** — customizable global keyboard shortcuts
