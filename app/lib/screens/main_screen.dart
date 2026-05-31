@@ -37,6 +37,7 @@ import '../providers/settings_provider.dart';
 import '../providers/terminal_layout_provider.dart';
 import '../services/hotkey_service.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
+import 'package:yourssh_script_engine/yourssh_script_engine.dart';
 
 enum NavSection { hosts, keychain, portForwarding, sftp, localTerminal, knownHosts, recordings, settings, plugins }
 
@@ -570,6 +571,36 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 ],
               ],
             ),
+          ),
+          Consumer<PluginUiRegistry>(
+            builder: (context, registry, _) {
+              if (registry.statusBarItems.isEmpty) return const SizedBox.shrink();
+              return Container(
+                height: 24,
+                color: AppColors.sidebar,
+                child: Row(
+                  children: [
+                    for (final item in registry.statusBarItems)
+                      Tooltip(
+                        message: item.tooltip ?? '',
+                        child: InkWell(
+                          onTap: item.onClick,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: Text(
+                              item.label,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
