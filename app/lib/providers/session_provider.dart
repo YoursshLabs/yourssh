@@ -55,8 +55,8 @@ class SessionProvider extends ChangeNotifier {
     _safeNotify();
   }
 
-  Future<void> connect(Host host) async {
-    final session = SshSession(host: host);
+  Future<void> connect(Host host, {String? initialCommand}) async {
+    final session = SshSession(host: host, initialCommand: initialCommand);
     _sessions.add(session);
     _activeSessionId = session.id;
     _safeNotify();
