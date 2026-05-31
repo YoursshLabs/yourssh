@@ -29,9 +29,20 @@ class HostsDashboard extends StatefulWidget {
 
 class _HostsDashboardState extends State<HostsDashboard> {
   String _search = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   void _toggleFacet(String facet) {
-    setState(() => _search = HostQuery.toggleToken(_search, facet));
+    final next = HostQuery.toggleToken(_search, facet);
+    setState(() => _search = next);
+    _searchController.text = next;
+    _searchController.selection =
+        TextSelection.collapsed(offset: next.length);
   }
 
   @override
@@ -61,7 +72,7 @@ class _HostsDashboardState extends State<HostsDashboard> {
       child: Column(
         children: [
           _TopBar(
-            search: _search,
+            controller: _searchController,
             onSearch: (v) => setState(() => _search = v),
             totalHosts: hosts.length,
             filteredCount: filtered.length,
@@ -131,7 +142,7 @@ class _HostsDashboardState extends State<HostsDashboard> {
 // ── Top Bar ───────────────────────────────────────────────
 
 class _TopBar extends StatelessWidget {
-  final String search;
+  final TextEditingController controller;
   final ValueChanged<String> onSearch;
   final int totalHosts;
   final int filteredCount;
@@ -140,7 +151,7 @@ class _TopBar extends StatelessWidget {
   final VoidCallback? onNewGroup;
   final VoidCallback? onImport;
 
-  const _TopBar({required this.search, required this.onSearch, required this.totalHosts, required this.filteredCount, this.onAddHost, this.onLocalTerminal, this.onNewGroup, this.onImport});
+  const _TopBar({required this.controller, required this.onSearch, required this.totalHosts, required this.filteredCount, this.onAddHost, this.onLocalTerminal, this.onNewGroup, this.onImport});
 
   @override
   Widget build(BuildContext context) {
@@ -162,6 +173,7 @@ class _TopBar extends StatelessWidget {
                 border: Border.all(color: AppColors.border),
               ),
               child: TextField(
+                controller: controller,
                 onChanged: onSearch,
                 style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
                 decoration: const InputDecoration(
