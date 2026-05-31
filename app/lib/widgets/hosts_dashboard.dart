@@ -30,6 +30,10 @@ class HostsDashboard extends StatefulWidget {
 class _HostsDashboardState extends State<HostsDashboard> {
   String _search = '';
 
+  void _toggleFacet(String facet) {
+    setState(() => _search = HostQuery.toggleToken(_search, facet));
+  }
+
   @override
   Widget build(BuildContext context) {
     final hostProvider = context.watch<HostProvider>();
@@ -37,6 +41,7 @@ class _HostsDashboardState extends State<HostsDashboard> {
     final query = HostQuery.parse(_search);
     final filtered =
         query.isEmpty ? hosts : hosts.where(query.matches).toList();
+    final facets = HostQuery.availableFacets(hosts);
 
     final pinnedGroupsUpper =
         hostProvider.pinnedGroups.map((g) => g.toUpperCase()).toSet();
@@ -71,6 +76,14 @@ class _HostsDashboardState extends State<HostsDashboard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (facets.isNotEmpty) ...[
+                    _FacetChipBar(
+                      facets: facets,
+                      query: _search,
+                      onToggle: _toggleFacet,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                   if (_search.isEmpty) ...[
                     _SectionHeader(title: 'Groups', count: '${groups.length} group${groups.length == 1 ? '' : 's'}'),
                     const SizedBox(height: 12),
@@ -959,3 +972,67 @@ class _EmptyState extends StatelessWidget {
     );
   }
 }
+
+class _FacetChipBar extends StatelessWidget {
+  final List<String> facets;
+  final String query;
+  final void Function(String facet) onToggle;
+
+  const _FacetChipBar({
+    required this.facets,
+    required this.query,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final active = query
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .where((t) => t.isNotEmpty)
+        .toSet();
+    return SizedBox(
+      height: 32,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: facets.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final facet = facets[i];
+          final on = active.contains(facet.toLowerCase());
+          return GestureDetector(
+            onTap: () => onToggle(facet),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: on
+                    ? AppColors.accent.withValues(alpha: 0.18)
+                    : AppColors.card,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: on ? AppColors.accent : AppColors.border),
+              ),
+              child: Text(
+                facet,
+                style: TextStyle(
+                  color: on ? AppColors.accent : AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Test-only entry point to the private facet chip bar.
+@visibleForTesting
+Widget facetChipBarForTest({
+  required List<String> facets,
+  required String query,
+  required void Function(String) onToggle,
+}) =>
+    _FacetChipBar(facets: facets, query: query, onToggle: onToggle);
