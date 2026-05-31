@@ -71,6 +71,8 @@ dependencies:
     path: ../packages/yourssh_web_tools
   yourssh_snippets:
     path: ../packages/yourssh_snippets
+  yourssh_script_engine:
+    path: ../packages/yourssh_script_engine
 
   # Cryptography utilities
   cryptography: ^2.7.0
@@ -105,6 +107,8 @@ dependencies:
 dependency_overrides:
   dartssh2:
     path: ../packages/dartssh2
+  yourssh_script_engine:
+    path: ../packages/yourssh_script_engine
 
 dev_dependencies:
   flutter_test:
