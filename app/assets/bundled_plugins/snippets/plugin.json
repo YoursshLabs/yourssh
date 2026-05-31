@@ -8,6 +8,7 @@
     "session.observe",
     "terminal.inject",
     "ui.clipboard",
+    "ui.notify",
     "ui.panel"
   ]
 }

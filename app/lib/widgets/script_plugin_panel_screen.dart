@@ -76,9 +76,8 @@ class _ScriptPluginPanelScreenState extends State<ScriptPluginPanelScreen> {
     if (id != null) result['id'] = id;
 
     if (!mounted) return;
-    // Escape single quotes in JSON to prevent JS injection
-    final encoded = json.encode(result).replaceAll("'", "\\'");
-    await _controller.runJavaScript("window.pluginBridge.receive('$encoded')");
+    final arg = json.encode(json.encode(result));
+    await _controller.runJavaScript('window.pluginBridge.receive($arg)');
   }
 
   @override
