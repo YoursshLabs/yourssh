@@ -15,6 +15,23 @@ class SftpTransferService {
 
   static const _chunkSize = 64 * 1024;
 
+  /// Streams [file] into [sink] in [_chunkSize] blocks. [onProgress] receives
+  /// the running byte offset after each chunk (used to report transfer state).
+  static Future<void> _pipeToSink(
+    SftpFile file,
+    IOSink sink, {
+    void Function(int offset)? onProgress,
+  }) async {
+    int offset = 0;
+    while (true) {
+      final chunk = await file.readBytes(length: _chunkSize, offset: offset);
+      if (chunk.isEmpty) break;
+      sink.add(chunk);
+      offset += chunk.length;
+      onProgress?.call(offset);
+    }
+  }
+
   Future<List<SftpEntry>> listDirectory(Host host, String path) async {
     final sftp = await _sshService.openSftp(host);
     try {
@@ -45,13 +62,7 @@ class SftpTransferService {
     final sink = File(localPath).openWrite();
     try {
       file = await sftp.open(entry.path);
-      int offset = 0;
-      while (true) {
-        final chunk = await file.readBytes(length: _chunkSize, offset: offset);
-        if (chunk.isEmpty) break;
-        sink.add(chunk);
-        offset += chunk.length;
-      }
+      await _pipeToSink(file, sink);
     } finally {
       await sink.close();
       await file?.close();
@@ -103,13 +114,7 @@ class SftpTransferService {
     final sink = File(p.join(localDir, remoteEntry.name)).openWrite();
     try {
       remoteFile = await sftp.open(remoteEntry.path);
-      int offset = 0;
-      while (true) {
-        final chunk = await remoteFile.readBytes(length: _chunkSize, offset: offset);
-        if (chunk.isEmpty) break;
-        sink.add(chunk);
-        offset += chunk.length;
-      }
+      await _pipeToSink(remoteFile, sink);
     } finally {
       await sink.close();
       await remoteFile?.close();
@@ -277,14 +282,9 @@ class SftpTransferService {
     final remoteFile = await sftp.open(remotePath);
     final sink = File(localPath).openWrite();
     try {
-      int offset = 0;
-      while (true) {
-        final chunk = await remoteFile.readBytes(length: _chunkSize, offset: offset);
-        if (chunk.isEmpty) break;
-        sink.add(chunk);
-        offset += chunk.length;
-        onProgress(remotePath, offset, totalBytes > 0 ? totalBytes : offset);
-      }
+      await _pipeToSink(remoteFile, sink,
+          onProgress: (offset) => onProgress(
+              remotePath, offset, totalBytes > 0 ? totalBytes : offset));
     } finally {
       await sink.close();
       await remoteFile.close();

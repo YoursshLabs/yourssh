@@ -161,13 +161,16 @@ class AiChatProvider extends ChangeNotifier {
     }
   }
 
+  /// Conversation history sent to the model: drops system messages and the
+  /// in-flight streaming placeholder (the last entry).
+  Iterable<ChatMessage> _historyForApi() => _messages
+      .where((m) => !m.isStreaming && m.role != 'system')
+      .take(_messages.length - 1);
+
   Future<void> _sendAnthropic(AiProviderConfig config) async {
     final apiMessages = [
       ChatMessage.system(_systemPrompt).toApiMap(),
-      ..._messages
-          .where((m) => !m.isStreaming && m.role != 'system')
-          .take(_messages.length - 1)
-          .map((m) => m.toApiMap()),
+      ..._historyForApi().map((m) => m.toApiMap()),
     ];
 
     final response = await http.post(
@@ -198,10 +201,7 @@ class AiChatProvider extends ChangeNotifier {
   Future<void> _sendOpenAI(AiProviderConfig config) async {
     final apiMessages = [
       {'role': 'system', 'content': _systemPrompt},
-      ..._messages
-          .where((m) => !m.isStreaming && m.role != 'system')
-          .take(_messages.length - 1)
-          .map((m) => m.toApiMap()),
+      ..._historyForApi().map((m) => m.toApiMap()),
     ];
 
     final response = await http.post(
@@ -229,9 +229,7 @@ class AiChatProvider extends ChangeNotifier {
   }
 
   Future<void> _sendGemini(AiProviderConfig config) async {
-    final contents = _messages
-        .where((m) => !m.isStreaming && m.role != 'system')
-        .take(_messages.length - 1)
+    final contents = _historyForApi()
         .map((m) => {
               'role': m.role == 'assistant' ? 'model' : 'user',
               'parts': [

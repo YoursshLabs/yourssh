@@ -19,6 +19,10 @@ class KnownHostsProvider extends ChangeNotifier {
   List<KnownHost> get hosts => List.unmodifiable(_hosts);
   HostKeyChallenge? get pendingChallenge => _pendingChallenge;
 
+  /// Identity of a host key entry: same endpoint + key type.
+  bool _matches(KnownHost h, String host, int port, String keyType) =>
+      h.host == host && h.port == port && h.keyType == keyType;
+
   Future<void> load() async {
     if (_storage == null) return;
     _hosts = await _storage.loadKnownHosts();
@@ -26,8 +30,7 @@ class KnownHostsProvider extends ChangeNotifier {
   }
 
   Future<void> remove(KnownHost entry) async {
-    _hosts.removeWhere((h) =>
-        h.host == entry.host && h.port == entry.port && h.keyType == entry.keyType);
+    _hosts.removeWhere((h) => _matches(h, entry.host, entry.port, entry.keyType));
     await _storage?.saveKnownHosts(_hosts);
     notifyListeners();
   }
@@ -35,9 +38,8 @@ class KnownHostsProvider extends ChangeNotifier {
   Future<bool> verifyHostKey(
       String host, int port, String keyType, Uint8List fingerprint) async {
     final fp = KnownHost.bytesToFingerprint(fingerprint);
-    final existing = _hosts
-        .where((h) => h.host == host && h.port == port && h.keyType == keyType)
-        .firstOrNull;
+    final existing =
+        _hosts.where((h) => _matches(h, host, port, keyType)).firstOrNull;
 
     if (existing == null) {
       _hosts.add(KnownHost(
@@ -73,8 +75,7 @@ class KnownHostsProvider extends ChangeNotifier {
     if (identical(_pendingChallenge, challenge)) _pendingChallenge = null;
 
     if (trusted) {
-      _hosts.removeWhere(
-          (h) => h.host == host && h.port == port && h.keyType == keyType);
+      _hosts.removeWhere((h) => _matches(h, host, port, keyType));
       _hosts.add(KnownHost(
           host: host,
           port: port,

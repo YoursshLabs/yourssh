@@ -382,118 +382,29 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
     }
     return ListView.builder(
       itemCount: entries.length,
-      itemBuilder: (_, i) => _buildEntryRow(entries[i], prov),
-    );
-  }
-
-  Widget _buildEntryRow(LocalEntry entry, LocalFilePanelProvider prov) {
-    final isSelected = prov.selectedEntries.contains(entry);
-    return Draggable<LocalEntry>(
-      data: entry,
-      feedback: Material(
-        color: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFF22C55E).withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(entry.name,
-              style: const TextStyle(
-                  color: Color(0xFF22C55E), fontSize: 13)),
-        ),
-      ),
-      child: GestureDetector(
-        onTap: () {
-          final isMulti = HardwareKeyboard.instance.isMetaPressed ||
-              HardwareKeyboard.instance.isControlPressed;
-          if (isMulti) {
-            prov.toggleSelection(entry);
-          } else {
+      itemBuilder: (_, i) {
+        final entry = entries[i];
+        return _LocalEntryRow(
+          entry: entry,
+          selected: prov.selectedEntries.contains(entry),
+          onTap: () {
+            final isMulti = HardwareKeyboard.instance.isMetaPressed ||
+                HardwareKeyboard.instance.isControlPressed;
+            if (isMulti) {
+              prov.toggleSelection(entry);
+            } else {
+              prov.selectOnly(entry);
+            }
+          },
+          onDoubleTap: () {
+            if (entry.isDirectory) prov.loadDirectory(entry.path);
+          },
+          onSecondaryTap: (pos) {
             prov.selectOnly(entry);
-          }
-        },
-        onDoubleTap: () {
-          if (entry.isDirectory) prov.loadDirectory(entry.path);
-        },
-        onSecondaryTapUp: (d) {
-          prov.selectOnly(entry);
-          _showContextMenu(entry, prov, d.globalPosition);
-        },
-        child: Container(
-          color: isSelected
-              ? const Color(0xFF22C55E).withValues(alpha: 0.08)
-              : Colors.transparent,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          child: Row(
-            children: [
-              Expanded(
-                flex: 5,
-                child: Row(
-                  children: [
-                    Icon(
-                      entry.isDirectory
-                          ? Icons.folder
-                          : _fileIcon(entry.extension),
-                      size: 15,
-                      color: entry.isDirectory
-                          ? const Color(0xFFFBBF24)
-                          : const Color(0xFF60A5FA),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(entry.name,
-                              style: const TextStyle(
-                                  color: Color(0xFFD4D4D4), fontSize: 13),
-                              overflow: TextOverflow.ellipsis),
-                          Text(entry.permissions,
-                              style: const TextStyle(
-                                  color: Color(0xFF444444),
-                                  fontSize: 10,
-                                  fontFamily: 'monospace')),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                flex: 3,
-                child: Text(
-                  _formatDate(entry.modifiedAt),
-                  style: const TextStyle(
-                      color: Color(0xFF666666), fontSize: 11),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              SizedBox(
-                width: 70,
-                child: Text(
-                  entry.formattedSize,
-                  style: const TextStyle(
-                      color: Color(0xFF555555), fontSize: 11),
-                  textAlign: TextAlign.right,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 70,
-                child: Text(
-                  entry.kindLabel,
-                  style: const TextStyle(
-                      color: Color(0xFF555555), fontSize: 11),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+            _showContextMenu(entry, prov, pos);
+          },
+        );
+      },
     );
   }
 
@@ -527,26 +438,6 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
       const SizedBox(width: 8),
       Text(label, style: TextStyle(fontSize: 13, color: color)),
     ]);
-  }
-
-  IconData _fileIcon(String ext) {
-    return switch (ext) {
-      'dart' || 'py' || 'js' || 'ts' || 'go' || 'rs' || 'c' || 'cpp' =>
-        Icons.code,
-      'json' || 'yaml' || 'yml' || 'toml' || 'xml' => Icons.data_object,
-      'md' || 'txt' || 'log' => Icons.article,
-      'sh' || 'bash' || 'zsh' => Icons.terminal,
-      _ => Icons.insert_drive_file,
-    };
-  }
-
-  String _formatDate(DateTime dt) {
-    final now = DateTime.now();
-    if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
-      return 'Today ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    }
-    return '${dt.month}/${dt.day}/${dt.year}, '
-        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
   List<({String label, String path})> _buildCrumbs(String path) {
@@ -661,6 +552,142 @@ class _HeaderButton extends StatelessWidget {
                 ? const Color(0xFF22C55E)
                 : const Color(0xFFD4D4D4),
             fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+IconData _fileIcon(String ext) {
+  return switch (ext) {
+    'dart' || 'py' || 'js' || 'ts' || 'go' || 'rs' || 'c' || 'cpp' =>
+      Icons.code,
+    'json' || 'yaml' || 'yml' || 'toml' || 'xml' => Icons.data_object,
+    'md' || 'txt' || 'log' => Icons.article,
+    'sh' || 'bash' || 'zsh' => Icons.terminal,
+    _ => Icons.insert_drive_file,
+  };
+}
+
+String _formatDate(DateTime dt) {
+  final now = DateTime.now();
+  if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+    return 'Today ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+  return '${dt.month}/${dt.day}/${dt.year}, '
+      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+}
+
+/// A single row in the local file listing: draggable, selectable, with a
+/// context-menu hook. Extracted from `_LocalFilePanelState` so `ListView.builder`
+/// can reuse row elements efficiently.
+class _LocalEntryRow extends StatelessWidget {
+  final LocalEntry entry;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onDoubleTap;
+  final void Function(Offset globalPosition) onSecondaryTap;
+
+  const _LocalEntryRow({
+    required this.entry,
+    required this.selected,
+    required this.onTap,
+    required this.onDoubleTap,
+    required this.onSecondaryTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Draggable<LocalEntry>(
+      data: entry,
+      feedback: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF22C55E).withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(entry.name,
+              style: const TextStyle(color: Color(0xFF22C55E), fontSize: 13)),
+        ),
+      ),
+      child: GestureDetector(
+        onTap: onTap,
+        onDoubleTap: onDoubleTap,
+        onSecondaryTapUp: (d) => onSecondaryTap(d.globalPosition),
+        child: Container(
+          color: selected
+              ? const Color(0xFF22C55E).withValues(alpha: 0.08)
+              : Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 5,
+                child: Row(
+                  children: [
+                    Icon(
+                      entry.isDirectory
+                          ? Icons.folder
+                          : _fileIcon(entry.extension),
+                      size: 15,
+                      color: entry.isDirectory
+                          ? const Color(0xFFFBBF24)
+                          : const Color(0xFF60A5FA),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(entry.name,
+                              style: const TextStyle(
+                                  color: Color(0xFFD4D4D4), fontSize: 13),
+                              overflow: TextOverflow.ellipsis),
+                          Text(entry.permissions,
+                              style: const TextStyle(
+                                  color: Color(0xFF444444),
+                                  fontSize: 10,
+                                  fontFamily: 'monospace')),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  _formatDate(entry.modifiedAt),
+                  style:
+                      const TextStyle(color: Color(0xFF666666), fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              SizedBox(
+                width: 70,
+                child: Text(
+                  entry.formattedSize,
+                  style:
+                      const TextStyle(color: Color(0xFF555555), fontSize: 11),
+                  textAlign: TextAlign.right,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 70,
+                child: Text(
+                  entry.kindLabel,
+                  style:
+                      const TextStyle(color: Color(0xFF555555), fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
         ),
       ),

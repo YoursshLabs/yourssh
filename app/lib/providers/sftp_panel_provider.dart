@@ -47,10 +47,7 @@ class SftpPanelProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void deselectAll() {
-    _selected.clear();
-    notifyListeners();
-  }
+  void deselectAll() => clearSelection();
 
   bool get isAllSelected => _entries.isNotEmpty && _selected.length == _entries.length;
 

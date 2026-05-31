@@ -554,6 +554,25 @@ class _SyncSectionState extends State<_SyncSection> {
   }
 
 
+  /// Shared decoration for the sync text fields (URL / anon key / passphrase).
+  InputDecoration _syncFieldDecoration({required String hint, Widget? suffixIcon}) {
+    OutlineInputBorder borderWith(Color color) => OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: BorderSide(color: color));
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
+      filled: true,
+      fillColor: AppColors.bg,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      border: borderWith(AppColors.border),
+      enabledBorder: borderWith(AppColors.border),
+      focusedBorder: borderWith(AppColors.accent),
+      suffixIcon: suffixIcon,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final sync = widget.sync;
@@ -585,201 +604,183 @@ class _SyncSectionState extends State<_SyncSection> {
                   ),
                 ),
                 const Divider(height: 1, color: AppColors.border),
-                if (_syncMode == _SyncMode.cloud) ...[
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Supabase Backend', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _urlController,
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                          decoration: InputDecoration(
-                            hintText: 'Project URL',
-                            hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                            filled: true,
-                            fillColor: AppColors.bg,
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
-                            suffixIcon: _urlHasText
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear, size: 16, color: AppColors.textTertiary),
-                                    onPressed: () => _urlController.clear(),
-                                  )
-                                : const Icon(Icons.link, size: 16, color: AppColors.textTertiary),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _anonKeyController,
-                                obscureText: !_showAnonKey,
-                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                                decoration: InputDecoration(
-                                  hintText: 'Anon key',
-                                  hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                                  filled: true,
-                                  fillColor: AppColors.bg,
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(_showAnonKey ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
-                                    onPressed: () => setState(() => _showAnonKey = !_showAnonKey),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 110,
-                              height: 36,
-                              child: ElevatedButton(
-                                onPressed: _testing ? null : _testAndSave,
-                                style: ElevatedButton.styleFrom(
-                                  minimumSize: Size.zero,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                ),
-                                child: _testing
-                                    ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
-                                    : const Text('Save & Test', style: TextStyle(fontSize: 12)),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (_testing || _testOk || _needsServiceKey || _testError != null) ...[
-                          const SizedBox(height: 6),
-                          _buildTestStatus(),
-                        ],
-                        if (sync.isSupabaseConfigured) ...[
-                          const SizedBox(height: 16),
-                          const Divider(height: 1, color: AppColors.border),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Encryption passphrase (recommended)',
-                            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            sync.hasPassphrase
-                                ? 'A passphrase is set. Without it, anyone with your anon key can decrypt synced data.'
-                                : 'No passphrase set. Anyone with your anon key can decrypt synced data.',
-                            style: TextStyle(
-                              color: sync.hasPassphrase ? AppColors.textTertiary : Colors.orange,
-                              fontSize: 11,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _passphraseController,
-                                  obscureText: !_showPassphrase,
-                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                                  decoration: InputDecoration(
-                                    hintText: 'Passphrase (leave empty to disable)',
-                                    hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                                    filled: true,
-                                    fillColor: AppColors.bg,
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.border)),
-                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppColors.accent)),
-                                    suffixIcon: IconButton(
-                                      icon: Icon(_showPassphrase ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
-                                      onPressed: () => setState(() => _showPassphrase = !_showPassphrase),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              SizedBox(
-                                height: 36,
-                                child: ElevatedButton(
-                                  onPressed: _savePassphrase,
-                                  style: ElevatedButton.styleFrom(
-                                    minimumSize: Size.zero,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                  ),
-                                  child: const Text('Save', style: TextStyle(fontSize: 12)),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          const Divider(height: 1, color: AppColors.border),
-                          const SizedBox(height: 16),
-                          _SyncStatusRow(sync: sync),
-                        ],
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  // ── P2P Transfer ─────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Transfer all hosts and passwords to another device over LAN or Tailscale. No cloud required.',
-                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.qr_code, size: 16),
-                                label: const Text('Show QR Code'),
-                                onPressed: () => _showQrExport(context),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.textPrimary,
-                                  side: const BorderSide(color: AppColors.border),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.content_paste, size: 16),
-                                label: const Text('Import via Code'),
-                                onPressed: () => showDialog<void>(
-                                  context: context,
-                                  builder: (_) => const QrImportDialog(),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.textPrimary,
-                                  side: const BorderSide(color: AppColors.border),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                if (_syncMode == _SyncMode.cloud)
+                  _buildCloudTab(sync)
+                else
+                  _buildP2pTab(context),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCloudTab(SyncProvider sync) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Supabase Backend', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _urlController,
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+            decoration: _syncFieldDecoration(
+              hint: 'Project URL',
+              suffixIcon: _urlHasText
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 16, color: AppColors.textTertiary),
+                      onPressed: () => _urlController.clear(),
+                    )
+                  : const Icon(Icons.link, size: 16, color: AppColors.textTertiary),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _anonKeyController,
+                  obscureText: !_showAnonKey,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                  decoration: _syncFieldDecoration(
+                    hint: 'Anon key',
+                    suffixIcon: IconButton(
+                      icon: Icon(_showAnonKey ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
+                      onPressed: () => setState(() => _showAnonKey = !_showAnonKey),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 110,
+                height: 36,
+                child: ElevatedButton(
+                  onPressed: _testing ? null : _testAndSave,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: Size.zero,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                  child: _testing
+                      ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Save & Test', style: TextStyle(fontSize: 12)),
+                ),
+              ),
+            ],
+          ),
+          if (_testing || _testOk || _needsServiceKey || _testError != null) ...[
+            const SizedBox(height: 6),
+            _buildTestStatus(),
+          ],
+          if (sync.isSupabaseConfigured) ...[
+            const SizedBox(height: 16),
+            const Divider(height: 1, color: AppColors.border),
+            const SizedBox(height: 16),
+            const Text(
+              'Encryption passphrase (recommended)',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              sync.hasPassphrase
+                  ? 'A passphrase is set. Without it, anyone with your anon key can decrypt synced data.'
+                  : 'No passphrase set. Anyone with your anon key can decrypt synced data.',
+              style: TextStyle(
+                color: sync.hasPassphrase ? AppColors.textTertiary : Colors.orange,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _passphraseController,
+                    obscureText: !_showPassphrase,
+                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                    decoration: _syncFieldDecoration(
+                      hint: 'Passphrase (leave empty to disable)',
+                      suffixIcon: IconButton(
+                        icon: Icon(_showPassphrase ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
+                        onPressed: () => setState(() => _showPassphrase = !_showPassphrase),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 36,
+                  child: ElevatedButton(
+                    onPressed: _savePassphrase,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                    child: const Text('Save', style: TextStyle(fontSize: 12)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1, color: AppColors.border),
+            const SizedBox(height: 16),
+            _SyncStatusRow(sync: sync),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildP2pTab(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Transfer all hosts and passwords to another device over LAN or Tailscale. No cloud required.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.qr_code, size: 16),
+                  label: const Text('Show QR Code'),
+                  onPressed: () => _showQrExport(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.content_paste, size: 16),
+                  label: const Text('Import via Code'),
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => const QrImportDialog(),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

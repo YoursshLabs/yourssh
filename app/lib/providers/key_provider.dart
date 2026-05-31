@@ -44,7 +44,7 @@ class KeyProvider extends ChangeNotifier {
       // Skip already registered keys
       if (_keys.any((k) => k.privateKeyPath == keyFile.path)) continue;
 
-      final algo = _algorithmFromName(name);
+      final algo = _algorithmFrom(name);
       final pubKey = pubFile.existsSync() ? pubFile.readAsStringSync().trim() : '';
       _keys.add(SshKeyEntry(
         label: name,
@@ -60,9 +60,10 @@ class KeyProvider extends ChangeNotifier {
     await _save();
   }
 
-  KeyAlgorithm _algorithmFromName(String name) {
-    if (name.contains('ed25519')) return KeyAlgorithm.ed25519;
-    if (name.contains('ecdsa')) return KeyAlgorithm.ecdsa;
+  /// Infers the key algorithm from a filename or path by substring match.
+  KeyAlgorithm _algorithmFrom(String nameOrPath) {
+    if (nameOrPath.contains('ed25519')) return KeyAlgorithm.ed25519;
+    if (nameOrPath.contains('ecdsa')) return KeyAlgorithm.ecdsa;
     return KeyAlgorithm.rsa;
   }
 
@@ -72,7 +73,7 @@ class KeyProvider extends ChangeNotifier {
 
     final pubFile = File('$path.pub');
     final pubKey = pubFile.existsSync() ? pubFile.readAsStringSync().trim() : '';
-    final algo = _algorithmFromPath(path);
+    final algo = _algorithmFrom(path);
 
     final entry = SshKeyEntry(
       label: label,
@@ -87,12 +88,6 @@ class KeyProvider extends ChangeNotifier {
     }
     await _save();
     notifyListeners();
-  }
-
-  KeyAlgorithm _algorithmFromPath(String path) {
-    if (path.contains('ed25519')) return KeyAlgorithm.ed25519;
-    if (path.contains('ecdsa')) return KeyAlgorithm.ecdsa;
-    return KeyAlgorithm.rsa;
   }
 
   Future<void> deleteKey(String id) async {

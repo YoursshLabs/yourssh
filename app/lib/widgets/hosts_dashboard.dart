@@ -33,18 +33,20 @@ class _HostsDashboardState extends State<HostsDashboard> {
   Widget build(BuildContext context) {
     final hostProvider = context.watch<HostProvider>();
     final hosts = hostProvider.hosts;
+    final query = _search.toLowerCase();
     final filtered = _search.isEmpty
         ? hosts
         : hosts.where((h) =>
-            h.label.toLowerCase().contains(_search.toLowerCase()) ||
-            h.host.toLowerCase().contains(_search.toLowerCase()) ||
-            h.username.toLowerCase().contains(_search.toLowerCase())).toList();
+            h.label.toLowerCase().contains(query) ||
+            h.host.toLowerCase().contains(query) ||
+            h.username.toLowerCase().contains(query)).toList();
 
-    final pinnedGroups = hostProvider.pinnedGroups;
+    final pinnedGroupsUpper =
+        hostProvider.pinnedGroups.map((g) => g.toUpperCase()).toSet();
     final groups = <String, List<Host>>{};
     // Pinned groups appear first (may be empty)
-    for (final g in pinnedGroups) {
-      groups[g.toUpperCase()] = [];
+    for (final g in pinnedGroupsUpper) {
+      groups[g] = [];
     }
     // Fill with hosts (may add new groups not in pinnedGroups)
     for (final h in hosts) {
@@ -80,9 +82,7 @@ class _HostsDashboardState extends State<HostsDashboard> {
                       runSpacing: 12,
                       children: groups.entries
                           .map((e) {
-                            final isPinned = hostProvider.pinnedGroups.any(
-                              (g) => g.toUpperCase() == e.key,
-                            );
+                            final isPinned = pinnedGroupsUpper.contains(e.key);
                             return _GroupCard(
                               name: e.key,
                               count: e.value.length,

@@ -57,69 +57,68 @@ class HotkeyService {
     return HotKey(key: key, modifiers: modifiers);
   }
 
-  static LogicalKeyboardKey? _parseKey(String k) {
-    switch (k) {
-      case 'a': return LogicalKeyboardKey.keyA;
-      case 'b': return LogicalKeyboardKey.keyB;
-      case 'c': return LogicalKeyboardKey.keyC;
-      case 'd': return LogicalKeyboardKey.keyD;
-      case 'e': return LogicalKeyboardKey.keyE;
-      case 'f': return LogicalKeyboardKey.keyF;
-      case 'g': return LogicalKeyboardKey.keyG;
-      case 'h': return LogicalKeyboardKey.keyH;
-      case 'i': return LogicalKeyboardKey.keyI;
-      case 'j': return LogicalKeyboardKey.keyJ;
-      case 'k': return LogicalKeyboardKey.keyK;
-      case 'l': return LogicalKeyboardKey.keyL;
-      case 'm': return LogicalKeyboardKey.keyM;
-      case 'n': return LogicalKeyboardKey.keyN;
-      case 'o': return LogicalKeyboardKey.keyO;
-      case 'p': return LogicalKeyboardKey.keyP;
-      case 'q': return LogicalKeyboardKey.keyQ;
-      case 'r': return LogicalKeyboardKey.keyR;
-      case 's': return LogicalKeyboardKey.keyS;
-      case 't': return LogicalKeyboardKey.keyT;
-      case 'u': return LogicalKeyboardKey.keyU;
-      case 'v': return LogicalKeyboardKey.keyV;
-      case 'w': return LogicalKeyboardKey.keyW;
-      case 'x': return LogicalKeyboardKey.keyX;
-      case 'y': return LogicalKeyboardKey.keyY;
-      case 'z': return LogicalKeyboardKey.keyZ;
-      case '0': return LogicalKeyboardKey.digit0;
-      case '1': return LogicalKeyboardKey.digit1;
-      case '2': return LogicalKeyboardKey.digit2;
-      case '3': return LogicalKeyboardKey.digit3;
-      case '4': return LogicalKeyboardKey.digit4;
-      case '5': return LogicalKeyboardKey.digit5;
-      case '6': return LogicalKeyboardKey.digit6;
-      case '7': return LogicalKeyboardKey.digit7;
-      case '8': return LogicalKeyboardKey.digit8;
-      case '9': return LogicalKeyboardKey.digit9;
-      case 'tab': return LogicalKeyboardKey.tab;
-      case 'enter': return LogicalKeyboardKey.enter;
-      case 'escape':
-      case 'esc': return LogicalKeyboardKey.escape;
-      case 'space': return LogicalKeyboardKey.space;
-      case 'backspace': return LogicalKeyboardKey.backspace;
-      case 'delete':
-      case 'del': return LogicalKeyboardKey.delete;
-      case 'up': return LogicalKeyboardKey.arrowUp;
-      case 'down': return LogicalKeyboardKey.arrowDown;
-      case 'left': return LogicalKeyboardKey.arrowLeft;
-      case 'right': return LogicalKeyboardKey.arrowRight;
-      case 'f1': return LogicalKeyboardKey.f1;
-      case 'f2': return LogicalKeyboardKey.f2;
-      case 'f3': return LogicalKeyboardKey.f3;
-      case 'f4': return LogicalKeyboardKey.f4;
-      case 'f5': return LogicalKeyboardKey.f5;
-      case 'f6': return LogicalKeyboardKey.f6;
-      case 'f7': return LogicalKeyboardKey.f7;
-      case 'f8': return LogicalKeyboardKey.f8;
-      case 'f9': return LogicalKeyboardKey.f9;
-      case 'f10': return LogicalKeyboardKey.f10;
-      case 'f11': return LogicalKeyboardKey.f11;
-      case 'f12': return LogicalKeyboardKey.f12;
-      default: return null;
-    }
-  }
+  static const Map<String, LogicalKeyboardKey> _keyMap = {
+    'a': LogicalKeyboardKey.keyA,
+    'b': LogicalKeyboardKey.keyB,
+    'c': LogicalKeyboardKey.keyC,
+    'd': LogicalKeyboardKey.keyD,
+    'e': LogicalKeyboardKey.keyE,
+    'f': LogicalKeyboardKey.keyF,
+    'g': LogicalKeyboardKey.keyG,
+    'h': LogicalKeyboardKey.keyH,
+    'i': LogicalKeyboardKey.keyI,
+    'j': LogicalKeyboardKey.keyJ,
+    'k': LogicalKeyboardKey.keyK,
+    'l': LogicalKeyboardKey.keyL,
+    'm': LogicalKeyboardKey.keyM,
+    'n': LogicalKeyboardKey.keyN,
+    'o': LogicalKeyboardKey.keyO,
+    'p': LogicalKeyboardKey.keyP,
+    'q': LogicalKeyboardKey.keyQ,
+    'r': LogicalKeyboardKey.keyR,
+    's': LogicalKeyboardKey.keyS,
+    't': LogicalKeyboardKey.keyT,
+    'u': LogicalKeyboardKey.keyU,
+    'v': LogicalKeyboardKey.keyV,
+    'w': LogicalKeyboardKey.keyW,
+    'x': LogicalKeyboardKey.keyX,
+    'y': LogicalKeyboardKey.keyY,
+    'z': LogicalKeyboardKey.keyZ,
+    '0': LogicalKeyboardKey.digit0,
+    '1': LogicalKeyboardKey.digit1,
+    '2': LogicalKeyboardKey.digit2,
+    '3': LogicalKeyboardKey.digit3,
+    '4': LogicalKeyboardKey.digit4,
+    '5': LogicalKeyboardKey.digit5,
+    '6': LogicalKeyboardKey.digit6,
+    '7': LogicalKeyboardKey.digit7,
+    '8': LogicalKeyboardKey.digit8,
+    '9': LogicalKeyboardKey.digit9,
+    'tab': LogicalKeyboardKey.tab,
+    'enter': LogicalKeyboardKey.enter,
+    'escape': LogicalKeyboardKey.escape,
+    'esc': LogicalKeyboardKey.escape,
+    'space': LogicalKeyboardKey.space,
+    'backspace': LogicalKeyboardKey.backspace,
+    'delete': LogicalKeyboardKey.delete,
+    'del': LogicalKeyboardKey.delete,
+    'up': LogicalKeyboardKey.arrowUp,
+    'down': LogicalKeyboardKey.arrowDown,
+    'left': LogicalKeyboardKey.arrowLeft,
+    'right': LogicalKeyboardKey.arrowRight,
+    'f1': LogicalKeyboardKey.f1,
+    'f2': LogicalKeyboardKey.f2,
+    'f3': LogicalKeyboardKey.f3,
+    'f4': LogicalKeyboardKey.f4,
+    'f5': LogicalKeyboardKey.f5,
+    'f6': LogicalKeyboardKey.f6,
+    'f7': LogicalKeyboardKey.f7,
+    'f8': LogicalKeyboardKey.f8,
+    'f9': LogicalKeyboardKey.f9,
+    'f10': LogicalKeyboardKey.f10,
+    'f11': LogicalKeyboardKey.f11,
+    'f12': LogicalKeyboardKey.f12,
+  };
+
+  static LogicalKeyboardKey? _parseKey(String k) => _keyMap[k];
 }

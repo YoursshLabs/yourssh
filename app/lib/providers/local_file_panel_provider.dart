@@ -182,6 +182,7 @@ class LocalFilePanelProvider extends ChangeNotifier {
   }
 
   void setFilterQuery(String query) {
+    if (_filterQuery == query) return;
     _filterQuery = query;
     notifyListeners();
   }
