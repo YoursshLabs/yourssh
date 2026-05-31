@@ -63,44 +63,48 @@ plugin.on('session.disconnect', function(ctx) {
 
 migrateIfNeeded();
 
+function _handlePanelMessage(msg) {
+  try {
+    if (msg.type === 'get-snippets') {
+      return { type: 'snippets', data: getSnippets() };
+    }
+    if (msg.type === 'add-snippet') {
+      var list = getSnippets();
+      var snippet = msg.snippet;
+      snippet.id = 's' + String(new Date().getTime()) + Math.random().toString(36).slice(2, 6);
+      list.push(snippet);
+      saveSnippets(list);
+      return { type: 'ok' };
+    }
+    if (msg.type === 'delete-snippet') {
+      var filtered = getSnippets().filter(function(s) { return s.id !== msg.id; });
+      saveSnippets(filtered);
+      return { type: 'ok' };
+    }
+    if (msg.type === 'run-snippet') {
+      if (!_activeSessionId) {
+        return { type: 'error', message: 'No active SSH session. Connect to a host first.' };
+      }
+      _ssh.inject(JSON.stringify({ sessionId: _activeSessionId, text: msg.command + '\n' }));
+      return { type: 'ok' };
+    }
+    if (msg.type === 'copy-snippet') {
+      _ui.copyToClipboard(JSON.stringify({ text: msg.command }));
+      _ui.notify(JSON.stringify({ message: 'Copied to clipboard', type: 'info' }));
+      return { type: 'ok' };
+    }
+    return { type: 'error', message: 'Unknown message type: ' + msg.type };
+  } catch (e) {
+    console.error('[snippets] onMessage error: ' + e);
+    return { type: 'error', message: String(e) };
+  }
+}
+
+plugin._setPanelMessage(_handlePanelMessage);
+
 ui.panel.register({
   title: 'Snippets',
   icon: 'code',
   webviewEntry: 'panel/index.html',
-  onMessage: function(msg) {
-    try {
-      if (msg.type === 'get-snippets') {
-        return { type: 'snippets', data: getSnippets() };
-      }
-      if (msg.type === 'add-snippet') {
-        var list = getSnippets();
-        var snippet = msg.snippet;
-        snippet.id = 's' + String(new Date().getTime()) + Math.random().toString(36).slice(2, 6);
-        list.push(snippet);
-        saveSnippets(list);
-        return { type: 'ok' };
-      }
-      if (msg.type === 'delete-snippet') {
-        var filtered = getSnippets().filter(function(s) { return s.id !== msg.id; });
-        saveSnippets(filtered);
-        return { type: 'ok' };
-      }
-      if (msg.type === 'run-snippet') {
-        if (!_activeSessionId) {
-          return { type: 'error', message: 'No active SSH session. Connect to a host first.' };
-        }
-        _ssh.inject(JSON.stringify({ sessionId: _activeSessionId, text: msg.command + '\n' }));
-        return { type: 'ok' };
-      }
-      if (msg.type === 'copy-snippet') {
-        _ui.copyToClipboard(JSON.stringify({ text: msg.command }));
-        _ui.notify(JSON.stringify({ message: 'Copied to clipboard', type: 'info' }));
-        return { type: 'ok' };
-      }
-      return { type: 'error', message: 'Unknown message type: ' + msg.type };
-    } catch (e) {
-      console.error('[snippets] onMessage error: ' + e);
-      return { type: 'error', message: String(e) };
-    }
-  }
+  onMessage: _handlePanelMessage
 });

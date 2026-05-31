@@ -15,10 +15,12 @@ import 'bridge/terminal_inject_bridge.dart';
 import 'bridge/migration_bridge.dart';
 
 // JS bootstrap injected at runtime load time.
-// Provides `plugin.on(event, handler)` and `plugin._dispatch(event, ctxJson)`.
+// Provides `plugin.on(event, handler)`, `plugin._dispatch(event, ctxJson)`,
+// `plugin._setPanelMessage(handler)`, and `plugin._invokePanelMessage(msgJson)`.
 const _kBootstrap = r'''
 var plugin = (function() {
   var _h = {};
+  var _panelMessageHandler = null;
   return {
     on: function(event, handler) {
       if (!_h[event]) _h[event] = [];
@@ -34,6 +36,20 @@ var plugin = (function() {
         if (typeof r === 'string') current = Object.assign({}, current, {data: r});
       }
       return {data: current.data};
+    },
+    _setPanelMessage: function(handler) {
+      _panelMessageHandler = handler;
+    },
+    _invokePanelMessage: function(msgJson) {
+      if (!_panelMessageHandler) return null;
+      try {
+        var msg = JSON.parse(msgJson);
+        var result = _panelMessageHandler(msg);
+        if (result === null || result === undefined) return null;
+        return JSON.stringify(result);
+      } catch(e) {
+        return JSON.stringify({type: 'error', message: String(e)});
+      }
     }
   };
 })();
@@ -88,7 +104,14 @@ class ScriptEngineService {
       }
       if (sftpDelegate != null) SftpBridge(guard, sftpDelegate!).register(rt);
       if (uiRegistry != null) {
-        UiBridge(manifest.id, guard, uiRegistry!, null).register(rt);
+        UiBridge(manifest.id, guard, uiRegistry!, null, (msg) async {
+          try {
+            final result = rt.callPanelMessage(msg);
+            return result;
+          } catch (e) {
+            return json.encode({'type': 'error', 'message': e.toString()});
+          }
+        }).register(rt);
       }
 
       // Execute plugin entry point

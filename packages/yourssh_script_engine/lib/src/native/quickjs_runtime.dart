@@ -182,6 +182,46 @@ class QuickJsRuntime implements JsRuntimeRegistrar {
     }
   }
 
+  /// Call `plugin._invokePanelMessage(msgJson)` in the JS runtime.
+  ///
+  /// Returns the JSON-encoded result string from the plugin's panel message
+  /// handler, or `null` if no handler is set or an error occurs.
+  String? callPanelMessage(Map<String, dynamic> msg) {
+    _checkNotDisposed();
+    final msgJson = json.encode(msg);
+
+    // Store result in a global via eval.
+    final invokeJs =
+        'var __qjsPanelResult = plugin._invokePanelMessage(${json.encode(msgJson)});';
+    try {
+      eval(invokeJs, filename: '<panel-message>');
+    } catch (_) {
+      return null;
+    }
+
+    // Define getter (idempotent).
+    try {
+      eval(
+        'function __getPanelResult() { return __qjsPanelResult; }',
+        filename: '<panel-message-getter>',
+      );
+    } catch (_) {}
+
+    // Read result via qjs_call_fn.
+    final fnName = '__getPanelResult'.toNativeUtf8();
+    final argStr = 'null'.toNativeUtf8();
+    try {
+      final resultPtr = ffi.qjsCallFn(_ctx, fnName, argStr);
+      if (resultPtr.address == 0) return null;
+      final result = resultPtr.toDartString();
+      ffi.qjsStringFree(resultPtr);
+      return result == 'null' ? null : result;
+    } finally {
+      malloc.free(fnName);
+      malloc.free(argStr);
+    }
+  }
+
   /// Release the QuickJS context and all registered callbacks.
   void dispose() {
     if (_disposed) return;

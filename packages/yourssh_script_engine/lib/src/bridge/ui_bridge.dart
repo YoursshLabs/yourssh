@@ -9,8 +9,10 @@ class UiBridge {
   final PermissionGuard _guard;
   final PluginUiRegistry _registry;
   final void Function(String msg, String type)? _onNotify;
+  final Future<String?> Function(Map<String, dynamic>)? _onPanelMessage;
 
-  UiBridge(this._pluginId, this._guard, this._registry, this._onNotify);
+  UiBridge(this._pluginId, this._guard, this._registry, this._onNotify,
+      [this._onPanelMessage]);
 
   void register(JsRuntimeRegistrar rt) {
     if (_guard.has('ui.notify')) {
@@ -76,7 +78,7 @@ class UiBridge {
       title: arg['title'] as String,
       icon: arg['icon'] as String? ?? 'extension',
       webviewEntry: arg['webviewEntry'] as String,
-      onMessage: (_) async => null,
+      onMessage: _onPanelMessage ?? (_) async => null,
     ));
     return null;
   }
