@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Docker / Kubernetes container browser in DevOps: list running containers (`docker ps`) and pods (`kubectl get pods`), exec directly into them in a new terminal tab, with install/permission hints when the runtime is missing.
+
 ---
 
 ## [0.1.11] — 2026-05-31

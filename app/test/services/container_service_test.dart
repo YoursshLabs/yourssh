@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:yourssh/models/container_entry.dart'
-    show ContainerEntry, PodEntry, RuntimeAvailability;
+import 'package:yourssh/models/container_entry.dart' show RuntimeAvailability;
 import 'package:yourssh/services/container_service.dart';
 
 void main() {
