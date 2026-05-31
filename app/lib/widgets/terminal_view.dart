@@ -49,9 +49,28 @@ class _TerminalWidget extends StatefulWidget {
 }
 
 class _TerminalWidgetState extends State<_TerminalWidget> {
+  final _controller = TerminalController();
+  final _scrollController = ScrollController();
+
+  // Search state
+  bool _searchVisible = false;
+  String _searchQuery = '';
+  bool _searchRegex = false;
+  bool _searchError = false;
+  List<_SearchMatch> _matches = [];
+  int _currentMatch = 0;
+  final List<TerminalHighlight> _highlights = [];
+  late final TextEditingController _searchTextController;
+
   String _inputBuffer = '';
   int _selectedIdx = 0;
   List<String> _suggestions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _searchTextController = TextEditingController();
+  }
 
   void _refreshSuggestions() {
     if (!mounted) return;
@@ -59,6 +78,173 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
     setState(() {
       _suggestions = provider.suggestions(widget.session.id, _inputBuffer);
       _selectedIdx = 0;
+    });
+  }
+
+  @override
+  void dispose() {
+    _clearHighlights();
+    _controller.dispose();
+    _scrollController.dispose();
+    _searchTextController.dispose();
+    super.dispose();
+  }
+
+  void _clearHighlights() {
+    for (final h in _highlights) {
+      h.dispose();
+    }
+    _highlights.clear();
+  }
+
+  void _runSearch() {
+    if (!mounted) return;
+    _clearHighlights();
+
+    if (_searchQuery.isEmpty) {
+      setState(() {
+        _matches = [];
+        _currentMatch = 0;
+        _searchError = false;
+      });
+      return;
+    }
+
+    RegExp regex;
+    try {
+      final pattern =
+          _searchRegex ? _searchQuery : RegExp.escape(_searchQuery);
+      regex = RegExp(pattern, caseSensitive: false);
+    } catch (_) {
+      setState(() {
+        _matches = [];
+        _currentMatch = 0;
+        _searchError = true;
+      });
+      return;
+    }
+
+    final terminal = widget.session.terminal;
+    final buffer = terminal.buffer;
+    final lines = terminal.lines;
+    final newMatches = <_SearchMatch>[];
+
+    for (var i = 0; i < lines.length; i++) {
+      final text = lines[i].getText();
+      for (final m in regex.allMatches(text)) {
+        newMatches.add(_SearchMatch(i, m.start, m.end));
+      }
+    }
+
+    final settings = context.read<SettingsProvider>();
+    final termTheme = terminalThemeByName(settings.terminalTheme);
+
+    for (var mi = 0; mi < newMatches.length; mi++) {
+      final match = newMatches[mi];
+      final color = mi == 0
+          ? termTheme.searchHitBackgroundCurrent
+          : termTheme.searchHitBackground;
+      final h = _controller.highlight(
+        p1: buffer.createAnchor(match.startCol, match.lineIdx),
+        p2: buffer.createAnchor(match.endCol, match.lineIdx),
+        color: color,
+      );
+      _highlights.add(h);
+    }
+
+    setState(() {
+      _matches = newMatches;
+      _currentMatch = 0;
+      _searchError = false;
+    });
+
+    if (newMatches.isNotEmpty) _scrollToMatch(0);
+  }
+
+  void _scrollToMatch(int matchIdx) {
+    if (_matches.isEmpty || !_scrollController.hasClients) return;
+    final lineIdx = _matches[matchIdx].lineIdx;
+    final fontSize = context.read<SettingsProvider>().fontSize;
+    final estimatedLineHeight = fontSize * 1.35;
+    final offset = (lineIdx * estimatedLineHeight)
+        .clamp(0.0, _scrollController.position.maxScrollExtent);
+    _scrollController.animateTo(
+      offset,
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _goNext() {
+    if (_matches.isEmpty) return;
+    final termTheme = terminalThemeByName(
+        context.read<SettingsProvider>().terminalTheme);
+    final buffer = widget.session.terminal.buffer;
+
+    // Demote current match to normal color
+    _highlights[_currentMatch].dispose();
+    final old = _matches[_currentMatch];
+    _highlights[_currentMatch] = _controller.highlight(
+      p1: buffer.createAnchor(old.startCol, old.lineIdx),
+      p2: buffer.createAnchor(old.endCol, old.lineIdx),
+      color: termTheme.searchHitBackground,
+    );
+
+    final next = (_currentMatch + 1) % _matches.length;
+
+    // Promote next match to current color
+    _highlights[next].dispose();
+    final cur = _matches[next];
+    _highlights[next] = _controller.highlight(
+      p1: buffer.createAnchor(cur.startCol, cur.lineIdx),
+      p2: buffer.createAnchor(cur.endCol, cur.lineIdx),
+      color: termTheme.searchHitBackgroundCurrent,
+    );
+
+    setState(() => _currentMatch = next);
+    _scrollToMatch(next);
+  }
+
+  void _goPrev() {
+    if (_matches.isEmpty) return;
+    final termTheme = terminalThemeByName(
+        context.read<SettingsProvider>().terminalTheme);
+    final buffer = widget.session.terminal.buffer;
+
+    // Demote current match to normal color
+    _highlights[_currentMatch].dispose();
+    final old = _matches[_currentMatch];
+    _highlights[_currentMatch] = _controller.highlight(
+      p1: buffer.createAnchor(old.startCol, old.lineIdx),
+      p2: buffer.createAnchor(old.endCol, old.lineIdx),
+      color: termTheme.searchHitBackground,
+    );
+
+    final prev = (_currentMatch - 1 + _matches.length) % _matches.length;
+
+    // Promote prev match to current color
+    _highlights[prev].dispose();
+    final cur = _matches[prev];
+    _highlights[prev] = _controller.highlight(
+      p1: buffer.createAnchor(cur.startCol, cur.lineIdx),
+      p2: buffer.createAnchor(cur.endCol, cur.lineIdx),
+      color: termTheme.searchHitBackgroundCurrent,
+    );
+
+    setState(() => _currentMatch = prev);
+    _scrollToMatch(prev);
+  }
+
+  void _closeSearch() {
+    _clearHighlights();
+    _searchTextController.clear();
+    setState(() {
+      _searchVisible = false;
+      _searchQuery = '';
+      _searchRegex = false;
+      _searchError = false;
+      _matches = [];
+      _currentMatch = 0;
     });
   }
 
@@ -77,6 +263,30 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
     final key = event.logicalKey;
     final ctrl = HardwareKeyboard.instance.isControlPressed;
     final meta = HardwareKeyboard.instance.isMetaPressed;
+
+    // Open search (Cmd+F on macOS, Ctrl+F elsewhere)
+    if ((meta || ctrl) && key == LogicalKeyboardKey.keyF) {
+      setState(() => _searchVisible = true);
+      return KeyEventResult.handled;
+    }
+
+    // While search bar is visible: intercept Escape and Enter only;
+    // all other keys flow to the TextField via its own focus.
+    if (_searchVisible) {
+      if (key == LogicalKeyboardKey.escape) {
+        _closeSearch();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.enter) {
+        if (HardwareKeyboard.instance.isShiftPressed) {
+          _goPrev();
+        } else {
+          _goNext();
+        }
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
 
     if (key == LogicalKeyboardKey.tab) {
       if (_suggestions.isNotEmpty) {
@@ -135,17 +345,43 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
       children: [
         TerminalView(
           widget.session.terminal,
+          controller: _controller,
+          scrollController: _scrollController,
           theme: theme,
           textStyle: TerminalStyle(
             fontSize: settings.fontSize,
             fontFamily: settings.terminalFont,
           ),
           padding: EdgeInsets.zero,
-          autofocus: true,
+          autofocus: !_searchVisible,
           onKeyEvent: _handleKey,
         ),
+        if (_searchVisible)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _SearchBar(
+              controller: _searchTextController,
+              useRegex: _searchRegex,
+              hasError: _searchError,
+              matchCount: _matches.length,
+              currentMatch: _currentMatch,
+              onQueryChanged: (q) {
+                _searchQuery = q;
+                _runSearch();
+              },
+              onToggleRegex: () {
+                setState(() => _searchRegex = !_searchRegex);
+                _runSearch();
+              },
+              onNext: _goNext,
+              onPrev: _goPrev,
+              onClose: _closeSearch,
+            ),
+          ),
         Positioned(
-          top: 8,
+          top: _searchVisible ? 44 : 8,
           left: 8,
           child: _RecordButton(session: widget.session),
         ),
@@ -213,6 +449,187 @@ class _RecordButton extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchMatch {
+  final int lineIdx;
+  final int startCol;
+  final int endCol;
+  const _SearchMatch(this.lineIdx, this.startCol, this.endCol);
+}
+
+class _SearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  final bool useRegex;
+  final bool hasError;
+  final int matchCount;
+  final int currentMatch;
+  final ValueChanged<String> onQueryChanged;
+  final VoidCallback onToggleRegex;
+  final VoidCallback onNext;
+  final VoidCallback onPrev;
+  final VoidCallback onClose;
+
+  const _SearchBar({
+    required this.controller,
+    required this.useRegex,
+    required this.hasError,
+    required this.matchCount,
+    required this.currentMatch,
+    required this.onQueryChanged,
+    required this.onToggleRegex,
+    required this.onNext,
+    required this.onPrev,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasResults = matchCount > 0;
+    final countLabel = controller.text.isEmpty
+        ? ''
+        : hasError
+            ? 'Invalid regex'
+            : hasResults
+                ? '${currentMatch + 1} of $matchCount'
+                : 'No results';
+    final countColor = hasError
+        ? Colors.red
+        : hasResults
+            ? const Color(0xFF888888)
+            : Colors.orange;
+
+    return Container(
+      height: 36,
+      color: const Color(0xFF141414),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              autofocus: true,
+              onChanged: onQueryChanged,
+              style: const TextStyle(
+                color: Color(0xFFEEEEEE),
+                fontSize: 12,
+                fontFamily: 'monospace',
+              ),
+              decoration: InputDecoration(
+                hintText: useRegex ? 'Search (regex)…' : 'Search…',
+                hintStyle:
+                    const TextStyle(color: Color(0xFF555555), fontSize: 12),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (countLabel.isNotEmpty)
+            Text(
+              countLabel,
+              style: TextStyle(
+                color: countColor,
+                fontSize: 11,
+                fontFamily: 'monospace',
+              ),
+            ),
+          const SizedBox(width: 8),
+          _SearchBtn(
+            tooltip: 'Use regex',
+            active: useRegex,
+            label: '.*',
+            onTap: onToggleRegex,
+          ),
+          const SizedBox(width: 4),
+          _SearchBtn(
+            tooltip: 'Previous match (Shift+Enter)',
+            icon: Icons.keyboard_arrow_up,
+            onTap: onPrev,
+          ),
+          const SizedBox(width: 2),
+          _SearchBtn(
+            tooltip: 'Next match (Enter)',
+            icon: Icons.keyboard_arrow_down,
+            onTap: onNext,
+          ),
+          const SizedBox(width: 4),
+          _SearchBtn(
+            tooltip: 'Close search (Escape)',
+            icon: Icons.close,
+            onTap: onClose,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchBtn extends StatefulWidget {
+  final String? tooltip;
+  final String? label;
+  final IconData? icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _SearchBtn({
+    this.tooltip,
+    this.label,
+    this.icon,
+    this.active = false,
+    required this.onTap,
+  }) : assert(label != null || icon != null);
+
+  @override
+  State<_SearchBtn> createState() => _SearchBtnState();
+}
+
+class _SearchBtnState extends State<_SearchBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.active
+        ? const Color(0xFF4FC3F7)
+        : _hovered
+            ? const Color(0xFFAAAAAA)
+            : const Color(0xFF666666);
+
+    final child = widget.label != null
+        ? Text(
+            widget.label!,
+            style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w600),
+          )
+        : Icon(widget.icon, size: 14, color: color);
+
+    return Tooltip(
+      message: widget.tooltip ?? '',
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            width: 24,
+            height: 24,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: widget.active
+                  ? const Color(0xFF4FC3F7).withValues(alpha: 0.12)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: child,
           ),
         ),
       ),
