@@ -1,31 +1,31 @@
 # YourSSH Plugin Authoring Guide
 
-Hướng dẫn viết script plugin cho YourSSH từ A đến Z — không cần rebuild app, chỉ cần tạo thư mục và viết JS.
+A complete guide to writing script plugins for YourSSH — no app rebuild required, just create a folder and write JS.
 
 ---
 
-## Mục lục
+## Table of Contents
 
-1. [Cách hoạt động](#1-cách-hoạt-động)
-2. [Cấu trúc plugin](#2-cấu-trúc-plugin)
+1. [How it works](#1-how-it-works)
+2. [Plugin structure](#2-plugin-structure)
 3. [Manifest (plugin.json)](#3-manifest-pluginjson)
 4. [API: Hook events](#4-api-hook-events)
 5. [API: Bridge functions](#5-api-bridge-functions)
 6. [API: Native panel messages](#6-api-native-panel-messages)
 7. [Lifecycle & hot-reload](#7-lifecycle--hot-reload)
 8. [Security & permissions](#8-security--permissions)
-9. [Ví dụ thực tế](#9-ví-dụ-thực-tế)
+9. [Examples](#9-examples)
 10. [Debugging](#10-debugging)
 11. [Known limitations](#11-known-limitations)
-12. [Checklist trước khi publish](#12-checklist-trước-khi-publish)
+12. [Pre-publish checklist](#12-pre-publish-checklist)
 
 ---
 
-## 1. Cách hoạt động
+## 1. How it works
 
-YourSSH chạy mỗi plugin trong một **JavaScript runtime riêng biệt** (QuickJS). Khi app khởi động, nó scan thư mục `~/.yourssh/plugins/`, load từng plugin, và inject một đối tượng `plugin` vào JS context.
+YourSSH runs each plugin in an **isolated JavaScript runtime** (QuickJS). On startup the app scans `~/.yourssh/plugins/`, loads each plugin, and injects a `plugin` object into the JS context.
 
-Plugin đăng ký handler thông qua `plugin.on(event, handler)`. App fire các event này tại đúng thời điểm (khi có data từ SSH, khi session connect, v.v.) — handler của plugin được gọi synchronously hoặc asynchronously tùy event.
+Plugins register handlers via `plugin.on(event, handler)`. The app fires events at the right moments (terminal data, session connect, etc.) — handlers are called synchronously or asynchronously depending on the event.
 
 ```
 App (Dart)          Plugin (JavaScript)
@@ -41,18 +41,18 @@ App (Dart)          Plugin (JavaScript)
 
 ---
 
-## 2. Cấu trúc plugin
+## 2. Plugin structure
 
 ```
 ~/.yourssh/plugins/
   my-plugin/
-    plugin.json     ← bắt buộc: manifest
-    index.js        ← bắt buộc: entry point
+    plugin.json     ← required: manifest
+    index.js        ← required: entry point
     lib/
-      helpers.js    ← tùy chọn: file phụ
+      helpers.js    ← optional: helper files
 ```
 
-Plugin là một **thư mục** trong `~/.yourssh/plugins/`. App nhận diện plugin qua `plugin.json`. Không cần install, không cần build.
+A plugin is a **directory** inside `~/.yourssh/plugins/`. The app identifies it via `plugin.json`. No install step, no build step.
 
 ---
 
@@ -72,48 +72,48 @@ Plugin là một **thư mục** trong `~/.yourssh/plugins/`. App nhận diện p
 }
 ```
 
-### Các trường bắt buộc
+### Required fields
 
-| Field | Mô tả |
-|-------|-------|
-| `id` | Reverse-domain ID duy nhất. Pattern: `^[a-z0-9][a-z0-9._\-]{0,63}$` |
-| `name` | Tên hiển thị trong UI |
+| Field | Description |
+|-------|-------------|
+| `id` | Unique reverse-domain ID. Pattern: `^[a-z0-9][a-z0-9._\-]{0,63}$` |
+| `name` | Display name shown in UI |
 | `version` | Semantic version: `MAJOR.MINOR.PATCH` |
-| `entry` | File JS entry point (relative to plugin folder) |
-| `minAppVersion` | Version YourSSH tối thiểu |
-| `permissions` | Danh sách quyền cần (xem mục 7) |
+| `entry` | JS entry point (relative to plugin folder) |
+| `minAppVersion` | Minimum YourSSH version required |
+| `permissions` | List of permissions needed (see section 8) |
 
 ### ID format
 
-- Phải bắt đầu bằng chữ thường hoặc số
-- Chỉ dùng: `a-z`, `0-9`, `.`, `_`, `-`
-- Tối đa 64 ký tự
-- Nên theo reverse-domain: `dev.yourname.pluginname`
+- Must start with a lowercase letter or digit
+- Allowed characters: `a-z`, `0-9`, `.`, `_`, `-`
+- Maximum 64 characters
+- Follow reverse-domain convention: `dev.yourname.pluginname`
 
 ---
 
 ## 4. API: Hook events
 
-Plugin đăng ký handler qua `plugin.on(event, handler)`.
+Plugins register handlers via `plugin.on(event, handler)`.
 
 ### Terminal events
 
 #### `terminal.output` — Transform terminal output
 
-> **Required permission:** `terminal.transform` (để modify) hoặc `terminal.read` (để observe-only)
+> **Required permission:** `terminal.transform` (to modify) or `terminal.read` (observe-only)
 
 ```js
 plugin.on("terminal.output", function(ctx) {
-  // ctx.sessionId : string — ID của SSH session
-  // ctx.data      : string — raw terminal output text (có thể có ANSI escape codes)
+  // ctx.sessionId : string — SSH session ID
+  // ctx.data      : string — raw terminal output text (may contain ANSI escape codes)
 
   // Return string → replace data
-  // Return null / undefined → pass-through (không thay đổi)
+  // Return null / undefined → pass-through (no change)
   return ctx.data.replace(/ERROR/g, "\x1b[31mERROR\x1b[0m");
 });
 ```
 
-**Hot path:** Handler này được gọi với mỗi chunk data từ SSH server. Phải **synchronous** và **nhanh** (< 5ms). Đừng làm I/O hoặc tính toán nặng ở đây.
+**Hot path:** Called for every chunk of data from the SSH server. Must be **synchronous** and **fast** (< 5ms). Do not perform I/O or heavy computation here.
 
 ---
 
@@ -124,10 +124,10 @@ plugin.on("terminal.output", function(ctx) {
 ```js
 plugin.on("terminal.input", function(ctx) {
   // ctx.sessionId : string
-  // ctx.data      : string — keystroke(s) sắp được gửi lên SSH server
+  // ctx.data      : string — keystroke(s) about to be sent to the SSH server
 
-  // Return false → cancel (keystroke không được gửi)
-  // Return string → modify và gửi string đó
+  // Return false → cancel (keystroke is not sent)
+  // Return string → modify and send that string instead
   // Return null / undefined → pass-through
 
   if (ctx.data.trim() === "rm -rf /") return false; // block
@@ -135,13 +135,13 @@ plugin.on("terminal.input", function(ctx) {
 });
 ```
 
-**Hot path:** Phải synchronous.
+**Hot path:** Must be synchronous.
 
 ---
 
 ### Session events
 
-#### `session.connect` — Session đã connect thành công
+#### `session.connect` — Session connected successfully
 
 > **Required permission:** `session.observe`
 
@@ -155,11 +155,11 @@ plugin.on("session.connect", function(ctx) {
 });
 ```
 
-Async được phép (handler không block terminal).
+Async handlers are allowed (handler does not block the terminal).
 
 ---
 
-#### `session.disconnect` — Session đóng
+#### `session.disconnect` — Session closed
 
 > **Required permission:** `session.observe`
 
@@ -172,7 +172,7 @@ plugin.on("session.disconnect", function(ctx) {
 
 ---
 
-#### `session.connect.before` — Trước khi connect (có thể cancel)
+#### `session.connect.before` — Before connect (can cancel)
 
 > **Required permission:** `session.control`
 
@@ -187,19 +187,38 @@ plugin.on("session.connect.before", function(ctx) {
 
 ### Command events
 
-#### `command.before` — Trước khi chạy `ssh.exec()`
+#### `command.before` — Before `ssh.exec()` runs
 
 > **Required permission:** `command.intercept`
 
 ```js
-plugin.on("command.before", async function(ctx) {
+plugin.on("command.before", function(ctx) {
   // ctx.sessionId : string
-  // ctx.command   : string — lệnh sắp chạy
+  // ctx.command   : string — command about to run
 
   // Return false → cancel
   // Return string → replace command
   console.log("Running: " + ctx.command);
   return ctx.command;
+});
+```
+
+---
+
+#### `command.after` — After `ssh.exec()` completes
+
+> **Required permission:** `command.intercept`
+
+```js
+plugin.on("command.after", function(ctx) {
+  // ctx.sessionId : string
+  // ctx.command   : string — command that ran
+  // ctx.stdout    : string
+  // ctx.stderr    : string
+  // ctx.exitCode  : number
+  if (ctx.exitCode !== 0) {
+    console.error("[plugin] Command failed: " + ctx.command);
+  }
 });
 ```
 
@@ -219,34 +238,15 @@ plugin.on("command.before", async function(ctx) {
 
 ---
 
-#### `command.after` — Sau khi `ssh.exec()` hoàn thành
-
-> **Required permission:** `command.intercept`
-
-```js
-plugin.on("command.after", function(ctx) {
-  // ctx.sessionId : string
-  // ctx.command   : string — lệnh đã chạy
-  // ctx.stdout    : string
-  // ctx.stderr    : string
-  // ctx.exitCode  : number
-  if (ctx.exitCode !== 0) {
-    console.error("[plugin] Command failed: " + ctx.command);
-  }
-});
-```
-
----
-
 ## 5. API: Bridge functions
 
-Bridge functions cho phép plugin gọi vào app. Chỉ available nếu có permission tương ứng.
+Bridge functions let plugins call into the app. Available only when the corresponding permission is granted.
 
 ### `ssh` — SSH operations
 
 #### `ssh.sessions()` → `Array`
 
-> **Permission:** `session.observe` hoặc `ssh.exec`
+> **Permission:** `session.observe` or `ssh.exec`
 
 ```js
 const sessions = ssh.sessions();
@@ -262,24 +262,20 @@ const sessions = ssh.sessions();
 // ]
 ```
 
-#### `ssh.exec(sessionId, command)` → `Promise<Object>`
+#### `ssh.inject(sessionId, text)` — Send text to terminal shell
 
-> **Permission:** `ssh.exec`
+> **Permission:** `terminal.inject`
 
 ```js
-plugin.on("session.connect", async function(ctx) {
-  const result = await ssh.exec(ctx.sessionId, "uname -a");
-  console.log(result.stdout);  // string
-  console.log(result.stderr);  // string
-  console.log(result.exitCode); // number
-});
+// Sends the text directly into the active shell (as if the user typed it)
+ssh.inject(sessionId, "ls -la\n");  // \n submits the command
 ```
 
 ---
 
 ### `sftp` — File operations
 
-> **Permission:** `sftp.read` (cho list/read) hoặc `sftp.write` (cho write/delete/mkdir)
+> **Permission:** `sftp.read` (for list/read) or `sftp.write` (for write/delete/mkdir)
 
 ```js
 // List remote directory
@@ -303,7 +299,7 @@ await sftp.mkdir(sessionId, "/tmp/newdir");
 
 ### `storage` — Persistent key-value store
 
-> **Permission:** Không cần — luôn available. Tự động namespace theo plugin id.
+> **Permission:** None — always available. Auto-namespaced by plugin id.
 
 ```js
 // Save
@@ -317,7 +313,7 @@ if (val !== null) console.log(val.value);
 await storage.delete("mykey");
 ```
 
-Keys được namespace tự động: `plugin::<id>::storage::<key>` — không cần lo về conflict với plugin khác.
+Keys are automatically namespaced as `plugin::<id>::storage::<key>` — no collision risk with other plugins.
 
 ---
 
@@ -350,7 +346,7 @@ ui.statusbar.update("my-item", { label: "CPU: 42%" });
 ui.statusbar.remove("my-item");
 ```
 
-Status bar item xuất hiện ở bottom của app window.
+Status bar items appear at the bottom of the app window.
 
 #### `ui.panel.register(config)` — Sidebar panel (WebView)
 
@@ -361,39 +357,28 @@ ui.panel.register({
   title: "My Panel",
   icon: "monitor",
   webviewEntry: "panel/index.html",  // relative to plugin folder
-  onMessage: async function(msg) {
-    if (msg.type === "fetch-stats") {
-      const sessions = ssh.sessions();
-      const r = await ssh.exec(sessions[0].sessionId, "df -h");
-      return { type: "stats", data: r.stdout };
+  onMessage: function(msg) {
+    if (msg.type === "get-data") {
+      return { type: "data", value: "hello" };
     }
   }
 });
 ```
 
-Panel HTML có thể gọi Dart bridge qua `window.pluginBridge.sendMessage(msg)`.
+The panel `onMessage` handler must be **synchronous**. For async SSH/SFTP operations from panel HTML, use [native panel messages](#6-api-native-panel-messages) instead.
 
----
+#### `ui.clipboard.copy(text)` — Copy to clipboard
 
-### `console` — Debug logging
-
-> **Permission:** Không cần — luôn available.
+> **Permission:** `ui.clipboard`
 
 ```js
-console.log("debug message");
-console.warn("warning");
-console.error("error message");
+ui.clipboard.copy(snippet.command);
+ui.notify("Copied to clipboard", { type: "info" });
 ```
 
-Logs hiện trong **Plugin Console** (Settings → Script Plugins → plugin → Console). Hỗ trợ nhiều arguments:
+#### `ui.addCommand(config)` — Register command palette entry
 
-```js
-console.log("Sessions:", sessions.length, "connected");
-```
-
-### `ui.addCommand` — Register command palette entry
-
-> **Permission:** `ui.statusbar` hoặc `ui.panel`
+> **Permission:** `ui.statusbar` or `ui.panel`
 
 ```js
 ui.addCommand({
@@ -403,20 +388,37 @@ ui.addCommand({
 });
 ```
 
-Command sẽ xuất hiện trong command palette. **Lưu ý:** Hiện tại command chỉ xuất hiện trong UI — callback chưa được implement (known limitation).
+The command appears in the command palette. **Note:** Command click handler is not yet implemented (see [Known limitations](#11-known-limitations)).
+
+---
+
+### `console` — Debug logging
+
+> **Permission:** None — always available.
+
+```js
+console.log("debug message");
+console.warn("warning");
+console.error("error message");
+```
+
+Logs appear in the **Plugin Console** (Settings → Script Plugins → plugin → Console). Multiple arguments are supported:
+
+```js
+console.log("Sessions:", sessions.length, "connected");
+```
 
 ---
 
 ## 6. API: Native panel messages
 
-Plugin panel HTML có thể gửi **native messages** để thực hiện SSH/SFTP operations mà không cần JS async. Dart xử lý trực tiếp và trả kết quả về WebView.
+Plugin panel HTML can send **native messages** to perform SSH/SFTP operations without JS async limitations. Dart handles them directly and returns the result to the WebView.
 
-Sử dụng trong panel HTML qua `pluginBridge.send()`:
+Use via `pluginBridge.send()` from `panel/index.html`:
 
 ### `ssh-exec` — Run SSH command
 
 ```js
-// In panel/index.html
 const r = await pluginBridge.send({
   type: 'ssh-exec',
   sessionId: 's1',
@@ -458,9 +460,7 @@ const r = await pluginBridge.send({
 // r = { type: 'sftp-content', content: '...' }
 ```
 
-> **Note:** Các native message type trên **không cần declare trong `plugin.json` permissions** vì chúng được xử lý bởi Dart, không phải JS bridge. Tuy nhiên plugin vẫn cần `session.observe` để track sessionId.
-
----
+> **Note:** Native message types do **not** need to be declared in `plugin.json` permissions — they are handled by Dart, not the JS bridge. The plugin still needs `session.observe` to track session IDs.
 
 ---
 
@@ -473,58 +473,60 @@ App start
   │
   ├── Scan ~/.yourssh/plugins/
   ├── Validate plugin.json
-  ├── Check permissions (prompt user nếu chưa approve)
+  ├── Check permissions (show consent dialog if not yet approved)
   └── Execute index.js → plugin.on(...) registers handlers
 ```
 
 ### Hot-reload
 
-App watch file changes. Khi `.js` hoặc `plugin.json` thay đổi:
-1. Unload plugin cũ (clear tất cả handlers)
-2. Reload và execute lại từ đầu
+The app watches for file changes. When a `.js` or `plugin.json` file changes:
+1. Unloads the old plugin (clears all handlers)
+2. Reloads and re-executes from scratch
 
-**Không cần restart app để test.** Chỉ cần save file, plugin reload ngay.
+**No app restart needed.** Just save the file and the plugin reloads immediately.
 
-### Không có state persistence qua reload
+### No state persistence across reloads
 
-`var myState = {}` ở top-level sẽ reset khi plugin reload. Dùng `storage.set/get` để persist data qua sessions và reloads.
+Top-level `var myState = {}` resets on plugin reload. Use `storage.set/get` to persist data across sessions and reloads.
 
 ---
 
 ## 8. Security & permissions
 
-### Khi install plugin
+### When installing a plugin
 
-App hiện dialog để user approve/deny từng permission. Plugin chỉ có thể gọi bridge functions mà user đã approve.
+The app shows a consent dialog listing all requested permissions. The user approves or denies each one. Plugins can only call bridge functions for permissions the user has approved.
 
 ### Permission reference
 
-| Permission | Cho phép |
-|-----------|---------|
-| `terminal.read` | Observe `terminal.output` và `terminal.input` (read-only, return value ignored) |
+| Permission | Grants access to |
+|-----------|-----------------|
+| `terminal.read` | Observe `terminal.output` and `terminal.input` (read-only, return value ignored) |
 | `terminal.transform` | Modify terminal output data |
-| `terminal.intercept` | Cancel/modify user keystrokes trước khi gửi SSH |
-| `session.observe` | Nhận `session.connect` / `session.disconnect` events |
-| `session.control` | `session.connect.before` — có thể cancel connect |
-| `ssh.exec` | Gọi `ssh.exec()` để chạy lệnh trên remote |
+| `terminal.intercept` | Cancel or modify user keystrokes before they reach SSH |
+| `session.observe` | Receive `session.connect` / `session.disconnect` events |
+| `session.control` | `session.connect.before` — can cancel a connection |
+| `ssh.exec` | Call `ssh.exec()` to run commands on remote |
+| `terminal.inject` | Send text directly into an active shell via `ssh.inject()` |
 | `sftp.read` | `sftp.list()`, `sftp.read()` |
 | `sftp.write` | `sftp.write()`, `sftp.delete()`, `sftp.mkdir()` |
-| `command.intercept` | `command.before` — modify/cancel SSH exec commands |
-| `ui.notify` | Hiện desktop notification |
-| `ui.statusbar` | Thêm items vào status bar |
-| `ui.panel` | Đăng ký sidebar panel với WebView UI |
+| `command.intercept` | `command.before` / `command.after` hooks for SSH exec commands |
+| `ui.notify` | Show desktop notifications |
+| `ui.statusbar` | Add items to the status bar |
+| `ui.clipboard` | Write to the system clipboard |
+| `ui.panel` | Register a sidebar panel with WebView UI |
 
-### Nguyên tắc least privilege
+### Principle of least privilege
 
-Chỉ request những permissions thực sự cần. Ví dụ: nếu plugin chỉ highlight log output, chỉ cần `terminal.transform` — không cần `ssh.exec` hay `sftp.write`.
+Only request permissions that are actually needed. For example, a log highlighter plugin only needs `terminal.transform` — it does not need `ssh.exec` or `sftp.write`.
 
 ---
 
-## 9. Ví dụ thực tế
+## 9. Examples
 
 ### Example 1: Log Highlighter
 
-Highlight ERROR/WARN/INFO trong terminal output.
+Highlights ERROR/WARN/INFO levels in terminal output.
 
 **plugin.json:**
 ```json
@@ -553,7 +555,7 @@ plugin.on("terminal.output", function(ctx) {
 
 ### Example 2: CPU Monitor
 
-Hiển thị CPU usage của remote server trong status bar, cập nhật mỗi 10 giây.
+Shows remote server CPU usage in the status bar, updated every 10 seconds via panel HTML.
 
 **plugin.json:**
 ```json
@@ -563,52 +565,52 @@ Hiển thị CPU usage của remote server trong status bar, cập nhật mỗi 
   "version": "1.0.0",
   "entry": "index.js",
   "minAppVersion": "1.0.0",
-  "permissions": ["session.observe", "ssh.exec", "ui.statusbar"]
+  "permissions": ["session.observe", "ui.statusbar", "ui.panel"]
 }
 ```
 
 **index.js:**
 ```js
-var _timers = {};
-
-plugin.on("session.connect", async function(ctx) {
-  var sessionId = ctx.sessionId;
-  var itemId = "cpu-" + sessionId;
-
-  ui.statusbar.add(itemId, {
-    label: "CPU: ...",
+plugin.on("session.connect", function(ctx) {
+  ui.statusbar.add("cpu-" + ctx.sessionId, {
+    label: "CPU: --",
     tooltip: ctx.host + " CPU usage"
   });
-
-  async function refresh() {
-    try {
-      var r = await ssh.exec(sessionId, "top -bn1 | grep 'Cpu(s)' | awk '{print $2}'");
-      var pct = r.stdout.trim();
-      ui.statusbar.update(itemId, { label: "CPU: " + pct + "%" });
-    } catch (e) {
-      // session may have closed
-    }
-  }
-
-  await refresh();
-  _timers[sessionId] = setInterval(refresh, 10000);
 });
 
 plugin.on("session.disconnect", function(ctx) {
-  var sessionId = ctx.sessionId;
-  if (_timers[sessionId]) {
-    clearInterval(_timers[sessionId]);
-    delete _timers[sessionId];
-  }
-  ui.statusbar.remove("cpu-" + sessionId);
+  ui.statusbar.remove("cpu-" + ctx.sessionId);
 });
+
+ui.panel.register({
+  title: "CPU Monitor",
+  icon: "monitor",
+  webviewEntry: "panel/index.html",
+  onMessage: function(msg) { return { type: "ok" }; }
+});
+```
+
+**panel/index.html** (simplified — poll via native message):
+```js
+async function poll() {
+  const sessions = (await pluginBridge.send({ type: 'ssh-sessions' })).data;
+  if (!sessions.length) return;
+  const r = await pluginBridge.send({
+    type: 'ssh-exec',
+    sessionId: sessions[0].sessionId,
+    command: "top -bn1 | grep 'Cpu(s)' | awk '{print $2}'"
+  });
+  document.getElementById('cpu').textContent = 'CPU: ' + r.stdout.trim() + '%';
+}
+setInterval(poll, 10000);
+poll();
 ```
 
 ---
 
 ### Example 3: Auto-run on connect
 
-Tự động chạy một số lệnh sau khi connect vào host cụ thể.
+Automatically runs commands after connecting to a specific host.
 
 **plugin.json:**
 ```json
@@ -618,7 +620,7 @@ Tự động chạy một số lệnh sau khi connect vào host cụ thể.
   "version": "1.0.0",
   "entry": "index.js",
   "minAppVersion": "1.0.0",
-  "permissions": ["session.observe", "ssh.exec"]
+  "permissions": ["session.observe", "terminal.inject"]
 }
 ```
 
@@ -626,18 +628,16 @@ Tự động chạy một số lệnh sau khi connect vào host cụ thể.
 ```js
 var AUTO_COMMANDS = {
   "prod-server.com": [
-    "cd /var/app && git log --oneline -5",
-    "systemctl status myapp --no-pager"
+    "cd /var/app && git log --oneline -5\n",
+    "systemctl status myapp --no-pager\n"
   ]
 };
 
-plugin.on("session.connect", async function(ctx) {
+plugin.on("session.connect", function(ctx) {
   var cmds = AUTO_COMMANDS[ctx.host];
   if (!cmds) return;
-
   for (var i = 0; i < cmds.length; i++) {
-    var r = await ssh.exec(ctx.sessionId, cmds[i]);
-    console.log("[auto-run] " + cmds[i] + ":\n" + r.stdout);
+    ssh.inject(ctx.sessionId, cmds[i]);
   }
 });
 ```
@@ -646,7 +646,7 @@ plugin.on("session.connect", async function(ctx) {
 
 ### Example 4: Block dangerous commands
 
-Chặn các lệnh nguy hiểm trước khi user gõ Enter.
+Blocks dangerous patterns before the user submits them.
 
 **plugin.json:**
 ```json
@@ -656,33 +656,22 @@ Chặn các lệnh nguy hiểm trước khi user gõ Enter.
   "version": "1.0.0",
   "entry": "index.js",
   "minAppVersion": "1.0.0",
-  "permissions": ["terminal.intercept", "ui.notify"]
+  "permissions": ["command.intercept", "ui.notify"]
 }
 ```
 
 **index.js:**
 ```js
-var BLOCKED_PATTERNS = [
-  /rm\s+-rf\s+\//,
-  /dd\s+if=\/dev\/zero\s+of=\/dev\//,
-  /mkfs\./
-];
+var BLOCKED = [/rm\s+-rf\s+\//, /dd\s+if=\/dev\/zero\s+of=\/dev\//, /mkfs\./];
 
-plugin.on("terminal.input", function(ctx) {
-  var input = ctx.data;
-
-  // Only check on Enter
-  if (input !== "\r" && input !== "\n") return input;
-
-  // We don't have buffer access here — this is a simplified approach
-  // For production, maintain a per-session input buffer
-  for (var i = 0; i < BLOCKED_PATTERNS.length; i++) {
-    if (BLOCKED_PATTERNS[i].test(input)) {
-      ui.notify("Command blocked by Safety Guard plugin", { type: "warning" });
+plugin.on("command.before", function(ctx) {
+  for (var i = 0; i < BLOCKED.length; i++) {
+    if (BLOCKED[i].test(ctx.command)) {
+      ui.notify("Command blocked by Safety Guard", { type: "warning" });
       return false; // cancel
     }
   }
-  return input;
+  return ctx.command;
 });
 ```
 
@@ -690,7 +679,7 @@ plugin.on("terminal.input", function(ctx) {
 
 ### Example 5: Persistent notes per host
 
-Lưu notes cho từng host, dùng storage API.
+Saves per-host notes using the storage API and a WebView panel.
 
 **plugin.json:**
 ```json
@@ -700,7 +689,7 @@ Lưu notes cho từng host, dùng storage API.
   "version": "1.0.0",
   "entry": "index.js",
   "minAppVersion": "1.0.0",
-  "permissions": ["session.observe", "ssh.exec", "ui.panel"]
+  "permissions": ["session.observe", "ui.panel"]
 }
 ```
 
@@ -710,13 +699,13 @@ ui.panel.register({
   title: "Host Notes",
   icon: "note",
   webviewEntry: "panel/index.html",
-  onMessage: async function(msg) {
+  onMessage: function(msg) {
     if (msg.type === "save-note") {
-      await storage.set("note-" + msg.host, msg.content);
+      storage.set("note-" + msg.host, msg.content);
       return { type: "saved" };
     }
     if (msg.type === "load-note") {
-      var result = await storage.get("note-" + msg.host);
+      var result = storage.get("note-" + msg.host);
       return { type: "note", content: result ? result.value : "" };
     }
   }
@@ -731,30 +720,30 @@ ui.panel.register({
 
 **Settings → Script Plugins → [plugin name] → Console**
 
-Mọi `console.log()` và `console.error()` trong plugin hiện ở đây. Lỗi JS runtime cũng được log.
+All `console.log()` and `console.error()` output from the plugin appears here. JS runtime errors are also logged.
 
 ### Circuit breaker
 
-Nếu plugin throw exception >= 5 lần, app hiện warning. Đến 10 lần, plugin tự động disabled.
+If a plugin throws an exception 5 or more times, the app shows a warning. At 10 exceptions, the plugin is automatically disabled.
 
-Để re-enable: vào Plugin Manager, restart plugin hoặc sửa file (hot-reload sẽ reset error count).
+To re-enable: go to Plugin Manager and save the file (hot-reload resets the error count).
 
 ### Common errors
 
-| Error | Nguyên nhân | Fix |
-|-------|------------|-----|
-| `Plugin "x" does not have permission: ssh.exec` | Missing permission in manifest | Thêm vào `permissions` array |
-| `ManifestException: plugin.json missing required field: name` | Thiếu field | Thêm field vào plugin.json |
-| `QuickJsException: SyntaxError` | Lỗi cú pháp JS | Sửa index.js |
-| Plugin không load | plugin.json không parse được | Validate JSON tại jsonlint.com |
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Plugin "x" does not have permission: ssh.exec` | Missing permission in manifest | Add it to the `permissions` array |
+| `ManifestException: plugin.json missing required field: name` | Missing required field | Add the field to plugin.json |
+| `QuickJsException: SyntaxError` | JS syntax error | Fix index.js |
+| Plugin does not load | plugin.json cannot be parsed | Validate JSON at jsonlint.com |
 
-### Testing plugin locally
+### Testing a plugin locally
 
 ```bash
-# Tạo plugin thư mục
+# Create plugin directory
 mkdir -p ~/.yourssh/plugins/test-plugin
 
-# Viết manifest
+# Write manifest
 cat > ~/.yourssh/plugins/test-plugin/plugin.json << 'EOF'
 {
   "id": "dev.local.test",
@@ -766,7 +755,7 @@ cat > ~/.yourssh/plugins/test-plugin/plugin.json << 'EOF'
 }
 EOF
 
-# Viết plugin
+# Write plugin
 cat > ~/.yourssh/plugins/test-plugin/index.js << 'EOF'
 plugin.on("terminal.output", function(ctx) {
   console.log("Got data: " + ctx.data.length + " bytes");
@@ -774,8 +763,8 @@ plugin.on("terminal.output", function(ctx) {
 });
 EOF
 
-# Mở app → consent dialog sẽ xuất hiện
-# Sau khi approve, sửa index.js → plugin tự reload
+# Open app → consent dialog appears
+# After approving, edit index.js → plugin reloads automatically
 ```
 
 ---
@@ -784,25 +773,27 @@ EOF
 
 | Limitation | Workaround |
 |-----------|------------|
-| `ssh.exec(sessionId, cmd)` không hoạt động trong JS hook handlers (`session.connect`, `terminal.output`, v.v.) — JS runtime là synchronous | Dùng **native panel message** `ssh-exec` từ panel HTML thay thế |
-| `setInterval` / `setTimeout` chưa available trong JS plugin context | Dùng `session.connect` hook để kick off logic; timer-based polling phải từ panel HTML (browser có native timers) |
-| `ui.addCommand` handler chưa được invoke khi user click — command chỉ xuất hiện trong palette | Known limitation — sẽ được fix trong phiên bản tới |
-| `sftp.write`, `sftp.delete`, `sftp.mkdir` trong JS chưa implement | Dùng `ssh.inject(sessionId, "rm file\n")` để thực hiện qua SSH shell |
-| Plugin panel WebView load từ `file://` — một số browser security policies có thể chặn `fetch()` | Dùng native panel messages (`ssh-exec`, `sftp-read`) thay vì `fetch()` trong panel HTML |
-| Plugin không thể share state với nhau | Dùng `storage.set/get` với cùng một key prefix (không có namespace isolation giữa các plugin về read) |
+| `ssh.exec()` does not work inside JS hook handlers (`session.connect`, `terminal.output`, etc.) — the JS runtime is synchronous | Use the **native panel message** `ssh-exec` from panel HTML instead |
+| `setInterval` / `setTimeout` are not available in the JS plugin context | Use `session.connect` hook to trigger logic; timer-based polling must run from panel HTML (the browser has native timers) |
+| `ui.addCommand` click handler is not invoked — commands appear in the palette but clicking them is a no-op | Known limitation — will be fixed in a future release |
+| `sftp.write`, `sftp.delete`, `sftp.mkdir` in JS are not yet implemented | Use `ssh.inject(sessionId, "rm file\n")` to perform operations via the SSH shell |
+| Plugin panel WebView loads from `file://` — some browser security policies may block `fetch()` | Use native panel messages (`ssh-exec`, `sftp-read`) instead of `fetch()` in panel HTML |
+| Plugins cannot share state with each other | Use `storage.set/get` with a shared key prefix (there is no read-isolation between plugins) |
 
-## 12. Checklist trước khi publish
+---
 
-- [ ] ID theo reverse-domain format (`dev.yourname.pluginname`)
-- [ ] Chỉ request permissions thực sự cần (least privilege)
-- [ ] `terminal.output` / `terminal.input` handlers là synchronous và nhẹ
-- [ ] Async operations (ssh.exec, sftp.*) chỉ trong non-hot-path handlers
-- [ ] State được lưu trong `storage` (không phải JS variable) nếu cần persist
-- [ ] Cleanup trong `session.disconnect` nếu plugin tạo setInterval hoặc statusbar items
-- [ ] Test với 0 active sessions (plugin.on handlers không crash khi `ssh.sessions()` rỗng)
-- [ ] `console.log` debug lines được remove hoặc giảm trước khi publish
-- [ ] `plugin.json` validate được (không lỗi JSON)
-- [ ] README.md trong plugin folder mô tả plugin làm gì
+## 12. Pre-publish checklist
+
+- [ ] ID follows reverse-domain format (`dev.yourname.pluginname`)
+- [ ] Only request permissions that are actually needed (least privilege)
+- [ ] `terminal.output` / `terminal.input` handlers are synchronous and fast
+- [ ] Async operations use native panel messages, not JS hook handlers
+- [ ] Persistent state uses `storage` (not JS variables)
+- [ ] Cleanup in `session.disconnect` if the plugin added statusbar items or timers
+- [ ] Tested with 0 active sessions (handlers do not crash when `ssh.sessions()` returns empty)
+- [ ] `console.log` debug lines removed or reduced before publishing
+- [ ] `plugin.json` is valid JSON
+- [ ] `README.md` in the plugin folder describes what the plugin does
 
 ---
 
@@ -811,13 +802,11 @@ EOF
 ```
 ~/.yourssh/plugins/
   my-plugin/
-    plugin.json          ← manifest (bắt buộc)
-    index.js             ← entry point (bắt buộc)
-    README.md            ← tùy chọn nhưng nên có
+    plugin.json          ← required: manifest
+    index.js             ← required: entry point
+    README.md            ← optional but recommended
     lib/
-      utils.js           ← helper modules (tùy chọn)
+      utils.js           ← optional helper modules
     panel/
-      index.html         ← WebView UI nếu dùng ui.panel (tùy chọn)
+      index.html         ← optional WebView UI for ui.panel
 ```
-
-> **Tip:** Dùng `/schedule` trong Claude Code để tự động nhắc bạn update plugin version sau mỗi major change.
