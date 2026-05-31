@@ -126,6 +126,59 @@ class ScriptEngineService {
       if (sftpDelegate != null) SftpBridge(guard, sftpDelegate!).register(rt);
       if (uiRegistry != null) {
         UiBridge(manifest.id, guard, uiRegistry!, null, (msg) async {
+          final type = msg['type'] as String? ?? '';
+
+          // Native SSH operations — handled by Dart, not JS (async-safe)
+          if (type == 'ssh-exec') {
+            if (sshDelegate == null) {
+              return json.encode({'type': 'error', 'message': 'SSH not available'});
+            }
+            try {
+              final sessionId = msg['sessionId'] as String;
+              final command = msg['command'] as String;
+              final result = await sshDelegate!.execCommand(sessionId, command);
+              result['type'] = 'exec-result';
+              return json.encode(result);
+            } catch (e) {
+              return json.encode({'type': 'error', 'message': e.toString()});
+            }
+          }
+
+          if (type == 'ssh-sessions') {
+            final sessions = sshDelegate?.activeSessions() ?? [];
+            return json.encode({'type': 'sessions', 'data': sessions});
+          }
+
+          // Native SFTP operations
+          if (type == 'sftp-list') {
+            if (sftpDelegate == null) {
+              return json.encode({'type': 'error', 'message': 'SFTP not available'});
+            }
+            try {
+              final sessionId = msg['sessionId'] as String;
+              final path = msg['path'] as String;
+              final entries = await sftpDelegate!.listDir(sessionId, path);
+              return json.encode({'type': 'sftp-entries', 'data': entries});
+            } catch (e) {
+              return json.encode({'type': 'error', 'message': e.toString()});
+            }
+          }
+
+          if (type == 'sftp-read') {
+            if (sftpDelegate == null) {
+              return json.encode({'type': 'error', 'message': 'SFTP not available'});
+            }
+            try {
+              final sessionId = msg['sessionId'] as String;
+              final path = msg['path'] as String;
+              final content = await sftpDelegate!.readFile(sessionId, path);
+              return json.encode({'type': 'sftp-content', 'content': content});
+            } catch (e) {
+              return json.encode({'type': 'error', 'message': e.toString()});
+            }
+          }
+
+          // Default: route to JS plugin's panel message handler
           try {
             final result = rt.callPanelMessage(msg);
             return result;
