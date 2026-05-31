@@ -97,10 +97,12 @@ class ContainerService {
 
   // ── Runtime detection ─────────────────────────────────
   Future<RuntimeStatus> detectRuntimes(Host host) async {
-    return RuntimeStatus(
-      docker: await _detectOne(host, 'docker', 'docker ps'),
-      kubectl: await _detectOne(host, 'kubectl', 'kubectl version --client'),
-    );
+    // The two runtimes are independent — probe them concurrently.
+    final results = await Future.wait([
+      _detectOne(host, 'docker', 'docker ps'),
+      _detectOne(host, 'kubectl', 'kubectl version --client'),
+    ]);
+    return RuntimeStatus(docker: results[0], kubectl: results[1]);
   }
 
   Future<RuntimeAvailability> _detectOne(Host host, String cmd, String probe) async {

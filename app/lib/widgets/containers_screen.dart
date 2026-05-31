@@ -172,7 +172,7 @@ class _ContainersScreenState extends State<ContainersScreen> {
       );
     }
 
-    final avail = _tab == _Tab.docker ? runtimes.docker : runtimes.kubectl;
+    final avail = _availabilityFor(runtimes);
     final runtimeName = _tab == _Tab.docker ? 'docker' : 'kubectl';
 
     if (avail == RuntimeAvailability.notInstalled) {
@@ -249,13 +249,13 @@ class _ContainersScreenState extends State<ContainersScreen> {
     try {
       final svc = _ensureService();
       _runtimes = await svc.detectRuntimes(host);
-      if (_tab == _Tab.docker &&
-          _runtimes!.docker == RuntimeAvailability.available) {
-        _containers = await svc.listDockerContainers(host);
-      } else if (_tab == _Tab.kubernetes &&
-          _runtimes!.kubectl == RuntimeAvailability.available) {
-        _pods = await svc.listPods(host,
-            namespace: _namespace, allNamespaces: _allNamespaces);
+      if (_availabilityFor(_runtimes!) == RuntimeAvailability.available) {
+        if (_tab == _Tab.docker) {
+          _containers = await svc.listDockerContainers(host);
+        } else {
+          _pods = await svc.listPods(host,
+              namespace: _namespace, allNamespaces: _allNamespaces);
+        }
       }
     } catch (e) {
       _error = e.toString();
@@ -307,12 +307,13 @@ class _ContainersScreenState extends State<ContainersScreen> {
     );
   }
 
+  RuntimeAvailability _availabilityFor(RuntimeStatus r) =>
+      _tab == _Tab.docker ? r.docker : r.kubectl;
+
   Host? _hostForSelected() {
-    final sessions = context.read<SessionProvider>().sessions;
-    for (final s in sessions) {
-      if (s.id == _sessionId) return s.host;
-    }
-    return sessions.isEmpty ? null : sessions.first.host;
+    final id = _sessionId;
+    if (id == null) return null;
+    return context.read<SessionProvider>().hostForSession(id);
   }
 }
 
