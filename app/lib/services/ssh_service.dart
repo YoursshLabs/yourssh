@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
@@ -423,6 +424,16 @@ class SshService {
   Future<SftpClient> openSftp(Host host) async {
     final client = await _ensureClient(host);
     return client.sftp();
+  }
+
+  // ── Send input to shell ────────────────────────────────
+
+  /// Sends [text] directly to the shell of [sessionId].
+  /// No-op if the session or shell is not found.
+  void sendInput(String sessionId, String text) {
+    final shell = _shells[sessionId];
+    if (shell == null) return;
+    shell.write(Uint8List.fromList(text.codeUnits));
   }
 
   // ── Disconnect ─────────────────────────────────────────

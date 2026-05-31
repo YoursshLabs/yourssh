@@ -13,6 +13,7 @@ const _kKnownPermissions = {
   'terminal.read',
   'terminal.transform',
   'terminal.intercept',
+  'terminal.inject',
   'session.observe',
   'session.control',
   'ssh.exec',
@@ -22,6 +23,7 @@ const _kKnownPermissions = {
   'ui.notify',
   'ui.statusbar',
   'ui.panel',
+  'ui.clipboard',
 };
 
 class PluginManifest {
