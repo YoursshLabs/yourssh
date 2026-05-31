@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.9] — 2026-05-31
+
+### Changed
+- Release pipeline expanded to build for all supported architectures: macOS arm64, x86_64, and universal binary; Windows x64 and arm64; Linux x86_64 and arm64
+
+---
+
 ## [0.1.8] — 2026-05-31
 
 ### Added
