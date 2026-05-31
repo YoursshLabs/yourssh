@@ -1,11 +1,11 @@
 # YourSSH — Roadmap
 
 > Direction: **infra workstation for DevOps/SRE managing 10–100+ hosts**, not just an SSH client.
-> Current version: 0.1.8 · updated: 2026-05-31 (Script Engine plugin system shipped)
+> Current version: 0.1.10 · updated: 2026-05-31 (host import + tagging shipped; internal refactor pass)
 
 This document lists proposed features ordered by priority. Each item can be broken out into its own spec (`docs/superpowers/specs/`) when ready for implementation.
 
-Already shipped (not repeated in roadmap): multi-tab terminal, split view, broadcast, recording (asciicast), snippet, SFTP dual-panel, port forwarding, jump host, Supabase sync + P2P LAN, AI chat sidebar with tool calling, plugin system (DevOps / WebTools / Snippets), Cloudflare tunnel, MCP gateway, mail catcher, code editor (Monaco), customizable hotkeys, TOFU known-hosts, **Command Palette (Cmd/Ctrl+K)** — fuzzy search hosts / nav / snippets / actions, **Workspace persistence** — auto-reconnect tabs + layout on relaunch, **Search-in-scrollback (Cmd/Ctrl+F)** — regex, highlights, prev/next navigation, **Script Engine plugin system** — disk-based JS plugins via QuickJS FFI, HookBus (terminal.output / terminal.input / session events), SSH/SFTP/Storage/UI bridges, hot-reload file watcher, PermissionGuard + circuit breaker, consent dialog, manager screen + console log viewer.
+Already shipped (not repeated in roadmap): multi-tab terminal, split view, broadcast, recording (asciicast), snippet, SFTP dual-panel, port forwarding, jump host, Supabase sync + P2P LAN, AI chat sidebar with tool calling, plugin system (DevOps / WebTools / Snippets), Cloudflare tunnel, MCP gateway, mail catcher, code editor (Monaco), customizable hotkeys, TOFU known-hosts, **Command Palette (Cmd/Ctrl+K)** — fuzzy search hosts / nav / snippets / actions, **Workspace persistence** — auto-reconnect tabs + layout on relaunch, **Search-in-scrollback (Cmd/Ctrl+F)** — regex, highlights, prev/next navigation, **Script Engine plugin system** — disk-based JS plugins via QuickJS FFI, HookBus (terminal.output / terminal.input / session events), SSH/SFTP/Storage/UI bridges, hot-reload file watcher, PermissionGuard + circuit breaker, consent dialog, manager screen + console log viewer, **Import** — paste SSH config / JSON / CSV with per-host include toggles (`parseSshConfig` in `import_panel.dart`), **Host tagging** — comma-separated tags on the `Host` model, editable in host detail and searchable from the dashboard.
 
 ---
 
@@ -13,13 +13,12 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 
 | # | Feature | Purpose | Implementation notes |
 |---|---|---|---|
-| 1 | **Tag + smart group + multi-dimensional filter** | Managing 50+ hosts is unworkable with a flat list. Query syntax like `env:prod role:db region:sg` | Extend `Host` model with `tags: List<String>`, persist in sync; filter chip UI in `hosts_dashboard` |
-| 2 | **Import `~/.ssh/config`** | DevOps already have an existing config; manual re-entry loses users | Parser supports `Include`, `ProxyJump`, `Match`, `IdentityFile`. Convert to `Host` + `SshKeyEntry` |
-| 3 | **Advanced tab management** | Pin, rename, color tag, drag reorder, duplicate-to-new-tab, tab group | Update `main_screen` tab bar; persist metadata alongside `SshSession` |
-| 4 | **Connection health badge** | Latency ping, last-active, auto-reconnect status shown on the tab | Leverage existing `SshService` heartbeat; attach to tab + tooltip |
-| 5 | **Internal audit log** | Compliance + retrospective: who/when/host/command | SQLite (drift/sqflite), redact secrets via regex; optional sync |
-| 6 | **Bulk action panel** | Select N hosts → connect-all / exec snippet in parallel / SFTP push / diff output | Multi-select UI on host list; backend runs `Future.wait` via `SshService` |
-| 7 | **Session template / per-host preset** | Env vars, working dir, shell, theme, startup snippet, recording auto-on | Extend `Host` model; apply when `SessionProvider.start` is called |
+| 1 | **Smart filter + multi-dimensional query** | Tags ship already; managing 50+ hosts still needs query syntax like `env:prod role:db region:sg` + filter chips | Build on existing `Host.tags`; add filter chip UI + query parser in `hosts_dashboard` (free-text search already covers tags) |
+| 2 | **Advanced tab management** | Pin, rename, color tag, drag reorder, duplicate-to-new-tab, tab group | Update `main_screen` tab bar; persist metadata alongside `SshSession` |
+| 3 | **Connection health badge** | Latency ping, last-active, auto-reconnect status shown on the tab | Leverage existing `SshService` heartbeat; attach to tab + tooltip |
+| 4 | **Internal audit log** | Compliance + retrospective: who/when/host/command | SQLite (drift/sqflite), redact secrets via regex; optional sync |
+| 5 | **Bulk action panel** | Select N hosts → connect-all / exec snippet in parallel / SFTP push / diff output | Multi-select UI on host list; backend runs `Future.wait` via `SshService` |
+| 6 | **Session template / per-host preset** | Env vars, working dir, shell, theme, startup snippet, recording auto-on | Extend `Host` model; apply when `SessionProvider.start` is called |
 
 ## P1 — Differentiation & DevOps depth
 
@@ -64,7 +63,7 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 
 ## Top 3 suggestions for the next sprint
 
-1. **Tag/Filter + Import `~/.ssh/config`** — DevOps onboarding: import existing config + organize hosts by env/role.
+1. **Smart filter + query syntax** — tags + import already ship; the missing piece is filter chips + `env:prod role:db` queries to make 50+ hosts navigable.
 2. **Advanced tab management** — pin, rename, color tag, drag reorder; completes the terminal UX story now that search and workspace persistence are shipped.
 3. **Kubernetes panel** — distinct DevOps angle that turns yourssh into an infra workstation rather than a plain SSH client.
 
