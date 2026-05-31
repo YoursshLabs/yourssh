@@ -66,11 +66,14 @@ class _SftpPanelState extends State<SftpPanel> {
     if (entry.isDirectory) {
       _loadDirectory(entry.path);
     } else {
+      final service = context.read<SftpTransferService>();
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              CodeEditorScreen(host: widget.host!, entry: entry),
+          builder: (_) => Provider<SftpTransferService>.value(
+            value: service,
+            child: CodeEditorScreen(host: widget.host!, entry: entry),
+          ),
         ),
       );
     }
@@ -404,9 +407,15 @@ class _SftpPanelState extends State<SftpPanel> {
         modifiedAt: DateTime.now(),
       );
       if (!mounted) return;
+      final service = context.read<SftpTransferService>();
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => CodeEditorScreen(host: widget.host!, entry: entry)),
+        MaterialPageRoute(
+          builder: (_) => Provider<SftpTransferService>.value(
+            value: service,
+            child: CodeEditorScreen(host: widget.host!, entry: entry),
+          ),
+        ),
       );
       if (mounted) _loadDirectory(prov.currentPath);
     } catch (e) {

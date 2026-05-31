@@ -98,6 +98,7 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
   }
 
   void _runSearch() {
+    if (!mounted) return;
     _clearHighlights();
 
     if (_searchQuery.isEmpty) {
