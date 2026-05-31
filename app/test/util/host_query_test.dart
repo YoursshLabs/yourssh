@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/util/host_query.dart';
+import 'package:yourssh/models/host.dart';
 
 void main() {
   group('HostQuery.parse', () {
@@ -40,6 +41,50 @@ void main() {
       final q = HostQuery.parse('Env:Prod WEB');
       expect(q.facets, {'env': {'prod'}});
       expect(q.terms, ['web']);
+    });
+  });
+
+  group('HostQuery.matches', () {
+    Host h({String label = 'srv', String host = '10.0.0.1', String username = 'root', List<String> tags = const []}) =>
+        Host(label: label, host: host, username: username, tags: tags);
+
+    test('empty query matches everything', () {
+      expect(HostQuery.parse('').matches(h()), isTrue);
+    });
+
+    test('single facet exact match', () {
+      expect(HostQuery.parse('env:prod').matches(h(tags: ['env:prod'])), isTrue);
+      expect(HostQuery.parse('env:prod').matches(h(tags: ['env:staging'])), isFalse);
+    });
+
+    test('same key ORs values', () {
+      final q = HostQuery.parse('env:prod env:staging');
+      expect(q.matches(h(tags: ['env:staging'])), isTrue);
+      expect(q.matches(h(tags: ['env:dev'])), isFalse);
+    });
+
+    test('different keys AND together', () {
+      final q = HostQuery.parse('env:prod role:db');
+      expect(q.matches(h(tags: ['env:prod', 'role:db'])), isTrue);
+      expect(q.matches(h(tags: ['env:prod'])), isFalse);
+    });
+
+    test('free-text matches label/host/username/tag-value', () {
+      expect(HostQuery.parse('web').matches(h(label: 'web-1')), isTrue);
+      expect(HostQuery.parse('10.0').matches(h(host: '10.0.0.5')), isTrue);
+      expect(HostQuery.parse('root').matches(h(username: 'root')), isTrue);
+      expect(HostQuery.parse('prod').matches(h(tags: ['env:prod'])), isTrue);
+      expect(HostQuery.parse('absent').matches(h()), isFalse);
+    });
+
+    test('free-text terms AND together', () {
+      expect(HostQuery.parse('web prod').matches(h(label: 'web-1', tags: ['env:prod'])), isTrue);
+      expect(HostQuery.parse('web prod').matches(h(label: 'web-1')), isFalse);
+    });
+
+    test('matching is case-insensitive', () {
+      expect(HostQuery.parse('ENV:PROD').matches(h(tags: ['env:prod'])), isTrue);
+      expect(HostQuery.parse('WEB').matches(h(label: 'Web-1')), isTrue);
     });
   });
 }

@@ -29,4 +29,35 @@ class HostQuery {
     }
     return HostQuery._(facets, terms);
   }
+
+  bool matches(Host host) {
+    if (isEmpty) return true;
+
+    final tags = host.tags.map((t) => t.toLowerCase()).toList();
+
+    // Facets: OR within a key, AND across keys.
+    for (final entry in facets.entries) {
+      final ok = entry.value.any((value) => tags.contains('${entry.key}:$value'));
+      if (!ok) return false;
+    }
+
+    if (terms.isNotEmpty) {
+      final label = host.label.toLowerCase();
+      final addr = host.host.toLowerCase();
+      final user = host.username.toLowerCase();
+      // Tag value = part after first ':', or the whole tag if it has none.
+      final tagValues = tags.map((t) {
+        final i = t.indexOf(':');
+        return i >= 0 ? t.substring(i + 1) : t;
+      }).toList();
+      for (final term in terms) {
+        final hit = label.contains(term) ||
+            addr.contains(term) ||
+            user.contains(term) ||
+            tagValues.any((v) => v.contains(term));
+        if (!hit) return false;
+      }
+    }
+    return true;
+  }
 }
