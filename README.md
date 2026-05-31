@@ -93,9 +93,13 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 - **AI Chat Sidebar** — toggle an AI assistant sidebar for command help and debugging; supports **Anthropic Claude**, **OpenAI**, and **Google Gemini** with configurable model selection
 
 ### Plugin System
-- **Plugin API** (`yourssh_plugin_api`) — stable Dart interface for building first- and third-party plugins; exposes SSH session proxy, secure prefs, navigation slots, and config UI hooks
-- **Plugin Marketplace** — in-app screen to discover, enable, and configure installed plugins
-- **YourSSH DevOps plugin** (`yourssh_devops`) — reference plugin bundling S3 Browser and LAN Share as plugin-provided nav sections
+- **Plugin API** (`yourssh_plugin_api`) — stable Dart interface for compiled (Dart) plugins; exposes SSH session proxy, secure prefs, navigation slots, and config UI hooks
+- **Script Engine** (`yourssh_script_engine`) — disk-based JS plugin runtime via QuickJS (Dart FFI); plugins live in a directory as `plugin.json` + JS files; hot-reload on file change; no app rebuild required
+- **HookBus** — typed event bus that routes `terminal.output`, `terminal.input`, and session lifecycle events to registered JS hooks (transform, intercept, observe)
+- **Bridges** — JS plugins call `ssh.*`, `sftp.*`, `storage.*`, and `ui.*` APIs bridged to native Dart
+- **PermissionGuard + circuit breaker** — plugins must declare permissions in manifest; error circuit-breaker auto-disables misbehaving plugins
+- **Plugin Manager & Console** — in-app screen to enable/disable JS plugins, reload them, and inspect their `console.log` output
+- **YourSSH DevOps plugin** (`yourssh_devops`) — reference Dart plugin bundling S3 Browser and LAN Share as plugin-provided nav sections
 
 ---
 
@@ -145,6 +149,7 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 | Markdown Rendering | `flutter_markdown` (AI chat) |
 | S3 XML Parsing | `xml` |
 | QR Code | `qr_flutter`, `mobile_scanner` (P2P sync) |
+| JS Plugin Runtime | QuickJS via Dart FFI (`yourssh_script_engine`) |
 
 ---
 
@@ -246,6 +251,7 @@ yourssh/
 │
 ├── packages/
 │   ├── yourssh_plugin_api/       # Plugin interface package (stable public API)
+│   ├── yourssh_script_engine/    # JS plugin runtime (QuickJS FFI, HookBus, bridges)
 │   ├── yourssh_devops/           # DevOps plugin (S3, LAN Share)
 │   └── dartssh2/                 # Local fork — adds signAsync() for SSH agent auth
 ├── macos/                        # Xcode project files (xcodegen — project.yml)
@@ -321,14 +327,11 @@ Flutter UI (widgets / screens)
 
 ### Plugin System
 
-The plugin API is defined in `packages/yourssh_plugin_api`. Plugins implement the `YourSSHPlugin` interface and receive a `PluginContext` that exposes:
+Two plugin types coexist:
 
-- `sshSession` — proxy to the active SSH session (exec, shell, SFTP)
-- `securePrefs` — namespaced key-value store (isolated per plugin)
-- Navigation slot registration — plugins can add items to the left sidebar
-- Config UI hook — plugins provide a settings widget rendered in the sidebar
+**Dart plugins** (compiled-in): implement `YourSSHPlugin` from `packages/yourssh_plugin_api`; registered in `app/lib/plugins/plugin_registry.dart` at build time. `PluginProvider` manages enable/disable. `YourSSHDevOpsPlugin` is the reference implementation.
 
-`PluginRegistry` in `app/lib/plugins/` loads plugins at startup. `PluginProvider` manages enable/disable state. The `YourSSHDevOpsPlugin` in `packages/yourssh_devops` serves as the reference implementation.
+**JS plugins** (disk-based, runtime): powered by `packages/yourssh_script_engine`. A plugin is a directory containing `plugin.json` (manifest with name, permissions, hook declarations) + one or more `.js` files. `ScriptEngineService` loads them via `QuickJsRuntime` (Dart FFI → QuickJS C engine) — no rebuild required. `PluginLoader` watches the directory for changes and hot-reloads modified plugins. `PluginEngineProvider` surfaces the loaded plugins to the UI.
 
 ---
 
@@ -405,6 +408,7 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 - [x] Plugin / extension system
 - [x] Multi-provider AI assistant (Claude, OpenAI, Gemini)
 - [x] P2P host sync via QR code (LAN / Tailscale, AES-256-GCM encrypted)
+- [x] **Script Engine** — disk-based JS plugins via QuickJS FFI; HookBus; SSH/SFTP/Storage/UI bridges; hot-reload; permission guard + circuit breaker; consent dialog, manager screen, console log viewer
 
 ### ✅ Phase 1 — Quick wins
 

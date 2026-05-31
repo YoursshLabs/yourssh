@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(gh pr *)",
+            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // \"\"'); if echo \"$cmd\" | grep -q 'gh pr create'; then echo '{\"systemMessage\":\"PR created → run /yourssh-roadmap, update README + CLAUDE.md, bump version in app/pubspec.yaml\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"PR to master created. Before merging, you MUST: 1) run /yourssh-roadmap to update docs/roadmap.md, 2) update README.md with newly shipped features, 3) update CLAUDE.md architecture/service descriptions, 4) bump version in app/pubspec.yaml. Commit all changes to the PR branch so they are included in the PR.\"}}'; fi",
+            "timeout": 10,
+            "statusMessage": "Checking PR docs checklist..."
+          }
+        ]
+      }
+    ]
+  }
+}

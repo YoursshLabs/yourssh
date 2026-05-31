@@ -1,0 +1,14 @@
+{
+  "id": "dev.yourssh.snippets",
+  "name": "Snippets",
+  "version": "2.0.0",
+  "entry": "index.js",
+  "minAppVersion": "1.0.0",
+  "permissions": [
+    "session.observe",
+    "terminal.inject",
+    "ui.clipboard",
+    "ui.notify",
+    "ui.panel"
+  ]
+}

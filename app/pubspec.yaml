@@ -1,7 +1,7 @@
 name: yourssh
 description: YourSSH - A professional SSH client for macOS, Windows, and Linux with advanced features like SFTP, port forwarding, and a built-in code editor.
 publish_to: 'none'
-version: 0.1.7+1
+version: 0.1.8+1
 
 environment:
   sdk: ^3.12.0
@@ -69,8 +69,8 @@ dependencies:
     path: ../packages/yourssh_devops
   yourssh_web_tools:
     path: ../packages/yourssh_web_tools
-  yourssh_snippets:
-    path: ../packages/yourssh_snippets
+  yourssh_script_engine:
+    path: ../packages/yourssh_script_engine
 
   # Cryptography utilities
   cryptography: ^2.7.0
@@ -105,6 +105,8 @@ dependencies:
 dependency_overrides:
   dartssh2:
     path: ../packages/dartssh2
+  yourssh_script_engine:
+    path: ../packages/yourssh_script_engine
 
 dev_dependencies:
   flutter_test:
@@ -118,6 +120,9 @@ flutter:
     - assets/monaco_editor.html
     - assets/app_icon.png
     - assets/os/
+    - assets/bundled_plugins/snippets/plugin.json
+    - assets/bundled_plugins/snippets/index.js
+    - assets/bundled_plugins/snippets/panel/index.html
   fonts:
     - family: DejaVu Sans Mono for Powerline
       fonts:

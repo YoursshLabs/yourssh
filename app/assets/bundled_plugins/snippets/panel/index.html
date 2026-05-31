@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snippets</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #1a1a2e;
+  color: #e2e8f0;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.topbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: #16213e;
+  border-bottom: 1px solid #2d3748;
+  flex-shrink: 0;
+}
+.search {
+  flex: 1;
+  background: #1a1a2e;
+  border: 1px solid #2d3748;
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: #e2e8f0;
+  font-size: 13px;
+  outline: none;
+}
+.search:focus { border-color: #4a9eff; }
+.btn {
+  background: #4a9eff;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { background: #3a8eef; }
+.btn-sm {
+  background: #2d3748;
+  color: #a0aec0;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.btn-sm:hover { background: #4a5568; color: #e2e8f0; }
+.btn-run { background: #22c55e22; color: #22c55e; }
+.btn-run:hover { background: #22c55e44; }
+.btn-danger { background: #ef444422; color: #ef4444; }
+.btn-danger:hover { background: #ef444444; }
+.list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+.list::-webkit-scrollbar { width: 4px; }
+.list::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
+.card {
+  background: #16213e;
+  border: 1px solid #2d3748;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+.card:hover { border-color: #4a5568; }
+.card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.card-label { font-weight: 600; font-size: 13px; color: #e2e8f0; flex: 1; }
+.card-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+.card:hover .card-actions { opacity: 1; }
+.card-cmd {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  color: #a0aec0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.card-desc { font-size: 11px; color: #718096; flex: 1; }
+.tag {
+  background: #2d3748;
+  color: #a0aec0;
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 10px;
+}
+.empty {
+  text-align: center;
+  color: #4a5568;
+  padding: 40px 20px;
+  font-size: 13px;
+}
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.overlay.hidden { display: none; }
+.form-card {
+  background: #16213e;
+  border: 1px solid #2d3748;
+  border-radius: 10px;
+  padding: 20px;
+  width: 400px;
+  max-width: 90vw;
+}
+.form-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+.form-group { margin-bottom: 12px; }
+.form-label { font-size: 12px; color: #a0aec0; margin-bottom: 4px; display: block; }
+.form-input, .form-textarea {
+  width: 100%;
+  background: #1a1a2e;
+  border: 1px solid #2d3748;
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: #e2e8f0;
+  font-size: 13px;
+  outline: none;
+  font-family: inherit;
+}
+.form-textarea { font-family: 'Menlo', monospace; min-height: 80px; resize: vertical; }
+.form-input:focus, .form-textarea:focus { border-color: #4a9eff; }
+.form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.toast {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: #22c55e; color: #fff;
+  padding: 8px 16px; border-radius: 6px;
+  font-size: 13px; z-index: 200;
+  opacity: 0; transition: opacity 0.2s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+.toast.error { background: #ef4444; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <input class="search" id="search" type="text" placeholder="Search snippets…" oninput="render()">
+  <button class="btn" onclick="showForm()">+ New</button>
+</div>
+
+<div class="list" id="list"></div>
+
+<div class="overlay hidden" id="overlay" onclick="overlayClick(event)">
+  <div class="form-card">
+    <div class="form-title">New Snippet</div>
+    <div class="form-group">
+      <label class="form-label">Label *</label>
+      <input class="form-input" id="f-label" placeholder="e.g. Check disk usage">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Command *</label>
+      <textarea class="form-textarea" id="f-cmd" placeholder="e.g. df -h"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <input class="form-input" id="f-desc" placeholder="Optional description">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Tag</label>
+      <input class="form-input" id="f-tag" placeholder="e.g. system, network, logs">
+    </div>
+    <div class="form-actions">
+      <button class="btn-sm" onclick="hideForm()" style="padding:6px 14px;font-size:13px;">Cancel</button>
+      <button class="btn" onclick="saveSnippet()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+window.pluginBridge = {
+  _pending: {},
+  send: function(msg) {
+    return new Promise(function(resolve) {
+      msg.id = Math.random().toString(36).slice(2);
+      window.pluginBridge._pending[msg.id] = resolve;
+      window.PluginBridge.postMessage(JSON.stringify(msg));
+    });
+  },
+  receive: function(resultStr) {
+    var result = typeof resultStr === 'string' ? JSON.parse(resultStr) : resultStr;
+    var resolve = window.pluginBridge._pending[result.id];
+    if (resolve) { resolve(result); delete window.pluginBridge._pending[result.id]; }
+  }
+};
+
+var snippets = [];
+
+async function loadSnippets() {
+  var r = await pluginBridge.send({ type: 'get-snippets' });
+  snippets = (r && r.data) ? r.data : [];
+  render();
+}
+
+function render() {
+  var q = document.getElementById('search').value.toLowerCase();
+  var filtered = snippets.filter(function(s) {
+    return !q || (s.label + ' ' + s.command + ' ' + (s.tag || '')).toLowerCase().indexOf(q) !== -1;
+  });
+  var el = document.getElementById('list');
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty">' + (q ? 'No snippets match &ldquo;' + esc(q) + '&rdquo;' : 'No snippets yet.<br>Click + New to add one.') + '</div>';
+    return;
+  }
+  el.innerHTML = filtered.map(function(s) {
+    return '<div class="card" id="c-' + esc(s.id) + '">' +
+      '<div class="card-header">' +
+        '<span class="card-label">' + esc(s.label) + '</span>' +
+        '<div class="card-actions">' +
+          '<button class="btn-sm btn-run" onclick="runSnippet(event,\'' + esc(s.id) + '\')">&#9654; Run</button>' +
+          '<button class="btn-sm" onclick="copySnippet(event,\'' + esc(s.id) + '\')">&#10520; Copy</button>' +
+          '<button class="btn-sm btn-danger" onclick="delSnippet(event,\'' + esc(s.id) + '\')">&#x2715;</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card-cmd">' + esc(s.command) + '</div>' +
+      '<div class="card-meta">' +
+        '<span class="card-desc">' + esc(s.description || '') + '</span>' +
+        (s.tag ? '<span class="tag">' + esc(s.tag) + '</span>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+async function runSnippet(e, id) {
+  e.stopPropagation();
+  var s = snippets.find(function(x) { return x.id === id; });
+  if (!s) return;
+  var r = await pluginBridge.send({ type: 'run-snippet', command: s.command });
+  if (r && r.type === 'error') showToast(r.message, true);
+  else showToast('Command sent to terminal');
+}
+
+async function copySnippet(e, id) {
+  e.stopPropagation();
+  var s = snippets.find(function(x) { return x.id === id; });
+  if (!s) return;
+  await pluginBridge.send({ type: 'copy-snippet', command: s.command });
+  showToast('Copied to clipboard');
+}
+
+async function delSnippet(e, id) {
+  e.stopPropagation();
+  if (!confirm('Delete this snippet?')) return;
+  await pluginBridge.send({ type: 'delete-snippet', id: id });
+  snippets = snippets.filter(function(s) { return s.id !== id; });
+  render();
+}
+
+function showForm() {
+  document.getElementById('overlay').classList.remove('hidden');
+  ['f-label','f-cmd','f-desc','f-tag'].forEach(function(id) { document.getElementById(id).value = ''; });
+  setTimeout(function() { document.getElementById('f-label').focus(); }, 50);
+}
+
+function hideForm() { document.getElementById('overlay').classList.add('hidden'); }
+
+function overlayClick(e) { if (e.target === document.getElementById('overlay')) hideForm(); }
+
+async function saveSnippet() {
+  var label = document.getElementById('f-label').value.trim();
+  var cmd = document.getElementById('f-cmd').value.trim();
+  if (!label || !cmd) { showToast('Label and command are required', true); return; }
+  var snippet = {
+    label: label, command: cmd,
+    description: document.getElementById('f-desc').value.trim(),
+    tag: document.getElementById('f-tag').value.trim()
+  };
+  var r = await pluginBridge.send({ type: 'add-snippet', snippet: snippet });
+  if (r && r.type === 'error') { showToast(r.message, true); return; }
+  hideForm();
+  await loadSnippets();
+}
+
+function showToast(msg, isError) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(function() { el.className = 'toast'; }, 2500);
+}
+
+loadSnippets();
+</script>
+</body>
+</html>

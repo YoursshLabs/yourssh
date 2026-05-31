@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
+import 'package:yourssh_script_engine/yourssh_script_engine.dart';
 import '../models/host.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
@@ -14,6 +15,7 @@ import 'system_agent_proxy.dart';
 
 class SshService {
   final StorageService _storage;
+  final HookBus? hookBus;
   final Map<String, SSHClient> _clients = {};
   final Map<String, SSHSession> _shells = {};
   final Map<String, String> _shellToHost = {}; // sessionId → hostId
@@ -31,7 +33,7 @@ class SshService {
   Future<bool> Function(String host, int port, String keyType, Uint8List fp)?
       defaultHostKeyVerifier;
 
-  SshService(this._storage);
+  SshService(this._storage, {this.hookBus});
 
   // ── Identity resolution ───────────────────────────────
   //
@@ -107,6 +109,16 @@ class SshService {
     SshKeyEntry? jumpKeyEntry,
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
   }) async {
+    if (hookBus != null) {
+      final result = hookBus!.fireInterceptable(
+        'session.connect.before',
+        TransformEvent(sessionId: host.id, data: host.host),
+      );
+      if (result == null) {
+        throw Exception('Connection cancelled by plugin');
+      }
+    }
+
     final password = await _storage.loadPassword(host.id);
     final resolution = await _resolveIdentities(host, keyEntry);
     if (resolution.agentProxy != null) {
@@ -298,6 +310,15 @@ class SshService {
     _shells[session.id] = shell;
     _shellToHost[session.id] = session.host.id;
 
+    hookBus?.fireObserve('session.connect', ObserveEvent(
+      sessionId: session.id,
+      payload: {
+        'host': session.host.host,
+        'username': session.host.username,
+        'port': session.host.port,
+      },
+    ));
+
     if (useTmux) {
       shell.write(Uint8List.fromList('tmux new-session -A -s yourssh\n'.codeUnits));
     }
@@ -310,7 +331,11 @@ class SshService {
         '${session.host.label} (${session.host.username}@${session.host.host})';
     shell.stdout.cast<List<int>>().listen(
       (data) {
-        final text = utf8.convert(data);
+        var text = utf8.convert(data);
+        if (hookBus != null) {
+          text = hookBus!.fireTransform(
+              'terminal.output', TransformEvent(sessionId: session.id, data: text));
+        }
         session.terminal.write(text);
         _recording?.writeOutput(session.id, text);
         try {
@@ -339,7 +364,14 @@ class SshService {
 
     // Pipe xterm input → SSH shell
     session.terminal.onOutput = (data) {
-      shell.write(Uint8List.fromList(data.codeUnits));
+      if (hookBus != null) {
+        final result = hookBus!.fireInterceptable(
+            'terminal.input', TransformEvent(sessionId: session.id, data: data));
+        if (result == null) return; // cancelled by plugin
+        shell.write(Uint8List.fromList(result.codeUnits));
+      } else {
+        shell.write(Uint8List.fromList(data.codeUnits));
+      }
     };
 
     // Handle terminal resize
@@ -352,6 +384,8 @@ class SshService {
   }
 
   void _onShellClosed(SshSession session) {
+    hookBus?.fireObserve('session.disconnect',
+        ObserveEvent(sessionId: session.id, payload: {}));
     _shells.remove(session.id);
     _shellToHost.remove(session.id);
     session.terminal.write('\r\n\x1b[31m[Connection closed]\x1b[0m\r\n');
@@ -385,13 +419,42 @@ class SshService {
     Host host,
     String command,
   ) async {
+    var cmd = command;
+
+    if (hookBus != null) {
+      final transformed = hookBus!.fireInterceptable(
+        'command.before',
+        TransformEvent(sessionId: host.id, data: cmd),
+      );
+      if (transformed == null) {
+        return (stdout: '', stderr: 'Command cancelled by plugin', exitCode: -1);
+      }
+      cmd = transformed;
+    }
+
+    final originalCommand = cmd;
     final client = await _ensureClient(host);
-    final result = await client.runWithResult(command);
-    return (
+    final result = await client.runWithResult(cmd);
+    final execResult = (
       stdout: String.fromCharCodes(result.stdout),
       stderr: String.fromCharCodes(result.stderr),
       exitCode: result.exitCode ?? -1,
     );
+
+    hookBus?.fireObserve(
+      'command.after',
+      ObserveEvent(
+        sessionId: host.id,
+        payload: {
+          'command': originalCommand,
+          'stdout': execResult.stdout,
+          'stderr': execResult.stderr,
+          'exitCode': execResult.exitCode,
+        },
+      ),
+    );
+
+    return execResult;
   }
 
   // ── SFTP ───────────────────────────────────────────────
@@ -399,6 +462,16 @@ class SshService {
   Future<SftpClient> openSftp(Host host) async {
     final client = await _ensureClient(host);
     return client.sftp();
+  }
+
+  // ── Send input to shell ────────────────────────────────
+
+  /// Sends [text] directly to the shell of [sessionId].
+  /// No-op if the session or shell is not found.
+  void sendInput(String sessionId, String text) {
+    final shell = _shells[sessionId];
+    if (shell == null) return;
+    shell.write(Uint8List.fromList(text.codeUnits));
   }
 
   // ── Disconnect ─────────────────────────────────────────

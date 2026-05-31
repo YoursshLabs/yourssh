@@ -1,0 +1,4 @@
+quickjs-*/
+*.tar.xz
+*.tar.gz
+build/

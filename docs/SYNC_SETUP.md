@@ -1,45 +1,49 @@
 # Sync Setup Guide
 
-YourSSH sync uses Supabase as the storage backend. Data is AES-GCM encrypted on the client — Supabase only sees ciphertext.
+YourSSH offers two sync modes: **Cloud Sync** (Supabase) for persistent cross-device sync, and **P2P Transfer** (LAN QR) for one-time device-to-device migration.
 
-**No app rebuild or dart-define configuration is required.** Enter credentials directly inside the app.
+---
 
-## 1. Create a Supabase project
+## Cloud Sync (Supabase)
+
+Data is AES-256-GCM encrypted on the client before upload — Supabase only ever stores ciphertext. No app rebuild or `dart-define` configuration is required; enter credentials directly in the app.
+
+### 1. Create a Supabase project
 
 1. Go to [supabase.com](https://supabase.com) → **New project**
 2. Choose the nearest region (Singapore or Tokyo for SEA)
 3. Set a strong database password → **Create project**
 
-## 2. Get credentials
+### 2. Get credentials
 
 Go to **Project Settings → API**:
 
-- **Project URL**: `https://<project-ref>.supabase.co`
-- **Publishable (anon) key**: the JWT string under "Project API keys" — also called the "anon key"
-- **Service Role Key** *(first-time setup only)*: the JWT string under "service_role" → click **Reveal**
+- **Project URL** — `https://<project-ref>.supabase.co`
+- **Publishable (anon) key** — JWT under "Project API keys"
 
-> The Service Role Key is only used once to create the table — the app does not store it after setup is complete.
+### 3. Configure in the app
 
-## 3. Configure in the app (auto table creation)
-
-**Settings → Sync → enable Enable Sync → Supabase Backend:**
+**Settings → Sync → Cloud Sync tab:**
 
 1. Enter **Project URL**
 2. Enter **Anon Key**
-3. Enter **Service Role Key** in the field below *(first-time setup)*
-4. Click **Save & Test**
-   - If the table does not exist → the app runs the migration automatically and shows **"Connected (table created)"**
-   - Subsequent logins do not require the Service Role Key — the table is already in place
+3. Click **Save & Test**
+   - If the `sync_data` table does not exist, a migration hint appears with the SQL to run manually (see step 4)
+   - On success the status row shows **"Synced"** and sync activates automatically — there is no separate enable toggle
 
-## 4. Create the table manually (if not using the Service Role Key)
+> Sync is considered enabled as soon as the URL and anon key are both set.
 
-### Option A — Supabase Dashboard
+### 4. Create the table (if auto-check shows it missing)
 
-1. Go to **SQL Editor** in the dashboard
+The app shows the required SQL inline. You can also run it manually:
+
+**Option A — Supabase Dashboard**
+
+1. **SQL Editor** in the dashboard
 2. Copy the contents of `supabase/migrations/20260529000000_sync_data.sql`
 3. Paste → **Run**
 
-### Option B — Supabase CLI
+**Option B — Supabase CLI**
 
 ```bash
 brew install supabase/tap/supabase
@@ -47,22 +51,65 @@ supabase link --project-ref <your-project-ref>
 supabase db push
 ```
 
-## 5. Connect additional devices
+### 5. Set an encryption passphrase (recommended)
 
-1. **Device A** (has existing data):
-   - Settings → Sync → copy the **Sync Code** (e.g. `ABCD-EFGH-JKLM`)
+Under the Supabase config section, expand **Encryption passphrase**:
 
-2. **Device B** (new):
-   - Settings → Sync → enter the **same Supabase credentials** → Save & Test
-   - Paste the sync code into the **Enter sync code…** field → **Connect**
-   - The app pulls and replaces the entire host list
+- Enter any string and press **Save passphrase**
+- The passphrase is stored in the system keychain (not in SharedPreferences) and is mixed into the PBKDF2 key derivation
+- Without a passphrase, anyone who obtains your anon key can decrypt your synced rows
+- With a passphrase, the anon key alone is insufficient — only the combination decrypts
 
-> **Note:** Both devices must use the same Supabase project. The sync code is the encryption key — do not share it over an insecure channel.
+> The passphrase is never transmitted; it lives only on the device that sets it. Every device syncing the same project must set the same passphrase.
 
-## Troubleshooting
+### 6. Connect additional devices
+
+1. On each additional device, enter the **same Project URL**, **Anon Key**, and **passphrase** → Save & Test
+2. The app automatically pulls on window focus when `remote.updated_at > last_push_at`
+3. Pushes fire on every host mutation and retry every 30 s on failure
+
+### Troubleshooting
 
 | Error | Cause | Fix |
 |---|---|---|
-| `Table not found. Add your Service Role Key…` | Migration has not run | Enter the Service Role Key in the field below the anon key and Save & Test again |
+| `Table not found` | Migration has not run | Run the SQL shown in-app or via CLI (see step 4) |
 | `Invalid API key` | Incorrect anon key | Check Project Settings → API |
-| `Invalid sync code` | Wrong code or different project | Make sure you enter exactly 12 characters from the correct project |
+| `invalid sync code` | Wrong passphrase or corrupted row | Ensure the same passphrase is set on all devices |
+| Push silently retried | Another push was already in flight | The retry timer will pick it up within 30 s |
+| `disableAndDelete` returns an error message | Remote row delete failed | The local config is cleared but the Supabase row may still exist; delete it manually via the Supabase dashboard |
+
+---
+
+## P2P Transfer (LAN QR)
+
+Transfers the host list directly between two devices on the same network — no cloud account required. This is a **one-shot** transfer, not continuous sync.
+
+### How it works
+
+1. **Sender** (device with existing data):
+   - Settings → Sync → **P2P Transfer** tab → **Show QR Code**
+   - The app starts a local HTTP server on a random port, encrypts the host list with a fresh random 32-byte AES-256-GCM key, and displays a QR code
+   - If multiple network interfaces are available (Wi-Fi, Ethernet, VPN), select which IP to advertise from the dropdown
+   - The QR code is valid for **2 minutes** (countdown shown)
+
+2. **Receiver** (new device):
+   - Settings → Sync → **P2P Transfer** tab → **Scan QR** (or paste the transfer code if QR scanning is unavailable)
+   - The app fetches the payload from the sender's URL (5 s connect + 10 s body timeout), decrypts it, and imports the hosts
+
+3. After a successful transfer the sender's HTTP server closes automatically.
+
+### QR code format
+
+The QR encodes a JSON object:
+
+```json
+{"u": "http://<ip>:<port>/sync", "k": "<base64-encoded-32-byte-key>"}
+```
+
+The encryption key is embedded in the QR — keep the QR visible only to the intended recipient.
+
+### Tips
+
+- Both devices must be on the **same LAN** (or at least the sender's IP must be reachable from the receiver)
+- If the sender has both Wi-Fi and Ethernet active, choose the interface that the receiver is also on
+- The 2-minute window can be reset by clicking **Show QR Code** again

@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.8] — 2026-05-31
+
+### Added
+- **Script Engine Plugin System** — QuickJS-based JS runtime; plugins load from `~/.yourssh/plugins/` at runtime without rebuilding the app; hot-reload on file save
+- **Plugin manifest** (`plugin.json`) with permission model; user approves permissions per-plugin via consent dialog
+- **HookBus** — event bus for terminal.output (transform), terminal.input (intercept/cancel), session.connect/disconnect, session.connect.before (cancel), command.before (modify/cancel), command.after (observe)
+- **Bridge APIs** available to plugins: `ssh.sessions()`, `ssh.inject(sessionId, text)`, `storage.get/set/delete`, `ui.notify()`, `ui.statusbar.add/update/remove`, `ui.panel.register()`, `ui.clipboard.copy()`, `ui.addCommand()`, `console.log/warn/error`
+- **Native panel messages** from plugin WebView HTML: `ssh-exec`, `ssh-sessions`, `sftp-list`, `sftp-read` — handled async in Dart, enables SSH/SFTP from panel HTML without JS async limitations
+- **ScriptPluginPanelScreen** — WebView renderer for plugin panels with bidirectional JS↔Dart bridge
+- **PluginLoader** — disk scan + DirectoryWatcher for hot-reload; permission consent dialog on first install
+- **BundledPluginInstaller** — ships bundled plugins in app assets, installs to `~/.yourssh/plugins/` on first run
+- **Snippets plugin migrated to JS** — compiled `yourssh_snippets` replaced by `dev.yourssh.snippets` JS plugin bundled in assets; data migrated from old SharedPreferences key automatically
+- **Plugin Console** — per-plugin log viewer (Settings → Script Plugins) showing `console.log` output and errors
+- **Plugin Manager screen** — shows pending consent, plugin directory info
+- **Plugin Authoring Guide** (`docs/plugin-authoring-guide.md`) — A-Z guide for writing plugins: manifest, hook API, bridge API, native panel messages, examples, debugging, known limitations
+
+### Changed
+- `SshService` now accepts optional `HookBus` for terminal data interception
+- `SshService.exec()` fires `command.before` (interceptable) and `command.after` (observe) hooks
+- `SshService.connect()` fires `session.connect.before` (interceptable) hook
+- `SshBridgeDelegate` extended with `sendInput(sessionId, text)` for terminal injection
+
+### Removed
+- `yourssh_snippets` compiled Dart plugin (replaced by bundled JS plugin)
+
+---
+
 ## [0.1.7] — 2026-05-31
 
 ### Added

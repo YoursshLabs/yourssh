@@ -25,16 +25,19 @@ import '../widgets/new_group_panel.dart';
 import '../widgets/import_panel.dart';
 import '../widgets/ai_chat_sidebar.dart';
 import '../widgets/command_palette.dart';
-import '../widgets/plugin_marketplace_screen.dart';
+import '../widgets/plugin_consent_dialog.dart';
+import '../widgets/plugin_manager_screen.dart';
 import '../widgets/recording_library_screen.dart';
 import '../plugins/plugin_context_impl.dart';
+import '../providers/plugin_engine_provider.dart';
 import '../providers/plugin_provider.dart';
 import '../services/ssh_service.dart';
 import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
 import '../providers/settings_provider.dart';
 import '../providers/terminal_layout_provider.dart';
 import '../services/hotkey_service.dart';
-import 'package:yourssh_snippets/yourssh_snippets.dart';
+import 'package:yourssh_script_engine/yourssh_script_engine.dart';
+import '../widgets/script_plugin_panel_screen.dart';
 
 enum NavSection { hosts, keychain, portForwarding, sftp, localTerminal, knownHosts, recordings, settings, plugins }
 
@@ -52,6 +55,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Timer? _workspaceSaveDebounce;
   NavSection _nav = NavSection.hosts;
   String? _activePluginId;
+  String? _activeScriptPanel;
   bool _pluginResetScheduled = false;
   _SidePanel _sidePanel = _SidePanel.none;
   final Map<String, PluginContextImpl> _pluginContexts = {};
@@ -65,6 +69,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   SettingsProvider? _settingsProvider;
   TerminalLayoutProvider? _layoutProvider;
   bool _hostKeyDialogShowing = false;
+  bool _consentDialogShowing = false;
 
   @override
   void initState() {
@@ -329,7 +334,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   void _openCommandPalette() {
     final hosts = context.read<HostProvider>().allHosts;
-    final snippetProvider = context.read<SnippetProvider>();
 
     final items = <CommandItem>[
       // Actions
@@ -434,19 +438,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           await context.read<SessionProvider>().connect(h);
         },
       )),
-      // Snippets
-      ...snippetProvider.snippets.map((s) => CommandItem(
-        id: 'snippet_${s.id}',
-        title: s.label,
-        subtitle: s.command,
-        icon: Icons.code,
-        type: CommandType.snippet,
-        execute: () {
-          final active = context.read<SessionProvider>().activeSession;
-          if (active == null) return;
-          active.terminal.textInput('${s.command}\n');
-        },
-      )),
     ];
 
     showDialog(
@@ -470,6 +461,20 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final sessions = sessionProvider.sessions;
     final activeSession = sessionProvider.activeSession;
 
+    final engineProvider = context.watch<PluginEngineProvider>();
+    if (engineProvider.pendingConsent != null && !_consentDialogShowing) {
+      _consentDialogShowing = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) =>
+              PluginConsentDialog(manifest: engineProvider.pendingConsent!),
+        ).then((_) => setState(() => _consentDialogShowing = false));
+      });
+    }
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: Column(
@@ -481,6 +486,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             viewingTerminal: _viewingTerminal && sessions.isNotEmpty,
             onNavSelect: (s) => setState(() {
               _activePluginId = null;
+              _activeScriptPanel = null;
               _nav = s;
               _viewingTerminal = false;
               _showAiChat = false;
@@ -491,6 +497,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             onAddSession: () {
               setState(() {
                 _activePluginId = null;
+                _activeScriptPanel = null;
                 _nav = NavSection.hosts;
                 _viewingTerminal = false;
                 _showAiChat = false;
@@ -513,6 +520,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                       if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
                       setState(() {
                         _activePluginId = null;
+                        _activeScriptPanel = null;
                         _nav = s;
                         _viewingTerminal = false;
                         _showAiChat = false;
@@ -521,6 +529,15 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     onSelectPlugin: (id) {
                       setState(() {
                         _activePluginId = id;
+                        _viewingTerminal = false;
+                        _sidePanel = _SidePanel.none;
+                      });
+                    },
+                    activeScriptPanel: _activeScriptPanel,
+                    onSelectScriptPanel: (pluginId) {
+                      setState(() {
+                        _activeScriptPanel = pluginId;
+                        _activePluginId = null;
                         _viewingTerminal = false;
                         _sidePanel = _SidePanel.none;
                       });
@@ -553,6 +570,36 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 ],
               ],
             ),
+          ),
+          Consumer<PluginUiRegistry>(
+            builder: (context, registry, _) {
+              if (registry.statusBarItems.isEmpty) return const SizedBox.shrink();
+              return Container(
+                height: 24,
+                color: AppColors.sidebar,
+                child: Row(
+                  children: [
+                    for (final item in registry.statusBarItems)
+                      Tooltip(
+                        message: item.tooltip ?? '',
+                        child: InkWell(
+                          onTap: item.onClick,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: Text(
+                              item.label,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -591,6 +638,23 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             ),
         ],
       );
+    }
+
+    // Script plugin panel
+    if (_activeScriptPanel != null) {
+      final registry = context.watch<PluginUiRegistry>();
+      final panels = registry.panels.where((p) => p.pluginId == _activeScriptPanel);
+      if (panels.isNotEmpty) {
+        return ScriptPluginPanelScreen(panel: panels.first);
+      }
+      if (!_pluginResetScheduled) {
+        _pluginResetScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _pluginResetScheduled = false;
+          if (mounted) setState(() => _activeScriptPanel = null);
+        });
+      }
+      return const SizedBox.shrink();
     }
 
     // Active plugin view
@@ -635,7 +699,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       NavSection.recordings => const RecordingLibraryScreen(),
       NavSection.knownHosts => const KnownHostsScreen(),
       NavSection.settings => const SettingsScreen(),
-      NavSection.plugins => const PluginMarketplaceScreen(),
+      NavSection.plugins => const PluginManagerScreen(),
     };
   }
 }
@@ -645,13 +709,17 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 class _Sidebar extends StatelessWidget {
   final NavSection selected;
   final String? activePluginId;
+  final String? activeScriptPanel;
   final ValueChanged<NavSection> onSelect;
   final ValueChanged<String> onSelectPlugin;
+  final ValueChanged<String> onSelectScriptPanel;
   const _Sidebar({
     required this.selected,
     required this.activePluginId,
+    required this.activeScriptPanel,
     required this.onSelect,
     required this.onSelectPlugin,
+    required this.onSelectScriptPanel,
   });
 
   @override
@@ -689,6 +757,13 @@ class _Sidebar extends StatelessWidget {
           _navItem(Icons.video_library_outlined, 'Recordings', NavSection.recordings),
           ...context.watch<PluginProvider>().enabledPlugins.map(
             (plugin) => _pluginNavItem(context, plugin),
+          ),
+          ...context.watch<PluginUiRegistry>().panels.map(
+            (panel) => _ScriptPanelNavItem(
+              panel: panel,
+              isActive: activeScriptPanel == panel.pluginId,
+              onTap: () => onSelectScriptPanel(panel.pluginId),
+            ),
           ),
 
           const _SectionLabel('SECURITY'),
@@ -798,6 +873,28 @@ class _PluginNavItemState extends State<_PluginNavItem> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ScriptPanelNavItem extends StatelessWidget {
+  final PluginPanelEntry panel;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _ScriptPanelNavItem({
+    required this.panel,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _NavItem(
+      icon: Icons.code_outlined,
+      label: panel.title,
+      selected: isActive,
+      onTap: onTap,
     );
   }
 }

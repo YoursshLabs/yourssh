@@ -1,7 +1,6 @@
 import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
 import 'package:yourssh_devops/yourssh_devops.dart';
 import 'package:yourssh_web_tools/yourssh_web_tools.dart';
-import 'package:yourssh_snippets/yourssh_snippets.dart';
 import '../widgets/devops_tools_screen.dart';
 import '../widgets/cloudflare_tunnel_screen.dart';
 import '../widgets/mail_catcher_screen.dart';
@@ -24,5 +23,4 @@ final List<YourSSHPlugin> kRegisteredPlugins = [
       portForwardBrowserBuilder: (onOpenUrl) => PortForwardBrowser(onOpenUrl: onOpenUrl),
     ),
   ),
-  YourSSHSnippetsPlugin(),
 ];

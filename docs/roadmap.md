@@ -1,11 +1,11 @@
 # YourSSH — Roadmap
 
 > Direction: **infra workstation for DevOps/SRE managing 10–100+ hosts**, not just an SSH client.
-> Current version: 0.1.7 · updated: 2026-05-31 (Workspace persistence + Search-in-scrollback shipped)
+> Current version: 0.1.8 · updated: 2026-05-31 (Script Engine plugin system shipped)
 
 This document lists proposed features ordered by priority. Each item can be broken out into its own spec (`docs/superpowers/specs/`) when ready for implementation.
 
-Already shipped (not repeated in roadmap): multi-tab terminal, split view, broadcast, recording (asciicast), snippet, SFTP dual-panel, port forwarding, jump host, Supabase sync + P2P LAN, AI chat sidebar with tool calling, plugin system (DevOps / WebTools / Snippets), Cloudflare tunnel, MCP gateway, mail catcher, code editor (Monaco), customizable hotkeys, TOFU known-hosts, **Command Palette (Cmd/Ctrl+K)** — fuzzy search hosts / nav / snippets / actions, **Workspace persistence** — auto-reconnect tabs + layout on relaunch, **Search-in-scrollback (Cmd/Ctrl+F)** — regex, highlights, prev/next navigation.
+Already shipped (not repeated in roadmap): multi-tab terminal, split view, broadcast, recording (asciicast), snippet, SFTP dual-panel, port forwarding, jump host, Supabase sync + P2P LAN, AI chat sidebar with tool calling, plugin system (DevOps / WebTools / Snippets), Cloudflare tunnel, MCP gateway, mail catcher, code editor (Monaco), customizable hotkeys, TOFU known-hosts, **Command Palette (Cmd/Ctrl+K)** — fuzzy search hosts / nav / snippets / actions, **Workspace persistence** — auto-reconnect tabs + layout on relaunch, **Search-in-scrollback (Cmd/Ctrl+F)** — regex, highlights, prev/next navigation, **Script Engine plugin system** — disk-based JS plugins via QuickJS FFI, HookBus (terminal.output / terminal.input / session events), SSH/SFTP/Storage/UI bridges, hot-reload file watcher, PermissionGuard + circuit breaker, consent dialog, manager screen + console log viewer.
 
 ---
 
@@ -46,7 +46,7 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 
 ### Polish existing features
 - TOFU dialog: side-by-side diff of old/new fingerprint + "trust temporarily" button.
-- Plugin marketplace: real install/uninstall (currently compile-in via `plugin_registry.dart`).
+- Plugin marketplace: hosted catalog for browsing + one-click install of community JS plugins (runtime loading infrastructure already shipped in 0.1.8).
 - Sync conflict resolution UI when a pull detects a newer remote version of a locally modified host.
 - SFTP: trash instead of direct delete + undo last operation.
 - AI chat: explicit tool approval gating + token cost meter.
