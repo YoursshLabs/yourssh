@@ -180,11 +180,11 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     );
     // Install bundled plugins, warm up migration cache, then scan for plugins.
     // Runs async so initState() stays synchronous.
-    unawaited(() async {
+    Future(() async {
       await BundledPluginInstaller.ensureInstalled('snippets');
       await MigrationBridge.warmup();
       loader.scanAndLoad();
-    }());
+    });
 
     _syncProvider = SyncProvider(storage: _storage);
     _syncService = SyncService(_syncProvider);
