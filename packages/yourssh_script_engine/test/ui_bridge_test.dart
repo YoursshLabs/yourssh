@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh_script_engine/src/bridge/ui_bridge.dart';
+import 'package:yourssh_script_engine/src/js_runtime_registrar.dart';
 import 'package:yourssh_script_engine/src/permission_guard.dart';
 import 'package:yourssh_script_engine/src/plugin_ui_registry.dart';
 

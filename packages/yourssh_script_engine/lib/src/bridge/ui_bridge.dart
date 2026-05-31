@@ -1,12 +1,7 @@
 import 'dart:convert';
 import '../permission_guard.dart';
 import '../plugin_ui_registry.dart';
-
-// TODO: remove when QuickJsRuntime implements JsRuntimeRegistrar
-abstract class JsRuntimeRegistrar {
-  void registerHostFn(
-      String bridgeName, String fnName, String? Function(String arg) handler);
-}
+import '../js_runtime_registrar.dart';
 
 class UiBridge {
   final String _pluginId;

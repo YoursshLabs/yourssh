@@ -1,4 +1,5 @@
 import '../permission_guard.dart';
+import '../js_runtime_registrar.dart';
 
 abstract class SftpBridgeDelegate {
   Future<List<Map<String, dynamic>>> listDir(String sessionId, String path);
@@ -6,12 +7,6 @@ abstract class SftpBridgeDelegate {
   Future<void> writeFile(String sessionId, String path, String content);
   Future<void> deleteFile(String sessionId, String path);
   Future<void> makeDir(String sessionId, String path);
-}
-
-// TODO: remove when QuickJsRuntime implements JsRuntimeRegistrar
-abstract class JsRuntimeRegistrar {
-  void registerHostFn(
-      String bridgeName, String fnName, String? Function(String arg) handler);
 }
 
 class SftpBridge {

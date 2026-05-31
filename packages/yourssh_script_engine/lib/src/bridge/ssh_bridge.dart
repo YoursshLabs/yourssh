@@ -1,15 +1,10 @@
 import 'dart:convert';
 import '../permission_guard.dart';
+import '../js_runtime_registrar.dart';
 
 abstract class SshBridgeDelegate {
   List<Map<String, dynamic>> activeSessions();
   Future<Map<String, dynamic>> execCommand(String sessionId, String command);
-}
-
-// TODO: remove when QuickJsRuntime implements JsRuntimeRegistrar
-abstract class JsRuntimeRegistrar {
-  void registerHostFn(
-      String bridgeName, String fnName, String? Function(String arg) handler);
 }
 
 class SshBridge {

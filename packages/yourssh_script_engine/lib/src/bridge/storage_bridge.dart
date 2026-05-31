@@ -1,15 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-
-// Minimal interface StorageBridge needs from a JS runtime.
-// QuickJsRuntime (Task 3) will implement this.
-abstract class JsRuntimeRegistrar {
-  void registerHostFn(
-    String bridgeName,
-    String fnName,
-    String? Function(String arg) handler,
-  );
-}
+import '../js_runtime_registrar.dart';
 
 class StorageBridge {
   final String _pluginId;
