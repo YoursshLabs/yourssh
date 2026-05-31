@@ -73,10 +73,12 @@ var console = {
 
 class _LoadedPlugin {
   final String id;
+  final PluginManifest manifest;
   final QuickJsRuntime runtime;
   final PluginErrorTracker errorTracker;
 
-  _LoadedPlugin(this.id, this.runtime) : errorTracker = PluginErrorTracker(id);
+  _LoadedPlugin(this.id, this.manifest, this.runtime)
+      : errorTracker = PluginErrorTracker(id);
 
   void dispose() => runtime.dispose();
 }
@@ -87,6 +89,11 @@ class ScriptEngineService {
   final SshBridgeDelegate? sshDelegate;
   final SftpBridgeDelegate? sftpDelegate;
   final void Function(String pluginId, String level, String message)? onLog;
+
+  VoidCallback? onChange;
+
+  List<PluginManifest> get loadedManifests =>
+      _plugins.values.map((p) => p.manifest).toList();
 
   final _plugins = <String, _LoadedPlugin>{};
 
@@ -195,7 +202,8 @@ class ScriptEngineService {
       // Wire JS dispatch into HookBus
       _wireHooks(manifest.id, rt, grantedPermissions);
 
-      _plugins[manifest.id] = _LoadedPlugin(manifest.id, rt);
+      _plugins[manifest.id] = _LoadedPlugin(manifest.id, manifest, rt);
+      onChange?.call();
     } catch (e) {
       rt.dispose();
       rethrow;
@@ -295,6 +303,7 @@ class ScriptEngineService {
     uiRegistry?.clearPlugin(pluginId);
     _plugins[pluginId]?.dispose();
     _plugins.remove(pluginId);
+    onChange?.call();
   }
 
   void dispose() {

@@ -11,12 +11,16 @@ class PluginEngineProvider extends ChangeNotifier {
   PluginManifest? _pendingConsent;
   String? _pendingConsentDir;
 
+  List<PluginManifest> get loadedPlugins => engine.loadedManifests;
+
   PluginEngineProvider({
     required this.engine,
     required this.loader,
     required this.hookBus,
     required this.uiRegistry,
-  });
+  }) {
+    engine.onChange = notifyListeners;
+  }
 
   List<String> logsFor(String pluginId) =>
       List.unmodifiable(_logs[pluginId] ?? []);

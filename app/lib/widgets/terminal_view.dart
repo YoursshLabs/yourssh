@@ -382,7 +382,7 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
           ),
         Positioned(
           top: _searchVisible ? 44 : 8,
-          left: 8,
+          right: 8,
           child: _RecordButton(session: widget.session),
         ),
         if (_suggestions.isNotEmpty)

@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.11] — 2026-05-31
+
+### Added
+- **Snippets plugin restored** — `SnippetProvider` is registered again (its absence was crashing the app), and the Plugin Manager now lists both built-in plugins (with enable/disable toggles) and loaded JS script plugins instead of showing only help text
+
+### Fixed
+- **Recordings screen crash on open** — opening the Recordings library threw `Cannot hit test a render box with no size` and the mouse-tracker `!_debugDuringDeviceUpdate` assertion. A `SizedBox(width: double.infinity)` used as a direct `Row` child resolved to an infinite width, leaving the row with no size; the library now renders the list directly when no recording is playing and only splits into a fixed-width list + player when one is
+
+### Changed
+- Moved the terminal **REC** (start/stop recording) button from the top-left to the top-right corner so it is easier to see
+
+---
+
 ## [0.1.10] — 2026-05-31
 
 ### Added
@@ -177,7 +190,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/YoursshLabs/yourssh/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/YoursshLabs/yourssh/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/YoursshLabs/yourssh/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/YoursshLabs/yourssh/compare/v0.1.5...v0.1.8

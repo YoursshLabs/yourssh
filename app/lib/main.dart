@@ -19,6 +19,7 @@ import 'providers/sync_provider.dart';
 import 'providers/known_hosts_provider.dart';
 import 'providers/plugin_provider.dart';
 import 'plugins/plugin_registry.dart';
+import 'package:yourssh_snippets/yourssh_snippets.dart';
 import 'services/notification_service.dart';
 import 'services/ssh_service.dart';
 import 'services/storage_service.dart';
@@ -272,6 +273,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         ChangeNotifierProvider(create: (_) => TerminalLayoutProvider()),
         ChangeNotifierProvider(create: (_) => LocalSessionProvider()),
         ChangeNotifierProvider(create: (_) => AiChatProvider()),
+        ChangeNotifierProvider(create: (_) => SnippetProvider()),
         ChangeNotifierProvider.value(value: _pluginProvider),
         ChangeNotifierProvider.value(value: _recordingProvider),
         ChangeNotifierProvider.value(value: _uiRegistry),
