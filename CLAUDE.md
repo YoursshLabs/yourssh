@@ -64,7 +64,7 @@ Flutter UI (widgets/screens)
 - `PortForwardProvider` — local/remote/dynamic `PortForward` tunnel configs (persistent rules)
 - `TunnelProvider` — active `TunnelConfig` sessions (runtime state, separate from PortForwardProvider)
 - `SnippetProvider` — reusable command snippets (managed by `yourssh_snippets` plugin)
-- `SyncProvider` — holds Supabase sync config (URL/key, enabled flag, status)
+- `SyncProvider` — holds Supabase sync config (URL/key, optional passphrase, status); `enabled` is derived from `isSupabaseConfigured` — no separate stored flag; passphrase stored in secure storage via `StorageService`
 - `KnownHostsProvider` — persists known host fingerprints; exposes `pendingChallenge` for TOFU dialog
 - `SettingsProvider` — app-wide prefs (auto-reconnect, tmux, hotkeys, feature flags for DevOps/WebTools/Snippets)
 - `TerminalLayoutProvider` — split layout (none/horizontal/vertical) and input bar visibility
@@ -79,12 +79,12 @@ Flutter UI (widgets/screens)
 
 **Services** (`app/lib/services/`):
 - `SshService` — owns `SSHClient` and `SSHSession` maps keyed by host ID; handles connect, shell, exec, sftp, `testConnection` (TCP+auth without opening a shell), disconnect
-- `StorageService` — host list as JSON in `SharedPreferences`; passwords/passphrases in `FlutterSecureStorage` (`pw_<hostId>`, `pp_<keyId>`); falls back to `SharedPreferences` if secure storage fails
+- `StorageService` — host list as JSON in `SharedPreferences`; all secrets via `_saveSecret/_loadSecret/_deleteSecret` helpers (secure-first: write to `FlutterSecureStorage`, purge stale prefs copy on success, fall back to prefs on error); exposes `saveGenericSecret` / `loadGenericSecret` / `deleteGenericSecret` for app-scoped secrets (e.g., `sync_passphrase`)
 - `CertificateKeyPair` — implements `SSHKeyPair`; wraps a PEM private key with a separate OpenSSH certificate file (base64 blob); used by `SshService` when `AuthType.certificate`
-- `SyncService` — push/pull host data encrypted via `SyncEncryption` (AES-256-GCM, key derived from Supabase anon key) to a Supabase table; retries failed pushes every 30 s via a timer
+- `SyncService` — push/pull host data encrypted via `SyncEncryption` to a Supabase table; retries failed pushes every 30 s via timer; concurrent push while one is in-flight sets `sync_pending_push` instead of silently dropping the mutation; `disableAndDelete()` returns `String?` (remote delete error, or null on success) and calls `clearSupabaseConfig()` on the provider; `buildPayload` strips `detectedOs` from host JSON before upload
 - `SupabaseService` — thin HTTP wrapper around Supabase REST API (upsert/fetch/delete a single row in `sync_data` table); raw `http` calls, no `supabase_flutter` SDK
-- `P2PSyncService` — LAN sync via a one-shot HTTP server; exports an encrypted payload, shares URL as QR code for another device to import
-- `P2PSyncEncryption` — AES-256-GCM encryption used by P2P sync
+- `P2PSyncService` — LAN sync via a one-shot HTTP server; `getLocalInterfaces()` enumerates non-loopback IPv4 interfaces with friendly `displayName` (Wi-Fi / Ethernet / VPN); `startServer(encryptedPayload, hostAddress)` binds on a random port and returns the full URL; server closes after the first successful `GET /sync` response; `onServerError` callback for mid-transfer errors; `fetchPayload(url)` HTTP GET with 5 s connect + 10 s body timeout
+- `P2PSyncEncryption` — AES-256-GCM for LAN sync; `generateKey()` returns a random 32-byte key embedded in the QR URL (no PBKDF2 — key exchanged out-of-band via QR scan)
 - `LocalShellService` / `PtyRunner` — local terminal via `flutter_pty`
 - `HotkeyService` — global hotkey registration via `hotkey_manager`; hotkey names (`new_session`, `close_session`, `next_session`, `prev_session`, `toggle_input_bar`, `split_horizontal`, `split_vertical`) configured in `SettingsProvider`
 - `SftpFileOpsService` — SFTP file operations (rename, delete, mkdir, permissions)
@@ -130,7 +130,7 @@ Each plugin implements `YourSSHPlugin` (from `yourssh_plugin_api`):
 
 **Supabase sync** (cloud): opt-in. Host data is AES-256-GCM encrypted before upload. The payload uses format `v1:` with a per-row random 16-byte salt and PBKDF2-HMAC-SHA256 (100k iterations) over `passphrase + " " + anonKey` (the optional user passphrase mixes into the KDF — without it, anyone holding the public anon key could decrypt). Legacy rows (no `v1:` prefix) still decrypt using the old fixed-salt + anon-key-only derivation, so existing data migrates on next write. `SyncService.push` fires from `HostProvider.onMutation` and retries every 30 s on failure (`sync_pending_push` flag). `SyncService.pull` runs on `WindowFocus` and only applies if `remote.updated_at > last_push_at`. `SyncProvider.enabled` is derived from `isSupabaseConfigured` — no separate flag.
 
-**P2P sync** (LAN): `P2PSyncService` starts a one-shot HTTP server, encrypts the host list payload, and exposes a URL as a QR code. The receiving device scans the QR code and imports the encrypted payload.
+**P2P sync** (LAN): `P2PSyncService` starts a one-shot HTTP server on a random port and encrypts the host list with a random 32-byte AES-256-GCM key (`P2PSyncEncryption.generateKey()`). Both the URL and the key are encoded in the QR code. The receiving device scans the QR code, fetches the payload via HTTP (5 s connect + 10 s body timeout), decrypts it, and imports the hosts. The server closes automatically after one successful transfer. `NetworkInterfaceInfo` discovers available LAN interfaces (Wi-Fi / Ethernet / VPN) so the sender can choose which IP to advertise.
 
 ## Credential storage
 
