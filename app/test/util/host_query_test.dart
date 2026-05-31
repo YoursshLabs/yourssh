@@ -86,6 +86,17 @@ void main() {
       expect(HostQuery.parse('ENV:PROD').matches(h(tags: ['env:prod'])), isTrue);
       expect(HostQuery.parse('WEB').matches(h(label: 'Web-1')), isTrue);
     });
+
+    test('facet + free-text are both required', () {
+      final q = HostQuery.parse('env:prod web');
+      expect(q.matches(h(label: 'web-server', tags: ['env:prod'])), isTrue);
+      expect(q.matches(h(label: 'web-server', tags: ['env:staging'])), isFalse);
+      expect(q.matches(h(label: 'db-server', tags: ['env:prod'])), isFalse);
+    });
+
+    test('free-text matches a bare (non-facet) tag', () {
+      expect(HostQuery.parse('legacy').matches(h(tags: ['legacy'])), isTrue);
+    });
   });
 
   group('HostQuery.availableFacets', () {

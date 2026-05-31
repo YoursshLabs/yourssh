@@ -27,7 +27,10 @@ class HostQuery {
         terms.add(token);
       }
     }
-    return HostQuery._(facets, terms);
+    final frozenFacets = {
+      for (final e in facets.entries) e.key: Set<String>.unmodifiable(e.value),
+    };
+    return HostQuery._(Map.unmodifiable(frozenFacets), List.unmodifiable(terms));
   }
 
   bool matches(Host host) {
