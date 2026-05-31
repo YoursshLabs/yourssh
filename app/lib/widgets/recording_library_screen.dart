@@ -27,34 +27,44 @@ class _RecordingLibraryScreenState extends State<RecordingLibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // No player open: the list fills the area via Expanded. Using
+    // SizedBox(width: double.infinity) as a direct Row child resolves to an
+    // infinite width during Row's measure pass, producing a render box with a
+    // non-finite size that the mouse tracker cannot hit-test ("Cannot hit test
+    // a render box with no size" + the `!_debugDuringDeviceUpdate` assertion).
+    if (_playing == null) {
+      return _LibraryList(
+        onPlay: (entry) => setState(() => _playing = entry),
+        playingPath: null,
+      );
+    }
+
     return Row(
       children: [
         SizedBox(
-          width: _playing != null ? 360 : double.infinity,
+          width: 360,
           child: _LibraryList(
             onPlay: (entry) => setState(() => _playing = entry),
-            playingPath: _playing?.filePath,
+            playingPath: _playing!.filePath,
           ),
         ),
-        if (_playing != null) ...[
-          const VerticalDivider(width: 1, color: AppColors.border),
-          Expanded(
-            child: Column(
-              children: [
-                _PlayerHeader(
-                  entry: _playing!,
-                  onClose: () => setState(() => _playing = null),
+        const VerticalDivider(width: 1, color: AppColors.border),
+        Expanded(
+          child: Column(
+            children: [
+              _PlayerHeader(
+                entry: _playing!,
+                onClose: () => setState(() => _playing = null),
+              ),
+              Expanded(
+                child: RecordingPlayerWidget(
+                  key: ValueKey(_playing!.filePath),
+                  filePath: _playing!.filePath,
                 ),
-                Expanded(
-                  child: RecordingPlayerWidget(
-                    key: ValueKey(_playing!.filePath),
-                    filePath: _playing!.filePath,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ],
     );
   }

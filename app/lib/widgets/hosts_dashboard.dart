@@ -504,18 +504,6 @@ class _HostCardState extends State<_HostCard> {
   ({bool success, int latencyMs, String? error})? _testResult;
   Timer? _resultTimer;
 
-  // Hover toggles whether the action buttons (each wrapping a Tooltip, which
-  // owns its own MouseRegion) are mounted. Mutating the mouse-region tree
-  // synchronously inside an enter/exit callback re-enters the mouse tracker
-  // mid device-update and trips `!_debugDuringDeviceUpdate`. Defer the state
-  // change to a microtask so the rebuild happens after the update completes.
-  void _setHovered(bool value) {
-    if (_hovered == value) return;
-    Future.microtask(() {
-      if (mounted && _hovered != value) setState(() => _hovered = value);
-    });
-  }
-
   @override
   void dispose() {
     _resultTimer?.cancel();
@@ -578,8 +566,8 @@ class _HostCardState extends State<_HostCard> {
     final hostProvider = context.read<HostProvider>();
 
     return MouseRegion(
-      onEnter: (_) => _setHovered(true),
-      onExit: (_) => _setHovered(false),
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onDoubleTap: () => sessionProvider.connect(widget.host),
         child: Container(
