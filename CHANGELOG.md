@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.10] — 2026-05-31
+
+### Changed
+- Internal refactor across `app/lib` (no behavior change): deduplicated helpers in `KeyProvider`, `KnownHostsProvider`, `AiChatProvider`, and `SftpTransferService`; replaced the 60-case hotkey `switch` with an O(1) `Map` lookup; precomputed search query and pinned-groups `Set` in the hosts dashboard to avoid per-frame work; guarded a redundant `notifyListeners()` in `LocalFilePanelProvider`
+- Split large widgets for readability: extracted `_LocalEntryRow` from `LocalFilePanel`'s list builder, and split the sync settings section into `_buildCloudTab` / `_buildP2pTab` with a shared field-decoration helper
+
+---
+
 ## [0.1.9] — 2026-05-31
 
 ### Changed
@@ -166,7 +174,10 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/YoursshLabs/yourssh/compare/v0.1.9...v0.1.10
+[0.1.9]: https://github.com/YoursshLabs/yourssh/compare/v0.1.8...v0.1.9
+[0.1.8]: https://github.com/YoursshLabs/yourssh/compare/v0.1.5...v0.1.8
 [0.1.5]: https://github.com/YoursshLabs/yourssh/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/YoursshLabs/yourssh/compare/v0.1.2...v0.1.4
 [0.1.2]: https://github.com/YoursshLabs/yourssh/compare/v0.1.1...v0.1.2
