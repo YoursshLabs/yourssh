@@ -179,6 +179,15 @@ class ScriptEngineService {
       hookBus.register('command.before', pluginId, (e) {
         return _dispatch(rt, 'command.before', e, pluginId);
       });
+      hookBus.registerObserver('command.after', pluginId, (e) {
+        _dispatchObserve(rt, 'command.after', e, pluginId);
+      });
+    }
+
+    if (perms.contains('session.control')) {
+      hookBus.register('session.connect.before', pluginId, (e) {
+        return _dispatch(rt, 'session.connect.before', e, pluginId);
+      });
     }
   }
 

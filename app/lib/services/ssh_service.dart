@@ -110,6 +110,16 @@ class SshService {
     SshKeyEntry? jumpKeyEntry,
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
   }) async {
+    if (hookBus != null) {
+      final result = hookBus!.fireInterceptable(
+        'session.connect.before',
+        TransformEvent(sessionId: host.id, data: host.host),
+      );
+      if (result == null) {
+        throw Exception('Connection cancelled by plugin');
+      }
+    }
+
     final password = await _storage.loadPassword(host.id);
     final resolution = await _resolveIdentities(host, keyEntry);
     if (resolution.agentProxy != null) {
@@ -410,13 +420,42 @@ class SshService {
     Host host,
     String command,
   ) async {
+    var cmd = command;
+
+    if (hookBus != null) {
+      final transformed = hookBus!.fireInterceptable(
+        'command.before',
+        TransformEvent(sessionId: host.id, data: cmd),
+      );
+      if (transformed == null) {
+        return (stdout: '', stderr: 'Command cancelled by plugin', exitCode: -1);
+      }
+      cmd = transformed;
+    }
+
+    final originalCommand = cmd;
     final client = await _ensureClient(host);
-    final result = await client.runWithResult(command);
-    return (
+    final result = await client.runWithResult(cmd);
+    final execResult = (
       stdout: String.fromCharCodes(result.stdout),
       stderr: String.fromCharCodes(result.stderr),
       exitCode: result.exitCode ?? -1,
     );
+
+    hookBus?.fireObserve(
+      'command.after',
+      ObserveEvent(
+        sessionId: host.id,
+        payload: {
+          'command': originalCommand,
+          'stdout': execResult.stdout,
+          'stderr': execResult.stderr,
+          'exitCode': execResult.exitCode,
+        },
+      ),
+    );
+
+    return execResult;
   }
 
   // ── SFTP ───────────────────────────────────────────────
