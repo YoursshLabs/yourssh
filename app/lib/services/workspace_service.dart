@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/terminal_layout_provider.dart';
 
@@ -49,7 +50,8 @@ class WorkspaceService {
     try {
       return WorkspaceSnapshot.fromJson(
           jsonDecode(raw) as Map<String, dynamic>);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[WorkspaceService] malformed snapshot, ignoring: $e');
       return null;
     }
   }
