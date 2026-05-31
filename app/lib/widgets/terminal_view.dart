@@ -97,6 +97,156 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
     _highlights.clear();
   }
 
+  void _runSearch() {
+    _clearHighlights();
+
+    if (_searchQuery.isEmpty) {
+      setState(() {
+        _matches = [];
+        _currentMatch = 0;
+        _searchError = false;
+      });
+      return;
+    }
+
+    RegExp regex;
+    try {
+      final pattern =
+          _searchRegex ? _searchQuery : RegExp.escape(_searchQuery);
+      regex = RegExp(pattern, caseSensitive: false);
+    } catch (_) {
+      setState(() {
+        _matches = [];
+        _currentMatch = 0;
+        _searchError = true;
+      });
+      return;
+    }
+
+    final terminal = widget.session.terminal;
+    final buffer = terminal.buffer;
+    final lines = terminal.lines;
+    final newMatches = <_SearchMatch>[];
+
+    for (var i = 0; i < lines.length; i++) {
+      final text = lines[i].getText();
+      for (final m in regex.allMatches(text)) {
+        newMatches.add(_SearchMatch(i, m.start, m.end));
+      }
+    }
+
+    final settings = context.read<SettingsProvider>();
+    final termTheme = terminalThemeByName(settings.terminalTheme);
+
+    for (var mi = 0; mi < newMatches.length; mi++) {
+      final match = newMatches[mi];
+      final color = mi == 0
+          ? termTheme.searchHitBackgroundCurrent
+          : termTheme.searchHitBackground;
+      final h = _controller.highlight(
+        p1: buffer.createAnchor(match.startCol, match.lineIdx),
+        p2: buffer.createAnchor(match.endCol, match.lineIdx),
+        color: color,
+      );
+      _highlights.add(h);
+    }
+
+    setState(() {
+      _matches = newMatches;
+      _currentMatch = 0;
+      _searchError = false;
+    });
+
+    if (newMatches.isNotEmpty) _scrollToMatch(0);
+  }
+
+  void _scrollToMatch(int matchIdx) {
+    if (_matches.isEmpty || !_scrollController.hasClients) return;
+    final lineIdx = _matches[matchIdx].lineIdx;
+    final fontSize = context.read<SettingsProvider>().fontSize;
+    final estimatedLineHeight = fontSize * 1.35;
+    final offset = (lineIdx * estimatedLineHeight)
+        .clamp(0.0, _scrollController.position.maxScrollExtent);
+    _scrollController.animateTo(
+      offset,
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _goNext() {
+    if (_matches.isEmpty) return;
+    final termTheme = terminalThemeByName(
+        context.read<SettingsProvider>().terminalTheme);
+    final buffer = widget.session.terminal.buffer;
+
+    // Demote current match to normal color
+    _highlights[_currentMatch].dispose();
+    final old = _matches[_currentMatch];
+    _highlights[_currentMatch] = _controller.highlight(
+      p1: buffer.createAnchor(old.startCol, old.lineIdx),
+      p2: buffer.createAnchor(old.endCol, old.lineIdx),
+      color: termTheme.searchHitBackground,
+    );
+
+    final next = (_currentMatch + 1) % _matches.length;
+
+    // Promote next match to current color
+    _highlights[next].dispose();
+    final cur = _matches[next];
+    _highlights[next] = _controller.highlight(
+      p1: buffer.createAnchor(cur.startCol, cur.lineIdx),
+      p2: buffer.createAnchor(cur.endCol, cur.lineIdx),
+      color: termTheme.searchHitBackgroundCurrent,
+    );
+
+    setState(() => _currentMatch = next);
+    _scrollToMatch(next);
+  }
+
+  void _goPrev() {
+    if (_matches.isEmpty) return;
+    final termTheme = terminalThemeByName(
+        context.read<SettingsProvider>().terminalTheme);
+    final buffer = widget.session.terminal.buffer;
+
+    // Demote current match to normal color
+    _highlights[_currentMatch].dispose();
+    final old = _matches[_currentMatch];
+    _highlights[_currentMatch] = _controller.highlight(
+      p1: buffer.createAnchor(old.startCol, old.lineIdx),
+      p2: buffer.createAnchor(old.endCol, old.lineIdx),
+      color: termTheme.searchHitBackground,
+    );
+
+    final prev = (_currentMatch - 1 + _matches.length) % _matches.length;
+
+    // Promote prev match to current color
+    _highlights[prev].dispose();
+    final cur = _matches[prev];
+    _highlights[prev] = _controller.highlight(
+      p1: buffer.createAnchor(cur.startCol, cur.lineIdx),
+      p2: buffer.createAnchor(cur.endCol, cur.lineIdx),
+      color: termTheme.searchHitBackgroundCurrent,
+    );
+
+    setState(() => _currentMatch = prev);
+    _scrollToMatch(prev);
+  }
+
+  void _closeSearch() {
+    _clearHighlights();
+    _searchTextController.clear();
+    setState(() {
+      _searchVisible = false;
+      _searchQuery = '';
+      _searchRegex = false;
+      _searchError = false;
+      _matches = [];
+      _currentMatch = 0;
+    });
+  }
+
   void _completeTo(String suggestion) {
     widget.session.terminal.textInput('\b' * _inputBuffer.length);
     widget.session.terminal.textInput(suggestion);
