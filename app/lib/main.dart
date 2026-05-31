@@ -3,10 +3,12 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:yourssh_script_engine/yourssh_script_engine.dart';
 import 'providers/ai_chat_provider.dart';
 import 'providers/command_history_provider.dart';
 import 'providers/host_provider.dart';
 import 'providers/key_provider.dart';
+import 'providers/plugin_engine_provider.dart';
 import 'providers/port_forward_provider.dart';
 import 'providers/session_provider.dart';
 import 'providers/settings_provider.dart';
@@ -27,6 +29,40 @@ import 'theme/app_theme.dart';
 import 'providers/recording_provider.dart';
 
 String kAppVersion = '';
+
+/// Lazy adapter so ScriptEngineService can call into SessionProvider / SshService
+/// without a circular initialization dependency.
+class _SshBridgeAdapter implements SshBridgeDelegate {
+  final SessionProvider Function() _getSessionProvider;
+  final SshService Function() _getSshService;
+
+  _SshBridgeAdapter(this._getSessionProvider, this._getSshService);
+
+  @override
+  List<Map<String, dynamic>> activeSessions() {
+    return _getSessionProvider().sessions.map((s) => {
+          'sessionId': s.id,
+          'host': s.host.host,
+          'username': s.host.username,
+          'port': s.host.port,
+          'connected': s.status.name == 'connected',
+        }).toList();
+  }
+
+  @override
+  Future<Map<String, dynamic>> execCommand(
+      String sessionId, String command) async {
+    final session = _getSessionProvider()
+        .sessions
+        .firstWhere((s) => s.id == sessionId);
+    final result = await _getSshService().exec(session.host, command);
+    return {
+      'stdout': result.stdout,
+      'stderr': result.stderr,
+      'exitCode': result.exitCode,
+    };
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,6 +95,9 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final PluginProvider _pluginProvider;
   late final RecordingService _recordingService;
   late final RecordingProvider _recordingProvider;
+  late final HookBus _hookBus;
+  late final PluginUiRegistry _uiRegistry;
+  late final PluginEngineProvider _pluginEngineProvider;
 
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
 
@@ -72,7 +111,9 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
       _recordingService,
       getPath: () => _settingsProvider.recordingPath,
     );
-    _ssh = SshService(_storage);
+    _hookBus = HookBus();
+    _uiRegistry = PluginUiRegistry();
+    _ssh = SshService(_storage, hookBus: _hookBus);
     _ssh.recordingService = _recordingService;
     _hostProvider = HostProvider(_storage);
     _keyProvider = KeyProvider();
@@ -97,6 +138,42 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     // YourSSHPluginContext, which needs SessionProvider from the widget tree.
     // Actual lifecycle wiring is done in MainScreen after the widget tree is built.
     _pluginProvider.onToggled = (plugin, enabled) {};
+
+    // Wire ScriptEngineService with a lazy SSH bridge adapter.
+    // The adapter captures _sessionProvider and _ssh by reference; they are
+    // already assigned above so any plugin call at runtime is safe.
+    final sshAdapter = _SshBridgeAdapter(
+      () => _sessionProvider,
+      () => _ssh,
+    );
+    final engine = ScriptEngineService(
+      hookBus: _hookBus,
+      uiRegistry: _uiRegistry,
+      sshDelegate: sshAdapter,
+      sftpDelegate: null,
+    );
+    // PluginEngineProvider must be created before PluginLoader because the
+    // loader's onConsentRequired callback closes over _pluginEngineProvider.
+    // Use a late local var pattern: assign _pluginEngineProvider after loader.
+    late final PluginLoader loader;
+    loader = PluginLoader(
+      engine: engine,
+      onConsentRequired: (id, manifest, dir) {
+        _pluginEngineProvider.setPendingConsent(id, manifest, dir);
+      },
+      onError: (id, msg) {
+        _pluginEngineProvider.addLog(id, '[ERROR] $msg');
+      },
+    );
+    _pluginEngineProvider = PluginEngineProvider(
+      engine: engine,
+      loader: loader,
+      hookBus: _hookBus,
+      uiRegistry: _uiRegistry,
+    );
+    // Fire-and-forget: scan ~/.yourssh/plugins and hot-watch for changes.
+    loader.scanAndLoad();
+
     _syncProvider = SyncProvider(storage: _storage);
     _syncService = SyncService(_syncProvider);
 
@@ -148,6 +225,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     // Tear down in reverse-dependency order: consumers first (sessions, plugins,
     // recording, sync service — they read host/key/settings via callbacks), then
     // the producers they depend on.
+    _pluginEngineProvider.dispose();
     _pluginProvider.dispose();
     _recordingProvider.dispose();
     _sessionProvider.dispose();
@@ -185,6 +263,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         ChangeNotifierProvider(create: (_) => AiChatProvider()),
         ChangeNotifierProvider.value(value: _pluginProvider),
         ChangeNotifierProvider.value(value: _recordingProvider),
+        ChangeNotifierProvider.value(value: _uiRegistry),
+        ChangeNotifierProvider.value(value: _pluginEngineProvider),
       ],
       child: MaterialApp(
         title: 'YourSSH',

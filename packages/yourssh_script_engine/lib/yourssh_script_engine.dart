@@ -8,3 +8,5 @@ export 'src/script_engine_service.dart';
 export 'src/plugin_loader.dart';
 export 'src/js_runtime_registrar.dart';
 export 'src/native/quickjs_runtime.dart';
+export 'src/bridge/ssh_bridge.dart' show SshBridgeDelegate;
+export 'src/bridge/sftp_bridge.dart' show SftpBridgeDelegate;
