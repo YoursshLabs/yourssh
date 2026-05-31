@@ -239,6 +239,7 @@ class _ContainersScreenState extends State<ContainersScreen> {
 
   // ── Actions ───────────────────────────────────────────
   Future<void> _refresh() async {
+    _namespace = _nsController.text.trim().isEmpty ? 'default' : _nsController.text.trim();
     final host = _hostForSelected();
     if (host == null) return;
     setState(() {
@@ -264,6 +265,7 @@ class _ContainersScreenState extends State<ContainersScreen> {
   }
 
   Future<void> _execContainer(ContainerEntry c) async {
+    if (!mounted) return;
     final host = _hostForSelected();
     if (host == null) return;
     final sessionProvider = context.read<SessionProvider>();
