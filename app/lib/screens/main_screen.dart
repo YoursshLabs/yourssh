@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/workspace_service.dart';
 import '../models/host.dart';
 import '../models/known_host.dart';
 import '../models/ssh_session.dart';
@@ -45,7 +47,9 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
+  final _workspaceSvc = WorkspaceService();
+  Timer? _workspaceSaveDebounce;
   NavSection _nav = NavSection.hosts;
   String? _activePluginId;
   bool _pluginResetScheduled = false;
@@ -64,6 +68,8 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreWorkspace());
     _sftpConnectionNotifier.addListener(_onSftpConnectionChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _wirePluginLifecycle();
@@ -202,6 +208,8 @@ class _MainScreenState extends State<MainScreen> {
     _sessionProvider?.removeListener(_onSessionsChanged);
     _knownHostsProvider?.removeListener(_onKnownHostsChanged);
     _settingsProvider?.removeListener(_onSettingsChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    _workspaceSaveDebounce?.cancel();
     HotkeyService().unregisterAll();
     super.dispose();
   }
@@ -231,6 +239,53 @@ class _MainScreenState extends State<MainScreen> {
         _editingHost = null;
         _initialGroup = null;
       });
+
+  Future<void> _restoreWorkspace() async {
+    final snapshot = await _workspaceSvc.load();
+    if (snapshot == null || !mounted) return;
+
+    final hostProvider = context.read<HostProvider>();
+    final sessionProvider = context.read<SessionProvider>();
+    final layoutProvider = context.read<TerminalLayoutProvider>();
+
+    final allHosts = hostProvider.allHosts;
+    final found = snapshot.hostIds
+        .map((id) => allHosts.where((h) => h.id == id).firstOrNull)
+        .whereType<Host>()
+        .toList();
+
+    final missingCount = snapshot.hostIds.length - found.length;
+    if (missingCount > 0 && mounted) {
+      AppSnack.info(context,
+          '$missingCount host(s) from last session no longer exist');
+    }
+
+    if (found.isEmpty) {
+      await _workspaceSvc.clear();
+      return;
+    }
+
+    layoutProvider.setLayout(snapshot.layout);
+    if (snapshot.inputBarVisible != layoutProvider.inputBarVisible) {
+      layoutProvider.toggleInputBar();
+    }
+
+    for (final host in found) {
+      unawaited(sessionProvider.connect(host));
+    }
+
+    // Sessions are added synchronously at connect() entry; set active now.
+    if (snapshot.activeHostId != null) {
+      final targetSession = sessionProvider.sessions
+          .where((s) => s.host.id == snapshot.activeHostId)
+          .firstOrNull;
+      if (targetSession != null) {
+        sessionProvider.setActive(targetSession.id);
+      }
+    }
+
+    await _workspaceSvc.clear();
+  }
 
   void _openCommandPalette() {
     final hosts = context.read<HostProvider>().allHosts;
