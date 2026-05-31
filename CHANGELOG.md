@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.10] — 2026-05-31
 
+### Added
+- **Smart host filter** — the dashboard search box now parses a faceted query (`env:prod role:db region:sg`): values under the same tag key OR together, different keys AND together, and free-text terms match host label / address / username / tag values. Tags (`key:value`) are finally searchable. A row of toggleable suggestion chips above the host list builds the query with a tap
+
 ### Changed
 - Internal refactor across `app/lib` (no behavior change): deduplicated helpers in `KeyProvider`, `KnownHostsProvider`, `AiChatProvider`, and `SftpTransferService`; replaced the 60-case hotkey `switch` with an O(1) `Map` lookup; precomputed search query and pinned-groups `Set` in the hosts dashboard to avoid per-frame work; guarded a redundant `notifyListeners()` in `LocalFilePanelProvider`
 - Split large widgets for readability: extracted `_LocalEntryRow` from `LocalFilePanel`'s list builder, and split the sync settings section into `_buildCloudTab` / `_buildP2pTab` with a shared field-decoration helper
