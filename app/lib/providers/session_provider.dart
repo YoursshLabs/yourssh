@@ -9,6 +9,7 @@ class SessionProvider extends ChangeNotifier {
   final SshService _ssh;
   final List<SshSession> _sessions = [];
   final Map<String, Timer> _reconnectTimers = {};
+  final Map<String, Timer> _countdownTimers = {};
   String? _activeSessionId;
   bool _disposed = false;
   SshKeyEntry? Function(String keyId)? keyLookup;
@@ -30,6 +31,10 @@ class SessionProvider extends ChangeNotifier {
       t.cancel();
     }
     _reconnectTimers.clear();
+    for (final t in _countdownTimers.values) {
+      t.cancel();
+    }
+    _countdownTimers.clear();
     super.dispose();
   }
 
@@ -65,7 +70,6 @@ class SessionProvider extends ChangeNotifier {
   }
 
   Future<void> _doConnect(SshSession session, Host host, {required int attempt}) async {
-    final maxAttempts = reconnectAttempts?.call() ?? 3;
     try {
       final keyEntry = host.keyId != null ? keyLookup?.call(host.keyId!) : null;
       Host? jumpHost;
@@ -111,7 +115,10 @@ class SessionProvider extends ChangeNotifier {
       }
     } catch (e) {
       if (!_sessions.contains(session)) return;
-      final shouldRetry = (autoReconnectEnabled?.call() ?? false) && attempt < maxAttempts;
+      final maxAttempts = reconnectAttempts?.call() ?? 0;
+      final isUnlimited = maxAttempts == 0;
+      final shouldRetry = (autoReconnectEnabled?.call() ?? false) &&
+          (isUnlimited || attempt < maxAttempts);
       if (shouldRetry) {
         _scheduleReconnect(session, host, attempt: attempt + 1);
       } else {
@@ -125,21 +132,52 @@ class SessionProvider extends ChangeNotifier {
   }
 
   void _scheduleReconnect(SshSession session, Host host, {required int attempt}) {
+    final delay = (attempt * 2).clamp(2, 60);
     session.status = SessionStatus.connecting;
-    final msg = attempt > 1 ? 'Reconnecting (attempt $attempt)…' : 'Reconnecting…';
-    session.terminal.write('\r\n\x1b[33m[$msg]\x1b[0m\r\n');
     _safeNotify();
 
+    _startCountdown(session, delay, attempt);
+
     _reconnectTimers[session.id]?.cancel();
-    _reconnectTimers[session.id] = Timer(Duration(seconds: attempt * 2), () {
+    _reconnectTimers[session.id] = Timer(Duration(seconds: delay), () {
       _reconnectTimers.remove(session.id);
       if (_disposed || !_sessions.contains(session)) return;
       _doConnect(session, host, attempt: attempt);
     });
   }
 
+  void _startCountdown(SshSession session, int totalSeconds, int attempt) {
+    _countdownTimers[session.id]?.cancel();
+    var remaining = totalSeconds;
+
+    session.terminal.write(
+      '\r\n\x1b[33m[Reconnecting in ${remaining}s... (attempt $attempt)]\x1b[0m',
+    );
+
+    _countdownTimers[session.id] = Timer.periodic(const Duration(seconds: 1), (t) {
+      remaining--;
+      if (!_sessions.contains(session)) {
+        t.cancel();
+        _countdownTimers.remove(session.id);
+        return;
+      }
+      if (remaining <= 0) {
+        t.cancel();
+        _countdownTimers.remove(session.id);
+        session.terminal.write(
+          '\r\x1b[2K\x1b[33m[Reconnecting now... (attempt $attempt)]\x1b[0m\r\n',
+        );
+      } else {
+        session.terminal.write(
+          '\r\x1b[2K\x1b[33m[Reconnecting in ${remaining}s... (attempt $attempt)]\x1b[0m',
+        );
+      }
+    });
+  }
+
   void closeSession(String sessionId) {
     _reconnectTimers.remove(sessionId)?.cancel();
+    _countdownTimers.remove(sessionId)?.cancel();
     final hostId = _sessions.where((s) => s.id == sessionId).firstOrNull?.host.id;
 
     _ssh.disconnectSession(sessionId);
