@@ -75,6 +75,10 @@ When grep returns a real match (not a comment/TODO), consider it shipped → mov
 - ❌ Committing without showing the diff. **Always show diff and wait for approval.**
 - ❌ Skipping `packages/` when detecting shipped features — the plugin folder counts too.
 - ❌ Changing section/table format structure → makes diffs between versions harder to read.
+- ❌ Forgetting to update the wiki when shipping a feature. **Always update `docs/wiki/` alongside `docs/roadmap.md`:**
+  - User-visible feature shipped → update or create `docs/wiki/User-Guide-*.md`
+  - New developer component → update `docs/wiki/Developer-Guide-*.md`
+  - New feature area → add a row to `docs/wiki/Home.md`
 
 ## Output
 

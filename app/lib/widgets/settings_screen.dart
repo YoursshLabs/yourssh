@@ -93,9 +93,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     label: 'Max reconnect attempts',
                     trailing: _DropDown<int>(
                       value: settings.reconnectAttempts,
-                      items: [1, 3, 5, 10],
-                      labelOf: (n) => '$n times',
+                      items: [0, 1, 3, 5, 10],
+                      labelOf: (n) => n == 0 ? 'Unlimited' : '$n times',
                       onChanged: (v) => context.read<SettingsProvider>().save(reconnectAttempts: v),
+                    ),
+                  ),
+                  _Row(
+                    label: 'Keep-alive interval',
+                    subtitle: 'How often to ping the server to keep the connection alive',
+                    trailing: _DropDown<int>(
+                      value: settings.keepAliveInterval,
+                      items: [10, 30, 60, 0],
+                      labelOf: (n) => n == 0 ? 'Off' : '${n}s',
+                      onChanged: (v) => context.read<SettingsProvider>().save(keepAliveInterval: v),
                     ),
                   ),
                   SwitchListTile(

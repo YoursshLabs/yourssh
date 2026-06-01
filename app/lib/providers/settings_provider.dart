@@ -6,7 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsProvider extends ChangeNotifier {
   bool autoReconnect = true;
-  int reconnectAttempts = 3;
+  int reconnectAttempts = 0;
+  int keepAliveInterval = 10;
   double fontSize = 13;
   String terminalTheme = 'Dracula';
   bool networkStatsEnabled = false;
@@ -32,7 +33,8 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     autoReconnect = prefs.getBool('autoReconnect') ?? true;
-    reconnectAttempts = prefs.getInt('reconnectAttempts') ?? 3;
+    reconnectAttempts = prefs.getInt('reconnectAttempts') ?? 0;
+    keepAliveInterval = prefs.getInt('keepAliveInterval') ?? 10;
     fontSize = prefs.getDouble('fontSize') ?? 13;
     terminalTheme = prefs.getString('terminalTheme') ?? 'Dracula';
     networkStatsEnabled = prefs.getBool('networkStatsEnabled') ?? false;
@@ -60,6 +62,7 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> save({
     bool? autoReconnect,
     int? reconnectAttempts,
+    int? keepAliveInterval,
     double? fontSize,
     String? terminalTheme,
     Map<String, String>? hotkeys,
@@ -71,6 +74,7 @@ class SettingsProvider extends ChangeNotifier {
   }) async {
     if (autoReconnect != null) this.autoReconnect = autoReconnect;
     if (reconnectAttempts != null) this.reconnectAttempts = reconnectAttempts;
+    if (keepAliveInterval != null) this.keepAliveInterval = keepAliveInterval;
     if (fontSize != null) this.fontSize = fontSize;
     if (terminalTheme != null) this.terminalTheme = terminalTheme;
     if (hotkeys != null) this.hotkeys = hotkeys;
@@ -82,6 +86,7 @@ class SettingsProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('autoReconnect', this.autoReconnect);
     await prefs.setInt('reconnectAttempts', this.reconnectAttempts);
+    await prefs.setInt('keepAliveInterval', this.keepAliveInterval);
     await prefs.setDouble('fontSize', this.fontSize);
     await prefs.setString('terminalTheme', this.terminalTheme);
     await prefs.setString('hotkeys', jsonEncode(this.hotkeys));

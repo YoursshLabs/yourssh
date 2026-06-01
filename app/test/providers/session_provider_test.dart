@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/host.dart';
+import 'package:yourssh/models/ssh_session.dart';
 import 'package:yourssh/providers/session_provider.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
@@ -58,6 +59,46 @@ void main() {
       provider.dispose();
       // Second dispose() must not throw.
       expect(() => provider.dispose(), returnsNormally);
+    });
+
+    test('closeSession cancels countdown timer without throwing', () async {
+      final host = Host(
+        label: 'test',
+        host: '127.0.0.1',
+        port: 1,
+        username: 'x',
+      );
+      provider.autoReconnectEnabled = () => true;
+      provider.reconnectAttempts = () => 0; // unlimited
+
+      final future = provider.connect(host);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(provider.sessions, isNotEmpty);
+
+      provider.closeSession(provider.sessions.first.id);
+      expect(provider.sessions, isEmpty);
+
+      await expectLater(future, completes);
+    });
+
+    test('unlimited reconnect: session stays connecting after first failure', () async {
+      final host = Host(
+        label: 'unreachable',
+        host: '127.0.0.1',
+        port: 1,
+        username: 'x',
+      );
+      provider.autoReconnectEnabled = () => true;
+      provider.reconnectAttempts = () => 0; // unlimited
+
+      final future = provider.connect(host);
+      await expectLater(future, completes);
+
+      expect(provider.sessions, isNotEmpty);
+      expect(provider.sessions.first.status, SessionStatus.connecting);
+
+      provider.closeSession(provider.sessions.first.id);
     });
 
     test('dispose during in-flight connect does not throw', () async {

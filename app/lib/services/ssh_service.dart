@@ -26,6 +26,13 @@ class SshService {
   RecordingService? _recording;
   set recordingService(RecordingService? service) => _recording = service;
 
+  int Function()? keepAliveSecondsProvider;
+
+  Duration? _resolvedKeepAlive() {
+    final secs = keepAliveSecondsProvider?.call() ?? 10;
+    return secs == 0 ? null : Duration(seconds: secs);
+  }
+
   /// Verifier used when [exec]/[openSftp] auto-connect without an explicit
   /// verifier (e.g., DevOps tools invoking a one-off command). Set from main.dart
   /// to KnownHostsProvider.verifyHostKey used by interactive connects;
@@ -148,6 +155,7 @@ class SshService {
           if (verifyHostKey != null) return verifyHostKey(type.toString(), fp);
           return true;
         },
+        keepAliveInterval: _resolvedKeepAlive(),
       );
       await client.authenticated;
     } catch (e) {
