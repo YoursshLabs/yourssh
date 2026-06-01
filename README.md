@@ -21,10 +21,11 @@ Get the latest release from the [Releases page](https://github.com/thangnm93/you
 
 | Platform | File |
 |---|---|
-| macOS (Apple Silicon) | `YourSSH-x.x.x-arm64.dmg` |
-| Windows | `YourSSH.Setup.x.x.x.exe` |
-| Linux (Debian/Ubuntu) | `yourssh_x.x.x_amd64.deb` |
-| Linux (AppImage) | `YourSSH-x.x.x.AppImage` |
+| macOS (Apple Silicon) | `YourSSH-x.x.x-macOS-arm64.dmg` |
+| Windows (x64) | `YourSSH.Setup.x.x.x-Windows-x64.exe` |
+| Windows (ARM64 — Surface, Snapdragon) | `YourSSH.Setup.x.x.x-Windows-arm64.exe` |
+| Linux (Debian/Ubuntu — x86_64) | `yourssh_x.x.x_amd64.deb` |
+| Linux (Debian/Ubuntu — ARM64) | `yourssh_x.x.x_arm64.deb` |
 
 ### macOS — First Launch
 
@@ -39,6 +40,31 @@ Alternatively, run this in Terminal:
 ```bash
 xattr -dr com.apple.quarantine /Applications/YourSSH.app
 ```
+
+### Windows — Installation
+
+Run the `.exe` installer and follow the setup wizard. The installer adds YourSSH to the Start menu and optionally the desktop.
+
+> **Windows SmartScreen** may warn on first run because the app is not yet code-signed. Click **More info → Run anyway** to proceed.
+
+If you prefer a portable version (no installation required), download `YourSSH-x.x.x-Windows-arm64.exe` (ARM64) or extract the x64 build manually from the installer.
+
+### Linux — Installation
+
+**Debian / Ubuntu (recommended):**
+```bash
+sudo dpkg -i yourssh_x.x.x_amd64.deb   # x86_64
+sudo dpkg -i yourssh_x.x.x_arm64.deb   # ARM64 (Raspberry Pi 4/5, Apple M1 Linux, etc.)
+```
+
+After install, launch from your application menu or run `yourssh` in a terminal.
+
+**Uninstall:**
+```bash
+sudo dpkg -r yourssh
+```
+
+> **Minimum requirement:** GTK3 runtime (pre-installed on Ubuntu 20.04+, Debian 11+, and most modern distros).
 
 ---
 
