@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/ssh_session.dart';
 import '../providers/terminal_layout_provider.dart';
 import '../providers/session_provider.dart';
+import '../providers/share_provider.dart';
 import 'terminal_view.dart';
 import 'terminal_input_bar.dart';
 import 'broadcast_toolbar.dart';
@@ -124,6 +125,8 @@ class SplitTerminalView extends StatelessWidget {
 
     return Column(
       children: [
+        if (session.isWatch)
+          _WatchBanner(session: session),
         Expanded(
           child: GestureDetector(
             onTap: () => context.read<SessionProvider>().setActive(session.id),
@@ -143,6 +146,55 @@ class SplitTerminalView extends StatelessWidget {
             onDismiss: () => layout.toggleInputBar(),
           ),
       ],
+    );
+  }
+}
+
+class _WatchBanner extends StatelessWidget {
+  final SshSession session;
+  const _WatchBanner({required this.session});
+
+  @override
+  Widget build(BuildContext context) {
+    final share = context.watch<ShareProvider>();
+    final hasControl = share.isGuest && share.hasControl;
+    final sessionEnded = share.isGuest && share.sessionEnded;
+
+    Color bg;
+    Color fg;
+    String label;
+
+    if (sessionEnded) {
+      bg = const Color(0xFF2A1A1A);
+      fg = const Color(0xFFCC4444);
+      label = 'Session ended by host';
+    } else if (hasControl) {
+      bg = const Color(0xFF1A2A1A);
+      fg = const Color(0xFF22C55E);
+      label = 'You have control';
+    } else {
+      bg = const Color(0xFF1A1A2A);
+      fg = const Color(0xFF6699CC);
+      label = 'Watching: ${session.watchedTitle ?? ''} · Read-only';
+    }
+
+    return Container(
+      width: double.infinity,
+      color: bg,
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+      child: Row(
+        children: [
+          Icon(Icons.screen_share_outlined, size: 12, color: fg),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(color: fg, fontSize: 11)),
+          const Spacer(),
+          if (!sessionEnded)
+            GestureDetector(
+              onTap: () => context.read<ShareProvider>().leaveSession(),
+              child: Text('Leave', style: TextStyle(color: fg.withValues(alpha: 0.7), fontSize: 11)),
+            ),
+        ],
+      ),
     );
   }
 }
