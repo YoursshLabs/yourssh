@@ -1121,6 +1121,17 @@ class _SessionTabState extends State<_SessionTab> {
     super.dispose();
   }
 
+  static const _kTabColors = [
+    ('Red',    '#ef4444'),
+    ('Orange', '#f97316'),
+    ('Yellow', '#eab308'),
+    ('Green',  '#22c55e'),
+    ('Teal',   '#14b8a6'),
+    ('Blue',   '#3b82f6'),
+    ('Purple', '#a855f7'),
+    ('Pink',   '#ec4899'),
+  ];
+
   void _startRename() {
     _renameController.text = widget.session.customLabel ?? widget.session.title;
     _renameController.selection = TextSelection(
@@ -1128,6 +1139,123 @@ class _SessionTabState extends State<_SessionTab> {
       extentOffset: _renameController.text.length,
     );
     setState(() => _isRenaming = true);
+  }
+
+  Future<void> _showTabContextMenu(BuildContext context, Offset globalPos) async {
+    final session = widget.session;
+    final provider = widget.provider;
+
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPos.dx, globalPos.dy, globalPos.dx + 1, globalPos.dy + 1,
+      ),
+      color: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      items: [
+        PopupMenuItem(
+          value: 'rename',
+          child: const Row(children: [
+            Icon(Icons.edit_outlined, size: 14, color: Color(0xFFAAAAAA)),
+            SizedBox(width: 8),
+            Text('Rename', style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'pin',
+          child: Row(children: [
+            Icon(
+              session.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+              size: 14,
+              color: const Color(0xFFAAAAAA),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              session.isPinned ? 'Unpin' : 'Pin',
+              style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13),
+            ),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'color',
+          child: const Row(children: [
+            Icon(Icons.circle_outlined, size: 14, color: Color(0xFFAAAAAA)),
+            SizedBox(width: 8),
+            Text('Color tag', style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
+            Spacer(),
+            Icon(Icons.chevron_right, size: 14, color: Color(0xFF666666)),
+          ]),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'close',
+          child: const Row(children: [
+            Icon(Icons.close, size: 14, color: Color(0xFF888888)),
+            SizedBox(width: 8),
+            Text('Close', style: TextStyle(color: Color(0xFF888888), fontSize: 13)),
+          ]),
+        ),
+      ],
+    );
+
+    if (!context.mounted) return;
+
+    switch (result) {
+      case 'rename':
+        _startRename();
+      case 'pin':
+        provider.togglePin(session.id);
+      case 'color':
+        await _showColorSubmenu(context, globalPos);
+      case 'close':
+        provider.closeSession(session.id);
+    }
+  }
+
+  Future<void> _showColorSubmenu(BuildContext context, Offset globalPos) async {
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPos.dx + 160, globalPos.dy + 60,
+        globalPos.dx + 161, globalPos.dy + 61,
+      ),
+      color: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      items: [
+        PopupMenuItem(
+          value: 'none',
+          child: const Row(children: [
+            SizedBox(
+              width: 14, height: 14,
+              child: Icon(Icons.block, size: 12, color: Color(0xFF666666)),
+            ),
+            SizedBox(width: 8),
+            Text('None', style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 13)),
+          ]),
+        ),
+        ..._kTabColors.map((c) => PopupMenuItem(
+          value: c.$2,
+          child: Row(children: [
+            Container(
+              width: 14, height: 14,
+              decoration: BoxDecoration(
+                color: _hexColor(c.$2),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(c.$1, style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
+          ]),
+        )),
+      ],
+    );
+
+    if (result != null) {
+      widget.provider.setSessionColor(
+        widget.session.id,
+        result == 'none' ? null : result,
+      );
+    }
   }
 
   @override
@@ -1143,6 +1271,8 @@ class _SessionTabState extends State<_SessionTab> {
           widget.onTap();
         },
         onDoubleTap: _startRename,
+        onSecondaryTapUp: (details) =>
+            _showTabContextMenu(context, details.globalPosition),
         child: Container(
           height: 38,
           padding: const EdgeInsets.symmetric(horizontal: 12),
