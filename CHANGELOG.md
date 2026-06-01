@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Advanced tab management** — rename tabs (double-click or right-click → Rename), color tags (8 preset colors shown as a dot), pin tabs (moves to front, hides close button, persists across reconnects), drag reorder (horizontal drag with pinned/unpinned zone boundary). All metadata persists per host via SharedPreferences (`TabMetadataService`).
+
 ---
 
 ## [0.1.13] — 2026-06-01
