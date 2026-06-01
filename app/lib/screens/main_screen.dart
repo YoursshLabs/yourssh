@@ -38,6 +38,9 @@ import '../providers/terminal_layout_provider.dart';
 import '../services/hotkey_service.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
 import '../widgets/script_plugin_panel_screen.dart';
+import '../providers/share_provider.dart';
+import '../widgets/share_session_dialog.dart';
+import '../widgets/join_share_dialog.dart';
 
 enum NavSection { hosts, keychain, portForwarding, sftp, localTerminal, knownHosts, recordings, settings, plugins }
 
@@ -353,6 +356,16 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         type: CommandType.action,
         execute: () => WidgetsBinding.instance.addPostFrameCallback((_) => _openImportPanel()),
       ),
+      CommandItem(
+        id: 'action_join_share',
+        title: 'Join Shared Session',
+        subtitle: 'Watch a colleague\'s terminal using a share code',
+        icon: Icons.screen_share_outlined,
+        type: CommandType.action,
+        execute: () => WidgetsBinding.instance.addPostFrameCallback(
+          (_) => showDialog(context: context, builder: (_) => const JoinShareDialog()),
+        ),
+      ),
       // Nav sections
       CommandItem(
         id: 'nav_hosts',
@@ -621,6 +634,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const NetworkStatsOverlay(),
+                      const SizedBox(width: 8),
+                      _ShareButton(session: active),
                       const SizedBox(width: 8),
                       _AiChatToggle(
                         active: _showAiChat,
@@ -1398,6 +1413,46 @@ class _FpRow extends StatelessWidget {
                   fontFamily: 'monospace')),
         ),
       ],
+    );
+  }
+}
+
+class _ShareButton extends StatelessWidget {
+  final SshSession session;
+  const _ShareButton({required this.session});
+
+  @override
+  Widget build(BuildContext context) {
+    final share = context.watch<ShareProvider>();
+    if (!share.canShare || session.isWatch) return const SizedBox.shrink();
+    if (session.status != SessionStatus.connected) return const SizedBox.shrink();
+
+    final isActive = share.isSharing;
+    return Tooltip(
+      message: isActive ? 'Sharing active' : 'Share this terminal',
+      child: GestureDetector(
+        onTap: () => showDialog(
+          context: context,
+          builder: (_) => ShareSessionDialog(sessionId: session.id),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: isActive
+                ? AppColors.accent.withValues(alpha: 0.2)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: isActive ? AppColors.accent : const Color(0xFF2A2A2A),
+            ),
+          ),
+          child: Icon(
+            Icons.screen_share_outlined,
+            size: 14,
+            color: isActive ? AppColors.accent : const Color(0xFF555555),
+          ),
+        ),
+      ),
     );
   }
 }
