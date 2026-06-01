@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.1.16] — 2026-06-01
+
 ### Changed
 - **Cloud sync secret is now a 12-character sync code** — synced data is encrypted (AES-256-GCM) with a key derived from a random 12-char Crockford-Base32 code that is also the Supabase row id, replacing the anon-key-derived encryption and optional passphrase. The anon key is now only an API credential and can no longer decrypt anything. Generate a code on one device in **Settings → Sync** and enter it on your other devices to join — it is the only key to your data. Existing `default`-keyed rows are not migrated (fresh start); the old passphrase secret is removed on upgrade.
 
@@ -227,7 +231,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.15...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.16...HEAD
+[0.1.16]: https://github.com/YoursshLabs/yourssh/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/YoursshLabs/yourssh/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/YoursshLabs/yourssh/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/YoursshLabs/yourssh/compare/v0.1.12...v0.1.13
