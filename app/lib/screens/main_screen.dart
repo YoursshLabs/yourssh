@@ -1148,19 +1148,32 @@ class _SessionTabState extends State<_SessionTab> {
                       )
                     : const SizedBox.shrink(),
               ),
-              // X close button (left, per image)
-              GestureDetector(
-                onTap: () => widget.provider.closeSession(widget.session.id),
-                child: Icon(
-                  Icons.close,
-                  size: 11,
-                  color: _hovered || widget.isActive ? const Color(0xFF888888) : const Color(0xFF444444),
+              // Color dot (shown when colorTag is set)
+              if (widget.session.colorTag != null) ...[
+                Container(
+                  width: 7,
+                  height: 7,
+                  margin: const EdgeInsets.only(right: 5),
+                  decoration: BoxDecoration(
+                    color: _hexColor(widget.session.colorTag!),
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
+              ],
+              // X close button — hidden when pinned
+              if (!widget.session.isPinned)
+                GestureDetector(
+                  onTap: () => widget.provider.closeSession(widget.session.id),
+                  child: Icon(
+                    Icons.close,
+                    size: 11,
+                    color: _hovered || widget.isActive ? const Color(0xFF888888) : const Color(0xFF444444),
+                  ),
+                ),
               const SizedBox(width: 8),
               // Host label
               Text(
-                widget.session.host.label,
+                widget.session.title,
                 style: TextStyle(
                   color: labelColor,
                   fontSize: 12,
@@ -1168,7 +1181,13 @@ class _SessionTabState extends State<_SessionTab> {
                 ),
               ),
               const SizedBox(width: 8),
-              // Terminal icon (right, per image)
+              // Pin icon (shown when pinned)
+              if (widget.session.isPinned)
+                const Padding(
+                  padding: EdgeInsets.only(right: 4),
+                  child: Icon(Icons.push_pin, size: 11, color: Color(0xFF888888)),
+                ),
+              // Terminal icon (right)
               Icon(
                 Icons.monitor_outlined,
                 size: 13,
@@ -1457,4 +1476,9 @@ class _ShareButton extends StatelessWidget {
       ),
     );
   }
+}
+
+Color _hexColor(String hex) {
+  final h = hex.replaceFirst('#', '');
+  return Color(int.parse('FF$h', radix: 16));
 }
