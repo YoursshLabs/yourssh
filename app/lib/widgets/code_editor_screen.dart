@@ -52,13 +52,29 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   }
 
   Future<void> _loadFile() async {
-    final service = context.read<SftpTransferService>();
-    final tmpPath = await service.downloadToTemp(widget.host, widget.entry);
-    if (tmpPath == null || !mounted) return;
-    final bytes = await File(tmpPath).readAsBytes();
-    if (!mounted) return;
-    setState(() => _content = utf8.decode(bytes, allowMalformed: true));
-    if (_ready) _pushContentToEditor();
+    try {
+      final service = context.read<SftpTransferService>();
+      final tmpPath = await service.downloadToTemp(widget.host, widget.entry);
+      if (tmpPath == null || !mounted) return;
+      final bytes = await File(tmpPath).readAsBytes();
+      if (!mounted) return;
+      setState(() => _content = utf8.decode(bytes, allowMalformed: true));
+      if (_ready) _pushContentToEditor();
+    } catch (e) {
+      // The SFTP server returns SSH_FX_FAILURE (code 4) when the target is not
+      // a readable regular file — e.g. a directory, a virtual/special file, or
+      // a permission/IO error. Surface it and close the editor instead of
+      // crashing with an unhandled exception (this runs fire-and-forget from
+      // initState, so an uncaught error has nowhere to go).
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Cannot open ${widget.entry.name}: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      Navigator.of(context).pop();
+    }
   }
 
   void _onJsMessage(JavaScriptMessage msg) {

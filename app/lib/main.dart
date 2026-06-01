@@ -25,6 +25,7 @@ import 'services/ssh_service.dart';
 import 'services/storage_service.dart';
 import 'services/sync_service.dart';
 import 'services/recording_service.dart';
+import 'services/tab_metadata_service.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
 import 'providers/recording_provider.dart';
@@ -74,8 +75,16 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   kAppVersion = (await PackageInfo.fromPlatform()).version;
   await windowManager.ensureInitialized();
-  await windowManager.setTitle('YourSSH');
-  await windowManager.setMinimumSize(const Size(800, 600));
+  const windowOptions = WindowOptions(
+    size: Size(1280, 800),
+    minimumSize: Size(800, 600),
+    center: true,
+    title: 'YourSSH',
+  );
+  await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.show();
+    await windowManager.focus();
+  });
   await hotKeyManager.unregisterAll();
   await NotificationService.init();
   runApp(const YourSSHApp());
@@ -125,7 +134,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _hostProvider = HostProvider(_storage);
     _keyProvider = KeyProvider();
     _settingsProvider = SettingsProvider();
-    _sessionProvider = SessionProvider(_ssh);
+    _sessionProvider = SessionProvider(_ssh, TabMetadataService());
     _sessionProvider.keyLookup = (id) => _keyProvider.findById(id);
     _sessionProvider.jumpHostLookup = (id) =>
         _hostProvider.allHosts.where((h) => h.id == id).firstOrNull;

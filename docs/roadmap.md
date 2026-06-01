@@ -1,11 +1,11 @@
 # YourSSH — Roadmap
 
 > Direction: **infra workstation for DevOps/SRE managing 10–100+ hosts**, not just an SSH client.
-> Current version: 0.1.13 · updated: 2026-06-01 (Terminal sharing/multiplayer shipped; Linux portable distribution fix)
+> Current version: 0.1.15 · updated: 2026-06-01 (Cloud sync Supabase `sync_data` policy fix)
 
 This document lists proposed features ordered by priority. Each item can be broken out into its own spec (`docs/superpowers/specs/`) when ready for implementation.
 
-Already shipped (not repeated in roadmap): multi-tab terminal, split view, broadcast, recording (asciicast), snippet, SFTP dual-panel, port forwarding, jump host, Supabase sync + P2P LAN, AI chat sidebar with tool calling, plugin system (DevOps / WebTools / Snippets), Cloudflare tunnel, MCP gateway, mail catcher, code editor (Monaco), customizable hotkeys, TOFU known-hosts, **Command Palette (Cmd/Ctrl+K)** — fuzzy search hosts / nav / snippets / actions, **Workspace persistence** — auto-reconnect tabs + layout on relaunch, **Search-in-scrollback (Cmd/Ctrl+F)** — regex, highlights, prev/next navigation, **Script Engine plugin system** — disk-based JS plugins via QuickJS FFI, HookBus (terminal.output / terminal.input / session events), SSH/SFTP/Storage/UI bridges, hot-reload file watcher, PermissionGuard + circuit breaker, consent dialog, manager screen + console log viewer, **Import** — paste SSH config / JSON / CSV with per-host include toggles (`parseSshConfig` in `import_panel.dart`), **Host tagging** — comma-separated tags on the `Host` model, editable in host detail and searchable from the dashboard, **Smart filter + multi-dimensional query (0.1.10)** — `HostQuery` parser with `key:value` faceted AND/OR semantics, toggleable facet chips on hosts dashboard, tag-based search, **Terminal sharing / multiplayer (0.1.13)** — share a live SSH session via Supabase Realtime; guests join with a session code, watch or interact in real time; `ShareSessionService`, `ShareProvider`, `ShareEvent`, split-view watch banner.
+Already shipped (not repeated in roadmap): multi-tab terminal, split view, broadcast, recording (asciicast), snippet, SFTP dual-panel, port forwarding, jump host, Supabase sync + P2P LAN, AI chat sidebar with tool calling, plugin system (DevOps / WebTools / Snippets), Cloudflare tunnel, MCP gateway, mail catcher, code editor (Monaco), customizable hotkeys, TOFU known-hosts, **Command Palette (Cmd/Ctrl+K)** — fuzzy search hosts / nav / snippets / actions, **Workspace persistence** — auto-reconnect tabs + layout on relaunch, **Search-in-scrollback (Cmd/Ctrl+F)** — regex, highlights, prev/next navigation, **Script Engine plugin system** — disk-based JS plugins via QuickJS FFI, HookBus (terminal.output / terminal.input / session events), SSH/SFTP/Storage/UI bridges, hot-reload file watcher, PermissionGuard + circuit breaker, consent dialog, manager screen + console log viewer, **Import** — paste SSH config / JSON / CSV with per-host include toggles (`parseSshConfig` in `import_panel.dart`), **Host tagging** — comma-separated tags on the `Host` model, editable in host detail and searchable from the dashboard, **Smart filter + multi-dimensional query (0.1.10)** — `HostQuery` parser with `key:value` faceted AND/OR semantics, toggleable facet chips on hosts dashboard, tag-based search, **Terminal sharing / multiplayer (0.1.13)** — share a live SSH session via Supabase Realtime; guests join with a session code, watch or interact in real time; `ShareSessionService`, `ShareProvider`, `ShareEvent`, split-view watch banner, **Advanced tab management** — rename, color tag, pin, drag reorder; all tab metadata persists per host.
 
 ---
 
@@ -13,11 +13,10 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 
 | # | Feature | Purpose | Implementation notes |
 |---|---|---|---|
-| 1 | **Advanced tab management** | Pin, rename, color tag, drag reorder, duplicate-to-new-tab, tab group | Update `main_screen` tab bar; persist metadata alongside `SshSession` |
+| 1 | **Bulk action panel** | Select N hosts → connect-all / exec snippet in parallel / SFTP push / diff output | Multi-select UI on host list; backend runs `Future.wait` via `SshService` |
 | 2 | **Connection health badge** | Latency ping, last-active, auto-reconnect status shown on the tab | Leverage existing `SshService` heartbeat; attach to tab + tooltip |
 | 3 | **Internal audit log** | Compliance + retrospective: who/when/host/command | SQLite (drift/sqflite), redact secrets via regex; optional sync |
-| 4 | **Bulk action panel** | Select N hosts → connect-all / exec snippet in parallel / SFTP push / diff output | Multi-select UI on host list; backend runs `Future.wait` via `SshService` |
-| 5 | **Session template / per-host preset** | Env vars, working dir, shell, theme, startup snippet, recording auto-on | Extend `Host` model; apply when `SessionProvider.start` is called |
+| 4 | **Session template / per-host preset** | Env vars, working dir, shell, theme, startup snippet, recording auto-on | Extend `Host` model; apply when `SessionProvider.start` is called |
 
 ## P1 — Differentiation & DevOps depth
 
@@ -62,7 +61,7 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 
 ## Top 3 suggestions for the next sprint
 
-1. **Advanced tab management** — pin, rename, color tag, drag reorder; completes the terminal UX story now that search, workspace persistence, and smart filter are all shipped.
+1. **Bulk action panel** — select N hosts → connect-all / exec snippet in parallel / SFTP push; the core UX gap after advanced tab management ships.
 2. **Connection health badge** — latency + auto-reconnect status on tabs; small surface area, high daily-driver visibility.
 3. **Kubernetes panel completion** — context switcher + `logs -f` + 1-click port-forward; the container browser shipped in 0.1.12, finishing the K8s story is the clearest next DevOps milestone.
 

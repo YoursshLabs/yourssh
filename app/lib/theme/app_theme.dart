@@ -31,6 +31,33 @@ class AppColors {
     final idx = seed.codeUnits.fold(0, (a, b) => a + b) % hostColors.length;
     return hostColors[idx];
   }
+
+  /// Selectable palette for tagging session tabs. Stored as hex strings (the
+  /// persisted form in tab metadata); render with [fromHex].
+  static const tabColors = <(String, String)>[
+    ('Red', '#ef4444'),
+    ('Orange', '#f97316'),
+    ('Yellow', '#eab308'),
+    ('Green', '#22c55e'),
+    ('Teal', '#14b8a6'),
+    ('Blue', '#3b82f6'),
+    ('Purple', '#a855f7'),
+    ('Pink', '#ec4899'),
+  ];
+
+  /// Parses a `#rrggbb` (or `#aarrggbb`) hex string into a [Color], returning
+  /// [fallback] for malformed input instead of throwing during build.
+  static Color fromHex(String hex, {Color fallback = textSecondary}) {
+    final h = hex.replaceFirst('#', '').trim();
+    if (h.length == 6) {
+      final v = int.tryParse('FF$h', radix: 16);
+      if (v != null) return Color(v);
+    } else if (h.length == 8) {
+      final v = int.tryParse(h, radix: 16);
+      if (v != null) return Color(v);
+    }
+    return fallback;
+  }
 }
 
 /// Consistent SnackBar styling. Callers should use these helpers rather than

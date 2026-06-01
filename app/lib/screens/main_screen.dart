@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/workspace_service.dart';
 import '../models/host.dart';
@@ -761,6 +762,13 @@ class _Sidebar extends StatelessWidget {
           const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 8),
 
+          // Scrollable nav area so the sidebar never overflows when the
+          // window is short or many plugin/script panels are enabled.
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
           const _SectionLabel('CONNECTIONS'),
           _navItem(Icons.dns_outlined, 'Hosts', NavSection.hosts),
           _navItem(Icons.swap_horiz, 'Port Forwarding', NavSection.portForwarding),
@@ -786,7 +794,10 @@ class _Sidebar extends StatelessWidget {
           const _SectionLabel('SECURITY'),
           _navItem(Icons.vpn_key_outlined, 'Keychain', NavSection.keychain),
 
-          const Spacer(),
+                ],
+              ),
+            ),
+          ),
           const Divider(height: 1, color: AppColors.border),
           _navItem(Icons.extension_outlined, 'Plugins', NavSection.plugins),
           _navItem(Icons.settings_outlined, 'Settings', NavSection.settings),
@@ -1014,18 +1025,26 @@ class _TopTabBar extends StatelessWidget {
           // Divider
           Container(width: 1, height: 18, color: const Color(0xFF2A2A2A)),
           const SizedBox(width: 4),
-          // Session tabs (scrollable)
+          // Session tabs (scrollable, drag-reorderable)
           Expanded(
-            child: ListView(
+            child: ReorderableListView.builder(
               scrollDirection: Axis.horizontal,
-              children: sessions
-                  .map((s) => _SessionTab(
-                        session: s,
-                        isActive: s.id == active?.id && viewingTerminal,
-                        provider: provider,
-                        onTap: () => onSessionTap(s.id),
-                      ))
-                  .toList(),
+              buildDefaultDragHandles: false,
+              itemCount: sessions.length,
+              onReorderItem: provider.reorderSessionItem,
+              itemBuilder: (context, index) {
+                final s = sessions[index];
+                return ReorderableDragStartListener(
+                  key: ValueKey(s.id),
+                  index: index,
+                  child: _SessionTab(
+                    session: s,
+                    isActive: s.id == active?.id && viewingTerminal,
+                    provider: provider,
+                    onTap: () => onSessionTap(s.id),
+                  ),
+                );
+              },
             ),
           ),
           // "+" button
@@ -1105,6 +1124,155 @@ class _SessionTab extends StatefulWidget {
 
 class _SessionTabState extends State<_SessionTab> {
   bool _hovered = false;
+  bool _isRenaming = false;
+  late TextEditingController _renameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _renameController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _renameController.dispose();
+    super.dispose();
+  }
+
+  void _startRename() {
+    _renameController.text = widget.session.tabLabel;
+    _renameController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _renameController.text.length,
+    );
+    setState(() => _isRenaming = true);
+  }
+
+  void _commitRename() {
+    final text = _renameController.text.trim();
+    widget.provider.renameSession(
+      widget.session.id,
+      text.isEmpty ? null : text,
+    );
+    setState(() => _isRenaming = false);
+  }
+
+  Future<void> _showTabContextMenu(BuildContext context, Offset globalPos) async {
+    final session = widget.session;
+    final provider = widget.provider;
+
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPos.dx, globalPos.dy, globalPos.dx + 1, globalPos.dy + 1,
+      ),
+      color: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      items: [
+        PopupMenuItem(
+          value: 'rename',
+          child: const Row(children: [
+            Icon(Icons.edit_outlined, size: 14, color: Color(0xFFAAAAAA)),
+            SizedBox(width: 8),
+            Text('Rename', style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'pin',
+          child: Row(children: [
+            Icon(
+              session.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+              size: 14,
+              color: const Color(0xFFAAAAAA),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              session.isPinned ? 'Unpin' : 'Pin',
+              style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13),
+            ),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'color',
+          child: const Row(children: [
+            Icon(Icons.circle_outlined, size: 14, color: Color(0xFFAAAAAA)),
+            SizedBox(width: 8),
+            Text('Color tag', style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
+            Spacer(),
+            Icon(Icons.chevron_right, size: 14, color: Color(0xFF666666)),
+          ]),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'close',
+          child: const Row(children: [
+            Icon(Icons.close, size: 14, color: Color(0xFF888888)),
+            SizedBox(width: 8),
+            Text('Close', style: TextStyle(color: Color(0xFF888888), fontSize: 13)),
+          ]),
+        ),
+      ],
+    );
+
+    if (!context.mounted) return;
+
+    switch (result) {
+      case 'rename':
+        _startRename();
+      case 'pin':
+        provider.togglePin(session.id);
+      case 'color':
+        await _showColorSubmenu(context, globalPos);
+      case 'close':
+        provider.closeSession(session.id);
+    }
+  }
+
+  Future<void> _showColorSubmenu(BuildContext context, Offset globalPos) async {
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPos.dx + 160, globalPos.dy + 60,
+        globalPos.dx + 161, globalPos.dy + 61,
+      ),
+      color: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      items: [
+        PopupMenuItem(
+          value: 'none',
+          child: const Row(children: [
+            SizedBox(
+              width: 14, height: 14,
+              child: Icon(Icons.block, size: 12, color: Color(0xFF666666)),
+            ),
+            SizedBox(width: 8),
+            Text('None', style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 13)),
+          ]),
+        ),
+        ...AppColors.tabColors.map((c) => PopupMenuItem(
+          value: c.$2,
+          child: Row(children: [
+            Container(
+              width: 14, height: 14,
+              decoration: BoxDecoration(
+                color: AppColors.fromHex(c.$2),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(c.$1, style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
+          ]),
+        )),
+      ],
+    );
+
+    if (result != null) {
+      widget.provider.setSessionColor(
+        widget.session.id,
+        result == 'none' ? null : result,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1118,6 +1286,9 @@ class _SessionTabState extends State<_SessionTab> {
           widget.provider.setActive(widget.session.id);
           widget.onTap();
         },
+        onDoubleTap: _startRename,
+        onSecondaryTapUp: (details) =>
+            _showTabContextMenu(context, details.globalPosition),
         child: Container(
           height: 38,
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1148,27 +1319,76 @@ class _SessionTabState extends State<_SessionTab> {
                       )
                     : const SizedBox.shrink(),
               ),
-              // X close button (left, per image)
-              GestureDetector(
-                onTap: () => widget.provider.closeSession(widget.session.id),
-                child: Icon(
-                  Icons.close,
-                  size: 11,
-                  color: _hovered || widget.isActive ? const Color(0xFF888888) : const Color(0xFF444444),
+              // Color dot (shown when colorTag is set)
+              if (widget.session.colorTag != null)
+                Container(
+                  width: 7,
+                  height: 7,
+                  margin: const EdgeInsets.only(right: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.fromHex(widget.session.colorTag!),
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              // Host label
-              Text(
-                widget.session.host.label,
-                style: TextStyle(
-                  color: labelColor,
-                  fontSize: 12,
-                  fontWeight: widget.isActive ? FontWeight.w500 : FontWeight.normal,
+              // X close button — hidden when pinned
+              if (!widget.session.isPinned)
+                GestureDetector(
+                  onTap: () => widget.provider.closeSession(widget.session.id),
+                  child: Icon(
+                    Icons.close,
+                    size: 11,
+                    color: _hovered || widget.isActive ? const Color(0xFF888888) : const Color(0xFF444444),
+                  ),
                 ),
-              ),
               const SizedBox(width: 8),
-              // Terminal icon (right, per image)
+              // Host label — switches to Focus+TextField when renaming
+              if (_isRenaming)
+                SizedBox(
+                  width: 100,
+                  height: 20,
+                  child: Focus(
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent &&
+                          event.logicalKey == LogicalKeyboardKey.escape) {
+                        setState(() => _isRenaming = false);
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: TextField(
+                      controller: _renameController,
+                      autofocus: true,
+                      style: const TextStyle(color: Color(0xFFE0E0E0), fontSize: 12),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onSubmitted: (_) => _commitRename(),
+                      onTapOutside: (_) => _commitRename(),
+                      // Suppress default focus-traversal on Enter; commit is
+                      // handled by onSubmitted/onTapOutside.
+                      onEditingComplete: () {},
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  widget.session.tabLabel,
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: 12,
+                    fontWeight: widget.isActive ? FontWeight.w500 : FontWeight.normal,
+                  ),
+                ),
+              const SizedBox(width: 8),
+              // Pin icon (shown when pinned)
+              if (widget.session.isPinned)
+                const Padding(
+                  padding: EdgeInsets.only(right: 4),
+                  child: Icon(Icons.push_pin, size: 11, color: Color(0xFF888888)),
+                ),
+              // Terminal icon (right)
               Icon(
                 Icons.monitor_outlined,
                 size: 13,

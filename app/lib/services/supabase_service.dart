@@ -9,7 +9,11 @@ create table if not exists sync_data (
   payload    text        not null,
   updated_at timestamptz not null default now()
 );
+-- Drop the legacy 12-char sync_id constraint from older deployments; the
+-- client keys rows by the fixed id 'default'. Safe (no-op) on fresh tables.
+alter table sync_data drop constraint if exists sync_data_sync_id_check;
 alter table sync_data enable row level security;
+drop policy if exists "anon_rw" on sync_data;
 create policy "anon_rw" on sync_data
   for all
   to anon

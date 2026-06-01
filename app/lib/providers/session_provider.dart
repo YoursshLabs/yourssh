@@ -4,9 +4,11 @@ import '../models/host.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
 import '../services/ssh_service.dart';
+import '../services/tab_metadata_service.dart';
 
 class SessionProvider extends ChangeNotifier {
   final SshService _ssh;
+  final TabMetadataService _tabMetadata;
   final List<SshSession> _sessions = [];
   final Map<String, Timer> _reconnectTimers = {};
   final Map<String, Timer> _countdownTimers = {};
@@ -21,7 +23,7 @@ class SessionProvider extends ChangeNotifier {
   Future<void> Function(String hostId, String os)? onOsDetected;
   Future<void> Function(SshSession session)? recordingStart;
 
-  SessionProvider(this._ssh);
+  SessionProvider(this._ssh, this._tabMetadata);
 
   @override
   void dispose() {
@@ -65,6 +67,19 @@ class SessionProvider extends ChangeNotifier {
     _sessions.add(session);
     _activeSessionId = session.id;
     _safeNotify();
+
+    // Load persisted tab metadata (label, color, pin) for this host.
+    final meta = await _tabMetadata.loadMetadata(host.id);
+    // The user may have closed the tab during the async load — don't mutate,
+    // sort, or connect a session that's no longer tracked.
+    if (!_sessions.contains(session)) return;
+    if (meta != null) {
+      session.customLabel = meta['label'] as String?;
+      session.colorTag = meta['color'] as String?;
+      session.isPinned = (meta['pinned'] as bool?) ?? false;
+      if (session.isPinned) _sortSessions();
+      _safeNotify();
+    }
 
     await _doConnect(session, host, attempt: 1);
   }
@@ -227,5 +242,77 @@ class SessionProvider extends ChangeNotifier {
     final prevIdx = (idx - 1 + _sessions.length) % _sessions.length;
     _activeSessionId = _sessions[prevIdx].id;
     _safeNotify();
+  }
+
+  SshSession? _sessionById(String id) =>
+      _sessions.where((s) => s.id == id).firstOrNull;
+
+  /// Persists a session's tab metadata and mirrors it onto any other live
+  /// tabs of the same host. Tab metadata is keyed per host, so all tabs of a
+  /// host share one label/color/pin — keeping the live sessions in sync avoids
+  /// them silently diverging and then stomping each other's persisted record.
+  void _persistTabMetadata(SshSession session) {
+    _tabMetadata.saveMetadata(session.host.id,
+        label: session.customLabel,
+        color: session.colorTag,
+        pinned: session.isPinned);
+    for (final s in _sessions) {
+      if (!identical(s, session) && s.host.id == session.host.id) {
+        s.customLabel = session.customLabel;
+        s.colorTag = session.colorTag;
+        s.isPinned = session.isPinned;
+      }
+    }
+  }
+
+  void renameSession(String sessionId, String? label) {
+    final session = _sessionById(sessionId);
+    if (session == null) return;
+    session.customLabel = label;
+    _persistTabMetadata(session);
+    _safeNotify();
+  }
+
+  void setSessionColor(String sessionId, String? colorHex) {
+    final session = _sessionById(sessionId);
+    if (session == null) return;
+    session.colorTag = colorHex;
+    _persistTabMetadata(session);
+    _safeNotify();
+  }
+
+  void togglePin(String sessionId) {
+    final session = _sessionById(sessionId);
+    if (session == null) return;
+    session.isPinned = !session.isPinned;
+    _persistTabMetadata(session);
+    _sortSessions();
+    _safeNotify();
+  }
+
+  /// Used by [ReorderableListView.onReorderItem] — index is already adjusted.
+  void reorderSessionItem(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _sessions.length) return;
+    final session = _sessions[oldIndex];
+    final pinnedCount = _sessions.where((s) => s.isPinned).length;
+    if (session.isPinned) {
+      newIndex = newIndex.clamp(0, (pinnedCount - 1).clamp(0, _sessions.length - 1));
+    } else {
+      newIndex = newIndex.clamp(pinnedCount, _sessions.length - 1);
+    }
+    // No movement — return without a spurious rebuild.
+    if (newIndex == oldIndex) return;
+    _sessions.removeAt(oldIndex);
+    _sessions.insert(newIndex, session);
+    _safeNotify();
+  }
+
+  void _sortSessions() {
+    final pinned = _sessions.where((s) => s.isPinned).toList();
+    final unpinned = _sessions.where((s) => !s.isPinned).toList();
+    _sessions
+      ..clear()
+      ..addAll(pinned)
+      ..addAll(unpinned);
   }
 }
