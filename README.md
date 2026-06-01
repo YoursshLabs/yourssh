@@ -84,6 +84,7 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 - Minimum window size enforced (800×600); fully resizable
 
 ### DevOps & Developer Tools
+- **Containers (Docker / Kubernetes)** — list running containers (`docker ps`) and pods (`kubectl get pods`) on the active SSH session, then **Exec** into any of them in a new terminal tab; namespace filter + all-namespaces toggle for Kubernetes, and an install/permission hint when the runtime is missing
 - **Network Tools** — ping, cURL, DNS lookup, traceroute, port scan, whois, netstat, disk usage, memory info, HTTP headers, SSL certificate inspection — all run on the active SSH session
 - **Cloudflare Tunnel manager** — start/stop quick tunnels via `cloudflared` on the remote host; public URL displayed instantly
 - **LAN Share** — serve any local file over HTTP for one-click download on the same network

@@ -323,6 +323,11 @@ class SshService {
       shell.write(Uint8List.fromList('tmux new-session -A -s yourssh\n'.codeUnits));
     }
 
+    final initialCommand = session.initialCommand;
+    if (initialCommand != null && initialCommand.isNotEmpty) {
+      shell.write(Uint8List.fromList('$initialCommand\n'.codeUnits));
+    }
+
     final done = Completer<void>();
     const utf8 = Utf8Decoder(allowMalformed: true);
 

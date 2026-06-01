@@ -4,7 +4,7 @@ import '../theme.dart';
 import 's3_browser_screen.dart';
 import 'lan_share_screen.dart';
 
-enum _DevOpsTool { networkTools, cloudflare, lanShare, mailCatcher, mcpServer, s3Browser }
+enum _DevOpsTool { containers, networkTools, cloudflare, lanShare, mailCatcher, mcpServer, s3Browser }
 
 class DevOpsHubScreen extends StatefulWidget {
   final DevOpsPluginConfig config;
@@ -29,6 +29,7 @@ class _DevOpsHubScreenState extends State<DevOpsHubScreen> {
   }
 
   Widget _buildContent() => switch (_active) {
+        _DevOpsTool.containers  => widget.config.containersScreen,
         _DevOpsTool.networkTools => widget.config.networkToolsScreen,
         _DevOpsTool.cloudflare  => widget.config.cloudflareScreen,
         _DevOpsTool.lanShare    => const LanShareScreen(),
@@ -65,6 +66,7 @@ class _SubNav extends StatelessWidget {
               ),
             ),
           ),
+          _item(_DevOpsTool.containers, Icons.widgets_outlined, 'Containers'),
           _item(_DevOpsTool.networkTools, Icons.network_check, 'Network Tools'),
           _item(_DevOpsTool.cloudflare, Icons.cloud_outlined, 'Cloudflare'),
           _item(_DevOpsTool.lanShare, Icons.share_outlined, 'LAN Share'),

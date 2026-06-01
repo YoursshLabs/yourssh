@@ -42,7 +42,7 @@ The active codebase is `app/` — a Flutter app targeting macOS, Windows, and Li
 - `app/` — the Flutter app
 - `packages/dartssh2` — **local fork** of dartssh2; overrides the pub.dev version via `dependency_overrides` in `app/pubspec.yaml`
 - `packages/yourssh_plugin_api` — abstract plugin interface (`YourSSHPlugin`, `YourSSHPluginContext`)
-- `packages/yourssh_devops` — DevOps plugin (network tools, Cloudflare tunnel, mail catcher, MCP server, S3 browser)
+- `packages/yourssh_devops` — DevOps plugin (containers (Docker/K8s), network tools, Cloudflare tunnel, mail catcher, MCP server, S3 browser)
 - `packages/yourssh_web_tools` — Web Tools plugin (in-app browser over port-forwarded HTTP)
 - `packages/yourssh_snippets` — Snippets plugin
 - `packages/yourssh_script_engine` — JS plugin runtime (QuickJS FFI, HookBus, bridges, PluginLoader, PermissionGuard)

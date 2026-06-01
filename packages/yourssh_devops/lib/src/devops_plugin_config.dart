@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 /// (SessionProvider, SshService, TunnelProvider). Passed from the app so
 /// the yourssh_devops package stays free of circular dependencies.
 class DevOpsPluginConfig {
+  final Widget containersScreen;
   final Widget networkToolsScreen;
   final Widget cloudflareScreen;
   final Widget mailCatcherScreen;
   final Widget mcpServerScreen;
 
   const DevOpsPluginConfig({
+    required this.containersScreen,
     required this.networkToolsScreen,
     required this.cloudflareScreen,
     required this.mailCatcherScreen,

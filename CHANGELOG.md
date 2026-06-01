@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.12] — 2026-05-31
+
+### Added
+- **Docker / Kubernetes container browser** in the DevOps hub — lists running containers (`docker ps`) and pods (`kubectl get pods`) over an active SSH session, with a namespace field and an all-namespaces toggle for Kubernetes. An **Exec** action opens a new terminal tab that drops straight into the container/pod (`docker exec -it` / `kubectl exec -it`, with a bash→sh fallback; multi-container pods prompt for a container). When `docker`/`kubectl` is missing or unauthorized, an install/permission hint with a copy button is shown instead. Backed by a new `ContainerService` and an `initialCommand` threaded onto `SshSession` so the new shell runs the exec command on open
+
+---
+
 ## [0.1.11] — 2026-05-31
 
 ### Added
@@ -190,7 +197,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.11...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.12...HEAD
+[0.1.12]: https://github.com/YoursshLabs/yourssh/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/YoursshLabs/yourssh/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/YoursshLabs/yourssh/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/YoursshLabs/yourssh/compare/v0.1.8...v0.1.9

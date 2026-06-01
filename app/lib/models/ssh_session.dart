@@ -11,6 +11,7 @@ class SshSession {
   SessionStatus status;
   String? errorMessage;
   DateTime connectedAt;
+  final String? initialCommand;
 
   SshSession({
     String? id,
@@ -18,6 +19,7 @@ class SshSession {
     this.status = SessionStatus.connecting,
     this.errorMessage,
     DateTime? connectedAt,
+    this.initialCommand,
   })  : id = id ?? const Uuid().v4(),
         terminal = Terminal(maxLines: 10000),
         connectedAt = connectedAt ?? DateTime.now();

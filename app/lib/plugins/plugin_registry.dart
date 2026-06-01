@@ -2,6 +2,7 @@ import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
 import 'package:yourssh_devops/yourssh_devops.dart';
 import 'package:yourssh_web_tools/yourssh_web_tools.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
+import '../widgets/containers_screen.dart';
 import '../widgets/devops_tools_screen.dart';
 import '../widgets/cloudflare_tunnel_screen.dart';
 import '../widgets/mail_catcher_screen.dart';
@@ -14,6 +15,7 @@ final List<YourSSHPlugin> kRegisteredPlugins = [
   YourSSHSnippetsPlugin(),
   YourSSHDevOpsPlugin(
     config: DevOpsPluginConfig(
+      containersScreen: const ContainersScreen(),
       networkToolsScreen: const DevopsToolsScreen(),
       cloudflareScreen: const CloudflareTunnelScreen(),
       mailCatcherScreen: const MailCatcherScreen(),
