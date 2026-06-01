@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/workspace_service.dart';
 import '../models/host.dart';
@@ -1105,6 +1106,29 @@ class _SessionTab extends StatefulWidget {
 
 class _SessionTabState extends State<_SessionTab> {
   bool _hovered = false;
+  bool _isRenaming = false;
+  late TextEditingController _renameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _renameController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _renameController.dispose();
+    super.dispose();
+  }
+
+  void _startRename() {
+    _renameController.text = widget.session.customLabel ?? widget.session.title;
+    _renameController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _renameController.text.length,
+    );
+    setState(() => _isRenaming = true);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1118,6 +1142,7 @@ class _SessionTabState extends State<_SessionTab> {
           widget.provider.setActive(widget.session.id);
           widget.onTap();
         },
+        onDoubleTap: _startRename,
         child: Container(
           height: 38,
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1171,15 +1196,49 @@ class _SessionTabState extends State<_SessionTab> {
                   ),
                 ),
               const SizedBox(width: 8),
-              // Host label
-              Text(
-                widget.session.title,
-                style: TextStyle(
-                  color: labelColor,
-                  fontSize: 12,
-                  fontWeight: widget.isActive ? FontWeight.w500 : FontWeight.normal,
+              // Host label — switches to Focus+TextField when renaming
+              if (_isRenaming)
+                SizedBox(
+                  width: 100,
+                  height: 20,
+                  child: Focus(
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent &&
+                          event.logicalKey == LogicalKeyboardKey.escape) {
+                        setState(() => _isRenaming = false);
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: TextField(
+                      controller: _renameController,
+                      autofocus: true,
+                      style: const TextStyle(color: Color(0xFFE0E0E0), fontSize: 12),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onSubmitted: (value) {
+                        widget.provider.renameSession(
+                          widget.session.id,
+                          value.trim().isEmpty ? null : value.trim(),
+                        );
+                        setState(() => _isRenaming = false);
+                      },
+                      onEditingComplete: () {},
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  widget.session.title,
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: 12,
+                    fontWeight: widget.isActive ? FontWeight.w500 : FontWeight.normal,
+                  ),
                 ),
-              ),
               const SizedBox(width: 8),
               // Pin icon (shown when pinned)
               if (widget.session.isPinned)
