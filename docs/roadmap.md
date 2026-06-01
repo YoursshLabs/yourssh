@@ -1,7 +1,7 @@
 # YourSSH — Roadmap
 
 > Direction: **infra workstation for DevOps/SRE managing 10–100+ hosts**, not just an SSH client.
-> Current version: 0.1.15 · updated: 2026-06-01 (Cloud sync Supabase `sync_data` policy fix)
+> Current version: 0.1.16 · updated: 2026-06-01 (Cloud sync secret is now a 12-char sync code)
 
 This document lists proposed features ordered by priority. Each item can be broken out into its own spec (`docs/superpowers/specs/`) when ready for implementation.
 

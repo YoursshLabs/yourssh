@@ -1,13 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/storage_service.dart';
+import '../services/sync_code.dart';
 
 enum SyncStatus { idle, syncing, synced, error }
 
 class SyncProvider extends ChangeNotifier {
   static const _supabaseUrlKey = 'supabase_url';
   static const _supabaseAnonKeyKey = 'supabase_anon_key';
-  static const _passphraseKey = 'sync_passphrase';
+  static const _syncCodeKey = 'sync_code';
+  static const _legacyPassphraseKey = 'sync_passphrase';
 
   final StorageService? _storage;
 
@@ -16,22 +18,21 @@ class SyncProvider extends ChangeNotifier {
   DateTime? _lastSynced;
   String _supabaseUrl = '';
   String _supabaseAnonKey = '';
-  String _passphrase = '';
+  String _syncCode = '';
   bool _supabaseConfigExplicitlySet = false;
   bool _disposed = false;
 
-  bool get enabled => isSupabaseConfigured;
+  bool get enabled => isSupabaseConfigured && hasSyncCode;
   SyncStatus get status => _status;
   String? get error => _error;
   DateTime? get lastSynced => _lastSynced;
   String get supabaseUrl => _supabaseUrl;
   String get supabaseAnonKey => _supabaseAnonKey;
 
-  /// User-supplied passphrase mixed into the sync encryption KDF. Empty means
-  /// the anon key alone is the secret (legacy behaviour) — anyone with that
-  /// key can decrypt synced rows. Setting a passphrase is recommended.
-  String get passphrase => _passphrase;
-  bool get hasPassphrase => _passphrase.isNotEmpty;
+  /// The 12-char sync code: the single secret for cloud sync (row id + KDF
+  /// input). Empty until the user generates one or joins with an existing code.
+  String get syncCode => _syncCode;
+  bool get hasSyncCode => _syncCode.length == SyncCode.length;
 
   bool get isSupabaseConfigured => _supabaseUrl.isNotEmpty && _supabaseAnonKey.isNotEmpty;
 
@@ -55,7 +56,9 @@ class SyncProvider extends ChangeNotifier {
       _supabaseAnonKey = prefs.getString(_supabaseAnonKeyKey) ?? '';
     }
     if (_storage != null) {
-      _passphrase = await _storage.loadGenericSecret(_passphraseKey) ?? '';
+      _syncCode = await _storage.loadGenericSecret(_syncCodeKey) ?? '';
+      // One-time cleanup of the abandoned passphrase secret.
+      await _storage.deleteGenericSecret(_legacyPassphraseKey);
     }
     if (_disposed) return;
     notifyListeners();
@@ -71,16 +74,23 @@ class SyncProvider extends ChangeNotifier {
     await prefs.setString(_supabaseAnonKeyKey, _supabaseAnonKey);
   }
 
-  Future<void> setPassphrase(String value) async {
+  Future<void> setSyncCode(String value) async {
+    final normalized = SyncCode.normalize(value);
     if (_storage != null) {
-      if (value.isEmpty) {
-        await _storage.deleteGenericSecret(_passphraseKey);
+      if (normalized.isEmpty) {
+        await _storage.deleteGenericSecret(_syncCodeKey);
       } else {
-        await _storage.saveGenericSecret(_passphraseKey, value);
+        await _storage.saveGenericSecret(_syncCodeKey, normalized);
       }
     }
-    _passphrase = value;
+    _syncCode = normalized;
     notifyListeners();
+  }
+
+  Future<String> generateSyncCode() async {
+    final code = SyncCode.generate();
+    await setSyncCode(code);
+    return code;
   }
 
   Future<void> clearSupabaseConfig() async {
@@ -88,11 +98,11 @@ class SyncProvider extends ChangeNotifier {
     await prefs.remove(_supabaseUrlKey);
     await prefs.remove(_supabaseAnonKeyKey);
     if (_storage != null) {
-      await _storage.deleteGenericSecret(_passphraseKey);
+      await _storage.deleteGenericSecret(_syncCodeKey);
     }
     _supabaseUrl = '';
     _supabaseAnonKey = '';
-    _passphrase = '';
+    _syncCode = '';
     _supabaseConfigExplicitlySet = false;
     notifyListeners();
   }

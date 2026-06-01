@@ -32,13 +32,17 @@ class SyncService {
   set cachedSupabase(SupabaseService value) => _cachedSupabase = value;
 
   SupabaseService? _getSupabase() {
-    if (!_syncProvider.isSupabaseConfigured) return null;
+    if (!_syncProvider.isSupabaseConfigured || !_syncProvider.hasSyncCode) {
+      return null;
+    }
     final url = _syncProvider.supabaseUrl;
     final key = _syncProvider.supabaseAnonKey;
+    final code = _syncProvider.syncCode;
     if (_cachedSupabase == null ||
         _cachedSupabase!.url != url ||
-        _cachedSupabase!.anonKey != key) {
-      _cachedSupabase = SupabaseService(url, key);
+        _cachedSupabase!.anonKey != key ||
+        _cachedSupabase!.syncCode != code) {
+      _cachedSupabase = SupabaseService(url, key, code);
     }
     return _cachedSupabase;
   }
@@ -85,7 +89,11 @@ class SyncService {
     required List<Host> hosts,
     required Future<Map<String, String>> Function() loadPasswords,
   }) async {
-    if (!_syncProvider.enabled) return;
+    if (!_syncProvider.isSupabaseConfigured) return;
+    if (!_syncProvider.hasSyncCode) {
+      _syncProvider.setError('Generate or enter a sync code in Settings → Sync.');
+      return;
+    }
     if (_syncing) {
       // Another push is in flight; flag a retry so we don't silently drop this
       // mutation. The 30s retry timer will pick it up.
@@ -106,8 +114,7 @@ class SyncService {
       final payload = buildPayload(hosts: hosts, passwords: passwords);
       final encrypted = await SyncEncryption.encrypt(
         payload,
-        _syncProvider.supabaseAnonKey,
-        passphrase: _syncProvider.passphrase,
+        _syncProvider.syncCode,
       );
       await supabase.upsertPayload(encrypted);
       await prefs.setString(_lastPushKey, DateTime.now().toUtc().toIso8601String());
@@ -153,8 +160,7 @@ class SyncService {
       }
       final decrypted = await SyncEncryption.decrypt(
         encrypted,
-        _syncProvider.supabaseAnonKey,
-        passphrase: _syncProvider.passphrase,
+        _syncProvider.syncCode,
       );
       final result = parsePayload(decrypted);
       await prefs.setBool(_pendingPushKey, false);

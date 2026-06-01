@@ -8,7 +8,8 @@ import 'package:yourssh/services/sync_encryption.dart';
 import 'package:yourssh/services/sync_service.dart';
 
 class _ThrowingSupabase extends SupabaseService {
-  _ThrowingSupabase() : super('https://test.supabase.co', 'test-anon-key');
+  _ThrowingSupabase()
+      : super('https://test.supabase.co', 'test-anon-key', 'ABCD2345EFGH');
 
   @override
   Future<void> deleteRow() async => throw Exception('network error');
@@ -67,13 +68,13 @@ void main() {
         username: 'root',
         createdAt: DateTime.utc(2026, 1, 1),
       );
-      const anonKey = 'anon-key-abc';
+      const code = 'ABCD2345EFGH';
       final payload = SyncService.buildPayload(
         hosts: [host],
         passwords: {'pw_abc': 'pass123'},
       );
-      final encrypted = await SyncEncryption.encrypt(payload, anonKey);
-      final decrypted = await SyncEncryption.decrypt(encrypted, anonKey);
+      final encrypted = await SyncEncryption.encrypt(payload, code);
+      final decrypted = await SyncEncryption.decrypt(encrypted, code);
       final result = SyncService.parsePayload(decrypted);
       expect(result.hosts, hasLength(1));
       expect(result.hosts.first.id, 'abc');

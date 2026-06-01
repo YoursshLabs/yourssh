@@ -7,6 +7,7 @@ import '../providers/ai_chat_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/sync_provider.dart';
 import '../services/sync_service.dart';
+import '../services/sync_code.dart';
 import '../providers/host_provider.dart';
 import '../services/supabase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -326,9 +327,9 @@ enum _SyncMode { cloud, p2p }
 class _SyncSectionState extends State<_SyncSection> {
   final _urlController = TextEditingController();
   final _anonKeyController = TextEditingController();
-  final _passphraseController = TextEditingController();
+  final _syncCodeController = TextEditingController();
   bool _showAnonKey = false;
-  bool _showPassphrase = false;
+  bool _showSyncCode = false;
   bool _urlHasText = false;
   bool _testing = false;
   bool _testOk = false;
@@ -342,7 +343,7 @@ class _SyncSectionState extends State<_SyncSection> {
     super.initState();
     _urlController.text = widget.sync.supabaseUrl;
     _anonKeyController.text = widget.sync.supabaseAnonKey;
-    _passphraseController.text = widget.sync.passphrase;
+    _syncCodeController.text = SyncCode.format(widget.sync.syncCode);
     if (widget.sync.isSupabaseConfigured) _testOk = true;
     _urlHasText = _urlController.text.isNotEmpty;
     _urlController.addListener(() {
@@ -354,8 +355,8 @@ class _SyncSectionState extends State<_SyncSection> {
   @override
   void didUpdateWidget(_SyncSection old) {
     super.didUpdateWidget(old);
-    if (_passphraseController.text != widget.sync.passphrase) {
-      _passphraseController.text = widget.sync.passphrase;
+    if (SyncCode.normalize(_syncCodeController.text) != widget.sync.syncCode) {
+      _syncCodeController.text = SyncCode.format(widget.sync.syncCode);
     }
   }
 
@@ -363,17 +364,55 @@ class _SyncSectionState extends State<_SyncSection> {
   void dispose() {
     _urlController.dispose();
     _anonKeyController.dispose();
-    _passphraseController.dispose();
+    _syncCodeController.dispose();
     super.dispose();
   }
 
-  Future<void> _savePassphrase() async {
-    await context.read<SyncProvider>().setPassphrase(_passphraseController.text);
+  Future<void> _generateCode() async {
+    final code = await context.read<SyncProvider>().generateSyncCode();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Passphrase saved. New data will use it; existing rows still decrypt with the legacy key.'),
-      duration: Duration(seconds: 4),
-    ));
+    setState(() => _syncCodeController.text = SyncCode.format(code));
+    await _pushNow();
+  }
+
+  Future<void> _saveCode() async {
+    if (!SyncCode.isValid(_syncCodeController.text)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enter a valid 12-character sync code.'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+    final provider = context.read<SyncProvider>();
+    await provider.setSyncCode(_syncCodeController.text);
+    if (!mounted) return;
+    setState(() => _syncCodeController.text = SyncCode.format(provider.syncCode));
+    await _pushNow();
+  }
+
+  Future<void> _regenerate() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text('Regenerate sync code?',
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 14)),
+        content: const Text(
+          'A new code creates a new cloud record. Data tied to the old code '
+          'becomes unreachable until you re-enter the old code.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Regenerate', style: TextStyle(color: Colors.orange))),
+        ],
+      ),
+    );
+    if (ok == true) await _generateCode();
   }
 
   Future<void> _pushNow() async {
@@ -397,7 +436,7 @@ class _SyncSectionState extends State<_SyncSection> {
     }
     setState(() { _testing = true; _testError = null; _testOk = false; _needsServiceKey = false; });
     try {
-      final svc = SupabaseService(url, anonKey);
+      final svc = SupabaseService(url, anonKey, '');
       final (outcome, error) = await svc.testConnection();
       if (!mounted) return;
 
@@ -564,7 +603,7 @@ class _SyncSectionState extends State<_SyncSection> {
   }
 
 
-  /// Shared decoration for the sync text fields (URL / anon key / passphrase).
+  /// Shared decoration for the sync text fields (URL / anon key / sync code).
   InputDecoration _syncFieldDecoration({required String hint, Widget? suffixIcon}) {
     OutlineInputBorder borderWith(Color color) => OutlineInputBorder(
         borderRadius: BorderRadius.circular(6),
@@ -692,48 +731,84 @@ class _SyncSectionState extends State<_SyncSection> {
             const Divider(height: 1, color: AppColors.border),
             const SizedBox(height: 16),
             const Text(
-              'Encryption passphrase (recommended)',
+              'Sync code',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
             ),
             const SizedBox(height: 4),
             Text(
-              sync.hasPassphrase
-                  ? 'A passphrase is set. Without it, anyone with your anon key can decrypt synced data.'
-                  : 'No passphrase set. Anyone with your anon key can decrypt synced data.',
+              sync.hasSyncCode
+                  ? 'This 12-character code is the only key to your synced data. Enter it on another device to join.'
+                  : 'Generate a code on this device, or enter one from another device. It is the only key to your data — save it.',
               style: TextStyle(
-                color: sync.hasPassphrase ? AppColors.textTertiary : Colors.orange,
+                color: sync.hasSyncCode ? AppColors.textTertiary : Colors.orange,
                 fontSize: 11,
               ),
             ),
             const SizedBox(height: 6),
+            TextField(
+              controller: _syncCodeController,
+              obscureText: !_showSyncCode,
+              style: const TextStyle(
+                  color: AppColors.textPrimary, fontSize: 13, letterSpacing: 1.5),
+              decoration: _syncFieldDecoration(
+                hint: 'XXXX-XXXX-XXXX',
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(_showSyncCode ? Icons.visibility_off : Icons.visibility,
+                          size: 16, color: AppColors.textTertiary),
+                      onPressed: () => setState(() => _showSyncCode = !_showSyncCode),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy, size: 15, color: AppColors.textTertiary),
+                      tooltip: 'Copy',
+                      onPressed: sync.hasSyncCode
+                          ? () {
+                              Clipboard.setData(ClipboardData(text: sync.syncCode));
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                  content: Text('Sync code copied'),
+                                  duration: Duration(seconds: 1)));
+                            }
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _passphraseController,
-                    obscureText: !_showPassphrase,
-                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                    decoration: _syncFieldDecoration(
-                      hint: 'Passphrase (leave empty to disable)',
-                      suffixIcon: IconButton(
-                        icon: Icon(_showPassphrase ? Icons.visibility_off : Icons.visibility, size: 16, color: AppColors.textTertiary),
-                        onPressed: () => setState(() => _showPassphrase = !_showPassphrase),
+                  child: SizedBox(
+                    height: 36,
+                    child: ElevatedButton(
+                      onPressed: _saveCode,
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: Size.zero,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                       ),
+                      child: const Text('Save code', style: TextStyle(fontSize: 12)),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                SizedBox(
-                  height: 36,
-                  child: ElevatedButton(
-                    onPressed: _savePassphrase,
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: Size.zero,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                Expanded(
+                  child: SizedBox(
+                    height: 36,
+                    child: OutlinedButton(
+                      onPressed: sync.hasSyncCode ? _regenerate : _generateCode,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: Size.zero,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                      child: Text(sync.hasSyncCode ? 'Regenerate' : 'Generate',
+                          style: const TextStyle(fontSize: 12)),
                     ),
-                    child: const Text('Save', style: TextStyle(fontSize: 12)),
                   ),
                 ),
               ],

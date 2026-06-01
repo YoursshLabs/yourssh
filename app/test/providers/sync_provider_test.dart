@@ -25,9 +25,11 @@ void main() {
       expect(provider.lastSynced, isNull);
     });
 
-    test('enabled reflects isSupabaseConfigured', () async {
+    test('enabled requires Supabase config and a sync code', () async {
       expect(provider.enabled, false);
       await provider.setSupabaseConfig('https://x.supabase.co', 'key');
+      expect(provider.enabled, false); // config set, but no sync code yet
+      await provider.setSyncCode('ABCD2345EFGH');
       expect(provider.enabled, true);
       await provider.clearSupabaseConfig();
       expect(provider.enabled, false);
