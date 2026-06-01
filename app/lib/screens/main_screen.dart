@@ -337,6 +337,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   void _openCommandPalette() {
     final hosts = context.read<HostProvider>().allHosts;
+    final canShare = context.read<ShareProvider>().canShare;
 
     final items = <CommandItem>[
       // Actions
@@ -356,16 +357,17 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         type: CommandType.action,
         execute: () => WidgetsBinding.instance.addPostFrameCallback((_) => _openImportPanel()),
       ),
-      CommandItem(
-        id: 'action_join_share',
-        title: 'Join Shared Session',
-        subtitle: 'Watch a colleague\'s terminal using a share code',
-        icon: Icons.screen_share_outlined,
-        type: CommandType.action,
-        execute: () => WidgetsBinding.instance.addPostFrameCallback(
-          (_) => showDialog(context: context, builder: (_) => const JoinShareDialog()),
+      if (canShare)
+        CommandItem(
+          id: 'action_join_share',
+          title: 'Join Shared Session',
+          subtitle: 'Watch a colleague\'s terminal using a share code',
+          icon: Icons.screen_share_outlined,
+          type: CommandType.action,
+          execute: () => WidgetsBinding.instance.addPostFrameCallback(
+            (_) => showDialog(context: context, builder: (_) => const JoinShareDialog()),
+          ),
         ),
-      ),
       // Nav sections
       CommandItem(
         id: 'nav_hosts',
