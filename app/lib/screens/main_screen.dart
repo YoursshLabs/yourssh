@@ -1226,6 +1226,15 @@ class _SessionTabState extends State<_SessionTab> {
                         );
                         setState(() => _isRenaming = false);
                       },
+                      onTapOutside: (_) {
+                        widget.provider.renameSession(
+                          widget.session.id,
+                          _renameController.text.trim().isEmpty
+                              ? null
+                              : _renameController.text.trim(),
+                        );
+                        setState(() => _isRenaming = false);
+                      },
                       onEditingComplete: () {},
                     ),
                   ),
