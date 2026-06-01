@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.15] — 2026-06-01
+
+### Fixed
+- **Cloud sync rejected by Supabase `sync_data` policy** — the shipped client keys its row by the fixed id `default` (7 chars), but older deployments created `sync_data` with a `char_length(sync_id) = 12` CHECK (and a matching RLS `with check`) left over from an abandoned "sync code" design. Those constraints rejected every write (column CHECK → `23514`, RLS with-check → `42501`). The migration now drops the legacy constraint and relaxes the RLS policy to `with check (true)`; confidentiality still comes from client-side AES-GCM encryption of the payload. No-op on fresh installs.
+
+---
+
 ## [0.1.14] — 2026-06-01
 
 ### Added
@@ -217,7 +224,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.14...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.15...HEAD
+[0.1.15]: https://github.com/YoursshLabs/yourssh/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/YoursshLabs/yourssh/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/YoursshLabs/yourssh/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/YoursshLabs/yourssh/compare/v0.1.11...v0.1.12

@@ -1,7 +1,7 @@
 # YourSSH — Roadmap
 
 > Direction: **infra workstation for DevOps/SRE managing 10–100+ hosts**, not just an SSH client.
-> Current version: 0.1.14 · updated: 2026-06-01 (Advanced tab management; SFTP code-editor crash fix)
+> Current version: 0.1.15 · updated: 2026-06-01 (Cloud sync Supabase `sync_data` policy fix)
 
 This document lists proposed features ordered by priority. Each item can be broken out into its own spec (`docs/superpowers/specs/`) when ready for implementation.
 
