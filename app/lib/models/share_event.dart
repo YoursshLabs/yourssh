@@ -68,7 +68,7 @@ class ShareEvent {
       'join_request' => ShareEventType.joinRequest,
       'rejected' => ShareEventType.rejected,
       'ended' => ShareEventType.ended,
-      _ => ShareEventType.ended,
+      _ => throw FormatException('Unknown ShareEvent type: $typeStr'),
     };
     return ShareEvent._(
       type: type,
