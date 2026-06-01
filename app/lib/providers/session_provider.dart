@@ -199,6 +199,20 @@ class SessionProvider extends ChangeNotifier {
     if (active != null) closeSession(active.id);
   }
 
+  void addWatchSession(SshSession session) {
+    _sessions.add(session);
+    _activeSessionId = session.id;
+    _safeNotify();
+  }
+
+  void removeWatchSession(String sessionId) {
+    _sessions.removeWhere((s) => s.id == sessionId && s.isWatch);
+    if (_activeSessionId == sessionId) {
+      _activeSessionId = _sessions.isNotEmpty ? _sessions.last.id : null;
+    }
+    _safeNotify();
+  }
+
   void activateNext() {
     if (_sessions.isEmpty) return;
     final idx = _sessions.indexWhere((s) => s.id == _activeSessionId);
