@@ -89,7 +89,7 @@ sudo dpkg -r yourssh
 - **4 auth methods**: password, SSH private key, SSH certificate (CA-signed), SSH agent (`SSH_AUTH_SOCK` on macOS/Linux; `\\.\pipe\openssh-ssh-agent` on Windows 10+)
 - **OS-level secure storage**: credentials encrypted in macOS Keychain / Windows Credential Manager via `flutter_secure_storage`
 - **Known hosts verification**: interactive fingerprint trust dialog on first connect; persistent known-hosts database
-- **Zero-knowledge cloud sync**: host configs encrypted client-side (AES-256-GCM) before syncing to Supabase
+- **Zero-knowledge cloud sync**: host configs encrypted client-side (AES-256-GCM) with a 12-character sync code that never leaves your devices — the Supabase anon key alone cannot decrypt anything
 - **P2P QR sync**: transfer all hosts and passwords to another device via QR code over LAN or Tailscale — no cloud required
 
 ### Productivity
@@ -379,6 +379,7 @@ Continuous sync via a Supabase backend. All data is **encrypted client-side** be
 1. Create a free project at [supabase.com](https://supabase.com).
 2. Run the migrations in `supabase/migrations/` against your project.
 3. Add your Supabase URL and anon key in **Settings → Sync** inside the app.
+4. Generate a **sync code** on your first device, then enter the same code on your other devices. The code is the encryption key — without it the synced data cannot be read.
 
 ### P2P QR Sync (no cloud required)
 
