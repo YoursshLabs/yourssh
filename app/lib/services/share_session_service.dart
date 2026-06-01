@@ -125,9 +125,11 @@ class ShareSessionService {
     if (_channel == null) return;
     final snapshot = _outputBuffer.toString();
     if (snapshot.length <= _chunkSize) {
+      final payload = ShareEvent.snapshot(snapshot).toJson()
+        ..['targetGuestId'] = guestId;
       await _channel!.sendBroadcastMessage(
         event: _broadcastEvent,
-        payload: ShareEvent.snapshot(snapshot).toJson(),
+        payload: payload,
       );
     } else {
       final chunks = <String>[];
@@ -135,9 +137,11 @@ class ShareSessionService {
         chunks.add(snapshot.substring(i, (i + _chunkSize).clamp(0, snapshot.length)));
       }
       for (var i = 0; i < chunks.length; i++) {
+        final payload = ShareEvent.snapshotChunk(chunks[i], i, chunks.length).toJson()
+          ..['targetGuestId'] = guestId;
         await _channel!.sendBroadcastMessage(
           event: _broadcastEvent,
-          payload: ShareEvent.snapshotChunk(chunks[i], i, chunks.length).toJson(),
+          payload: payload,
         );
       }
     }
@@ -221,6 +225,15 @@ class ShareSessionService {
       debugPrint('[ShareSessionService] guest received unknown event: $e');
       return;
     }
+
+    // For snapshot events, only process if targeted at this guest
+    final targetGuestId = payload['targetGuestId'] as String?;
+    final isSnapshotEvent = event.type == ShareEventType.snapshot ||
+        event.type == ShareEventType.snapshotChunk;
+    if (isSnapshotEvent && targetGuestId != null && targetGuestId != _guestId) {
+      return; // Not for us
+    }
+
     switch (event.type) {
       case ShareEventType.output:
         if (event.data != null) _guestTerminal?.write(event.data!);

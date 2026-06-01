@@ -17,6 +17,7 @@ class ShareProvider extends ChangeNotifier {
 
   bool _isSharing = false;
   String? _shareCode;
+  String? _sharingSessionId;
   final Set<String> _guests = {};
   String? _controlledBy;
 
@@ -28,6 +29,7 @@ class ShareProvider extends ChangeNotifier {
   bool get canShare => _syncProvider.isSupabaseConfigured;
   bool get isSharing => _isSharing;
   String? get shareCode => _shareCode;
+  String? get sharingSessionId => _sharingSessionId;
   Set<String> get guests => Set.unmodifiable(_guests);
   String? get controlledBy => _controlledBy;
   bool get isGuest => _isGuest;
@@ -58,8 +60,10 @@ class ShareProvider extends ChangeNotifier {
   // ─── Host ────────────────────────────────────────────
 
   Future<String> startSharing(String sessionId) async {
+    if (_isSharing) return _shareCode!;
     assert(canShare, 'canShare must be true before calling startSharing');
     assert(_hookBus != null, '_hookBus must be wired via wireDependencies() before calling startSharing');
+    _sharingSessionId = sessionId;
     final service = ShareSessionService();
     service.onPresenceLeave = (guestId) {
       _guests.remove(guestId);
@@ -123,6 +127,7 @@ class ShareProvider extends ChangeNotifier {
     _service = null;
     _isSharing = false;
     _shareCode = null;
+    _sharingSessionId = null;
     _guests.clear();
     _controlledBy = null;
     notifyListeners();

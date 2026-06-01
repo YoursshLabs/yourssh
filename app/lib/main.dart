@@ -195,10 +195,12 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _shareProvider = ShareProvider(syncProvider: _syncProvider);
     _shareProvider.wireDependencies(_sessionProvider, _hookBus);
     _shareProvider.onGuestInput = (data) {
-      final active = _sessionProvider.activeSession;
-      if (active != null && !active.isWatch) {
-        active.terminal.textInput(data);
-      }
+      final sessionId = _shareProvider.sharingSessionId;
+      if (sessionId == null) return;
+      final session = _sessionProvider.sessions
+          .where((s) => s.id == sessionId && !s.isWatch)
+          .firstOrNull;
+      session?.terminal.textInput(data);
     };
 
     _hostProvider.onMutation = () => _syncService.push(
