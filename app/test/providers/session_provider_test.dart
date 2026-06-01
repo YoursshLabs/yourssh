@@ -9,6 +9,13 @@ import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/tab_metadata_service.dart';
 
+Host _makeHost(String id) => Host(
+  id: id, label: id, host: '$id.example.com', port: 22, username: 'user',
+);
+
+SshSession _makeSession(String hostId) =>
+    SshSession(host: _makeHost(hostId));
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -138,6 +145,80 @@ void main() {
       expect(session.colorTag, '#22c55e');
       expect(session.isPinned, isTrue);
       p.dispose();
+    });
+  });
+
+  group('tab metadata mutations', () {
+    late SessionProvider p;
+
+    setUp(() {
+      p = SessionProvider(SshService(StorageService()), TabMetadataService());
+      p.addWatchSession(_makeSession('h1'));
+      p.addWatchSession(_makeSession('h2'));
+      p.addWatchSession(_makeSession('h3'));
+    });
+
+    tearDown(() => p.dispose());
+
+    test('renameSession sets customLabel', () async {
+      p.renameSession(p.sessions.first.id, 'renamed');
+      expect(p.sessions.first.customLabel, 'renamed');
+    });
+
+    test('renameSession with null clears label', () async {
+      p.renameSession(p.sessions.first.id, 'x');
+      p.renameSession(p.sessions.first.id, null);
+      expect(p.sessions.first.customLabel, isNull);
+    });
+
+    test('setSessionColor sets colorTag', () async {
+      p.setSessionColor(p.sessions.first.id, '#ef4444');
+      expect(p.sessions.first.colorTag, '#ef4444');
+    });
+
+    test('setSessionColor with null clears color', () async {
+      p.setSessionColor(p.sessions.first.id, '#ef4444');
+      p.setSessionColor(p.sessions.first.id, null);
+      expect(p.sessions.first.colorTag, isNull);
+    });
+
+    test('togglePin pins and moves session to front', () {
+      final third = p.sessions[2];
+      p.togglePin(third.id);
+      expect(p.sessions.first.id, third.id);
+      expect(p.sessions.first.isPinned, isTrue);
+    });
+
+    test('togglePin twice unpins and session leaves front', () {
+      final third = p.sessions[2];
+      p.togglePin(third.id);
+      p.togglePin(third.id);
+      expect(p.sessions.first.isPinned, isFalse);
+    });
+
+    test('reorderSession moves unpinned tab', () {
+      final h1Id = p.sessions[0].id;
+      p.reorderSession(0, 2);
+      // Flutter onReorder: newIndex > oldIndex → adjust by -1 inside method
+      // 0 → newIndex 2 → adjusted 1. Result: [h2, h1, h3]
+      expect(p.sessions[1].id, h1Id);
+    });
+
+    test('reorderSession: unpinned tab cannot be dragged into pinned zone', () {
+      p.togglePin(p.sessions[0].id);
+      // sessions: [h1(pinned), h2, h3]
+      p.reorderSession(1, 0);
+      expect(p.sessions[0].isPinned, isTrue);
+      expect(p.sessions[1].isPinned, isFalse);
+    });
+
+    test('reorderSession: pinned tab cannot be dragged into unpinned zone', () {
+      p.togglePin(p.sessions[0].id);
+      // sessions: [h1(pinned), h2, h3]
+      final h1Id = p.sessions[0].id;
+      p.reorderSession(0, 3);
+      expect(p.sessions[0].id, h1Id);
+      expect(p.sessions[0].isPinned, isTrue);
     });
   });
 }

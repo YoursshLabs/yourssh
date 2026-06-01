@@ -241,6 +241,53 @@ class SessionProvider extends ChangeNotifier {
     _safeNotify();
   }
 
+  void renameSession(String sessionId, String? label) {
+    final session = _sessions.where((s) => s.id == sessionId).firstOrNull;
+    if (session == null) return;
+    session.customLabel = label;
+    _tabMetadata.saveMetadata(session.host.id,
+        label: label, color: session.colorTag, pinned: session.isPinned);
+    _safeNotify();
+  }
+
+  void setSessionColor(String sessionId, String? colorHex) {
+    final session = _sessions.where((s) => s.id == sessionId).firstOrNull;
+    if (session == null) return;
+    session.colorTag = colorHex;
+    _tabMetadata.saveMetadata(session.host.id,
+        label: session.customLabel, color: colorHex, pinned: session.isPinned);
+    _safeNotify();
+  }
+
+  void togglePin(String sessionId) {
+    final session = _sessions.where((s) => s.id == sessionId).firstOrNull;
+    if (session == null) return;
+    session.isPinned = !session.isPinned;
+    _sortSessions();
+    _tabMetadata.saveMetadata(session.host.id,
+        label: session.customLabel, color: session.colorTag, pinned: session.isPinned);
+    _safeNotify();
+  }
+
+  void reorderSession(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _sessions.length) return;
+    if (newIndex > oldIndex) newIndex -= 1;
+    final session = _sessions[oldIndex];
+    final pinnedCount = _sessions.where((s) => s.isPinned).length;
+    if (session.isPinned) {
+      newIndex = newIndex.clamp(0, (pinnedCount - 1).clamp(0, _sessions.length - 1));
+    } else {
+      newIndex = newIndex.clamp(pinnedCount, _sessions.length - 1);
+    }
+    if (newIndex == oldIndex) {
+      _safeNotify();
+      return;
+    }
+    _sessions.removeAt(oldIndex);
+    _sessions.insert(newIndex, session);
+    _safeNotify();
+  }
+
   void _sortSessions() {
     final pinned = _sessions.where((s) => s.isPinned).toList();
     final unpinned = _sessions.where((s) => !s.isPinned).toList();
