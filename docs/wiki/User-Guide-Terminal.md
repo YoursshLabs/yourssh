@@ -71,5 +71,6 @@ The sidebar also has a **Local Terminal** section that opens a native shell (zsh
 
 ## Related Pages
 
+- [Terminal Sharing](User-Guide-Terminal-Sharing) — share a live session with teammates in real time
 - [Recording](User-Guide-Recording) — record the current session to an Asciinema file
 - [Settings](User-Guide-Settings) — customize hotkeys and themes
