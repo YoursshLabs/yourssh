@@ -18,6 +18,18 @@ Each SSH session opens in its own tab in the top bar. The tab shows the host nam
 | Yellow spinner | Connecting / reconnecting |
 | Red dot | Disconnected / error |
 
+### Managing tabs
+
+| Action | How |
+|---|---|
+| Rename | Double-click the tab, or right-click → **Rename** |
+| Color tag | Right-click → pick one of 8 colors (shown as a dot on the tab) |
+| Pin | Right-click → **Pin** — pinned tabs move to the front and hide their close button |
+| Reorder | Drag a tab left/right; pinned and unpinned tabs stay within their own zones |
+| Close | Hover and click ✕ (hidden while a tab is pinned) |
+
+Tab names, colors, and pin state persist per host across reconnects and app restarts.
+
 ## Split View
 
 Split the active session into two panes:
