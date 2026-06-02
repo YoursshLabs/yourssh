@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Shell integration (OSC 7 / OSC 133)** — yourssh now injects a small, guarded prompt-hook into bash/zsh sessions on connect (auto-on, opt-out per host and globally in **Settings → Terminal**) so it can read the remote shell's working directory and command boundaries via semantic-prompt escape sequences. This powers: the **working directory shown on the session tab** (e.g. `web-prod · app`), a **per-command status gutter** down the left of the terminal (green dot = exit 0, red = non-zero, grey = running), **jump-to-prompt** navigation (`Cmd/Ctrl+↑/↓` scrolls between command prompts), and **cwd-aware path autocomplete** in the command input bar (lists the resolved remote directory over SFTP). Sequences are captured via xterm's `onPrivateOSC` (no raw-stream parsing); non-bash/zsh shells and sessions where the markers are stripped simply see the feature stay inactive. The injected hooks affect only the live shell session — they never modify `.bashrc`/`.zshrc`.
+
 ---
 
 ## [0.1.17] — 2026-06-02
