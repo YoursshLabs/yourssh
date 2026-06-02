@@ -2,7 +2,7 @@
 
 A professional, open-source SSH client for **macOS**, **Windows**, and **Linux** — built for developers and sysadmins who manage multiple servers.
 
-> **Current version:** 0.1.13 · [Download](https://github.com/thangnm93/yourssh/releases) · [Report an issue](https://github.com/thangnm93/yourssh/issues)
+> **Current version:** 0.1.18 · [Download](https://github.com/thangnm93/yourssh/releases) · [Report an issue](https://github.com/thangnm93/yourssh/issues)
 
 ---
 
@@ -12,7 +12,7 @@ A professional, open-source SSH client for **macOS**, **Windows**, and **Linux**
 |---|---|
 | [Getting Started](User-Guide-Getting-Started) | Install the app and make your first connection |
 | [SSH Connections](User-Guide-SSH-Connections) | Manage hosts, auth methods, groups, and tags |
-| [Terminal](User-Guide-Terminal) | Tabs, health badges, split view, broadcast, search, hotkeys, command palette |
+| [Terminal](User-Guide-Terminal) | Tabs, health badges, shell integration, split view, broadcast, search, hotkeys, command palette |
 | [Terminal Sharing](User-Guide-Terminal-Sharing) | Share a live SSH session with teammates in real time |
 | [SFTP](User-Guide-SFTP) | Dual-panel file manager, uploads, downloads |
 | [Port Forwarding](User-Guide-Port-Forwarding) | Local, remote, and dynamic SOCKS5 tunnels |

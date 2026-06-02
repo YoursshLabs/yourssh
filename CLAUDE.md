@@ -78,6 +78,7 @@ Flutter UI (widgets/screens)
 - `PluginProvider` — activates/deactivates registered plugins; wraps `PluginContextImpl` for each
 - `PluginEngineProvider` — wires `ScriptEngineService` into the Flutter state tree; surfaces loaded JS plugins, enabled state, and per-plugin console logs to the UI
 - `RecordingProvider` — recording library state; `startRecording(session)` / `stopRecording(sessionId)`; `refreshLibrary()` scans disk for `.cast` files; `isRecording(sessionId)` for UI indicators; wired to `SessionProvider` via `recordingStart` callback in `main.dart`
+- `ShellIntegrationProvider` — per-session shell-integration state (cwd + command list) keyed by `sessionId`; `handleOsc(sessionId, code, args, absoluteCursorY)` routes xterm `onPrivateOSC` events through `ShellIntegrationService` into `ShellSessionState`; exposes `cwdFor`/`maybeStateFor` and a per-session `revisionFor` so consumers `context.select` to their own session; `clear(sessionId)` on shell close / disconnect
 
 **Services** (`app/lib/services/`):
 - `SshService` — owns `SSHClient` and `SSHSession` maps keyed by host ID; handles connect, shell, exec, sftp, `testConnection` (TCP+auth without opening a shell), disconnect
@@ -99,6 +100,7 @@ Flutter UI (widgets/screens)
 - `WebToolsService` — in-app HTTP requests through a port-forwarded connection
 - `SystemAgentProxy` — proxies SSH agent socket for `AuthType.agent`
 - `RecordingService` — writes asciicast v2 (`.cast`) files; tracks active recordings keyed by `sessionId`; passive intercept pattern — `SshService` always calls `writeOutput()` / `onShellClosed()`, which no-op when not recording
+- `ShellIntegrationService` — pure (no Flutter/IO): `parseOsc(code, args)` maps xterm `onPrivateOSC` to a typed `ShellOscEvent` (OSC 7 cwd, OSC 133 A/D; C ignored), `buildInjectionScript()` returns the guarded one-line bash/zsh prompt-hook installer (auto-on, opt-out via `Host.shellIntegration` + `SettingsProvider.shellIntegrationEnabled`). `SshService.openShell` injects it after tmux/initialCommand and wires `terminal.onPrivateOSC`; `path_completion.dart` (pure) plans cwd-aware path completion for the input bar over `SshService.listDirectory`
 
 **Key models** (`app/lib/models/`):
 - `Host` — connection profile (host, port, username, `AuthType`: `password` / `privateKey` / `certificate` / `agent`)
