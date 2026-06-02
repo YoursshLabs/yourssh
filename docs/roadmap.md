@@ -27,13 +27,13 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 - **SFTP file watcher** — local edit → auto upload (direct competitor to VSCode Remote SSH for fast dev loops).
 - **Multi-hop jump chain** — GUI to select bastion → bastion → target.
 - **Cloud inventory import** — AWS/GCP/Azure → auto-sync host list by instance tags, refresh on demand.
-- **Parameterized workflows / runbooks** — snippets with typed parameters prompted on run; on-demand reuse + foundation for team-shareable workflows (gap vs Warp Drive). Extends `yourssh_snippets`.
+- **Parameterized workflows / runbooks** — snippets with typed parameters prompted on run; on-demand reuse + foundation for team-shareable workflows. Extends `yourssh_snippets`.
 
 ### Terminal UX & protocol support
-- **Shell integration (semantic prompts)** — inject/parse OSC 7 + OSC 133 markers to detect cwd, command boundaries, and exit status; powers cwd-in-tab-title, per-command status markers, jump-to-prompt, and smarter autocomplete (gap vs Termius).
-- **Rich terminal autocomplete** — path / option / argument-aware completion sourced from shell history + snippets + built-ins; suggest a matching key/identity on password prompts (gap vs WindTerm/Termius). Extends `CommandHistoryProvider` (today history-only).
-- **Zmodem (rz/sz) inline transfer** — direct file transfer inside an active SSH shell without switching to the SFTP panel (gap vs Tabby).
-- **Telnet + serial console** — multi-protocol terminal beyond SSH for legacy/network gear (gap vs Tabby). Larger lift: the dartssh2 fork is SSH-only.
+- **Shell integration (semantic prompts)** — inject/parse OSC 7 + OSC 133 markers to detect cwd, command boundaries, and exit status; powers cwd-in-tab-title, per-command status markers, jump-to-prompt, and smarter autocomplete.
+- **Rich terminal autocomplete** — path / option / argument-aware completion sourced from shell history + snippets + built-ins; suggest a matching key/identity on password prompts. Extends `CommandHistoryProvider` (today history-only).
+- **Zmodem (rz/sz) inline transfer** — direct file transfer inside an active SSH shell without switching to the SFTP panel.
+- **Telnet + serial console** — multi-protocol terminal beyond SSH for legacy/network gear. Larger lift: the dartssh2 fork is SSH-only.
 
 ### Security & identity
 - **Secrets vault adapter** — 1Password / Bitwarden / HashiCorp Vault / aws-vault instead of storing passwords in the app.
@@ -42,9 +42,9 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 - **Recording redaction** — regex-mask tokens/passwords before writing to `.cast`.
 
 ### AI-native (extending AI chat sidebar)
-- **Inline NL → shell** — trigger from the terminal input itself (not just the sidebar) with diff + confirmation before exec; mirrors Warp `#` / Agent Mode (gap: yourssh AI is sidebar-only).
-- **AI explain output / error** — select text in terminal → "ask AI"; right-click an error to explain it (parity with Warp "Ask Warp AI").
-- **AI-assisted snippet/workflow authoring** — auto-generate name, description, and parameters for a captured command (gap vs Warp Drive AutoFill).
+- **Inline NL → shell** — trigger from the terminal input itself (not just the sidebar) with diff + confirmation before exec; today the AI is sidebar-only.
+- **AI explain output / error** — select text in terminal → "ask AI"; right-click an error to explain it.
+- **AI-assisted snippet/workflow authoring** — auto-generate name, description, and parameters for a captured command.
 - **AI runbook from recording** — `.cast` → markdown step-by-step.
 - **Per-host AI context** — prompt knows the role/env/recent commands for that host.
 
@@ -55,11 +55,11 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 - SFTP: trash instead of direct delete + undo last operation.
 - AI chat: explicit tool approval gating + token cost meter.
 
-> **Needs follow-up research (unverified this pass):** MobaXterm (bundled X-server), SecureCRT (Python/VBScript scripting & automation), iTerm2 (output triggers, tmux integration), Royal TSX (RDP/VNC multi-protocol consolidation) were in scope but produced no verified claims — candidate gaps to confirm before promoting to a real roadmap item.
+> **Candidate gaps (needs follow-up research before promoting):** bundled X-server, terminal scripting/automation (e.g. Python), output triggers + tmux integration, and multi-protocol consolidation (RDP/VNC). Unverified this pass.
 
 ## P2 — Team / Enterprise (when traction exists)
 
-- Team sync with RBAC + SSO (SAML/OIDC) + shared "vault" — share not just hosts but SSH keys, port-forward rules, known hosts, and snippet packages, with granular per-vault access control (parity with Termius Vaults).
+- Team sync with RBAC + SSO (SAML/OIDC) + shared "vault" — share not just hosts but SSH keys, port-forward rules, known hosts, and snippet packages, with granular per-vault access control.
 - Shared snippet library with approval/review flow.
 - Read-only web companion (audit dashboard via existing Cloudflare tunnel).
 - Compliance pack: SOC2 audit, key inventory export.
