@@ -16,6 +16,7 @@ class Host {
   String? detectedOs;
   bool autoRecord;
   String? jumpHostId;
+  bool shellIntegration;
 
   Host({
     String? id,
@@ -31,6 +32,7 @@ class Host {
     this.detectedOs,
     this.autoRecord = false,
     this.jumpHostId,
+    this.shellIntegration = true,
   })  : id = id ?? const Uuid().v4(),
         // Always own a growable copy so callers can `tags.add(...)`
         // without hitting `Unsupported operation` on the shared `const []`.
@@ -51,6 +53,7 @@ class Host {
         'detectedOs': detectedOs,
         'autoRecord': autoRecord,
         'jumpHostId': jumpHostId,
+        'shellIntegration': shellIntegration,
       };
 
   /// Tolerant of partially-missing fields so a corrupted prefs blob or
@@ -91,6 +94,7 @@ class Host {
       detectedOs: json['detectedOs'] as String?,
       autoRecord: (json['autoRecord'] as bool?) ?? false,
       jumpHostId: json['jumpHostId'] as String?,
+      shellIntegration: (json['shellIntegration'] as bool?) ?? true,
     );
   }
 
@@ -105,6 +109,7 @@ class Host {
     String? detectedOs,
     bool? autoRecord,
     Object? jumpHostId = const _Unset(),
+    bool? shellIntegration,
   }) =>
       Host(
         id: id,
@@ -120,6 +125,7 @@ class Host {
         detectedOs: detectedOs ?? this.detectedOs,
         autoRecord: autoRecord ?? this.autoRecord,
         jumpHostId: jumpHostId is _Unset ? this.jumpHostId : jumpHostId as String?,
+        shellIntegration: shellIntegration ?? this.shellIntegration,
       );
 }
 
