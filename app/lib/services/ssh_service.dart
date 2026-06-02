@@ -26,13 +26,6 @@ class SshService {
   RecordingService? _recording;
   set recordingService(RecordingService? service) => _recording = service;
 
-  int Function()? keepAliveSecondsProvider;
-
-  Duration? _resolvedKeepAlive() {
-    final secs = keepAliveSecondsProvider?.call() ?? 10;
-    return secs == 0 ? null : Duration(seconds: secs);
-  }
-
   /// Verifier used when [exec]/[openSftp] auto-connect without an explicit
   /// verifier (e.g., DevOps tools invoking a one-off command). Set from main.dart
   /// to KnownHostsProvider.verifyHostKey used by interactive connects;
@@ -155,7 +148,10 @@ class SshService {
           if (verifyHostKey != null) return verifyHostKey(type.toString(), fp);
           return true;
         },
-        keepAliveInterval: _resolvedKeepAlive(),
+        // Built-in keepalive is disabled: HealthMonitorService is the sole
+        // pinger (it both keeps the connection alive and measures latency),
+        // avoiding a race on the shared global-request reply queue.
+        keepAliveInterval: null,
       );
       await client.authenticated;
     } catch (e) {
@@ -298,6 +294,28 @@ class SshService {
       jumpClient?.close();
       await agentProxy?.close();
       await jumpAgentProxyForTest?.close();
+    }
+  }
+
+  // ── Health monitoring ─────────────────────────────────
+
+  /// Host ids with a live client. Used by HealthMonitorService to know which
+  /// connections to ping.
+  Iterable<String> get connectedHostIds => _clients.keys;
+
+  /// Round-trip latency (ms) of a keepalive ping over [hostId]'s live client,
+  /// or null when there is no client or the ping fails / times out. The timeout
+  /// is what surfaces half-open connections (the channel has not closed yet).
+  Future<int?> measureLatency(String hostId) async {
+    final client = _clients[hostId];
+    if (client == null) return null;
+    final sw = Stopwatch()..start();
+    try {
+      await client.ping().timeout(const Duration(seconds: 5));
+      sw.stop();
+      return sw.elapsedMilliseconds;
+    } catch (_) {
+      return null;
     }
   }
 
