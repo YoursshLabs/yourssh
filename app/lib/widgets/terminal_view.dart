@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,7 +7,9 @@ import '../models/ssh_session.dart';
 import '../providers/command_history_provider.dart';
 import '../providers/recording_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/shell_integration_provider.dart';
 import '../theme/terminal_themes.dart';
+import 'command_gutter.dart';
 import 'suggestion_popup.dart';
 
 class SessionTerminalView extends StatelessWidget {
@@ -175,6 +178,38 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
     );
   }
 
+  /// Scroll to the previous (-1) or next (+1) command prompt line, reusing the
+  /// same line→pixel conversion as search-in-scrollback.
+  void _jumpToPrompt(int direction) {
+    final st = context
+        .read<ShellIntegrationProvider>()
+        .maybeStateFor(widget.session.id);
+    if (st == null || st.commands.isEmpty || !_scrollController.hasClients) {
+      return;
+    }
+    final lineHeight = context.read<SettingsProvider>().fontSize * 1.35;
+    final currentLine = _scrollController.offset / lineHeight;
+    final lines = st.commands.map((c) => c.promptLine).toList()..sort();
+    int? target;
+    if (direction < 0) {
+      for (final l in lines) {
+        if (l < currentLine - 0.5) target = l;
+      }
+    } else {
+      for (final l in lines) {
+        if (l > currentLine + 0.5) {
+          target = l;
+          break;
+        }
+      }
+    }
+    if (target == null) return;
+    final offset = (target * lineHeight)
+        .clamp(0.0, _scrollController.position.maxScrollExtent);
+    _scrollController.animateTo(offset,
+        duration: const Duration(milliseconds: 150), curve: Curves.easeOut);
+  }
+
   void _goNext() {
     if (_matches.isEmpty) return;
     final termTheme = terminalThemeByName(
@@ -288,6 +323,17 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
       return KeyEventResult.ignored;
     }
 
+    // Jump-to-prompt (Cmd+↑/↓ on macOS, Ctrl+↑/↓ elsewhere).
+    final jumpMod = Platform.isMacOS ? meta : ctrl;
+    if (jumpMod && key == LogicalKeyboardKey.arrowUp) {
+      _jumpToPrompt(-1);
+      return KeyEventResult.handled;
+    }
+    if (jumpMod && key == LogicalKeyboardKey.arrowDown) {
+      _jumpToPrompt(1);
+      return KeyEventResult.handled;
+    }
+
     if (key == LogicalKeyboardKey.tab) {
       if (_suggestions.isNotEmpty) {
         _completeTo(_suggestions[_selectedIdx]);
@@ -355,6 +401,24 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
           padding: EdgeInsets.zero,
           autofocus: !_searchVisible,
           onKeyEvent: _handleKey,
+        ),
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          child: CommandGutter(
+            sessionId: widget.session.id,
+            scrollController: _scrollController,
+            lineHeight: settings.fontSize * 1.35,
+            onJumpTo: (line) {
+              if (!_scrollController.hasClients) return;
+              final offset = (line * settings.fontSize * 1.35)
+                  .clamp(0.0, _scrollController.position.maxScrollExtent);
+              _scrollController.animateTo(offset,
+                  duration: const Duration(milliseconds: 150),
+                  curve: Curves.easeOut);
+            },
+          ),
         ),
         if (_searchVisible)
           Positioned(
