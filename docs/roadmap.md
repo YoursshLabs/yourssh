@@ -1,11 +1,11 @@
 # YourSSH — Roadmap
 
 > Direction: **infra workstation for DevOps/SRE managing 10–100+ hosts**, not just an SSH client.
-> Current version: 0.1.16 · updated: 2026-06-02 (Cloud sync secret is now a 12-char sync code)
+> Current version: 0.1.17 · updated: 2026-06-02 (Connection health badge on session tabs)
 
 This document lists proposed features ordered by priority. Each item can be broken out into its own spec (`docs/superpowers/specs/`) when ready for implementation.
 
-Already shipped (not repeated in roadmap): multi-tab terminal, split view, broadcast, recording (asciicast), snippet, SFTP dual-panel, port forwarding, jump host, Supabase sync + P2P LAN, AI chat sidebar with tool calling, plugin system (DevOps / WebTools / Snippets), Cloudflare tunnel, MCP gateway, mail catcher, code editor (Monaco), customizable hotkeys, TOFU known-hosts, **Command Palette (Cmd/Ctrl+K)** — fuzzy search hosts / nav / snippets / actions, **Workspace persistence** — auto-reconnect tabs + layout on relaunch, **Search-in-scrollback (Cmd/Ctrl+F)** — regex, highlights, prev/next navigation, **Script Engine plugin system** — disk-based JS plugins via QuickJS FFI, HookBus (terminal.output / terminal.input / session events), SSH/SFTP/Storage/UI bridges, hot-reload file watcher, PermissionGuard + circuit breaker, consent dialog, manager screen + console log viewer, **Import** — paste SSH config / JSON / CSV with per-host include toggles (`parseSshConfig` in `import_panel.dart`), **Host tagging** — comma-separated tags on the `Host` model, editable in host detail and searchable from the dashboard, **Smart filter + multi-dimensional query (0.1.10)** — `HostQuery` parser with `key:value` faceted AND/OR semantics, toggleable facet chips on hosts dashboard, tag-based search, **Terminal sharing / multiplayer (0.1.13)** — share a live SSH session via Supabase Realtime; guests join with a session code, watch or interact in real time; `ShareSessionService`, `ShareProvider`, `ShareEvent`, split-view watch banner, **Advanced tab management** — rename, color tag, pin, drag reorder; all tab metadata persists per host.
+Already shipped (not repeated in roadmap): multi-tab terminal, split view, broadcast, recording (asciicast), snippet, SFTP dual-panel, port forwarding, jump host, Supabase sync + P2P LAN, AI chat sidebar with tool calling, plugin system (DevOps / WebTools / Snippets), Cloudflare tunnel, MCP gateway, mail catcher, code editor (Monaco), customizable hotkeys, TOFU known-hosts, **Command Palette (Cmd/Ctrl+K)** — fuzzy search hosts / nav / snippets / actions, **Workspace persistence** — auto-reconnect tabs + layout on relaunch, **Search-in-scrollback (Cmd/Ctrl+F)** — regex, highlights, prev/next navigation, **Script Engine plugin system** — disk-based JS plugins via QuickJS FFI, HookBus (terminal.output / terminal.input / session events), SSH/SFTP/Storage/UI bridges, hot-reload file watcher, PermissionGuard + circuit breaker, consent dialog, manager screen + console log viewer, **Import** — paste SSH config / JSON / CSV with per-host include toggles (`parseSshConfig` in `import_panel.dart`), **Host tagging** — comma-separated tags on the `Host` model, editable in host detail and searchable from the dashboard, **Smart filter + multi-dimensional query (0.1.10)** — `HostQuery` parser with `key:value` faceted AND/OR semantics, toggleable facet chips on hosts dashboard, tag-based search, **Terminal sharing / multiplayer (0.1.13)** — share a live SSH session via Supabase Realtime; guests join with a session code, watch or interact in real time; `ShareSessionService`, `ShareProvider`, `ShareEvent`, split-view watch banner, **Advanced tab management** — rename, color tag, pin, drag reorder; all tab metadata persists per host, **Connection health badge (0.1.17)** — live latency-driven dot per session tab (green/amber/red/grey + pulse), hover tooltip with uptime / last-ping / reconnect count; `HealthMonitorService` pings the live channel (`SSHClient.ping`) as sole pinger, 5s timeout surfaces half-open silent drops.
 
 ---
 
@@ -14,9 +14,8 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 | # | Feature | Purpose | Implementation notes |
 |---|---|---|---|
 | 1 | **Bulk action panel** | Select N hosts → connect-all / exec snippet in parallel / SFTP push / diff output | Multi-select UI on host list; backend runs `Future.wait` via `SshService` |
-| 2 | **Connection health badge** | Latency ping, last-active, auto-reconnect status shown on the tab | Leverage existing `SshService` heartbeat; attach to tab + tooltip |
-| 3 | **Internal audit log** | Compliance + retrospective: who/when/host/command | SQLite (drift/sqflite), redact secrets via regex; optional sync |
-| 4 | **Session template / per-host preset** | Env vars, working dir, shell, theme, startup snippet, recording auto-on | Extend `Host` model; apply when `SessionProvider.start` is called |
+| 2 | **Internal audit log** | Compliance + retrospective: who/when/host/command | SQLite (drift/sqflite), redact secrets via regex; optional sync |
+| 3 | **Session template / per-host preset** | Env vars, working dir, shell, theme, startup snippet, recording auto-on | Extend `Host` model; apply when `SessionProvider.start` is called |
 
 ## P1 — Differentiation & DevOps depth
 
@@ -28,6 +27,13 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 - **SFTP file watcher** — local edit → auto upload (direct competitor to VSCode Remote SSH for fast dev loops).
 - **Multi-hop jump chain** — GUI to select bastion → bastion → target.
 - **Cloud inventory import** — AWS/GCP/Azure → auto-sync host list by instance tags, refresh on demand.
+- **Parameterized workflows / runbooks** — snippets with typed parameters prompted on run; on-demand reuse + foundation for team-shareable workflows (gap vs Warp Drive). Extends `yourssh_snippets`.
+
+### Terminal UX & protocol support
+- **Shell integration (semantic prompts)** — inject/parse OSC 7 + OSC 133 markers to detect cwd, command boundaries, and exit status; powers cwd-in-tab-title, per-command status markers, jump-to-prompt, and smarter autocomplete (gap vs Termius).
+- **Rich terminal autocomplete** — path / option / argument-aware completion sourced from shell history + snippets + built-ins; suggest a matching key/identity on password prompts (gap vs WindTerm/Termius). Extends `CommandHistoryProvider` (today history-only).
+- **Zmodem (rz/sz) inline transfer** — direct file transfer inside an active SSH shell without switching to the SFTP panel (gap vs Tabby).
+- **Telnet + serial console** — multi-protocol terminal beyond SSH for legacy/network gear (gap vs Tabby). Larger lift: the dartssh2 fork is SSH-only.
 
 ### Security & identity
 - **Secrets vault adapter** — 1Password / Bitwarden / HashiCorp Vault / aws-vault instead of storing passwords in the app.
@@ -36,8 +42,9 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 - **Recording redaction** — regex-mask tokens/passwords before writing to `.cast`.
 
 ### AI-native (extending AI chat sidebar)
-- **Natural language → shell** with diff + confirmation before exec.
-- **AI explain output / error** — select text in terminal → "ask AI".
+- **Inline NL → shell** — trigger from the terminal input itself (not just the sidebar) with diff + confirmation before exec; mirrors Warp `#` / Agent Mode (gap: yourssh AI is sidebar-only).
+- **AI explain output / error** — select text in terminal → "ask AI"; right-click an error to explain it (parity with Warp "Ask Warp AI").
+- **AI-assisted snippet/workflow authoring** — auto-generate name, description, and parameters for a captured command (gap vs Warp Drive AutoFill).
 - **AI runbook from recording** — `.cast` → markdown step-by-step.
 - **Per-host AI context** — prompt knows the role/env/recent commands for that host.
 
@@ -48,9 +55,11 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 - SFTP: trash instead of direct delete + undo last operation.
 - AI chat: explicit tool approval gating + token cost meter.
 
+> **Needs follow-up research (unverified this pass):** MobaXterm (bundled X-server), SecureCRT (Python/VBScript scripting & automation), iTerm2 (output triggers, tmux integration), Royal TSX (RDP/VNC multi-protocol consolidation) were in scope but produced no verified claims — candidate gaps to confirm before promoting to a real roadmap item.
+
 ## P2 — Team / Enterprise (when traction exists)
 
-- Team sync with RBAC + SSO (SAML/OIDC), shared host folder.
+- Team sync with RBAC + SSO (SAML/OIDC) + shared "vault" — share not just hosts but SSH keys, port-forward rules, known hosts, and snippet packages, with granular per-vault access control (parity with Termius Vaults).
 - Shared snippet library with approval/review flow.
 - Read-only web companion (audit dashboard via existing Cloudflare tunnel).
 - Compliance pack: SOC2 audit, key inventory export.
@@ -62,8 +71,8 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 ## Top 3 suggestions for the next sprint
 
 1. **Bulk action panel** — select N hosts → connect-all / exec snippet in parallel / SFTP push; the core UX gap after advanced tab management ships.
-2. **Connection health badge** — latency + auto-reconnect status on tabs; small surface area, high daily-driver visibility.
-3. **Kubernetes panel completion** — context switcher + `logs -f` + 1-click port-forward; the container browser shipped in 0.1.12, finishing the K8s story is the clearest next DevOps milestone.
+2. **Kubernetes panel completion** — context switcher + `logs -f` + 1-click port-forward; the container browser shipped in 0.1.12, finishing the K8s story is the clearest next DevOps milestone.
+3. **Session template / per-host preset** — env vars, working dir, startup snippet, auto-record per host; pairs naturally with the health badge now that per-session metadata is richer.
 
 ---
 

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.17] — 2026-06-02
+
+### Added
+- **Connection health badge** — a live, latency-driven dot on each session tab: green (`<150ms`), amber (`150–500ms`), red (`>500ms` or unreachable), grey (connecting / no reading), with a pulsing amber dot during (re)connect. Hovering shows uptime, last-ping age, and the per-session reconnect count. A new `HealthMonitorService` pings each connected host over the live SSH channel (`SSHClient.ping`) on the keep-alive interval and becomes the sole pinger (the client's built-in keepalive is disabled), so a 5s ping timeout also surfaces half-open silent drops that the channel-close reconnect path cannot detect.
+
+---
+
 ## [0.1.16] — 2026-06-01
 
 ### Changed
@@ -231,7 +238,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.16...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.17...HEAD
+[0.1.17]: https://github.com/YoursshLabs/yourssh/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/YoursshLabs/yourssh/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/YoursshLabs/yourssh/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/YoursshLabs/yourssh/compare/v0.1.13...v0.1.14
