@@ -94,7 +94,7 @@ Flutter UI (widgets/screens)
 - `SftpFileOpsService` — SFTP file operations (rename, delete, mkdir, permissions)
 - `SftpTransferService` — chunked upload/download with progress callbacks
 - `ExternalEditService` — "open with external app" for SFTP files: downloads to a per-session temp dir, launches the OS default app (`url_launcher`) or a specific app (`openExternalWith`), polls mtime every 2 s and auto-uploads changes back to the server; `sftp_file_inspector.dart` (pure) decides which files the in-app editor refuses (binary extension, > 5 MB, null byte in first 8 KB)
-- `AppDiscoveryService` — discovers installed applications for a given file path, filtered by MIME type; per-extension cache; macOS uses `LSCopyApplicationURLsForURL` via a `yourssh/app_discovery` Flutter method channel (`AppDelegate.swift`), Linux parses XDG `.desktop` files in Dart, Windows uses PowerShell registry queries
+- `AppDiscoveryService` — discovers installed applications for a given file path, filtered by MIME type; per-extension cache; macOS uses `LSCopyApplicationURLsForURL` via a `yourssh/app_discovery` Flutter method channel registered in `MainFlutterWindow.awakeFromNib` (NOT AppDelegate — its lifecycle overrides never fire in this app), Linux parses XDG `.desktop` files in Dart, Windows uses PowerShell registry queries
 - `McpGatewayService` — starts a remote MCP server over SSH exec and forwards a local port to it
 - `CloudflareTunnelService` — manages `cloudflared` tunnel process lifecycle
 - `MailCatcherService` — connects to a remote MailCatcher SMTP instance via port forward
