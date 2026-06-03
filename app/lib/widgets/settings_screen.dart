@@ -304,7 +304,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         : Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (update.status == UpdateStatus.available)
+                              if (update.status == UpdateStatus.available) ...[
                                 FilledButton(
                                   onPressed: () =>
                                       context.read<UpdateProvider>().downloadAndInstall(),
@@ -316,7 +316,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ),
                                   child: const Text('Download & install'),
                                 ),
-                              const SizedBox(width: 8),
+                                const SizedBox(width: 8),
+                              ],
                               OutlinedButton(
                                 onPressed: update.status == UpdateStatus.checking
                                     ? null
@@ -342,6 +343,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Text(
                         update.latestRelease!.notes,
                         style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        maxLines: 5,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                 ]),
@@ -360,7 +363,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       case UpdateStatus.upToDate:
         return 'You are on the latest version';
       case UpdateStatus.available:
-        return 'New version v${u.latestRelease!.version} available';
+        return 'New version v${u.latestRelease?.version ?? '?'} available';
       case UpdateStatus.downloading:
         return 'Downloading…';
       case UpdateStatus.readyToInstall:
@@ -368,7 +371,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       case UpdateStatus.error:
         return u.errorMessage ?? 'Could not check for updates';
       case UpdateStatus.idle:
-        return 'Tap "Check for updates" to look for a new version';
+        return 'Click "Check for updates" to look for a new version';
     }
   }
 
