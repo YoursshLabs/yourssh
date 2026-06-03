@@ -1,6 +1,7 @@
 // app/lib/widgets/code_editor_screen.dart
 import 'dart:convert';
 import 'dart:io';
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -101,11 +102,17 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       // a readable regular file — e.g. a directory, a virtual/special file, or
       // a permission/IO error. Surface it and close the editor instead of
       // crashing with an unhandled exception (this runs fire-and-forget from
-      // initState, so an uncaught error has nowhere to go).
+      // initState, so an uncaught error has nowhere to go). No "open with
+      // another app" fallback is offered: the download itself failed, so no
+      // application could open this file either.
       if (!mounted) return;
+      final message = e is SftpStatusError
+          ? 'Cannot open ${widget.entry.name}: the server refused to read it '
+              '(special file, broken link, or no permission).'
+          : 'Cannot open ${widget.entry.name}: $e';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Cannot open ${widget.entry.name}: $e'),
+          content: Text(message),
           backgroundColor: Colors.red,
         ),
       );

@@ -1,5 +1,6 @@
 // app/lib/services/sftp_transfer_service.dart
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:path/path.dart' as p;
@@ -17,15 +18,21 @@ class SftpTransferService {
 
   /// Streams [file] into [sink] in [_chunkSize] blocks. [onProgress] receives
   /// the running byte offset after each chunk (used to report transfer state).
+  ///
+  /// Reads are bounded by the stat'd file size so we never read past EOF:
+  /// some SFTP servers answer past-EOF reads with SSH_FX_FAILURE instead of
+  /// SSH_FX_EOF, which made every download end with a spurious error.
   static Future<void> _pipeToSink(
     SftpFile file,
     IOSink sink, {
     void Function(int offset)? onProgress,
   }) async {
+    final size = (await file.stat()).size ?? 0;
     int offset = 0;
-    while (true) {
-      final chunk = await file.readBytes(length: _chunkSize, offset: offset);
-      if (chunk.isEmpty) break;
+    while (offset < size) {
+      final chunk = await file.readBytes(
+          length: min(_chunkSize, size - offset), offset: offset);
+      if (chunk.isEmpty) break; // file shrank mid-transfer
       sink.add(chunk);
       offset += chunk.length;
       onProgress?.call(offset);
@@ -36,19 +43,39 @@ class SftpTransferService {
     final sftp = await _sshService.openSftp(host);
     try {
       final items = await sftp.listdir(path);
-      return items
-          .where((item) => item.filename != '.' && item.filename != '..')
-          .map((item) => SftpEntry(
-                name: item.filename,
-                path: p.posix.join(path, item.filename),
-                isDirectory: item.attr.isDirectory,
-                size: item.attr.size ?? 0,
-                modifiedAt: item.attr.modifyTime != null
-                    ? DateTime.fromMillisecondsSinceEpoch(
-                        item.attr.modifyTime! * 1000)
-                    : DateTime.now(),
-              ))
-          .toList();
+      final visible = [
+        for (final item in items)
+          if (item.filename != '.' && item.filename != '..') item,
+      ];
+      // listdir attrs have lstat semantics, so a symlink to a directory looks
+      // like a plain file (e.g. /bin -> usr/bin on merged-usr distros) and
+      // double-click would try to read it — which servers answer with
+      // SSH_FX_FAILURE. Follow each symlink to get the target's real type so
+      // those entries navigate instead; broken links keep file semantics.
+      final isDir = await Future.wait(visible.map((item) async {
+        if (item.attr.mode?.type != SftpFileType.symbolicLink) {
+          return item.attr.isDirectory;
+        }
+        try {
+          final target = await sftp.stat(p.posix.join(path, item.filename));
+          return target.isDirectory;
+        } on SftpError {
+          return false; // dangling link
+        }
+      }));
+      return [
+        for (final (i, item) in visible.indexed)
+          SftpEntry(
+            name: item.filename,
+            path: p.posix.join(path, item.filename),
+            isDirectory: isDir[i],
+            size: item.attr.size ?? 0,
+            modifiedAt: item.attr.modifyTime != null
+                ? DateTime.fromMillisecondsSinceEpoch(
+                    item.attr.modifyTime! * 1000)
+                : DateTime.now(),
+          ),
+      ];
     } finally {
       sftp.close();
     }
