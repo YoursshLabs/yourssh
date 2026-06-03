@@ -21,6 +21,8 @@ class _AddHostDialogState extends State<AddHostDialog> {
   late final TextEditingController _password;
   late AuthType _authType;
   String? _selectedKeyId;
+  late SftpMode _sftpMode;
+  late final TextEditingController _sftpCommand;
 
   @override
   void initState() {
@@ -33,11 +35,13 @@ class _AddHostDialogState extends State<AddHostDialog> {
     _password = TextEditingController();
     _authType = h?.authType ?? AuthType.password;
     _selectedKeyId = h?.keyId;
+    _sftpMode = h?.sftpMode ?? SftpMode.normal;
+    _sftpCommand = TextEditingController(text: h?.sftpServerCommand ?? '');
   }
 
   @override
   void dispose() {
-    for (final c in [_label, _host, _port, _username, _password]) {
+    for (final c in [_label, _host, _port, _username, _password, _sftpCommand]) {
       c.dispose();
     }
     super.dispose();
@@ -55,6 +59,9 @@ class _AddHostDialogState extends State<AddHostDialog> {
       keyId: (_authType == AuthType.privateKey || _authType == AuthType.certificate)
           ? _selectedKeyId
           : null,
+      sftpMode: _sftpMode,
+      sftpServerCommand:
+          _sftpMode == SftpMode.custom ? _sftpCommand.text.trim() : null,
     );
     Navigator.of(context).pop((host: host, password: _password.text));
   }
@@ -169,6 +176,36 @@ class _AddHostDialogState extends State<AddHostDialog> {
                     }
                     return null;
                   },
+                ),
+              ],
+              const SizedBox(height: 12),
+              DropdownButtonFormField<SftpMode>(
+                initialValue: _sftpMode,
+                decoration: const InputDecoration(
+                    labelText: 'SFTP Mode', border: OutlineInputBorder()),
+                items: const [
+                  DropdownMenuItem(
+                      value: SftpMode.normal, child: Text('Default')),
+                  DropdownMenuItem(
+                      value: SftpMode.sudo, child: Text('Sudo (root)')),
+                  DropdownMenuItem(
+                      value: SftpMode.custom, child: Text('Custom command')),
+                ],
+                onChanged: (v) => setState(() => _sftpMode = v!),
+              ),
+              if (_sftpMode == SftpMode.custom) ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _sftpCommand,
+                  decoration: const InputDecoration(
+                    labelText: 'SFTP server command',
+                    hintText: 'sudo /usr/lib/openssh/sftp-server',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => _sftpMode == SftpMode.custom &&
+                          (v == null || v.trim().isEmpty)
+                      ? 'Required'
+                      : null,
                 ),
               ],
             ],

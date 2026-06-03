@@ -740,6 +740,8 @@ class _HostCardState extends State<_HostCard> {
       keyId: widget.host.keyId,
       group: widget.host.group,
       tags: List<String>.from(widget.host.tags),
+      sftpMode: widget.host.sftpMode,
+      sftpServerCommand: widget.host.sftpServerCommand,
     );
     await hostProvider.addHost(copy);
     if (!context.mounted) return;

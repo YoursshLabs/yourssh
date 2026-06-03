@@ -45,6 +45,8 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   bool _autoRecord = false;
   bool _shellIntegration = true;
   String? _selectedJumpHostId;
+  late SftpMode _sftpMode;
+  late final TextEditingController _sftpCommand;
 
   bool get _isNew => widget.existing == null;
 
@@ -64,6 +66,8 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     _autoRecord = h?.autoRecord ?? false;
     _shellIntegration = h?.shellIntegration ?? true;
     _selectedJumpHostId = h?.jumpHostId;
+    _sftpMode = h?.sftpMode ?? SftpMode.normal;
+    _sftpCommand = TextEditingController(text: h?.sftpServerCommand ?? '');
     for (final c in [_hostCtrl, _portCtrl, _usernameCtrl, _passwordCtrl]) {
       c.addListener(_clearTestResult);
     }
@@ -75,7 +79,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
 
   @override
   void dispose() {
-    for (final c in [_hostCtrl, _labelCtrl, _groupCtrl, _tagsCtrl, _portCtrl, _usernameCtrl, _passwordCtrl]) {
+    for (final c in [_hostCtrl, _labelCtrl, _groupCtrl, _tagsCtrl, _portCtrl, _usernameCtrl, _passwordCtrl, _sftpCommand]) {
       c.dispose();
     }
     super.dispose();
@@ -98,6 +102,9 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       autoRecord: _autoRecord,
       shellIntegration: _shellIntegration,
       jumpHostId: _selectedJumpHostId,
+      sftpMode: _sftpMode,
+      sftpServerCommand:
+          _sftpMode == SftpMode.custom ? _sftpCommand.text.trim() : null,
     );
     try {
       await widget.onSave(host, _passwordCtrl.text);
@@ -141,6 +148,9 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       group: '',
       tags: const [],
       jumpHostId: _selectedJumpHostId,
+      sftpMode: _sftpMode,
+      sftpServerCommand:
+          _sftpMode == SftpMode.custom ? _sftpCommand.text.trim() : null,
     );
 
     final result = await context.read<SshService>().testConnection(
@@ -348,6 +358,57 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                       ),
                     ]);
                   }),
+
+                  const SizedBox(height: 16),
+                  _sectionLabel('SFTP MODE'),
+                  const SizedBox(height: 6),
+                  _Card(children: [
+                    _DropdownRow(
+                      icon: Icons.admin_panel_settings_outlined,
+                      child: DropdownButton<SftpMode>(
+                        value: _sftpMode,
+                        isExpanded: true,
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                        dropdownColor: AppColors.card,
+                        underline: const SizedBox(),
+                        items: const [
+                          DropdownMenuItem(value: SftpMode.normal, child: Text('Default')),
+                          DropdownMenuItem(value: SftpMode.sudo, child: Text('Sudo (root)')),
+                          DropdownMenuItem(value: SftpMode.custom, child: Text('Custom command')),
+                        ],
+                        onChanged: (v) => setState(() => _sftpMode = v!),
+                      ),
+                    ),
+                    if (_sftpMode == SftpMode.custom) ...[
+                      _divider(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.terminal, size: 16, color: AppColors.textTertiary),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _sftpCommand,
+                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                                decoration: const InputDecoration(
+                                  hintText: 'sudo /usr/lib/openssh/sftp-server',
+                                  hintStyle: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                validator: (v) => _sftpMode == SftpMode.custom &&
+                                        (v == null || v.trim().isEmpty)
+                                    ? 'Required'
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ]),
 
                   const SizedBox(height: 16),
                   _sectionLabel('RECORDING'),
