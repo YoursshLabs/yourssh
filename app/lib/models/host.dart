@@ -94,9 +94,10 @@ class Host {
     }
     SftpMode parseSftpMode() {
       final name = json['sftpMode'] as String?;
-      if (name == null) return SftpMode.normal;
-      // Unknown values throw — same convention as parseAuth().
-      return SftpMode.values.byName(name);
+      // Unknown/forward-compat values degrade to normal rather than throwing:
+      // sftpMode is new and a target of cross-version sync, so a single host
+      // carrying a future mode must not abort loading the whole list.
+      return SftpMode.values.asNameMap()[name] ?? SftpMode.normal;
     }
     return Host(
       id: json['id'] as String?,

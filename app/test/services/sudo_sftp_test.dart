@@ -84,6 +84,9 @@ void main() {
           SudoSftpFailureReason.notInSudoers);
       expect(classifySudoFailure('sudo: a terminal is required to read'),
           SudoSftpFailureReason.requiresTty);
+      expect(
+          classifySudoFailure('sudo: sorry, you must have a tty to run sudo'),
+          SudoSftpFailureReason.requiresTty);
       expect(classifySudoFailure('sudo: 1 incorrect password attempt'),
           SudoSftpFailureReason.wrongPassword);
       expect(classifySudoFailure('Sorry, try again.'),
@@ -104,7 +107,7 @@ void main() {
           );
       expect(client, 'client');
       expect(fake.startLog.single.command,
-          'sudo -n /usr/lib/openssh/sftp-server');
+          'LANG=C LC_ALL=C sudo -n /usr/lib/openssh/sftp-server');
       expect(fake.passwordRequests, isEmpty);
     });
 
@@ -131,7 +134,7 @@ void main() {
           );
       expect(client, 'client');
       expect(fake.validateStdin.single, 'pw1\n');
-      expect(fake.execLog, contains("sudo -S -p '' -v"));
+      expect(fake.execLog, contains("LANG=C LC_ALL=C sudo -S -p '' -v"));
       // Both starts used sudo -n; no inline password feeding needed.
       expect(fake.startLog.every((s) => s.preamble == null), isTrue);
     });
@@ -149,7 +152,8 @@ void main() {
           );
       expect(client, 'client');
       final last = fake.startLog.last;
-      expect(last.command, "sudo -S -p '' /usr/lib/openssh/sftp-server");
+      expect(last.command,
+          "LANG=C LC_ALL=C sudo -S -p '' /usr/lib/openssh/sftp-server");
       expect(utf8.decode(last.preamble!), 'pw1\n');
     });
 

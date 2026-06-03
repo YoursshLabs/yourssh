@@ -165,23 +165,15 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _knownHostsProvider.load();
     _sessionProvider.hostKeyVerifier = _knownHostsProvider.verifyHostKey;
     _ssh.defaultHostKeyVerifier = _knownHostsProvider.verifyHostKey;
+    // Returns (password, remember); SshService persists it only after it
+    // validates, so a wrong "remembered" password is never stored.
     _ssh.sudoPasswordPrompt = (host) async {
       final ctx = _navigatorKey.currentContext;
       if (ctx == null) return null;
-      final result = await showDialog<({String password, bool remember})>(
+      return showDialog<({String password, bool remember})>(
         context: ctx,
         builder: (_) => SudoPasswordDialog(host: host),
       );
-      if (result == null) return null;
-      if (result.remember) {
-        try {
-          await _storage.saveSudoPassword(host.id, result.password);
-        } catch (_) {
-          // Keychain unavailable (e.g. locked screen) — skip persisting;
-          // the password still works for this session.
-        }
-      }
-      return result.password;
     };
     _sessionProvider.onOsDetected = (hostId, os) =>
         _hostProvider.updateDetectedOs(hostId, os);

@@ -23,19 +23,23 @@ String buildPathProbeCommand() =>
     'for p in ${kSftpServerPaths.join(' ')}; do '
     'if [ -x "\$p" ]; then echo "\$p"; break; fi; done';
 
+/// Forces C locale so sudo's diagnostics are emitted in English, keeping
+/// [classifySudoFailure] independent of the server's LANG/LC_ALL.
+const _kCLocale = "LANG=C LC_ALL=C ";
+
 /// Validates a sudo password fed via stdin AND caches the sudo timestamp on
 /// success. `-p ''` suppresses the prompt so stderr stays parseable; the
 /// caller must close stdin after one line so a wrong password fails fast
 /// instead of hanging on sudo's re-prompt.
-const kSudoValidateCommand = "sudo -S -p '' -v";
+const kSudoValidateCommand = "${_kCLocale}sudo -S -p '' -v";
 
 // [path] is always one of kSftpServerPaths (echoed back by the probe), never free-form input.
-String buildSudoRunCommand(String path) => 'sudo -n $path';
+String buildSudoRunCommand(String path) => '${_kCLocale}sudo -n $path';
 
 /// Last-resort start when sudo timestamp caching is disabled
 /// (timestamp_timeout=0): the validated password is fed as a stdin preamble.
 // [path] is always one of kSftpServerPaths (echoed back by the probe), never free-form input.
-String buildInlineSudoCommand(String path) => "sudo -S -p '' $path";
+String buildInlineSudoCommand(String path) => "${_kCLocale}sudo -S -p '' $path";
 
 enum SudoSftpFailureReason {
   binaryNotFound,
@@ -58,7 +62,9 @@ SudoSftpFailureReason? classifySudoFailure(String stderr) {
       s.contains('not allowed to execute')) {
     return SudoSftpFailureReason.notInSudoers;
   }
-  if (s.contains('a terminal is required') || s.contains('a tty is required')) {
+  if (s.contains('a terminal is required') ||
+      s.contains('a tty is required') ||
+      s.contains('must have a tty')) {
     return SudoSftpFailureReason.requiresTty;
   }
   if (s.contains('incorrect password') || s.contains('try again')) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -473,7 +474,7 @@ class SftpClient {
       // Stderr from an exec-started server (e.g. sudo diagnostics) is not
       // SFTP protocol data — buffering it would corrupt packet framing.
       printDebug?.call(
-        'SftpClient: stderr: ${String.fromCharCodes(data.bytes)}',
+        'SftpClient: stderr: ${utf8.decode(data.bytes, allowMalformed: true)}',
       );
       return;
     }

@@ -32,6 +32,12 @@ void main() {
       expect(restored.sftpServerCommand, isNull);
     });
 
+    test('unknown forward-compat sftpMode degrades to normal, never throws', () {
+      final json = base().toJson()..['sftpMode'] = 'futuremode';
+      final restored = Host.fromJson(json);
+      expect(restored.sftpMode, SftpMode.normal);
+    });
+
     test('copyWith updates and clears sftp fields', () {
       final host = base().copyWith(
         sftpMode: SftpMode.sudo,
