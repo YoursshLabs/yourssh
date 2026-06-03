@@ -74,7 +74,15 @@ void main() {
     });
     test('unparseable input is treated as not newer (fail closed)', () {
       expect(svc.isNewerVersion('0.1.18', 'garbage'), isFalse);
-      expect(svc.isNewerVersion('', '0.1.19'), isTrue);
+      expect(svc.isNewerVersion('', '0.1.19'), isFalse);
+    });
+    test('mixed v-prefix is tolerated', () {
+      expect(svc.isNewerVersion('0.1.18', 'v0.1.19'), isTrue);
+      expect(svc.isNewerVersion('v0.1.18', '0.1.19'), isTrue);
+    });
+    test('partial versions fill missing segments with 0', () {
+      expect(svc.isNewerVersion('1', '1.0.1'), isTrue);
+      expect(svc.isNewerVersion('1.2', '1.2.0'), isFalse);
     });
   });
 }

@@ -7,11 +7,15 @@ import 'package:yourssh/models/app_release.dart';
 class UpdateService {
   UpdateService();
 
+  static final RegExp _versionSuffix = RegExp(r'[-+]');
+
   /// Returns true when [latest] is a strictly higher semantic version than
   /// [current]. Leading `v` and any `-pre`/`+build` suffix are ignored.
   /// Fails closed: unparseable [current] or [latest] never reports "newer"
   /// unless the parsed numbers genuinely differ.
   bool isNewerVersion(String current, String latest) {
+    // Fail closed: an unknown/blank current version must never prompt an update.
+    if (current.trim().isEmpty) return false;
     final a = _parse(current);
     final b = _parse(latest);
     for (var i = 0; i < 3; i++) {
@@ -26,7 +30,7 @@ class UpdateService {
   List<int> _parse(String raw) {
     var s = raw.trim();
     if (s.startsWith('v') || s.startsWith('V')) s = s.substring(1);
-    final cut = s.indexOf(RegExp(r'[-+]'));
+    final cut = s.indexOf(_versionSuffix);
     if (cut != -1) s = s.substring(0, cut);
     final parts = s.split('.');
     final out = <int>[0, 0, 0];
