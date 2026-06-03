@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -23,21 +21,30 @@ class UpdateProvider extends ChangeNotifier {
   final String currentVersion;
   final DateTime Function() _now;
 
-  UpdateStatus status = UpdateStatus.idle;
-  AppRelease? latestRelease;
-  double downloadProgress = 0;
-  String? errorMessage;
+  UpdateStatus _status = UpdateStatus.idle;
+  UpdateStatus get status => _status;
+
+  AppRelease? _latestRelease;
+  AppRelease? get latestRelease => _latestRelease;
+
+  double _downloadProgress = 0;
+  double get downloadProgress => _downloadProgress;
+
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
+
   String? _dismissedVersion;
-  File? _downloadedFile;
 
   bool get showBanner =>
-      status == UpdateStatus.available &&
-      latestRelease != null &&
-      latestRelease!.version != _dismissedVersion;
+      _status == UpdateStatus.available &&
+      _latestRelease != null &&
+      _latestRelease!.version != _dismissedVersion;
 
   /// Checks GitHub for a newer stable release. Auto checks (`manual == false`)
   /// are skipped if the last check was under 24h ago; manual checks always run.
   Future<void> checkForUpdates({bool manual = false}) async {
+    if (_status == UpdateStatus.checking) return;
+
     final prefs = await SharedPreferences.getInstance();
     _dismissedVersion ??= prefs.getString(_dismissedKey);
 
@@ -51,23 +58,23 @@ class UpdateProvider extends ChangeNotifier {
       }
     }
 
-    status = UpdateStatus.checking;
-    errorMessage = null;
+    _status = UpdateStatus.checking;
+    _errorMessage = null;
     notifyListeners();
 
     try {
       final release = await _service.fetchLatestRelease();
       await prefs.setInt(_lastCheckKey, _now().millisecondsSinceEpoch);
-      latestRelease = release;
-      status = _service.isNewerVersion(currentVersion, release.version)
+      _latestRelease = release;
+      _status = _service.isNewerVersion(currentVersion, release.version)
           ? UpdateStatus.available
           : UpdateStatus.upToDate;
     } on UpdateException catch (e) {
-      status = UpdateStatus.error;
-      errorMessage = e.message;
+      _status = UpdateStatus.error;
+      _errorMessage = e.message;
     } catch (e) {
-      status = UpdateStatus.error;
-      errorMessage = 'Could not check for updates: $e';
+      _status = UpdateStatus.error;
+      _errorMessage = 'Could not check for updates: $e';
     }
     notifyListeners();
   }
@@ -76,7 +83,9 @@ class UpdateProvider extends ChangeNotifier {
   /// Falls back to opening the Releases page when no asset matches the
   /// current OS/arch or when launching the installer fails.
   Future<void> downloadAndInstall() async {
-    final release = latestRelease;
+    if (_status == UpdateStatus.downloading) return;
+
+    final release = _latestRelease;
     if (release == null) return;
 
     final asset = _service.assetForPlatform(
@@ -89,23 +98,27 @@ class UpdateProvider extends ChangeNotifier {
       return;
     }
 
-    status = UpdateStatus.downloading;
-    downloadProgress = 0;
-    errorMessage = null;
+    _status = UpdateStatus.downloading;
+    _downloadProgress = 0;
+    _errorMessage = null;
     notifyListeners();
 
     try {
       final file = await _service.downloadAsset(asset, onProgress: (p) {
-        downloadProgress = p;
+        _downloadProgress = p;
         notifyListeners();
       });
-      _downloadedFile = file;
-      status = UpdateStatus.readyToInstall;
+      _status = UpdateStatus.readyToInstall;
       notifyListeners();
       await _service.launchInstaller(file);
     } on UpdateException catch (e) {
-      status = UpdateStatus.error;
-      errorMessage = e.message;
+      _status = UpdateStatus.error;
+      _errorMessage = e.message;
+      notifyListeners();
+      await _openReleasePage(release);
+    } catch (e) {
+      _status = UpdateStatus.error;
+      _errorMessage = 'Install failed: $e';
       notifyListeners();
       await _openReleasePage(release);
     }
@@ -118,13 +131,23 @@ class UpdateProvider extends ChangeNotifier {
     }
   }
 
-  /// Hides the banner for the current latest version (persisted).
+  /// Hides the banner for the current latest version. The persisted write is
+  /// best-effort: the UI updates immediately and, at worst, the dismissal is
+  /// forgotten on next launch.
   void dismiss() {
-    final v = latestRelease?.version;
+    final v = _latestRelease?.version;
     if (v == null) return;
     _dismissedVersion = v;
-    SharedPreferences.getInstance()
-        .then((prefs) => prefs.setString(_dismissedKey, v));
     notifyListeners();
+    _persistDismissed(v);
+  }
+
+  Future<void> _persistDismissed(String version) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_dismissedKey, version);
+    } catch (_) {
+      // Best-effort; ignore persistence failures.
+    }
   }
 }
