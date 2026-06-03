@@ -115,4 +115,51 @@ void main() {
     expect(apps, isEmpty);
     service.dispose();
   });
+
+  group('Windows script builders', () {
+    test('isSafeWindowsExtension accepts plain extensions only', () {
+      expect(AppDiscoveryService.isSafeWindowsExtension('.txt'), isTrue);
+      expect(AppDiscoveryService.isSafeWindowsExtension('.7z'), isTrue);
+      expect(AppDiscoveryService.isSafeWindowsExtension('.tar-gz'), isTrue);
+      expect(AppDiscoveryService.isSafeWindowsExtension(''), isFalse);
+      expect(AppDiscoveryService.isSafeWindowsExtension('.t xt'), isFalse);
+      // Extensions come from remote SFTP filenames — shell/PS metacharacters
+      // must never reach an interpolated command.
+      expect(AppDiscoveryService.isSafeWindowsExtension(".txt';del"), isFalse);
+      expect(AppDiscoveryService.isSafeWindowsExtension(r'.txt$(x)'), isFalse);
+      expect(AppDiscoveryService.isSafeWindowsExtension('.txt&del'), isFalse);
+    });
+
+    test('OpenWithList script interpolates the extension (no param binding)',
+        () {
+      // powershell.exe joins everything after -Command into the command text,
+      // so named args after the script string never bind to param().
+      final script = AppDiscoveryService.windowsOpenWithListScript('.txt');
+      expect(script, contains(r'FileExts\.txt\OpenWithList'));
+      expect(script, isNot(contains('param(')));
+    });
+
+    test('resolve-exe script uses the provider-qualified HKCR path', () {
+      // HKCR: is not a default PSDrive in powershell.exe — only HKLM:/HKCU:
+      // are. Registry::HKEY_CLASSES_ROOT needs no drive mounted.
+      final script =
+          AppDiscoveryService.windowsResolveExeScript('notepad.exe');
+      expect(script, contains('Registry::HKEY_CLASSES_ROOT'));
+      expect(script, isNot(contains('HKCR:')));
+      expect(script, contains('notepad.exe'));
+    });
+
+    test('resolve-exe script doubles single quotes in the exe name', () {
+      final script =
+          AppDiscoveryService.windowsResolveExeScript("o'brien.exe");
+      expect(script, contains("o''brien.exe"));
+    });
+
+    test('file-description script doubles single quotes in the path', () {
+      final script = AppDiscoveryService.windowsFileDescriptionScript(
+          r"C:\Apps\O'Brien\app.exe");
+      expect(script, contains("O''Brien"));
+      expect(script, contains('GetVersionInfo'));
+    });
+  });
 }

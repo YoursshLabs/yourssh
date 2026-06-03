@@ -10,8 +10,8 @@ void main() {
     fixtureDir = Directory('test/fixtures/applications');
   });
 
-  test('parseDesktopFiles returns apps matching the MIME type', () {
-    final apps = AppDiscoveryService.parseDesktopFiles(
+  test('parseDesktopFiles returns apps matching the MIME type', () async {
+    final apps = await AppDiscoveryService.parseDesktopFiles(
       files: fixtureDir.listSync().whereType<File>().toList(),
       mimeType: 'text/plain',
       defaultDesktopFile: 'gedit.desktop',
@@ -22,8 +22,8 @@ void main() {
     expect(gedit.isDefault, isTrue);
   });
 
-  test('parseDesktopFiles strips Exec placeholders', () {
-    final apps = AppDiscoveryService.parseDesktopFiles(
+  test('parseDesktopFiles strips Exec placeholders', () async {
+    final apps = await AppDiscoveryService.parseDesktopFiles(
       files: fixtureDir.listSync().whereType<File>().toList(),
       mimeType: 'text/plain',
       defaultDesktopFile: '',
@@ -33,8 +33,8 @@ void main() {
     expect(gedit.executablePath, isNot(contains('%')));
   });
 
-  test('parseDesktopFiles returns empty list when no MIME match', () {
-    final apps = AppDiscoveryService.parseDesktopFiles(
+  test('parseDesktopFiles returns empty list when no MIME match', () async {
+    final apps = await AppDiscoveryService.parseDesktopFiles(
       files: fixtureDir.listSync().whereType<File>().toList(),
       mimeType: 'application/pdf',
       defaultDesktopFile: '',
@@ -42,8 +42,8 @@ void main() {
     expect(apps, isEmpty);
   });
 
-  test('%% in Exec is preserved as literal % and does not strip app name', () {
-    final apps = AppDiscoveryService.parseDesktopFiles(
+  test('%% in Exec is preserved as literal % and does not strip app name', () async {
+    final apps = await AppDiscoveryService.parseDesktopFiles(
       files: fixtureDir.listSync().whereType<File>().toList(),
       mimeType: 'text/plain',
       defaultDesktopFile: '',
@@ -53,12 +53,12 @@ void main() {
     expect(vim.executablePath, isNot(contains('%')));
   });
 
-  test('parseDesktopFiles ignores malformed desktop files gracefully', () {
+  test('parseDesktopFiles ignores malformed desktop files gracefully', () async {
     final tmp = File('${fixtureDir.path}/broken.desktop')
       ..writeAsStringSync('not valid content at all');
     addTearDown(tmp.deleteSync);
 
-    final apps = AppDiscoveryService.parseDesktopFiles(
+    final apps = await AppDiscoveryService.parseDesktopFiles(
       files: fixtureDir.listSync().whereType<File>().toList(),
       mimeType: 'text/plain',
       defaultDesktopFile: '',

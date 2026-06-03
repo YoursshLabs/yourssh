@@ -1,5 +1,6 @@
 // app/lib/services/app_discovery_service.dart
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import '../models/app_option.dart';
@@ -102,11 +103,12 @@ class AppDiscoveryService {
       Directory('/usr/local/share/applications'),
     ];
 
+    // Async I/O throughout — a system can have 100+ .desktop files and this
+    // runs on the UI isolate.
     final files = <File>[];
     for (final dir in dirs) {
-      if (dir.existsSync()) {
-        files.addAll(dir
-            .listSync()
+      if (await dir.exists()) {
+        files.addAll((await dir.list().toList())
             .whereType<File>()
             .where((f) => f.path.endsWith('.desktop')));
       }
@@ -116,16 +118,16 @@ class AppDiscoveryService {
         files: files, mimeType: mimeType, defaultDesktopFile: defaultFile);
   }
 
-  /// Pure function exposed for unit testing without touching the filesystem.
-  static List<AppOption> parseDesktopFiles({
+  /// Exposed for unit testing without spawning processes.
+  static Future<List<AppOption>> parseDesktopFiles({
     required List<File> files,
     required String mimeType,
     required String defaultDesktopFile,
-  }) {
+  }) async {
     final result = <AppOption>[];
     for (final file in files) {
       try {
-        final lines = file.readAsLinesSync();
+        final lines = await file.readAsLines();
         String? name, exec, mimeTypes;
         for (final line in lines) {
           if (line.startsWith('Name=') && name == null) {
@@ -165,25 +167,64 @@ class AppDiscoveryService {
 
   // ── Windows ───────────────────────────────────────────────────────────────
 
+  /// Extensions come from remote SFTP filenames — untrusted input that gets
+  /// interpolated into PowerShell / cmd command lines. Only a conservative
+  /// charset is allowed through.
+  @visibleForTesting
+  static bool isSafeWindowsExtension(String ext) =>
+      RegExp(r'^\.[a-z0-9_+\-]+$').hasMatch(ext);
+
+  /// powershell.exe joins everything after `-Command` into the command text,
+  /// so named args after the script string never bind to `param()` — the
+  /// (validated) extension is interpolated instead.
+  @visibleForTesting
+  static String windowsOpenWithListScript(String ext) => '''
+\$key = "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\$ext\\OpenWithList"
+\$props = Get-ItemProperty \$key -ErrorAction SilentlyContinue
+if (\$props -eq \$null) { exit 0 }
+\$props.PSObject.Properties |
+  Where-Object { \$_.Name -match '^[a-zA-Z]\$' } |
+  ForEach-Object { \$_.Value }
+''';
+
+  /// HKCR: is not a default PSDrive in powershell.exe (only HKLM:/HKCU: are),
+  /// so the scan uses the provider-qualified path, which needs no drive
+  /// mounted. Single quotes in [exeName] are doubled for the PS literal.
+  @visibleForTesting
+  static String windowsResolveExeScript(String exeName) {
+    final escaped = exeName.replaceAll("'", "''");
+    return r'Get-ChildItem "Registry::HKEY_CLASSES_ROOT\*\shell\open\command" '
+        r'-ErrorAction SilentlyContinue | '
+        r'ForEach-Object { (Get-ItemProperty $_.PsPath)."(default)" } | '
+        "Where-Object { \$_ -like ('*' + '$escaped' + '*') } | "
+        'Select-Object -First 1';
+  }
+
+  /// Single quotes in [exePath] are doubled so paths like `C:\O'Brien` don't
+  /// terminate the PS string literal.
+  @visibleForTesting
+  static String windowsFileDescriptionScript(String exePath) {
+    final escaped = exePath.replaceAll("'", "''");
+    return "[System.Diagnostics.FileVersionInfo]::GetVersionInfo('$escaped')"
+        '.FileDescription';
+  }
+
   static Future<List<AppOption>> _queryWindows(String filePath) async {
     final ext = p.extension(filePath).toLowerCase(); // e.g. ".txt"
-    if (ext.isEmpty) return [];
+    // Empty result makes getAppsFor fall back to the .txt editor list.
+    if (!isSafeWindowsExtension(ext)) return [];
 
     // Query user OpenWithList (single-letter keys a, b, c… hold exe names)
-    // then resolve each exe name to a full path via the ftype command.
+    // then resolve each exe name to a full path via the registry.
     // This two-step approach handles apps not in PATH (most GUI apps).
-    final psScript = r'''
-param([string]$Ext)
-$key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$Ext\OpenWithList"
-$props = Get-ItemProperty $key -ErrorAction SilentlyContinue
-if ($props -eq $null) { exit 0 }
-$props.PSObject.Properties |
-  Where-Object { $_.Name -match '^[a-zA-Z]$' } |
-  ForEach-Object { $_.Value }
-''';
     final result = await Process.run(
       'powershell',
-      ['-NoProfile', '-NonInteractive', '-Command', psScript, '-Ext', ext],
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        windowsOpenWithListScript(ext),
+      ],
     );
     if (result.exitCode != 0) return _queryWindowsFallback(ext);
 
@@ -196,24 +237,26 @@ $props.PSObject.Properties |
 
     if (exeNames.isEmpty) return _queryWindowsFallback(ext);
 
-    final apps = <AppOption>[];
-    for (final exeName in exeNames) {
-      // Try PATH first, then HKCR ftype for apps not in PATH.
-      String? exePath = await _resolveWindowsExe(exeName);
-      if (exePath == null) continue;
+    // Resolve paths and descriptions concurrently — each lookup spawns a
+    // PowerShell process, and doing them in sequence made the first menu
+    // open take seconds.
+    final options = await Future.wait(exeNames.map(_windowsAppOption));
+    return options.whereType<AppOption>().toList();
+  }
 
-      final descScript =
-          '[System.Diagnostics.FileVersionInfo]::GetVersionInfo(\'$exePath\').FileDescription';
-      final descResult = await Process.run(
-          'powershell', ['-NoProfile', '-Command', descScript]);
-      final desc = (descResult.stdout as String).trim();
-      apps.add(AppOption(
-        name: desc.isNotEmpty ? desc : exeName.replaceFirst('.exe', ''),
-        executablePath: exePath,
-        isDefault: false,
-      ));
-    }
-    return apps;
+  static Future<AppOption?> _windowsAppOption(String exeName) async {
+    // Try PATH first, then the HKCR open commands for apps not in PATH.
+    final exePath = await _resolveWindowsExe(exeName);
+    if (exePath == null) return null;
+
+    final descResult = await Process.run('powershell',
+        ['-NoProfile', '-Command', windowsFileDescriptionScript(exePath)]);
+    final desc = (descResult.stdout as String).trim();
+    return AppOption(
+      name: desc.isNotEmpty ? desc : exeName.replaceFirst('.exe', ''),
+      executablePath: exePath,
+      isDefault: false,
+    );
   }
 
   /// Resolves an exe filename (e.g. "notepad.exe") to a full path.
@@ -226,14 +269,9 @@ $props.PSObject.Properties |
       final path = (whereResult.stdout as String).split('\n').first.trim();
       if (path.isNotEmpty && File(path).existsSync()) return path;
     }
-    // 2. Scan HKCR open commands for matching exe name
-    final psScript =
-        r'Get-ChildItem "HKCR:\*\shell\open\command" -ErrorAction SilentlyContinue | '
-        'ForEach-Object { (Get-ItemProperty \$_.PsPath)."(default)" } | '
-        'Where-Object { \$_ -like "*${exeName.replaceAll(r'\', r'\\')}*" } | '
-        'Select-Object -First 1';
-    final regResult = await Process.run(
-        'powershell', ['-NoProfile', '-Command', psScript]);
+    // 2. Scan HKEY_CLASSES_ROOT open commands for matching exe name
+    final regResult = await Process.run('powershell',
+        ['-NoProfile', '-Command', windowsResolveExeScript(exeName)]);
     if (regResult.exitCode != 0) return null;
     final cmd = (regResult.stdout as String).trim();
     // Extract quoted path from e.g. '"C:\Program Files\Notepad++\notepad++.exe" "%1"'
