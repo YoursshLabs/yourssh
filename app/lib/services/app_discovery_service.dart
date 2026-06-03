@@ -23,7 +23,18 @@ class AppDiscoveryService {
     final ext = p.extension(filePath).toLowerCase(); // e.g. ".txt"
     if (_cache.containsKey(ext)) return _cache[ext]!;
     try {
-      final apps = await _querier(filePath);
+      // macOS Launch Services and Linux xdg-mime return nothing for paths
+      // that do not exist, so materialize an empty probe file with the same
+      // extension when callers pass a synthetic path.
+      var queryPath = filePath;
+      File? probe;
+      if (!File(filePath).existsSync()) {
+        probe = File('${Directory.systemTemp.path}/yourssh_probe$ext')
+          ..createSync();
+        queryPath = probe.path;
+      }
+      final apps = await _querier(queryPath);
+      if (probe != null && probe.existsSync()) probe.deleteSync();
       _cache[ext] = apps;
       return apps;
     } catch (_) {
