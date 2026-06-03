@@ -66,13 +66,17 @@ class ShellIntegrationService {
   static const kDoneSentinel = '__YS_DONE__';
 
   /// Short first-phase line written to the shell instead of the full script.
-  /// bash/zsh: prints RDY, then blocks in `read -rs` so the payload that
-  /// follows is consumed raw and never echoed. Other POSIX shells: prints
-  /// DONE immediately so the client skips the payload and cleans up.
+  /// bash/zsh: disables tty echo, prints RDY, then blocks in `read -rs` so
+  /// the payload that follows is consumed raw and never echoed. The explicit
+  /// `stty -echo` BEFORE the RDY printf closes the race where the payload
+  /// arrives after RDY but before `read -s` has switched the tty itself —
+  /// the kernel would echo it. Other POSIX shells: print DONE immediately so
+  /// the client skips the payload and cleans up.
   String buildBootstrapLine() =>
       r'[ -n "$BASH_VERSION$ZSH_VERSION" ] && '
-      r"{ printf '__YS_%s__' RDY; IFS= read -rs __ys; "
-      r'eval "$__ys"; unset __ys; } '
+      r"{ stty -echo 2>/dev/null; printf '__YS_%s__' RDY; "
+      r'IFS= read -rs __ys; eval "$__ys"; unset __ys; '
+      r'stty echo 2>/dev/null; } '
       r"|| printf '__YS_%s__' DONE"
       '\n';
 

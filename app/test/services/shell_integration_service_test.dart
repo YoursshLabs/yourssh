@@ -54,12 +54,16 @@ void main() {
       expect('\n'.allMatches(boot).length, 1); // trailing newline only
       expect(boot.endsWith('\n'), isTrue);
       expect(boot, contains(r'$BASH_VERSION$ZSH_VERSION'));
-      expect(boot.length, lessThan(160)); // must stay short: its echo can wrap
+      expect(boot.length, lessThan(220)); // must stay short: its echo can wrap
     });
     test('reads payload silently and evals it', () {
       expect(boot, contains('IFS= read -rs __ys'));
       expect(boot, contains(r'eval "$__ys"'));
       expect(boot, contains('unset __ys'));
+      // Echo must be off BEFORE RDY is printed (race: payload can arrive
+      // before `read -s` flips the tty), and restored afterwards.
+      expect(boot.indexOf('stty -echo'), lessThan(boot.indexOf('RDY')));
+      expect(boot, contains('stty echo 2>/dev/null'));
     });
     test('sentinel literals never appear in the bootstrap source (echo-safe)', () {
       // printf '__YS_%s__' RDY builds the sentinel at runtime, so scanning the
