@@ -80,23 +80,37 @@ unit-testable). State machine `holding → passthrough`:
 
 ### 3. `SshService.openShell` wiring
 
-1. **Quiescence wait**: do not write the injection right after channel open.
-   Arm a 300 ms timer only when a chunk looks prompt-like (does **not** end
-   with a newline — cursor resting mid-line). A chunk ending in `\n` means
-   the server is still printing (banner, late "Last login:" MOTD) — keep
-   waiting; a 3 s cap timer is the backstop for hosts that never settle.
+1. **Readiness detection** (`InjectionReadiness`, pure): timing heuristics
+   are not enough — a MOTD stalling mid-line ("Last login:" … reverse-DNS
+   pause) looks exactly like a prompt, and instant-prompt frameworks
+   (powerlevel10k) paint a prompt long before the shell reads input.
+   Injecting then gets the line echoed by the kernel (canonical mode)
+   mid-MOTD and re-echoed by zle — mangled output, observed in the field.
+   The reliable signal is the **bracketed-paste toggle**: modern zsh/bash
+   emit `ESC[?2004h` exactly when the line editor starts reading and
+   `ESC[?2004l` when it stops. Toggle ON + 250 ms of settle (redraw burst
+   over) → inject. Sequences split across chunks are handled with a 16-char
+   carry-over scan tail.
+2. **Probe fallback** for shells without bracketed paste (bash ≤ 5.0): after
+   1.2 s of silence — and a 2.5 s floor so instant-prompt frameworks have
+   revealed themselves — send a bare `\n`. A real prompt answers with a
+   prompt-like tail (escape-stripped text ending in `$ # % > ❯ ➜ »`); MOTD
+   in progress only produces a kernel `\r\n` echo. Four unanswered probes →
+   give up: a missing integration beats junk in the terminal. Guards: an
+   alt-screen entry (`ESC[?1049h`/`ESC[?47h` — vim/less) or any user
+   keystroke before the handshake aborts injection entirely.
    Pre-injection output flows straight to the terminal — MOTD is never
    delayed.
-2. Write the bootstrap line, activate the gate, start a 2 s done-timeout.
-3. Stdout listener order per chunk: hookBus transform (unchanged) → gate →
+3. Write the bootstrap line, activate the gate, start a 2 s done-timeout.
+4. Stdout listener order per chunk: hookBus transform (unchanged) → gate →
    emitted text goes to `terminal.write` + recording + notifications. Held
    text reaches none of them until flush, so recordings stay clean too.
-4. On DONE: the gate discards the echo head and emits only the tail (which
+5. On DONE: the gate discards the echo head and emits only the tail (which
    starts with the newline carried by the DONE printf). The shell's next
    prompt renders below the old one — visually identical to the user having
    pressed Enter once. Nothing junk-related ever reaches the terminal or the
    recording.
-5. Timeout / shell close while holding: `flush()` (held text shown as-is,
+6. Timeout / shell close while holding: `flush()` (held text shown as-is,
    sentinels stripped), no payload.
 
 ## Degradation matrix
@@ -107,7 +121,9 @@ unit-testable). State machine `holding → passthrough`:
 | sh / dash / ksh | Clean (bootstrap echo discarded, payload skipped) |
 | fish | Parse error + bootstrap line visible after 2 s flush timeout (better than today) |
 | tmux | Sentinels are plain text → pass through tmux; the app never renders the junk, but tmux's server-side grid still contains it, so a tmux-initiated full redraw (pane switch/resize) may resurrect ~2 junk rows — known limitation |
-| Long-running `initialCommand` (e.g. `tail -f`) | Bootstrap is consumed as that command's stdin — pre-existing flaw, unchanged |
+| Readiness never confirmed (exotic shell, no prompt) | Injection skipped entirely — clean terminal, no integration |
+| Full-screen app / user typing before handshake | Injection aborted — never types into vim or a half-typed command line |
+| Long-running `initialCommand` (e.g. `tail -f`) | No prompt answer → probes exhausted → injection skipped (was: script fed into the command's stdin) |
 
 ## Testing
 
@@ -122,6 +138,10 @@ unit-testable). State machine `holding → passthrough`:
   all decision logic lives in the pure gate/service for unit testing.
 - Protocol verified end-to-end against real zsh/bash/dash PTYs (payload never
   echoed, hooks installed, `__ys` unset, fresh line after DONE).
+- Full app-side logic (readiness + gate) simulated against real PTYs in six
+  scenarios: fast/slow zsh (powerlevel10k incl. instant prompt), fast/slow
+  bash 3.2 (probe path), and the field-failure mid-line MOTD stall on both —
+  asserting no junk, MOTD intact, hooks installed.
 
 ## Out of scope
 

@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **Invisible shell-integration setup** — the OSC 7/133 hook-installer script is no longer visible in the terminal when a session connects. It is now delivered through a silent two-phase handshake: a short bootstrap line blocks in `read -rs` (tty echo disabled), the real script is consumed without ever being echoed, and the bootstrap's own echo is discarded client-side before it is ever painted — connecting just looks like one extra Enter press. Non-bash/zsh shells degrade cleanly, and session recordings no longer capture the setup script either.
+- **Invisible shell-integration setup** — the OSC 7/133 hook-installer script is no longer visible in the terminal when a session connects. The app now waits until the shell's line editor is actually reading input (bracketed-paste signal, with a gentle Enter-probe fallback for older bash) before delivering the script through a silent two-phase handshake: a short bootstrap line blocks in `read -rs` (tty echo disabled), the real script is consumed without ever being echoed, and the bootstrap's own echo is discarded client-side before it is ever painted — connecting just looks like an extra Enter press. If readiness can't be confirmed (exotic shells, full-screen apps, the user already typing) the injection is skipped entirely. Session recordings no longer capture the setup script either.
 
 ### Added
 - **SFTP View mode** — right-clicking (or double-clicking) a file in the SFTP panel now shows separate **View** (read-only preview, lock icon in the AppBar, no save) and **Edit** (existing editable mode) actions so you can open log files and config files without risking accidental edits.
