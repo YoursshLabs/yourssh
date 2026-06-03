@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.1.19] — 2026-06-03
+
 ### Added
 - **In-app updates (assisted download)** — yourssh now checks GitHub Releases for a newer stable version on launch (debounced to once per 24h) and on demand via a **Settings → Updates** button. When an update is available, a dismissible banner appears at the top of the app; choosing **Update** downloads the correct artifact for your OS/architecture and hands it to the OS installer (macOS strips the `com.apple.quarantine` flag and opens the DMG; Windows runs the installer `.exe`; Linux opens the `.deb`/`.tar.gz` with the desktop handler). If no artifact matches your platform (e.g. an Intel Mac) or a download/launch fails, it falls back to opening the Releases page in your browser. Because the app is not code-signed, this is an assisted flow — it never silently replaces itself.
 
@@ -248,7 +252,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.18...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.19...HEAD
+[0.1.19]: https://github.com/YoursshLabs/yourssh/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/YoursshLabs/yourssh/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/YoursshLabs/yourssh/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/YoursshLabs/yourssh/compare/v0.1.15...v0.1.16

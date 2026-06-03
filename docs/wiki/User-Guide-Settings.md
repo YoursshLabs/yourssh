@@ -53,6 +53,18 @@ Select the default model per provider. Keys are stored in the OS keychain.
 
 See [Sync](User-Guide-Sync) for full setup instructions.
 
+## Updates
+
+YourSSH automatically checks GitHub for a newer stable release once per 24 hours on launch, and you can trigger a manual check at any time via **Settings → Updates → Check for updates**.
+
+- When a newer version is found, a **dismissible banner** appears at the top of the app. You can dismiss it for the current version and it will not reappear until the next release.
+- Clicking **Update** (or **Download & install**) downloads the correct build for your OS and architecture and hands it off to your OS installer:
+  - **macOS** — removes the `com.apple.quarantine` flag and opens the DMG. Complete the drag-to-Applications step yourself.
+  - **Windows** — launches the installer `.exe`. Follow the setup wizard to complete the upgrade.
+  - **Linux** — opens the `.deb` or `.tar.gz` with the default desktop file handler.
+- Because YourSSH is not code-signed, the final install step is always manual — the app never silently replaces itself.
+- If no build matches your platform (e.g. Intel Mac, where only Apple Silicon builds are published), the Releases page opens in your browser instead.
+
 ## Plugins
 
 Toggle Dart plugins (DevOps, Web Tools, Snippets) on or off. JS script plugins are managed via the Plugin Manager screen (sidebar → Plugins section).
