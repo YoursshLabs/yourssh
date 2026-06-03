@@ -359,6 +359,32 @@ void main() {
       harness.dispose();
     });
   });
+
+  group('SftpClient on exec channel', () {
+    test('ignores extended (stderr) data before the version packet', () async {
+      final harness = _SftpHarness();
+      await harness.nextOutgoingPacket();
+
+      harness.sendStderr('sudo: unable to resolve host myhost\n');
+      harness.sendResponsePacket(SftpVersionPacket(3));
+
+      final handshake = await harness.client.handshake;
+      expect(handshake.version, 3);
+
+      harness.dispose();
+    });
+
+    test('handshake fails when the channel closes before the version packet',
+        () async {
+      final harness = _SftpHarness();
+      await harness.nextOutgoingPacket();
+
+      final handshakeFuture = harness.client.handshake;
+      harness.closeChannel();
+
+      await expectLater(handshakeFuture, throwsA(isA<SftpError>()));
+    });
+  });
 }
 
 class _CollectingSink implements StreamSink<List<int>> {
@@ -440,6 +466,18 @@ class _SftpHarness {
       ),
     );
   }
+
+  void sendStderr(String text) {
+    _controller.handleMessage(
+      SSH_Message_Channel_Extended_Data(
+        recipientChannel: _controller.localId,
+        dataTypeCode: SSHChannelExtendedDataType.stderr,
+        data: Uint8List.fromList(text.codeUnits),
+      ),
+    );
+  }
+
+  void closeChannel() => _controller.destroy();
 
   void dispose() {
     if (_disposed) return;

@@ -32,7 +32,17 @@ class SftpClient {
 
   SftpClient(this._channel, {this.printDebug, this.printTrace}) {
     _startHandshake();
-    _channel.stream.listen(_handleData);
+    _channel.stream.listen(
+      _handleData,
+      onDone: () {
+        if (!_handshake.isCompleted) {
+          _handshake.completeError(
+            SftpError('Channel closed before SFTP handshake'),
+            StackTrace.current,
+          );
+        }
+      },
+    );
   }
 
   final _buffer = ChunkBuffer();
@@ -452,6 +462,14 @@ class SftpClient {
   }
 
   void _handleData(SSHChannelData data) {
+    if (data.isExtendedData) {
+      // Stderr from an exec-started server (e.g. sudo diagnostics) is not
+      // SFTP protocol data — buffering it would corrupt packet framing.
+      printDebug?.call(
+        'SftpClient: stderr: ${String.fromCharCodes(data.bytes)}',
+      );
+      return;
+    }
     _buffer.add(data.bytes);
     _handlePackets();
   }
