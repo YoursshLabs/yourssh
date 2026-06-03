@@ -22,8 +22,8 @@ class ReleaseAsset {
   });
 
   factory ReleaseAsset.fromJson(Map<String, dynamic> json) => ReleaseAsset(
-        name: json['name'] as String,
-        downloadUrl: json['browser_download_url'] as String,
+        name: (json['name'] as String?) ?? '',
+        downloadUrl: (json['browser_download_url'] as String?) ?? '',
         size: (json['size'] as num?)?.toInt() ?? 0,
       );
 }
@@ -45,7 +45,7 @@ class AppRelease {
     required this.name,
     required this.notes,
     required this.htmlUrl,
-    required this.publishedAt,
+    this.publishedAt,
     required this.assets,
   });
 

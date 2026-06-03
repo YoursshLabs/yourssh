@@ -38,5 +38,12 @@ void main() {
       expect(r.assets.first.downloadUrl, 'https://example.com/a.dmg');
       expect(r.assets.first.size, 1234);
     });
+
+    test('ReleaseAsset tolerates a null browser_download_url', () {
+      final asset = ReleaseAsset.fromJson(
+          {'name': 'source.zip', 'browser_download_url': null, 'size': 0});
+      expect(asset.downloadUrl, '');
+      expect(asset.name, 'source.zip');
+    });
   });
 }
