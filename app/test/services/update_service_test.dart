@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/app_release.dart';
+import 'package:yourssh/services/update_service.dart';
 
 void main() {
   group('AppRelease.fromJson', () {
@@ -44,6 +45,36 @@ void main() {
           {'name': 'source.zip', 'browser_download_url': null, 'size': 0});
       expect(asset.downloadUrl, '');
       expect(asset.name, 'source.zip');
+    });
+  });
+
+  group('isNewerVersion', () {
+    final svc = UpdateService();
+    test('equal versions are not newer', () {
+      expect(svc.isNewerVersion('0.1.18', '0.1.18'), isFalse);
+    });
+    test('patch bump is newer', () {
+      expect(svc.isNewerVersion('0.1.18', '0.1.19'), isTrue);
+    });
+    test('minor bump is newer', () {
+      expect(svc.isNewerVersion('0.1.18', '0.2.0'), isTrue);
+    });
+    test('major bump is newer', () {
+      expect(svc.isNewerVersion('0.9.9', '1.0.0'), isTrue);
+    });
+    test('older latest is not newer', () {
+      expect(svc.isNewerVersion('0.2.0', '0.1.19'), isFalse);
+    });
+    test('leading v is tolerated on both sides', () {
+      expect(svc.isNewerVersion('v0.1.18', 'v0.1.19'), isTrue);
+    });
+    test('pre-release / build suffix is ignored', () {
+      expect(svc.isNewerVersion('0.1.18', '0.1.18-beta.1'), isFalse);
+      expect(svc.isNewerVersion('0.1.18', '0.1.19+5'), isTrue);
+    });
+    test('unparseable input is treated as not newer (fail closed)', () {
+      expect(svc.isNewerVersion('0.1.18', 'garbage'), isFalse);
+      expect(svc.isNewerVersion('', '0.1.19'), isTrue);
     });
   });
 }
