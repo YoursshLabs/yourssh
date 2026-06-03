@@ -59,6 +59,37 @@ class ShellIntegrationService {
     return null;
   }
 
+  /// Sentinels printed by the injected shell code. Built at runtime with
+  /// `printf '__YS_%s__' RDY` so the literal string never appears in the
+  /// echoed command line — the output scanner cannot false-positive on echo.
+  static const kReadySentinel = '__YS_RDY__';
+  static const kDoneSentinel = '__YS_DONE__';
+
+  /// Short first-phase line written to the shell instead of the full script.
+  /// bash/zsh: prints RDY, then blocks in `read -rs` so the payload that
+  /// follows is consumed raw and never echoed. Other POSIX shells: prints
+  /// DONE immediately so the client skips the payload and cleans up.
+  String buildBootstrapLine() =>
+      r'[ -n "$BASH_VERSION$ZSH_VERSION" ] && '
+      r"{ printf '__YS_%s__' RDY; IFS= read -rs __ys; "
+      r'eval "$__ys"; unset __ys; } '
+      r"|| printf '__YS_%s__' DONE"
+      '\n';
+
+  /// Second-phase line: the hook installer plus the DONE sentinel. Sent only
+  /// after RDY is seen, while `read -rs` is consuming stdin — never echoed.
+  String buildPayloadLine() {
+    final body = buildInjectionScript(); // ends with '\n'
+    return '${body.substring(0, body.length - 1)}; '
+        "printf '__YS_%s__' DONE\n";
+  }
+
+  /// ANSI sequence erasing the bootstrap echo region: col 0, up [rows],
+  /// clear to end of screen. Written by the client in the same frame as the
+  /// withheld output, so the echo is never painted.
+  static String buildEraseSequence(int rows) =>
+      rows > 0 ? '\r\x1b[${rows}A\x1b[0J' : '\r\x1b[0J';
+
   /// Single-line bash/zsh setup written to the shell on connect. Guarded
   /// (`__yourssh_si`) so a re-source is a no-op; appends to PROMPT_COMMAND /
   /// precmd/preexec arrays rather than overwriting; silent on other shells.
