@@ -41,6 +41,7 @@ The active codebase is `app/` — a Flutter app targeting macOS, Windows, and Li
 **Monorepo layout:**
 - `app/` — the Flutter app
 - `packages/dartssh2` — **local fork** of dartssh2; overrides the pub.dev version via `dependency_overrides` in `app/pubspec.yaml`
+- `packages/flutter_pty` — **local fork** of flutter_pty 0.4.2 (also via `dependency_overrides`); patches `src/flutter_pty_win.c` so the Windows command line doesn't duplicate `argv[0]` (upstream issue #19 — broke keyboard input in the local PowerShell terminal)
 - `packages/yourssh_plugin_api` — abstract plugin interface (`YourSSHPlugin`, `YourSSHPluginContext`)
 - `packages/yourssh_devops` — DevOps plugin (containers (Docker/K8s), network tools, Cloudflare tunnel, mail catcher, MCP server, S3 browser)
 - `packages/yourssh_web_tools` — Web Tools plugin (in-app browser over port-forwarded HTTP)

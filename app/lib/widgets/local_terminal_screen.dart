@@ -106,6 +106,7 @@ class _LocalTerminalScreenState extends State<LocalTerminalScreen> {
     return TerminalView(
       key: ValueKey(session.id),
       session.terminal,
+      autofocus: true,
       textStyle: TerminalStyle(
         fontSize: settings.fontSize,
         fontFamily: settings.terminalFont,
