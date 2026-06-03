@@ -106,7 +106,7 @@ Click the **signal bars** icon in the session toolbar to show a real-time traffi
 
 ## Local Terminal
 
-The sidebar also has a **Local Terminal** section that opens a native shell (zsh/bash/PowerShell) alongside SSH sessions.
+The sidebar also has a **Local Terminal** section that opens a native shell (zsh/bash/PowerShell) alongside SSH sessions. The terminal is focused as soon as it opens — just start typing. On Windows the shell is PowerShell (fully working since 0.1.22).
 
 ## Related Pages
 

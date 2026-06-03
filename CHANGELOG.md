@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.1.22] — 2026-06-04
+
 ### Fixed
 - **Windows local terminal keyboard input** — typing into the local PowerShell terminal did nothing (the prompt rendered but no keystroke ever reached the shell). Root cause is an upstream `flutter_pty` bug ([TerminalStudio/flutter_pty#19](https://github.com/TerminalStudio/flutter_pty/issues/19)): the Dart side puts the executable at `argv[0]` (Unix convention) and the Windows C side appends *all* arguments to the `CreateProcessW` command line, so the app actually spawned `powershell.exe powershell.exe` — PowerShell parsed the duplicate as `-Command` and ran a nested shell that never received ConPTY input. `flutter_pty` is now vendored as a local fork (`packages/flutter_pty`, `0.4.2+yourssh.1`) with `build_command` fixed to skip `argv[0]`.
 - **Local terminal focus** — the local terminal now autofocuses when opened (matching SSH session tabs) instead of requiring a click before keystrokes register.
@@ -296,7 +300,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.21...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.22...HEAD
+[0.1.22]: https://github.com/YoursshLabs/yourssh/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/YoursshLabs/yourssh/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/YoursshLabs/yourssh/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/YoursshLabs/yourssh/compare/v0.1.18...v0.1.19

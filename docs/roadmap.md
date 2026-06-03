@@ -1,7 +1,7 @@
 # YourSSH — Roadmap
 
 > Direction: **infra workstation for DevOps/SRE managing 10–100+ hosts**, not just an SSH client.
-> Current version: 0.1.21 · updated: 2026-06-03 (Invisible shell integration · terminal snippets panel · SFTP View / Open with… / Sudo SFTP)
+> Current version: 0.1.22 · updated: 2026-06-04 (Windows local terminal input fix — vendored flutter_pty fork · SFTP download robustness · Windows Open-with discovery fixes)
 
 This document lists proposed features ordered by priority. Each item can be broken out into its own spec (`docs/superpowers/specs/`) when ready for implementation.
 

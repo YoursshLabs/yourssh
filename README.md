@@ -175,7 +175,7 @@ sudo dpkg -r yourssh
 | State Management | `provider` (ChangeNotifier) |
 | SSH / SFTP / Port Forwarding | `dartssh2` (local fork with `signAsync`) |
 | Terminal Emulation | `xterm` |
-| Local PTY | `flutter_pty` |
+| Local PTY | `flutter_pty` (local fork — Windows command-line fix) |
 | Secure Storage | `flutter_secure_storage` |
 | Cloud Sync Backend | `supabase_flutter` |
 | Encryption | `cryptography` (AES-GCM, HKDF), `crypto` (AWS Sig V4) |
@@ -291,7 +291,8 @@ yourssh/
 │   ├── yourssh_plugin_api/       # Plugin interface package (stable public API)
 │   ├── yourssh_script_engine/    # JS plugin runtime (QuickJS FFI, HookBus, bridges)
 │   ├── yourssh_devops/           # DevOps plugin (S3, LAN Share)
-│   └── dartssh2/                 # Local fork — adds signAsync() for SSH agent auth
+│   ├── dartssh2/                 # Local fork — adds signAsync() for SSH agent auth
+│   └── flutter_pty/              # Local fork — Windows argv[0] duplication fix (local terminal input)
 ├── macos/                        # Xcode project files (xcodegen — project.yml)
 ├── supabase/migrations/          # Database schema migrations
 ├── scripts/                      # Build and release automation

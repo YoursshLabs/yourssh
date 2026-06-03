@@ -55,12 +55,14 @@ cd app && flutter test --name "SyncService"
 
 ## Local Package Dependencies
 
-`app/pubspec.yaml` uses `dependency_overrides` to pull the local fork of `dartssh2` and all `yourssh_*` packages:
+`app/pubspec.yaml` uses `dependency_overrides` to pull the local forks of `dartssh2` and `flutter_pty` plus all `yourssh_*` packages:
 
 ```yaml
 dependency_overrides:
   dartssh2:
     path: ../packages/dartssh2
+  flutter_pty:
+    path: ../packages/flutter_pty
   yourssh_plugin_api:
     path: ../packages/yourssh_plugin_api
   # … etc

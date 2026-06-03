@@ -18,6 +18,7 @@ yourssh/
 │   └── pubspec.yaml
 ├── packages/
 │   ├── dartssh2/               # Local fork of dartssh2 (SSH/SFTP/port-forward)
+│   ├── flutter_pty/            # Local fork of flutter_pty (Windows argv[0] fix)
 │   ├── yourssh_plugin_api/     # Abstract plugin interface (YourSSHPlugin)
 │   ├── yourssh_devops/         # DevOps Dart plugin (containers, network tools, …)
 │   ├── yourssh_web_tools/      # Web Tools Dart plugin
