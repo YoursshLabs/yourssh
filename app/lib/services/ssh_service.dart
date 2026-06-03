@@ -9,7 +9,9 @@ import '../models/host.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
 import 'certificate_key_pair.dart';
+import 'injection_gate.dart';
 import 'notification_service.dart';
+import 'shell_integration_service.dart';
 import 'recording_service.dart';
 import 'storage_service.dart';
 import 'sudo_sftp.dart';
@@ -383,9 +385,41 @@ class SshService {
       shell.write(Uint8List.fromList('$initialCommand\n'.codeUnits));
     }
 
-    if (siOn) {
+    // Invisible shell-integration injection (two-phase handshake; see
+    // docs/superpowers/specs/2026-06-03-invisible-shell-integration-design.md).
+    // Quiescence wait → bootstrap → RDY → payload (never echoed via read -rs)
+    // → DONE → flush withheld output + erase the bootstrap echo in one frame.
+    InjectionGate? gate;
+    Timer? quiesceTimer;
+    Timer? capTimer;
+    Timer? doneTimer;
+    var injectionStartRow = 0;
+    var eraseArmed = false;
+
+    void launchInjection() {
+      if (!siOn || gate != null) return;
+      quiesceTimer?.cancel();
+      capTimer?.cancel();
+      gate = InjectionGate(
+        readySentinel: ShellIntegrationService.kReadySentinel,
+        doneSentinel: ShellIntegrationService.kDoneSentinel,
+      );
+      injectionStartRow = session.terminal.buffer.absoluteCursorY;
+      eraseArmed = true;
       shell.write(Uint8List.fromList(
-          shellIntegration!.buildInjectionScript().codeUnits));
+          shellIntegration!.buildBootstrapLine().codeUnits));
+      doneTimer = Timer(const Duration(seconds: 2), () {
+        final g = gate;
+        if (g == null || !g.isHolding) return;
+        eraseArmed = false; // degrade: show as-is, never mis-erase
+        final out = g.flush();
+        if (out.isNotEmpty) session.terminal.write(out);
+      });
+    }
+
+    if (siOn) {
+      // Cap: inject even if the server never goes quiet (or stays silent).
+      capTimer = Timer(const Duration(seconds: 3), launchInjection);
     }
 
     final done = Completer<void>();
@@ -401,7 +435,48 @@ class SshService {
           text = hookBus!.fireTransform(
               'terminal.output', TransformEvent(sessionId: session.id, data: text));
         }
-        session.terminal.write(text);
+
+        // Quiescence detection: first output seen + 300 ms of silence →
+        // the prompt has rendered, safe to inject.
+        if (siOn && gate == null) {
+          quiesceTimer?.cancel();
+          quiesceTimer = Timer(const Duration(milliseconds: 300), launchInjection);
+        }
+
+        final g = gate;
+        if (g != null) {
+          final wasHolding = g.isHolding;
+          final r = g.feed(text);
+          if (r.sendPayload) {
+            shell.write(Uint8List.fromList(
+                shellIntegration!.buildPayloadLine().codeUnits));
+          }
+          if (r.emit == null) return; // withheld until DONE / timeout
+          text = r.emit!;
+          if (wasHolding && !g.isHolding) {
+            // DONE just arrived: write held text + erase in the same frame so
+            // the bootstrap echo is never painted. Over-hold guard: a huge
+            // held buffer means real output (late MOTD) landed inside the
+            // window — show it rather than erase it.
+            doneTimer?.cancel();
+            final oversized = text.length >
+                shellIntegration!.buildBootstrapLine().length * 4;
+            if (eraseArmed && !oversized) {
+              session.terminal.write(text);
+              final rows =
+                  session.terminal.buffer.absoluteCursorY - injectionStartRow;
+              final erase = ShellIntegrationService.buildEraseSequence(rows);
+              session.terminal.write(erase);
+              text = text + erase; // recording replays the same clean view
+            } else {
+              session.terminal.write(text);
+            }
+          } else {
+            session.terminal.write(text);
+          }
+        } else {
+          session.terminal.write(text);
+        }
         _recording?.writeOutput(session.id, text);
         try {
           NotificationService.instance.onTerminalData(
@@ -415,6 +490,14 @@ class SshService {
         }
       },
       onDone: () {
+        quiesceTimer?.cancel();
+        capTimer?.cancel();
+        doneTimer?.cancel();
+        final g = gate;
+        if (g != null && g.isHolding) {
+          final out = g.flush();
+          if (out.isNotEmpty) session.terminal.write(out);
+        }
         _onShellClosed(session);
         if (!done.isCompleted) done.complete();
       },
