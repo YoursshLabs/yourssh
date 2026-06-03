@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -19,6 +20,7 @@ class UpdateService {
   UpdateService({
     http.Client? client,
     this.repo = 'YoursshLabs/yourssh',
+    // ignore: prefer_initializing_formals
     Directory? downloadDir,
   })  : _client = client ?? http.Client(),
         _downloadDir = downloadDir;
@@ -177,14 +179,16 @@ class UpdateService {
     ReleaseAsset asset, {
     required void Function(double) onProgress,
   }) async {
-    // Enforce HTTPS: check the parsed scheme, not a string prefix.
+    // Enforce HTTPS: use tryParse so a malformed URL throws UpdateException,
+    // not a raw FormatException.
     final rawUrl = asset.downloadUrl;
-    if (Uri.parse(rawUrl).scheme != 'https') {
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null || uri.scheme != 'https') {
       throw UpdateException('Download URL must use HTTPS: $rawUrl');
     }
     final dir = _downloadDir ?? await getDownloadsDirectory() ?? await getTemporaryDirectory();
     final file = File('${dir.path}/${asset.name}');
-    final req = http.Request('GET', Uri.parse(rawUrl));
+    final req = http.Request('GET', uri);
     final res = await _client.send(req);
     if (res.statusCode != 200) {
       throw UpdateException('Download failed (${res.statusCode})');
@@ -213,9 +217,10 @@ class UpdateService {
       }
       if (e is UpdateException) rethrow;
       throw UpdateException('Download failed: $e');
+    } finally {
+      digestInput.close();
     }
     await sink.close();
-    digestInput.close();
 
     // Verify SHA-256 digest when the GitHub API provided one.
     final assetDigest = asset.digest;

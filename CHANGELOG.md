@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Update binary integrity** — `downloadAsset()` now verifies the SHA-256 digest from the GitHub Releases API `digest` field before handing the file to the OS installer; a mismatch deletes the downloaded file and aborts the update. The HTTPS scheme check was tightened to use `Uri.tryParse` rather than a string prefix, so a malformed URL is caught as an `UpdateException` rather than a raw `FormatException`.
+
 ---
 
 ## [0.1.19] — 2026-06-03
