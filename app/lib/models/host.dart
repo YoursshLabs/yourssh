@@ -2,6 +2,12 @@ import 'package:uuid/uuid.dart';
 
 enum AuthType { password, privateKey, certificate, agent }
 
+/// How SFTP sessions are started on this host. [normal] requests the
+/// standard `sftp` subsystem; [sudo] runs the sftp-server binary through
+/// `sudo` on an exec channel (root SFTP); [custom] runs
+/// [Host.sftpServerCommand] verbatim on an exec channel.
+enum SftpMode { normal, sudo, custom }
+
 class Host {
   final String id;
   String label;
@@ -17,6 +23,8 @@ class Host {
   bool autoRecord;
   String? jumpHostId;
   bool shellIntegration;
+  SftpMode sftpMode;
+  String? sftpServerCommand;
 
   Host({
     String? id,
@@ -33,6 +41,8 @@ class Host {
     this.autoRecord = false,
     this.jumpHostId,
     this.shellIntegration = true,
+    this.sftpMode = SftpMode.normal,
+    this.sftpServerCommand,
   })  : id = id ?? const Uuid().v4(),
         // Always own a growable copy so callers can `tags.add(...)`
         // without hitting `Unsupported operation` on the shared `const []`.
@@ -54,6 +64,8 @@ class Host {
         'autoRecord': autoRecord,
         'jumpHostId': jumpHostId,
         'shellIntegration': shellIntegration,
+        'sftpMode': sftpMode.name,
+        'sftpServerCommand': sftpServerCommand,
       };
 
   /// Tolerant of partially-missing fields so a corrupted prefs blob or
@@ -80,6 +92,12 @@ class Host {
       // or version-mismatch bugs.
       return AuthType.values.byName(name);
     }
+    SftpMode parseSftpMode() {
+      final name = json['sftpMode'] as String?;
+      if (name == null) return SftpMode.normal;
+      // Unknown values throw — same convention as parseAuth().
+      return SftpMode.values.byName(name);
+    }
     return Host(
       id: json['id'] as String?,
       label: (json['label'] as String?) ?? host,
@@ -95,6 +113,8 @@ class Host {
       autoRecord: (json['autoRecord'] as bool?) ?? false,
       jumpHostId: json['jumpHostId'] as String?,
       shellIntegration: (json['shellIntegration'] as bool?) ?? true,
+      sftpMode: parseSftpMode(),
+      sftpServerCommand: json['sftpServerCommand'] as String?,
     );
   }
 
@@ -110,6 +130,8 @@ class Host {
     bool? autoRecord,
     Object? jumpHostId = const _Unset(),
     bool? shellIntegration,
+    SftpMode? sftpMode,
+    Object? sftpServerCommand = const _Unset(),
   }) =>
       Host(
         id: id,
@@ -126,6 +148,10 @@ class Host {
         autoRecord: autoRecord ?? this.autoRecord,
         jumpHostId: jumpHostId is _Unset ? this.jumpHostId : jumpHostId as String?,
         shellIntegration: shellIntegration ?? this.shellIntegration,
+        sftpMode: sftpMode ?? this.sftpMode,
+        sftpServerCommand: sftpServerCommand is _Unset
+            ? this.sftpServerCommand
+            : sftpServerCommand as String?,
       );
 }
 
