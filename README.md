@@ -75,6 +75,7 @@ sudo dpkg -r yourssh
 - **Terminal sharing (multiplayer)** — share a live SSH session with a session code; guests join via the Command Palette and watch or interact in real time; built on Supabase Realtime
 - **Split terminal view** — horizontal/vertical pane splitting within a session
 - **Search-in-scrollback (Cmd/Ctrl+F)** — regex-powered search across the full terminal buffer; highlights all matches, navigate with Enter / Shift+Enter
+- **Shell integration (bash/zsh)** — injected OSC 7/133 prompt hooks surface the working directory on the session tab, a per-command status gutter (green = ok, red = failed), jump-to-prompt (Cmd/Ctrl+↑/↓), and cwd-aware path completion in the input bar; auto-on with per-host / global opt-out
 - **Port forwarding** — local, remote, and dynamic SOCKS5 tunnels
 - **Jump host / bastion proxy** — connect to internal servers via a bastion host; select any saved host as the jump hop in the host detail panel
 - **Local shell** — spawn native macOS/Windows/Linux shell alongside SSH sessions

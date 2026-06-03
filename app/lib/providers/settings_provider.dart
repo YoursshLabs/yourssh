@@ -13,6 +13,7 @@ class SettingsProvider extends ChangeNotifier {
   bool networkStatsEnabled = false;
   bool tmuxEnabled = false;
   bool commandNotificationsEnabled = true;
+  bool shellIntegrationEnabled = true;
   String terminalFont = 'MesloLGS NF';
   String recordingPath = '';
   Map<String, String> hotkeys = {
@@ -40,6 +41,7 @@ class SettingsProvider extends ChangeNotifier {
     networkStatsEnabled = prefs.getBool('networkStatsEnabled') ?? false;
     tmuxEnabled = prefs.getBool('tmuxEnabled') ?? false;
     commandNotificationsEnabled = prefs.getBool('commandNotificationsEnabled') ?? true;
+    shellIntegrationEnabled = prefs.getBool('shellIntegrationEnabled') ?? true;
     terminalFont = prefs.getString('terminalFont') ?? 'MesloLGS NF';
     final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
     final defaultPath = home != null
@@ -70,6 +72,7 @@ class SettingsProvider extends ChangeNotifier {
     bool? tmuxEnabled,
     String? terminalFont,
     bool? commandNotificationsEnabled,
+    bool? shellIntegrationEnabled,
     String? recordingPath,
   }) async {
     if (autoReconnect != null) this.autoReconnect = autoReconnect;
@@ -82,6 +85,7 @@ class SettingsProvider extends ChangeNotifier {
     if (tmuxEnabled != null) this.tmuxEnabled = tmuxEnabled;
     if (terminalFont != null) this.terminalFont = terminalFont;
     if (commandNotificationsEnabled != null) this.commandNotificationsEnabled = commandNotificationsEnabled;
+    if (shellIntegrationEnabled != null) this.shellIntegrationEnabled = shellIntegrationEnabled;
     if (recordingPath != null) this.recordingPath = recordingPath;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('autoReconnect', this.autoReconnect);
@@ -94,6 +98,7 @@ class SettingsProvider extends ChangeNotifier {
     await prefs.setBool('tmuxEnabled', this.tmuxEnabled);
     await prefs.setString('terminalFont', this.terminalFont);
     await prefs.setBool('commandNotificationsEnabled', this.commandNotificationsEnabled);
+    await prefs.setBool('shellIntegrationEnabled', this.shellIntegrationEnabled);
     await prefs.setString('recordingPath', this.recordingPath);
     notifyListeners();
   }

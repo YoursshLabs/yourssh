@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,7 +7,9 @@ import '../models/ssh_session.dart';
 import '../providers/command_history_provider.dart';
 import '../providers/recording_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/shell_integration_provider.dart';
 import '../theme/terminal_themes.dart';
+import 'command_gutter.dart';
 import 'suggestion_popup.dart';
 
 class SessionTerminalView extends StatelessWidget {
@@ -162,17 +165,54 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
   }
 
   void _scrollToMatch(int matchIdx) {
-    if (_matches.isEmpty || !_scrollController.hasClients) return;
-    final lineIdx = _matches[matchIdx].lineIdx;
-    final fontSize = context.read<SettingsProvider>().fontSize;
-    final estimatedLineHeight = fontSize * 1.35;
-    final offset = (lineIdx * estimatedLineHeight)
+    if (_matches.isEmpty) return;
+    _scrollToLine(_matches[matchIdx].lineIdx);
+  }
+
+  /// xterm forces TextStyle.height = 1.2, so each rendered line is
+  /// `fontSize * 1.2` pixels tall — the unit the scroll offset is measured in.
+  double get _lineHeightPx => context.read<SettingsProvider>().fontSize * 1.2;
+
+  /// Animate the viewport so [line] (an absolute buffer line) is at the top.
+  void _scrollToLine(int line) {
+    if (!_scrollController.hasClients) return;
+    final offset = (line * _lineHeightPx)
         .clamp(0.0, _scrollController.position.maxScrollExtent);
     _scrollController.animateTo(
       offset,
       duration: const Duration(milliseconds: 150),
       curve: Curves.easeOut,
     );
+  }
+
+  /// Scroll to the previous (-1) or next (+1) command prompt line. Returns true
+  /// only if a jump actually occurred, so the key handler can let the key fall
+  /// through to the terminal when there is nothing to jump to.
+  bool _jumpToPrompt(int direction) {
+    final st = context
+        .read<ShellIntegrationProvider>()
+        .maybeStateFor(widget.session.id);
+    if (st == null || st.commands.isEmpty || !_scrollController.hasClients) {
+      return false;
+    }
+    final currentLine = _scrollController.offset / _lineHeightPx;
+    final lines = st.commands.map((c) => c.promptLine).toList()..sort();
+    int? target;
+    if (direction < 0) {
+      for (final l in lines) {
+        if (l < currentLine - 0.5) target = l;
+      }
+    } else {
+      for (final l in lines) {
+        if (l > currentLine + 0.5) {
+          target = l;
+          break;
+        }
+      }
+    }
+    if (target == null) return false;
+    _scrollToLine(target);
+    return true;
   }
 
   void _goNext() {
@@ -288,6 +328,17 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
       return KeyEventResult.ignored;
     }
 
+    // Jump-to-prompt (Cmd+↑/↓ on macOS, Ctrl+↑/↓ elsewhere). Only swallow the
+    // key when a jump actually happened — otherwise let it reach the terminal
+    // (e.g. Ctrl+↑/↓ word navigation), so non-integration sessions are unaffected.
+    final jumpMod = Platform.isMacOS ? meta : ctrl;
+    if (jumpMod && key == LogicalKeyboardKey.arrowUp) {
+      if (_jumpToPrompt(-1)) return KeyEventResult.handled;
+    }
+    if (jumpMod && key == LogicalKeyboardKey.arrowDown) {
+      if (_jumpToPrompt(1)) return KeyEventResult.handled;
+    }
+
     if (key == LogicalKeyboardKey.tab) {
       if (_suggestions.isNotEmpty) {
         _completeTo(_suggestions[_selectedIdx]);
@@ -340,6 +391,8 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final theme = terminalThemeByName(settings.terminalTheme);
+    final showGutter = settings.shellIntegrationEnabled &&
+        widget.session.host.shellIntegration;
 
     return Stack(
       children: [
@@ -352,10 +405,23 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
             fontSize: settings.fontSize,
             fontFamily: settings.terminalFont,
           ),
-          padding: EdgeInsets.zero,
+          // Leave room for the gutter so it never occludes column-0 text.
+          padding: showGutter ? const EdgeInsets.only(left: 10) : EdgeInsets.zero,
           autofocus: !_searchVisible,
           onKeyEvent: _handleKey,
         ),
+        if (showGutter)
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: CommandGutter(
+              sessionId: widget.session.id,
+              scrollController: _scrollController,
+              lineHeight: settings.fontSize * 1.2,
+              onJumpTo: _scrollToLine,
+            ),
+          ),
         if (_searchVisible)
           Positioned(
             top: 0,

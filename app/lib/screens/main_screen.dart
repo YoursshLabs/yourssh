@@ -37,7 +37,9 @@ import '../providers/plugin_engine_provider.dart';
 import '../providers/plugin_provider.dart';
 import '../services/ssh_service.dart';
 import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
+import 'package:path/path.dart' as p;
 import '../providers/settings_provider.dart';
+import '../providers/shell_integration_provider.dart';
 import '../providers/terminal_layout_provider.dart';
 import '../services/hotkey_service.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
@@ -1160,6 +1162,19 @@ class _SessionTabState extends State<_SessionTab> {
     setState(() => _isRenaming = false);
   }
 
+  /// Tab label, appending the shell-integration cwd basename when known and
+  /// the user hasn't set a custom label.
+  String _composedLabel(BuildContext context) {
+    final base = widget.session.tabLabel;
+    if (widget.session.customLabel != null) return base;
+    // select scopes the rebuild to this session's cwd (provider notifies globally).
+    final cwd = context.select<ShellIntegrationProvider, String?>(
+        (s) => s.cwdFor(widget.session.id));
+    if (cwd == null || cwd.isEmpty) return base;
+    final name = p.posix.basename(cwd);
+    return '$base · ${name.isEmpty ? '/' : name}';
+  }
+
   Future<void> _showTabContextMenu(BuildContext context, Offset globalPos) async {
     final session = widget.session;
     final provider = widget.provider;
@@ -1392,7 +1407,7 @@ class _SessionTabState extends State<_SessionTab> {
                 )
               else
                 Text(
-                  widget.session.tabLabel,
+                  _composedLabel(context),
                   style: TextStyle(
                     color: labelColor,
                     fontSize: 12,

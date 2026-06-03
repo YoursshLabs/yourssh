@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.18] — 2026-06-02
+
+### Added
+- **Shell integration (OSC 7 / OSC 133)** — yourssh now injects a small, guarded prompt-hook into bash/zsh sessions on connect (auto-on, opt-out per host and globally in **Settings → Terminal**) so it can read the remote shell's working directory and command boundaries via semantic-prompt escape sequences. This powers: the **working directory shown on the session tab** (e.g. `web-prod · app`), a **per-command status gutter** down the left of the terminal (green dot = exit 0, red = non-zero, grey = running), **jump-to-prompt** navigation (`Cmd/Ctrl+↑/↓` scrolls between command prompts), and **cwd-aware path autocomplete** in the command input bar (lists the resolved remote directory over SFTP). Sequences are captured via xterm's `onPrivateOSC` (no raw-stream parsing); non-bash/zsh shells and sessions where the markers are stripped simply see the feature stay inactive. The injected hooks affect only the live shell session — they never modify `.bashrc`/`.zshrc`.
+
+---
+
 ## [0.1.17] — 2026-06-02
 
 ### Added
@@ -238,7 +245,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.17...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.18...HEAD
+[0.1.18]: https://github.com/YoursshLabs/yourssh/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/YoursshLabs/yourssh/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/YoursshLabs/yourssh/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/YoursshLabs/yourssh/compare/v0.1.14...v0.1.15

@@ -118,6 +118,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       settings.save();
                     },
                   ),
+                  SwitchListTile(
+                    title: const Text('Shell Integration', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+                    subtitle: const Text('Detect cwd, command status & exit codes on bash/zsh (cwd in tab, gutter markers, jump-to-prompt, path completion)', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    value: settings.shellIntegrationEnabled,
+                    onChanged: (v) => context
+                        .read<SettingsProvider>()
+                        .save(shellIntegrationEnabled: v),
+                  ),
                 ]),
                 const SizedBox(height: 24),
                 _Section(title: 'Terminal', children: [

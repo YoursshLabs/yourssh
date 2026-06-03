@@ -43,6 +43,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   bool _testing = false;
   ({bool success, int latencyMs, String? error})? _testResult;
   bool _autoRecord = false;
+  bool _shellIntegration = true;
   String? _selectedJumpHostId;
 
   bool get _isNew => widget.existing == null;
@@ -61,6 +62,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     _authType = h?.authType ?? AuthType.password;
     _selectedKeyId = h?.keyId;
     _autoRecord = h?.autoRecord ?? false;
+    _shellIntegration = h?.shellIntegration ?? true;
     _selectedJumpHostId = h?.jumpHostId;
     for (final c in [_hostCtrl, _portCtrl, _usernameCtrl, _passwordCtrl]) {
       c.addListener(_clearTestResult);
@@ -94,6 +96,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       group: _groupCtrl.text.trim(),
       tags: tags,
       autoRecord: _autoRecord,
+      shellIntegration: _shellIntegration,
       jumpHostId: _selectedJumpHostId,
     );
     try {
@@ -359,6 +362,21 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                       ),
                       subtitle: const Text(
                         'Start recording automatically on connect',
+                        style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
+                      ),
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      activeThumbColor: AppColors.accent,
+                    ),
+                    SwitchListTile(
+                      value: _shellIntegration,
+                      onChanged: (v) => setState(() => _shellIntegration = v),
+                      title: const Text(
+                        'Shell integration',
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                      ),
+                      subtitle: const Text(
+                        'cwd, command status & path completion on bash/zsh',
                         style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
                       ),
                       dense: true,

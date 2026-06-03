@@ -13,6 +13,7 @@ import 'providers/plugin_engine_provider.dart';
 import 'providers/port_forward_provider.dart';
 import 'providers/session_provider.dart';
 import 'providers/settings_provider.dart';
+import 'providers/shell_integration_provider.dart';
 import 'providers/local_session_provider.dart';
 import 'providers/terminal_layout_provider.dart';
 import 'providers/sync_provider.dart';
@@ -116,6 +117,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final PluginEngineProvider _pluginEngineProvider;
   late final ShareProvider _shareProvider;
   late final HealthMonitorService _healthMonitor;
+  late final ShellIntegrationProvider _shellIntegrationProvider;
 
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
 
@@ -131,11 +133,15 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     );
     _hookBus = HookBus();
     _uiRegistry = PluginUiRegistry();
-    _ssh = SshService(_storage, hookBus: _hookBus);
+    _shellIntegrationProvider = ShellIntegrationProvider();
+    _ssh = SshService(_storage,
+        hookBus: _hookBus, shellIntegration: _shellIntegrationProvider);
     _ssh.recordingService = _recordingService;
     _hostProvider = HostProvider(_storage);
     _keyProvider = KeyProvider();
     _settingsProvider = SettingsProvider();
+    _ssh.isShellIntegrationEnabled =
+        () => _settingsProvider.shellIntegrationEnabled;
     _sessionProvider = SessionProvider(_ssh, TabMetadataService());
     _sessionProvider.keyLookup = (id) => _keyProvider.findById(id);
     _sessionProvider.jumpHostLookup = (id) =>
@@ -277,6 +283,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _hostProvider.dispose();
     _keyProvider.dispose();
     _settingsProvider.dispose();
+    _shellIntegrationProvider.dispose();
     super.dispose();
   }
 
@@ -291,6 +298,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         ChangeNotifierProvider.value(value: _settingsProvider),
         ChangeNotifierProvider.value(value: _sessionProvider),
         ChangeNotifierProvider.value(value: _healthMonitor),
+        ChangeNotifierProvider.value(value: _shellIntegrationProvider),
         ChangeNotifierProvider.value(value: _knownHostsProvider),
         ChangeNotifierProvider.value(value: _syncProvider),
         ChangeNotifierProvider.value(value: _shareProvider),

@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/command_history_provider.dart';
+import '../services/path_completion.dart';
 import 'suggestion_popup.dart';
 
 class TerminalInputBar extends StatefulWidget {
@@ -10,11 +12,20 @@ class TerminalInputBar extends StatefulWidget {
   final void Function(String command) onSubmit;
   final VoidCallback onDismiss;
 
+  /// Current shell-integration cwd (null when unknown) — enables cwd-aware
+  /// path completion.
+  final String? cwd;
+
+  /// Lists a remote directory for path completion. null disables it.
+  final Future<List<String>> Function(String dir)? listDir;
+
   const TerminalInputBar({
     super.key,
     required this.sessionId,
     required this.onSubmit,
     required this.onDismiss,
+    this.cwd,
+    this.listDir,
   });
 
   @override
@@ -26,6 +37,8 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
   final _focus = FocusNode();
   List<String> _suggestions = [];
   int _selectedIndex = -1;
+  Timer? _debounce;
+  int _completionSeq = 0;
 
   @override
   void initState() {
@@ -35,10 +48,30 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
   }
 
   void _onTextChanged() {
-    final provider = context.read<CommandHistoryProvider>();
-    setState(() {
-      _suggestions = provider.suggestions(widget.sessionId, _controller.text);
-      _selectedIndex = -1;
+    final text = _controller.text;
+    final history = context.read<CommandHistoryProvider>();
+    final plan = planPathCompletion(text, widget.cwd);
+    if (plan == null || widget.listDir == null) {
+      // Invalidate any in-flight path-completion timer so a late result can't
+      // overwrite these history suggestions.
+      _debounce?.cancel();
+      _completionSeq++;
+      setState(() {
+        _suggestions = history.suggestions(widget.sessionId, text);
+        _selectedIndex = -1;
+      });
+      return;
+    }
+    // Path completion: list the remote dir (debounced + stale-guarded).
+    _debounce?.cancel();
+    final seq = ++_completionSeq;
+    _debounce = Timer(const Duration(milliseconds: 120), () async {
+      final entries = await widget.listDir!(plan.dir);
+      if (!mounted || seq != _completionSeq) return; // stale keystroke
+      setState(() {
+        _suggestions = mergePathSuggestions(text, plan, entries);
+        _selectedIndex = -1;
+      });
     });
   }
 
@@ -109,6 +142,7 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     _focus.dispose();
     super.dispose();

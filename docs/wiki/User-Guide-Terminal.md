@@ -60,6 +60,19 @@ Send the same keystrokes to **all open sessions** simultaneously. Click the **Br
 
 Press **Cmd/Ctrl+F** to open the search bar. Type a regex or plain string; all matches highlight in the buffer. Navigate with **Enter** (next) / **Shift+Enter** (previous). Press **Esc** to close.
 
+## Shell Integration
+
+On **bash/zsh** hosts, YourSSH injects a small, guarded prompt hook on connect so it can follow what the remote shell is doing via OSC 7 (working directory) and OSC 133 (command boundaries + exit status). It only touches the live session — it never edits your `.bashrc`/`.zshrc`.
+
+This powers:
+
+- **Working directory on the tab** — the tab shows the current directory's name (e.g. `web-prod · app`); the full path also drives path completion.
+- **Per-command status gutter** — a thin strip down the left edge draws a dot next to each command's prompt: 🟢 green = exit 0, 🔴 red = non-zero, ⚪ grey = running/unknown. Click a dot to jump to that command.
+- **Jump-to-prompt** — **Cmd/Ctrl+↑ / ↓** scrolls to the previous / next command prompt.
+- **cwd-aware path completion** — when you type a path in the input bar (after `cd`, `cat`, `ls`, …), the suggestion popup lists matching entries in the resolved remote directory (read over SFTP), merged with command history.
+
+Shell integration is **on by default**. Turn it off globally in **Settings → Terminal → Shell Integration**, or per host via the **Shell integration** switch in the host detail panel. Other shells (and sessions where a multiplexer strips the markers, e.g. some tmux setups) simply run without it.
+
 ## Command Palette
 
 Press **Cmd/Ctrl+K** to open the Command Palette. Fuzzy-search across:

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
+import '../providers/shell_integration_provider.dart';
 import '../models/host.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
@@ -16,6 +17,11 @@ import 'system_agent_proxy.dart';
 class SshService {
   final StorageService _storage;
   final HookBus? hookBus;
+  final ShellIntegrationProvider? shellIntegration;
+
+  /// Global on/off for shell integration, read from SettingsProvider in
+  /// main.dart. null => treat as enabled.
+  bool Function()? isShellIntegrationEnabled;
   final Map<String, SSHClient> _clients = {};
   final Map<String, SSHSession> _shells = {};
   final Map<String, String> _shellToHost = {}; // sessionId → hostId
@@ -33,7 +39,7 @@ class SshService {
   Future<bool> Function(String host, int port, String keyType, Uint8List fp)?
       defaultHostKeyVerifier;
 
-  SshService(this._storage, {this.hookBus});
+  SshService(this._storage, {this.hookBus, this.shellIntegration});
 
   // ── Identity resolution ───────────────────────────────
   //
@@ -336,6 +342,20 @@ class SshService {
     _shells[session.id] = shell;
     _shellToHost[session.id] = session.host.id;
 
+    // Shell integration (OSC 7/133): route private OSC into the provider before
+    // any output arrives, so the first prompt cycle is captured.
+    final siOn = shellIntegration != null &&
+        session.host.shellIntegration &&
+        (isShellIntegrationEnabled?.call() ?? true);
+    if (siOn) {
+      session.terminal.onPrivateOSC = (code, args) => shellIntegration!.handleOsc(
+            session.id,
+            code,
+            args,
+            session.terminal.buffer.absoluteCursorY,
+          );
+    }
+
     hookBus?.fireObserve('session.connect', ObserveEvent(
       sessionId: session.id,
       payload: {
@@ -352,6 +372,11 @@ class SshService {
     final initialCommand = session.initialCommand;
     if (initialCommand != null && initialCommand.isNotEmpty) {
       shell.write(Uint8List.fromList('$initialCommand\n'.codeUnits));
+    }
+
+    if (siOn) {
+      shell.write(Uint8List.fromList(
+          shellIntegration!.buildInjectionScript().codeUnits));
     }
 
     final done = Completer<void>();
@@ -424,6 +449,8 @@ class SshService {
     // memory until the widget tree releases the terminal.
     session.terminal.onOutput = null;
     session.terminal.onResize = null;
+    session.terminal.onPrivateOSC = null;
+    shellIntegration?.clear(session.id);
     NotificationService.instance.removeSession(session.id);
     _recording?.onShellClosed(session.id);
   }
@@ -495,6 +522,28 @@ class SshService {
     return client.sftp();
   }
 
+  // Cached SFTP client per host, reused for path autocomplete listings.
+  final Map<String, SftpClient> _completionSftp = {};
+
+  /// List a remote directory for path autocomplete. Reuses a cached SFTP
+  /// client per host. Returns entry names (directories carry a trailing '/').
+  /// Never throws — returns an empty list on any failure and drops the cached
+  /// client so a later call can reopen it (self-heals after reconnect).
+  Future<List<String>> listDirectory(Host host, String path) async {
+    try {
+      final sftp = _completionSftp[host.id] ??= await openSftp(host);
+      final items = await sftp.listdir(path.isEmpty ? '.' : path);
+      return items
+          .map((e) => e.filename + (e.attr.isDirectory ? '/' : ''))
+          .where((n) => n != './' && n != '../')
+          .toList();
+    } catch (e) {
+      _completionSftp.remove(host.id);
+      debugPrint('[SshService] listDirectory failed for $path: $e');
+      return const [];
+    }
+  }
+
   // ── Send input to shell ────────────────────────────────
 
   /// Sends [text] directly to the shell of [sessionId].
@@ -518,9 +567,13 @@ class SshService {
       _shells.remove(id);
       _shellToHost.remove(id);
       NotificationService.instance.removeSession(id);
+      shellIntegration?.clear(id);
     }
     _clients[hostId]?.close();
     _clients.remove(hostId);
+    // The SFTP completion client rides the SSHClient just closed; drop it so a
+    // reconnect opens a fresh one instead of reusing the dead channel.
+    _completionSftp.remove(hostId);
     unawaited(_agentProxies[hostId]?.close() ?? Future.value());
     _agentProxies.remove(hostId);
 
@@ -537,6 +590,7 @@ class SshService {
     _shells.remove(sessionId);
     _shellToHost.remove(sessionId);
     NotificationService.instance.removeSession(sessionId);
+    shellIntegration?.clear(sessionId);
   }
 
   bool isConnected(String hostId) => _clients.containsKey(hostId);

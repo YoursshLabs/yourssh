@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../models/ssh_session.dart';
 import '../providers/terminal_layout_provider.dart';
 import '../providers/session_provider.dart';
+import '../providers/shell_integration_provider.dart';
+import '../services/ssh_service.dart';
 import '../providers/share_provider.dart';
 import 'terminal_view.dart';
 import 'terminal_input_bar.dart';
@@ -136,6 +138,10 @@ class SplitTerminalView extends StatelessWidget {
         if (showInput)
           TerminalInputBar(
             sessionId: session.id,
+            cwd: context.select<ShellIntegrationProvider, String?>(
+                (p) => p.cwdFor(session.id)),
+            listDir: (dir) =>
+                context.read<SshService>().listDirectory(session.host, dir),
             onSubmit: (cmd) {
               if (layout.broadcastEnabled) {
                 _broadcastCommand(allSessions, cmd, layout);
