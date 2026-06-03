@@ -53,4 +53,25 @@ void main() {
     p.toggleBroadcast();
     expect(notificationCount, 1);
   });
+
+  test('snippetsPanelVisible defaults to false', () {
+    final p = TerminalLayoutProvider();
+    expect(p.snippetsPanelVisible, false);
+  });
+
+  test('toggleSnippetsPanel flips visibility', () {
+    final p = TerminalLayoutProvider();
+    p.toggleSnippetsPanel();
+    expect(p.snippetsPanelVisible, true);
+    p.toggleSnippetsPanel();
+    expect(p.snippetsPanelVisible, false);
+  });
+
+  test('toggleSnippetsPanel notifies listeners', () {
+    final p = TerminalLayoutProvider();
+    var notificationCount = 0;
+    p.addListener(() => notificationCount++);
+    p.toggleSnippetsPanel();
+    expect(notificationCount, 1);
+  });
 }

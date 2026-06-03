@@ -22,7 +22,7 @@ class SessionTerminalView extends StatelessWidget {
       SessionStatus.connecting => _statusView(Icons.sync, 'Connecting to ${session.host.host}…', Colors.orange),
       SessionStatus.error => _statusView(Icons.error_outline, session.errorMessage ?? 'Connection error', Colors.red),
       SessionStatus.disconnected => _statusView(Icons.link_off, 'Disconnected', Colors.grey),
-      SessionStatus.connected => _TerminalWidget(session: session),
+      SessionStatus.connected => _TerminalWidget(key: ValueKey(session.id), session: session),
     };
   }
 
@@ -45,7 +45,7 @@ class SessionTerminalView extends StatelessWidget {
 
 class _TerminalWidget extends StatefulWidget {
   final SshSession session;
-  const _TerminalWidget({required this.session});
+  const _TerminalWidget({super.key, required this.session});
 
   @override
   State<_TerminalWidget> createState() => _TerminalWidgetState();

@@ -192,9 +192,11 @@ void main() {
       expect(() => svc.disconnect('no-such-host'), returnsNormally);
     });
 
-    test('sendInput on unknown session does not throw', () {
+    test('sendInput reports failure for a session without a shell', () {
+      // Callers (snippets, plugins) show success feedback — a silent no-op
+      // here meant "Sent" toasts for input that never reached the server.
       final svc = SshService(StorageService());
-      expect(() => svc.sendInput('no-such-session', 'hello'), returnsNormally);
+      expect(svc.sendInput('no-such-session', 'hello'), isFalse);
     });
 
     test('measureLatency returns null for unknown host', () async {

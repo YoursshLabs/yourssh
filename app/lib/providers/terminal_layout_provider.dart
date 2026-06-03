@@ -7,10 +7,12 @@ class TerminalLayoutProvider extends ChangeNotifier {
   SplitLayout _layout = SplitLayout.single;
   bool _broadcastEnabled = false;
   bool _inputBarVisible = false;
+  bool _snippetsPanelVisible = false;
 
   SplitLayout get layout => _layout;
   bool get broadcastEnabled => _broadcastEnabled;
   bool get inputBarVisible => _inputBarVisible;
+  bool get snippetsPanelVisible => _snippetsPanelVisible;
 
   int get paneCount => switch (_layout) {
     SplitLayout.single => 1,
@@ -31,6 +33,11 @@ class TerminalLayoutProvider extends ChangeNotifier {
 
   void toggleInputBar() {
     _inputBarVisible = !_inputBarVisible;
+    notifyListeners();
+  }
+
+  void toggleSnippetsPanel() {
+    _snippetsPanelVisible = !_snippetsPanelVisible;
     notifyListeners();
   }
 }

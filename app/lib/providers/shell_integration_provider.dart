@@ -16,7 +16,8 @@ class ShellIntegrationProvider extends ChangeNotifier {
   String? cwdFor(String id) => _states[id]?.cwd;
   int revisionFor(String id) => _revisions[id] ?? 0;
 
-  String buildInjectionScript() => _service.buildInjectionScript();
+  String buildBootstrapLine() => _service.buildBootstrapLine();
+  String buildPayloadLine() => _service.buildPayloadLine();
 
   /// [absoluteCursorY] is `terminal.buffer.absoluteCursorY` captured by the
   /// caller at marker time (kept out of this class so it stays testable).

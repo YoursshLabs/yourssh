@@ -314,6 +314,109 @@ void main() {
       harness.dispose();
     });
 
+    test(
+        'read raises no unhandled error when an abandoned pipelined request '
+        'fails after EOF', () async {
+      final errors = <Object>[];
+      await runZonedGuarded(() async {
+        final harness = _SftpHarness();
+        await harness.nextOutgoingPacket();
+        harness.sendResponsePacket(SftpVersionPacket(3));
+        await harness.client.handshake;
+
+        final fileFuture = harness.client.open('/tmp/file');
+        final open = SftpOpenPacket.decode(await harness.nextOutgoingPacket());
+        harness.sendResponsePacket(
+          SftpHandlePacket(open.requestId, Uint8List.fromList([1, 2, 3])),
+        );
+        final file = await fileFuture;
+
+        final readFuture =
+            file.read(length: 8, chunkSize: 4, maxPendingRequests: 2).toList();
+
+        final read1 = SftpReadPacket.decode(await harness.nextOutgoingPacket());
+        final read2 = SftpReadPacket.decode(await harness.nextOutgoingPacket());
+
+        // EOF on the first request ends the stream; the second request is
+        // still in flight and gets a failure response (some servers answer
+        // past-EOF reads with SSH_FX_FAILURE instead of SSH_FX_EOF).
+        harness.sendResponsePacket(
+          SftpStatusPacket(
+            requestId: read1.requestId,
+            code: SftpStatusCode.eof,
+            message: 'eof',
+          ),
+        );
+        expect(await readFuture, isEmpty);
+
+        harness.sendResponsePacket(
+          SftpStatusPacket(
+            requestId: read2.requestId,
+            code: SftpStatusCode.failure,
+            message: 'Failure',
+          ),
+        );
+
+        // Give the microtask queue time to surface any unhandled error.
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        harness.dispose();
+      }, (e, st) => errors.add(e))!;
+      expect(errors, isEmpty);
+    });
+
+    test(
+        'read propagates a head request failure as a catchable error and '
+        'raises no unhandled error for the remaining requests', () async {
+      final errors = <Object>[];
+      await runZonedGuarded(() async {
+        final harness = _SftpHarness();
+        await harness.nextOutgoingPacket();
+        harness.sendResponsePacket(SftpVersionPacket(3));
+        await harness.client.handshake;
+
+        final fileFuture = harness.client.open('/tmp/file');
+        final open = SftpOpenPacket.decode(await harness.nextOutgoingPacket());
+        harness.sendResponsePacket(
+          SftpHandlePacket(open.requestId, Uint8List.fromList([1, 2, 3])),
+        );
+        final file = await fileFuture;
+
+        final readFuture =
+            file.read(length: 8, chunkSize: 4, maxPendingRequests: 2).toList();
+
+        final read1 = SftpReadPacket.decode(await harness.nextOutgoingPacket());
+        final read2 = SftpReadPacket.decode(await harness.nextOutgoingPacket());
+
+        harness.sendResponsePacket(
+          SftpStatusPacket(
+            requestId: read1.requestId,
+            code: SftpStatusCode.failure,
+            message: 'Failure',
+          ),
+        );
+        harness.sendResponsePacket(
+          SftpStatusPacket(
+            requestId: read2.requestId,
+            code: SftpStatusCode.failure,
+            message: 'Failure',
+          ),
+        );
+
+        await expectLater(
+          readFuture,
+          throwsA(
+            isA<SftpStatusError>()
+                .having((e) => e.code, 'code', SftpStatusCode.failure),
+          ),
+        );
+
+        // Give the microtask queue time to surface any unhandled error.
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        harness.dispose();
+      }, (e, st) => errors.add(e))!;
+      expect(errors, isEmpty);
+    });
+
     test('write() returns writer and writes streamed data', () async {
       final harness = _SftpHarness();
       await harness.nextOutgoingPacket();

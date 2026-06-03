@@ -32,10 +32,17 @@ Right-click any file or folder for the context menu:
 
 | Operation | Description |
 |---|---|
+| View | Read-only preview (lock icon in the title bar, no save) — safe for logs and configs |
+| Edit | Open in the built-in editor (Monaco; plain-text fallback where the webview is unavailable) |
+| Open with ▶ | Hover submenu listing every installed app that can open the file's type, plus **Choose…** for any app. While the file is open externally, YourSSH watches the local copy and re-uploads it on every save |
 | Rename | Rename in place |
 | Delete | Permanently delete (no trash) |
 | New folder | Create a directory |
 | Permissions | Edit Unix permissions (remote only) |
+
+## Sudo SFTP (root file transfers)
+
+Each host has an **SFTP Mode** setting (host detail panel): **Default**, **Sudo (root)**, or **Custom command**. In Sudo mode the whole SFTP session — browse, upload, download, rename, delete — runs as root: YourSSH starts the remote `sftp-server` through `sudo` (WinSCP-style), auto-detecting its path across distros. `NOPASSWD` sudoers entries work silently; otherwise you are prompted for the sudo password (optionally remembered in the system keychain). Elevated panels show a **root** badge. Failures explain exactly what to fix, including a ready-to-paste `NOPASSWD` line.
 
 ## Tips
 

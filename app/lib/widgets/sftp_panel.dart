@@ -1,8 +1,11 @@
+import 'dart:io';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../models/sftp_entry.dart';
 import '../providers/sftp_panel_provider.dart';
+import '../services/app_discovery_service.dart';
 import '../services/external_edit_service.dart';
 import '../services/sftp_file_inspector.dart';
 import '../services/sftp_transfer_service.dart';
@@ -35,6 +38,25 @@ class _SftpPanelState extends State<SftpPanel> {
     if (widget.host != null) {
       _loadDirectory('/');
     }
+    // Wired once: the upload callbacks fire from the external-edit mtime
+    // watcher long after the triggering open, so resolve the messenger at
+    // fire time (and only while this panel is still mounted) instead of
+    // capturing one per open. Not cleared in dispose — the mounted guard
+    // makes stale closures inert, and clearing could clobber a newer panel's
+    // wiring.
+    final service = context.read<ExternalEditService>();
+    service.onUploaded = (name) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Uploaded $name to server'),
+          duration: const Duration(seconds: 2)));
+    };
+    service.onUploadError = (name, e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Upload of $name failed: $e'),
+          backgroundColor: const Color(0xFF2A1A1A)));
+    };
   }
 
   @override
@@ -75,6 +97,24 @@ class _SftpPanelState extends State<SftpPanel> {
     } else {
       _openEditor(entry);
     }
+  }
+
+  Future<void> _openViewer(SftpEntry entry) {
+    final service = context.read<SftpTransferService>();
+    final externalEdit = context.read<ExternalEditService>();
+    return Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MultiProvider(
+          providers: [
+            Provider<SftpTransferService>.value(value: service),
+            Provider<ExternalEditService>.value(value: externalEdit),
+          ],
+          child: CodeEditorScreen(
+              host: widget.host!, entry: entry, readOnly: true),
+        ),
+      ),
+    );
   }
 
   Future<void> _openEditor(SftpEntry entry) {
@@ -133,12 +173,6 @@ class _SftpPanelState extends State<SftpPanel> {
   Future<void> _openExternal(SftpEntry entry) async {
     final messenger = ScaffoldMessenger.of(context);
     final service = context.read<ExternalEditService>();
-    service.onUploaded = (name) => messenger.showSnackBar(SnackBar(
-        content: Text('Uploaded $name to server'),
-        duration: const Duration(seconds: 2)));
-    service.onUploadError = (name, e) => messenger.showSnackBar(SnackBar(
-        content: Text('Upload of $name failed: $e'),
-        backgroundColor: const Color(0xFF2A1A1A)));
     try {
       await service.openExternal(widget.host!, entry);
       messenger.showSnackBar(SnackBar(
@@ -149,6 +183,40 @@ class _SftpPanelState extends State<SftpPanel> {
           content: Text('Open externally failed: $e'),
           backgroundColor: const Color(0xFF2A1A1A)));
     }
+  }
+
+  Future<void> _openWithApp(SftpEntry entry, String appPath) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final service = context.read<ExternalEditService>();
+    try {
+      await service.openExternalWith(widget.host!, entry, appPath);
+      messenger.showSnackBar(SnackBar(
+          content: Text('Opened ${entry.name} — watching for changes'),
+          duration: const Duration(seconds: 2)));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text('Open with failed: $e'),
+          backgroundColor: const Color(0xFF2A1A1A)));
+    }
+  }
+
+  Future<String?> _pickApp() async {
+    if (Platform.isMacOS) {
+      const typeGroup =
+          XTypeGroup(label: 'Applications', extensions: ['app']);
+      final file = await openFile(
+          acceptedTypeGroups: [typeGroup],
+          initialDirectory: '/Applications');
+      return file?.path;
+    }
+    if (Platform.isWindows) {
+      const typeGroup =
+          XTypeGroup(label: 'Executables', extensions: ['exe']);
+      final file = await openFile(acceptedTypeGroups: [typeGroup]);
+      return file?.path;
+    }
+    final file = await openFile();
+    return file?.path;
   }
 
   @override
@@ -358,8 +426,26 @@ class _SftpPanelState extends State<SftpPanel> {
     return SftpEntryContextMenu(
       entry: entry,
       onOpen: () => _onEntryTap(entry),
-      onEdit: entry.isDirectory ? null : () => _onEntryTap(entry),
-      onOpenExternal: entry.isDirectory ? null : () => _openExternal(entry),
+      onView: entry.isDirectory ? null : () => _openViewer(entry),
+      onEdit: entry.isDirectory ? null : () => _openEditor(entry),
+      loadApps: entry.isDirectory
+          ? null
+          : () {
+              final stub =
+                  '/tmp/stub${entry.extension.isEmpty ? '' : '.${entry.extension}'}';
+              return context.read<AppDiscoveryService>().getAppsFor(stub);
+            },
+      onOpenWithApp: entry.isDirectory
+          ? null
+          : (app) => _openWithApp(entry, app.executablePath),
+      onChooseApp: entry.isDirectory
+          ? null
+          : () async {
+              final appPath = await _pickApp();
+              if (appPath != null && mounted) {
+                await _openWithApp(entry, appPath);
+              }
+            },
       onRename: () => _showRenameDialog(prov, entry),
       onDelete: () => _showDeleteConfirm(prov, [entry]),
       child: Draggable<SftpEntry>(
@@ -598,3 +684,4 @@ class _ToolbarBtn extends StatelessWidget {
     );
   }
 }
+

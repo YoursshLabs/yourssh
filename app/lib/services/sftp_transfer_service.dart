@@ -1,7 +1,8 @@
 // app/lib/services/sftp_transfer_service.dart
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:math';
 import 'package:dartssh2/dartssh2.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../models/host.dart';
@@ -15,6 +16,67 @@ class SftpTransferService {
 
   static const _chunkSize = 64 * 1024;
 
+  /// Core download loop, decoupled from dartssh2 for testing.
+  ///
+  /// Two phases:
+  /// 1. While within the stat'd size, request exactly the remaining bytes so
+  ///    servers that answer past-EOF reads with SSH_FX_FAILURE instead of
+  ///    SSH_FX_EOF never see one (they made every download end with a
+  ///    spurious error).
+  /// 2. Then keep reading until EOF: covers files whose stat size is
+  ///    0/unknown (procfs, pipes) and files that grew past the stat'd size.
+  ///    A FAILURE answered here is the past-EOF quirk — treat it as EOF.
+  @visibleForTesting
+  static Future<void> pipeChunks({
+    required int? statSize,
+    required Future<Uint8List> Function(int length, int offset) read,
+    required void Function(List<int> chunk) add,
+    void Function(int offset)? onProgress,
+  }) async {
+    final size = statSize ?? 0;
+    int offset = 0;
+    while (offset < size) {
+      final chunk = await read(min(_chunkSize, size - offset), offset);
+      if (chunk.isEmpty) return; // file shrank mid-transfer
+      add(chunk);
+      offset += chunk.length;
+      onProgress?.call(offset);
+    }
+    while (true) {
+      Uint8List chunk;
+      try {
+        chunk = await read(_chunkSize, offset);
+      } on SftpStatusError catch (e) {
+        if (e.code == SftpStatusCode.failure) return; // past-EOF quirk
+        rethrow;
+      }
+      if (chunk.isEmpty) return;
+      add(chunk);
+      offset += chunk.length;
+      onProgress?.call(offset);
+    }
+  }
+
+  /// listdir attrs have lstat semantics, so a symlink to a directory looks
+  /// like a plain file (e.g. /bin -> usr/bin on merged-usr distros). Follow
+  /// the link via [stat] to get the target's real type; broken links keep
+  /// file semantics.
+  @visibleForTesting
+  static Future<bool> resolveEntryIsDirectory({
+    required SftpFileAttrs attr,
+    required String path,
+    required Future<SftpFileAttrs> Function(String path) stat,
+  }) async {
+    if (attr.mode?.type != SftpFileType.symbolicLink) {
+      return attr.isDirectory;
+    }
+    try {
+      return (await stat(path)).isDirectory;
+    } on SftpError {
+      return false; // dangling link
+    }
+  }
+
   /// Streams [file] into [sink] in [_chunkSize] blocks. [onProgress] receives
   /// the running byte offset after each chunk (used to report transfer state).
   static Future<void> _pipeToSink(
@@ -22,33 +84,46 @@ class SftpTransferService {
     IOSink sink, {
     void Function(int offset)? onProgress,
   }) async {
-    int offset = 0;
-    while (true) {
-      final chunk = await file.readBytes(length: _chunkSize, offset: offset);
-      if (chunk.isEmpty) break;
-      sink.add(chunk);
-      offset += chunk.length;
-      onProgress?.call(offset);
-    }
+    final size = (await file.stat()).size;
+    await pipeChunks(
+      statSize: size,
+      read: (length, offset) =>
+          file.readBytes(length: length, offset: offset),
+      add: sink.add,
+      onProgress: onProgress,
+    );
   }
 
   Future<List<SftpEntry>> listDirectory(Host host, String path) async {
     final sftp = await _sshService.openSftp(host);
     try {
       final items = await sftp.listdir(path);
-      return items
-          .where((item) => item.filename != '.' && item.filename != '..')
-          .map((item) => SftpEntry(
-                name: item.filename,
-                path: p.posix.join(path, item.filename),
-                isDirectory: item.attr.isDirectory,
-                size: item.attr.size ?? 0,
-                modifiedAt: item.attr.modifyTime != null
-                    ? DateTime.fromMillisecondsSinceEpoch(
-                        item.attr.modifyTime! * 1000)
-                    : DateTime.now(),
-              ))
-          .toList();
+      final visible = [
+        for (final item in items)
+          if (item.filename != '.' && item.filename != '..') item,
+      ];
+      // Resolve symlink targets so symlink-to-dir entries navigate instead of
+      // being read as files (which servers answer with SSH_FX_FAILURE).
+      final isDir = await Future.wait(visible.map(
+        (item) => resolveEntryIsDirectory(
+          attr: item.attr,
+          path: p.posix.join(path, item.filename),
+          stat: sftp.stat,
+        ),
+      ));
+      return [
+        for (final (i, item) in visible.indexed)
+          SftpEntry(
+            name: item.filename,
+            path: p.posix.join(path, item.filename),
+            isDirectory: isDir[i],
+            size: item.attr.size ?? 0,
+            modifiedAt: item.attr.modifyTime != null
+                ? DateTime.fromMillisecondsSinceEpoch(
+                    item.attr.modifyTime! * 1000)
+                : DateTime.now(),
+          ),
+      ];
     } finally {
       sftp.close();
     }
@@ -259,7 +334,15 @@ class SftpTransferService {
       if (item.filename == '.' || item.filename == '..') continue;
       if (isCancelled()) return;
       final childRemote = p.posix.join(remotePath, item.filename);
-      if (item.attr.isDirectory) {
+      // Resolve symlinks the same way the panel listing does, so a
+      // symlink-to-dir shown as a folder in the UI is recursed into rather
+      // than downloaded as a file.
+      final isDirEntry = await resolveEntryIsDirectory(
+        attr: item.attr,
+        path: childRemote,
+        stat: sftp.stat,
+      );
+      if (isDirEntry) {
         await _downloadDirRecursive(
           sftp: sftp, remotePath: childRemote, localDir: dest.path,
           onProgress: onProgress, onFileSkipped: onFileSkipped, isCancelled: isCancelled,

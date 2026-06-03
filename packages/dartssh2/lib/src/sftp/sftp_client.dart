@@ -640,7 +640,11 @@ class SftpFile {
     }
 
     final endOffset = offset + length;
-    final pendingReads = <Future<Uint8List?>>[];
+    // Errors are captured into _SftpReadResult instead of being thrown so
+    // that requests abandoned mid-pipeline (after EOF, an earlier error, or
+    // stream cancellation) never surface as unhandled async errors. The head
+    // result rethrows through [_SftpReadResult.unwrap] below.
+    final pendingReads = <Future<_SftpReadResult>>[];
     var nextOffset = offset;
     var bytesRead = 0;
 
@@ -648,13 +652,18 @@ class SftpFile {
       while (
           nextOffset < endOffset && pendingReads.length < maxPendingRequests) {
         final requestLength = min(chunkSize, endOffset - nextOffset);
-        pendingReads.add(_readChunk(requestLength, nextOffset));
+        pendingReads.add(
+          _readChunk(requestLength, nextOffset).then<_SftpReadResult>(
+            _SftpReadResult.data,
+            onError: _SftpReadResult.error,
+          ),
+        );
         nextOffset += requestLength;
       }
 
       if (pendingReads.isEmpty) break;
 
-      final chunk = await pendingReads.removeAt(0);
+      final chunk = (await pendingReads.removeAt(0)).unwrap();
       if (chunk == null) break;
       if (chunk.isEmpty) {
         throw SftpError('Unexpected empty data chunk before EOF');
@@ -792,6 +801,35 @@ class SftpFile {
 
   @override
   String toString() => 'SftpFile(0x${hex.encode(_handle)})';
+}
+
+/// Outcome of one pipelined read request issued by [SftpFile.read].
+///
+/// Captures errors instead of letting the underlying future complete with
+/// them: pipelined requests may be abandoned before they are awaited (EOF or
+/// an error on an earlier chunk ends the stream early, or the consumer
+/// cancels), and an abandoned future that completes with an error would
+/// otherwise crash the zone as an unhandled async exception.
+class _SftpReadResult {
+  _SftpReadResult.data(this._data)
+      : _error = null,
+        _stackTrace = null;
+
+  _SftpReadResult.error(Object this._error, this._stackTrace) : _data = null;
+
+  final Uint8List? _data;
+  final Object? _error;
+  final StackTrace? _stackTrace;
+
+  /// Returns the chunk data (null means EOF), rethrowing a captured error
+  /// with its original stack trace.
+  Uint8List? unwrap() {
+    final error = _error;
+    if (error != null) {
+      Error.throwWithStackTrace(error, _stackTrace ?? StackTrace.current);
+    }
+    return _data;
+  }
 }
 
 /// Handsake information received from the server.

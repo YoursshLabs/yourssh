@@ -64,6 +64,8 @@ Press **Cmd/Ctrl+F** to open the search bar. Type a regex or plain string; all m
 
 On **bash/zsh** hosts, YourSSH injects a small, guarded prompt hook on connect so it can follow what the remote shell is doing via OSC 7 (working directory) and OSC 133 (command boundaries + exit status). It only touches the live session — it never edits your `.bashrc`/`.zshrc`.
 
+The setup is **invisible**: YourSSH waits until the shell is actually at a prompt reading input, then delivers the hook script through a silent handshake — nothing is echoed into your terminal or recordings. Connecting just looks like an extra Enter press. If readiness can't be confirmed (exotic shells, a full-screen app, or you start typing right away) the injection is skipped for that session.
+
 This powers:
 
 - **Working directory on the tab** — the tab shows the current directory's name (e.g. `web-prod · app`); the full path also drives path completion.
@@ -89,6 +91,8 @@ YourSSH stores a per-session command history. Press **↑ / ↓** in the input b
 ## Snippets
 
 Open the **Snippets** panel from the sidebar to inject saved commands. Snippets support variables (e.g., `{{hostname}}`).
+
+You can also use snippets **without leaving the terminal**: toggle the collapsible snippets panel from the terminal toolbar to browse, search, and copy snippets, or run one directly against the currently active pane (in split layouts, the focused pane). The Snippets screen can likewise type a snippet straight into the focused session.
 
 ## Themes & Fonts
 

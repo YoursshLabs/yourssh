@@ -23,6 +23,6 @@ class YourSSHSnippetsPlugin extends YourSSHPlugin {
 
   @override
   Widget buildUI(BuildContext context, YourSSHPluginContext pluginContext) {
-    return const SnippetsScreen();
+    return SnippetsScreen(pluginContext: pluginContext);
   }
 }

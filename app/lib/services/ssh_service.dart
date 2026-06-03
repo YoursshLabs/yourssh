@@ -9,7 +9,9 @@ import '../models/host.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
 import 'certificate_key_pair.dart';
+import 'injection_gate.dart';
 import 'notification_service.dart';
+import 'shell_integration_service.dart';
 import 'recording_service.dart';
 import 'storage_service.dart';
 import 'sudo_sftp.dart';
@@ -383,10 +385,91 @@ class SshService {
       shell.write(Uint8List.fromList('$initialCommand\n'.codeUnits));
     }
 
-    if (siOn) {
-      shell.write(Uint8List.fromList(
-          shellIntegration!.buildInjectionScript().codeUnits));
+    // Invisible shell-integration injection (two-phase handshake; see
+    // docs/superpowers/specs/2026-06-03-invisible-shell-integration-design.md).
+    // Readiness → bootstrap → RDY → payload (never echoed via read -rs) →
+    // DONE → discard the withheld bootstrap echo. Readiness is the bracketed-
+    // paste toggle (line editor reading) + a settle period; shells without it
+    // (bash ≤ 5.0) get a bare-\n probe answered by a prompt-like tail. If
+    // readiness is never confirmed the injection is skipped entirely — a
+    // missing integration beats junk typed into a half-initialized session.
+    InjectionGate? gate;
+    final readiness = InjectionReadiness();
+    Timer? settleTimer;
+    Timer? quietTimer;
+    Timer? probeWindowTimer;
+    Timer? doneTimer;
+    var awaitingProbe = false;
+    var sinceProbe = '';
+    var probesLeft = 4;
+    var injectionAborted = false;
+    DateTime? firstOutputAt;
+
+    void cancelReadinessTimers() {
+      settleTimer?.cancel();
+      quietTimer?.cancel();
+      probeWindowTimer?.cancel();
     }
+
+    void launchInjection() {
+      if (!siOn || gate != null || injectionAborted) return;
+      cancelReadinessTimers();
+      awaitingProbe = false;
+      final bootstrap = shellIntegration!.buildBootstrapLine();
+      gate = InjectionGate(
+        readySentinel: ShellIntegrationService.kReadySentinel,
+        doneSentinel: ShellIntegrationService.kDoneSentinel,
+        // Generous: the head is echo + line-editor redraw noise; only a
+        // genuinely streaming command produces more, and that must be shown.
+        maxHold: 16384,
+      );
+      shell.write(Uint8List.fromList(bootstrap.codeUnits));
+      doneTimer = Timer(const Duration(seconds: 2), () {
+        final g = gate;
+        if (g == null || !g.isHolding) return;
+        final out = g.flush(); // degrade: show as-is
+        if (out.isNotEmpty) session.terminal.write(out);
+      });
+    }
+
+    // Probe fallback scheduler: after 1.2 s of silence (and a 2.5 s floor so
+    // instant-prompt frameworks have revealed their bracketed paste), send a
+    // bare "\n". A real prompt answers it; MOTD-in-progress only produces a
+    // kernel echo. Out of probes → give up cleanly.
+    void armQuietProbe() {
+      if (!siOn ||
+          gate != null ||
+          injectionAborted ||
+          awaitingProbe ||
+          readiness.bpEver) {
+        return;
+      }
+      quietTimer?.cancel();
+      quietTimer = Timer(const Duration(milliseconds: 1200), () {
+        if (gate != null || injectionAborted || readiness.bpEver) return;
+        final first = firstOutputAt;
+        if (first == null ||
+            DateTime.now().difference(first) <
+                const Duration(milliseconds: 2500)) {
+          armQuietProbe(); // too early; keep waiting
+          return;
+        }
+        if (probesLeft <= 0) {
+          injectionAborted = true; // never confirmed: skip, stay clean
+          return;
+        }
+        probesLeft--;
+        awaitingProbe = true;
+        sinceProbe = '';
+        shell.write(Uint8List.fromList('\n'.codeUnits));
+        probeWindowTimer = Timer(const Duration(seconds: 1), () {
+          awaitingProbe = false;
+          armQuietProbe();
+        });
+      });
+    }
+
+    if (siOn) armQuietProbe();
 
     final done = Completer<void>();
     const utf8 = Utf8Decoder(allowMalformed: true);
@@ -400,6 +483,47 @@ class SshService {
         if (hookBus != null) {
           text = hookBus!.fireTransform(
               'terminal.output', TransformEvent(sessionId: session.id, data: text));
+        }
+
+        if (siOn && gate == null && !injectionAborted) {
+          firstOutputAt ??= DateTime.now();
+          final sig = readiness.onChunk(text);
+          if (sig == ReadinessSignal.altScreen) {
+            injectionAborted = true; // vim/less owns the tty — never inject
+            cancelReadinessTimers();
+          } else if (readiness.bpOn) {
+            // Line editor is reading: inject once the redraw burst settles.
+            settleTimer?.cancel();
+            settleTimer =
+                Timer(const Duration(milliseconds: 250), launchInjection);
+          } else {
+            settleTimer?.cancel();
+            if (awaitingProbe) {
+              sinceProbe += text;
+              if (!readiness.bpEver &&
+                  InjectionReadiness.promptLikeTail(sinceProbe)) {
+                // Probe answered with a prompt-looking tail (old bash).
+                settleTimer =
+                    Timer(const Duration(milliseconds: 250), launchInjection);
+              }
+            } else {
+              armQuietProbe();
+            }
+          }
+        }
+
+        final g = gate;
+        if (g != null) {
+          final wasHolding = g.isHolding;
+          final r = g.feed(text);
+          if (r.sendPayload) {
+            shell.write(Uint8List.fromList(
+                shellIntegration!.buildPayloadLine().codeUnits));
+          }
+          if (r.emit == null) return; // withheld until DONE / timeout
+          if (wasHolding && !g.isHolding) doneTimer?.cancel();
+          text = r.emit!;
+          if (text.isEmpty) return; // echo head discarded, nothing to show
         }
         session.terminal.write(text);
         _recording?.writeOutput(session.id, text);
@@ -415,6 +539,13 @@ class SshService {
         }
       },
       onDone: () {
+        cancelReadinessTimers();
+        doneTimer?.cancel();
+        final g = gate;
+        if (g != null && g.isHolding) {
+          final out = g.flush();
+          if (out.isNotEmpty) session.terminal.write(out);
+        }
         _onShellClosed(session);
         if (!done.isCompleted) done.complete();
       },
@@ -429,6 +560,13 @@ class SshService {
 
     // Pipe xterm input → SSH shell
     session.terminal.onOutput = (data) {
+      // A user keystroke before the handshake starts cancels the injection:
+      // a queued probe "\n" would execute their half-typed command, and the
+      // bootstrap would be appended to whatever they are typing.
+      if (siOn && gate == null && !injectionAborted) {
+        injectionAborted = true;
+        cancelReadinessTimers();
+      }
       if (hookBus != null) {
         final result = hookBus!.fireInterceptable(
             'terminal.input', TransformEvent(sessionId: session.id, data: data));
@@ -690,11 +828,15 @@ class SshService {
   // ── Send input to shell ────────────────────────────────
 
   /// Sends [text] directly to the shell of [sessionId].
-  /// No-op if the session or shell is not found.
-  void sendInput(String sessionId, String text) {
+  ///
+  /// Returns false when the session has no live shell (e.g. it closed
+  /// mid-disconnect) so callers don't show success feedback for input that
+  /// never reached the server.
+  bool sendInput(String sessionId, String text) {
     final shell = _shells[sessionId];
-    if (shell == null) return;
+    if (shell == null) return false;
     shell.write(Uint8List.fromList(text.codeUnits));
+    return true;
   }
 
   // ── Disconnect ─────────────────────────────────────────

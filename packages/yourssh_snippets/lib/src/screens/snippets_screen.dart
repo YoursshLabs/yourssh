@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
 import '../models/snippet.dart';
 import '../providers/snippet_provider.dart';
 import '../theme.dart';
 
 class SnippetsScreen extends StatefulWidget {
-  const SnippetsScreen({super.key});
+  final YourSSHPluginContext pluginContext;
+
+  const SnippetsScreen({super.key, required this.pluginContext});
 
   @override
   State<SnippetsScreen> createState() => _SnippetsScreenState();
@@ -19,14 +22,7 @@ class _SnippetsScreenState extends State<SnippetsScreen> {
   @override
   Widget build(BuildContext context) {
     final snippets = context.watch<SnippetProvider>().snippets;
-    final filtered = _search.isEmpty
-        ? snippets
-        : snippets
-            .where((s) =>
-                s.label.toLowerCase().contains(_search.toLowerCase()) ||
-                s.command.toLowerCase().contains(_search.toLowerCase()) ||
-                s.tag.toLowerCase().contains(_search.toLowerCase()))
-            .toList();
+    final filtered = filterSnippets(snippets, _search);
 
     return Row(
       children: [
@@ -48,8 +44,10 @@ class _SnippetsScreenState extends State<SnippetsScreen> {
                       : ListView.builder(
                           padding: const EdgeInsets.all(24),
                           itemCount: filtered.length,
-                          itemBuilder: (_, i) =>
-                              _SnippetTile(snippet: filtered[i]),
+                          itemBuilder: (_, i) => _SnippetTile(
+                            snippet: filtered[i],
+                            pluginContext: widget.pluginContext,
+                          ),
                         ),
                 ),
               ],
@@ -144,7 +142,12 @@ class _TopBar extends StatelessWidget {
 
 class _SnippetTile extends StatefulWidget {
   final Snippet snippet;
-  const _SnippetTile({required this.snippet});
+  final YourSSHPluginContext pluginContext;
+
+  const _SnippetTile({
+    required this.snippet,
+    required this.pluginContext,
+  });
 
   @override
   State<_SnippetTile> createState() => _SnippetTileState();
@@ -152,6 +155,33 @@ class _SnippetTile extends StatefulWidget {
 
 class _SnippetTileState extends State<_SnippetTile> {
   bool _hovered = false;
+
+  Future<void> _runSnippet() async {
+    final session = widget.pluginContext.activeSession;
+    if (session == null || !session.isConnected) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No active SSH session to run this snippet')),
+      );
+      return;
+    }
+
+    try {
+      await widget.pluginContext.sendInput(
+        session.sessionId,
+        '${widget.snippet.command}\n',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sent "${widget.snippet.label}" to terminal')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to run snippet: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -213,6 +243,15 @@ class _SnippetTileState extends State<_SnippetTile> {
               ),
             ),
             if (_hovered) ...[
+              _ActionBtn(
+                icon: Icons.play_arrow,
+                tooltip: 'Run in terminal',
+                color: SnippetsColors.accent,
+                onTap: () {
+                  _runSnippet();
+                },
+              ),
+              const SizedBox(width: 4),
               _ActionBtn(
                 icon: Icons.copy,
                 tooltip: 'Copy',

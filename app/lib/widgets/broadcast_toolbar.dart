@@ -42,6 +42,13 @@ class BroadcastToolbar extends StatelessWidget {
             selected: layout.layout == SplitLayout.quad,
             onTap: () => layout.setLayout(SplitLayout.quad),
           ),
+          const SizedBox(width: 8),
+          _LayoutButton(
+            icon: Icons.code,
+            tooltip: 'Toggle Snippets Panel',
+            selected: layout.snippetsPanelVisible,
+            onTap: layout.toggleSnippetsPanel,
+          ),
           const Spacer(),
           if (layout.paneCount > 1)
             InkWell(

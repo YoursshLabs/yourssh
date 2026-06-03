@@ -1,6 +1,7 @@
 // app/lib/widgets/code_editor_screen.dart
 import 'dart:convert';
 import 'dart:io';
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -15,11 +16,13 @@ import '../services/sftp_transfer_service.dart';
 class CodeEditorScreen extends StatefulWidget {
   final Host host;
   final SftpEntry entry;
+  final bool readOnly;
 
   const CodeEditorScreen({
     super.key,
     required this.host,
     required this.entry,
+    this.readOnly = false,
   });
 
   @override
@@ -84,7 +87,9 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       }
       setState(() => _content = utf8.decode(bytes, allowMalformed: true));
       if (_useWebView) {
-        if (_ready) _pushContentToEditor();
+        if (_ready) {
+          _pushContentToEditor();
+        }
       } else {
         _textController.text = _content!;
         setState(() => _ready = true);
@@ -94,11 +99,17 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       // a readable regular file — e.g. a directory, a virtual/special file, or
       // a permission/IO error. Surface it and close the editor instead of
       // crashing with an unhandled exception (this runs fire-and-forget from
-      // initState, so an uncaught error has nowhere to go).
+      // initState, so an uncaught error has nowhere to go). No "open with
+      // another app" fallback is offered: the download itself failed, so no
+      // application could open this file either.
       if (!mounted) return;
+      final message = e is SftpStatusError
+          ? 'Cannot open ${widget.entry.name}: the server refused to read it '
+              '(special file, broken link, or no permission).'
+          : 'Cannot open ${widget.entry.name}: $e';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Cannot open ${widget.entry.name}: $e'),
+          content: Text(message),
           backgroundColor: Colors.red,
         ),
       );
@@ -155,7 +166,9 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
     final type = data['type'] as String;
     if (type == 'ready') {
       setState(() => _ready = true);
-      if (_content != null) _pushContentToEditor();
+      if (_content != null) {
+        _pushContentToEditor();
+      }
     } else if (type == 'change') {
       if (!_isDirty) setState(() => _isDirty = true);
     } else if (type == 'save') {
@@ -168,6 +181,9 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
     final lang = _langMap[widget.entry.extension] ?? 'plaintext';
     final escaped = jsonEncode(_content);
     _controller!.runJavaScript('loadContent($escaped, "$lang")');
+    if (widget.readOnly) {
+      _controller!.runJavaScript('setReadOnly(true)');
+    }
   }
 
   /// Save entry point shared by the AppBar button and Ctrl/Cmd+S: pulls the
@@ -235,46 +251,78 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_isDirty,
+      canPop: widget.readOnly || !_isDirty,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _showDiscardDialog();
       },
       child: Scaffold(
-      backgroundColor: const Color(0xFF0F0F0F),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF141414),
-        title: Text(
-          widget.entry.name,
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-        ),
-        actions: [
-          if (_saving)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF22C55E)),
+        backgroundColor: const Color(0xFF0F0F0F),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF141414),
+          title: Text(widget.entry.name,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 14)),
+          actions: [
+            if (widget.readOnly)
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Icon(Icons.lock_outline,
+                    size: 16, color: Color(0xFF888888)),
+              )
+            else ...[
+              if (_saving)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Color(0xFF22C55E)),
+                  ),
+                ),
+              IconButton(
+                icon: const Icon(Icons.save_outlined, size: 18),
+                tooltip: 'Save (Ctrl+S)',
+                onPressed: _saving ? null : _saveCurrent,
               ),
-            ),
-          IconButton(
-            icon: const Icon(Icons.save_outlined, size: 18),
-            tooltip: 'Save (Ctrl+S)',
-            onPressed: _saving ? null : _saveCurrent,
-          ),
-        ],
-      ),
-      body: !_ready
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF22C55E)))
-          : _useWebView
-              ? WebViewWidget(controller: _controller!)
-              : _buildFallbackEditor(),
+            ],
+          ],
+        ),
+        body: !_ready
+            ? const Center(
+                child: CircularProgressIndicator(color: Color(0xFF22C55E)))
+            : _useWebView
+                ? WebViewWidget(controller: _controller!)
+                : _buildFallbackEditor(),
       ),
     );
   }
 
   /// Plain-Flutter editor for platforms without a webview implementation.
   Widget _buildFallbackEditor() {
+    final field = TextField(
+      controller: _textController,
+      maxLines: null,
+      expands: true,
+      textAlignVertical: TextAlignVertical.top,
+      autofocus: !widget.readOnly,
+      readOnly: widget.readOnly,
+      style: const TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 13,
+        color: Color(0xFFD4D4D4),
+        height: 1.5,
+      ),
+      decoration: const InputDecoration(
+        border: InputBorder.none,
+        contentPadding: EdgeInsets.all(12),
+      ),
+      onChanged: widget.readOnly
+          ? null
+          : (_) {
+              if (!_isDirty) setState(() => _isDirty = true);
+            },
+    );
+    if (widget.readOnly) return field;
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyS, control: true):
@@ -282,26 +330,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
         const SingleActivator(LogicalKeyboardKey.keyS, meta: true):
             _saveCurrent,
       },
-      child: TextField(
-        controller: _textController,
-        maxLines: null,
-        expands: true,
-        textAlignVertical: TextAlignVertical.top,
-        autofocus: true,
-        style: const TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 13,
-          color: Color(0xFFD4D4D4),
-          height: 1.5,
-        ),
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.all(12),
-        ),
-        onChanged: (_) {
-          if (!_isDirty) setState(() => _isDirty = true);
-        },
-      ),
+      child: field,
     );
   }
 }

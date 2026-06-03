@@ -32,14 +32,25 @@ class PluginContextImpl implements YourSSHPluginContext {
     }
   }
 
+  SSHSessionProxy _toProxy(SshSession s, {required bool isActive}) =>
+      SSHSessionProxy(
+        sessionId: s.id,
+        hostLabel: '${s.host.username}@${s.host.host}',
+        isConnected: s.status == SessionStatus.connected,
+        isActive: isActive,
+      );
+
   @override
   List<SSHSessionProxy> get activeSessions => _sessions.sessions
-      .map((s) => SSHSessionProxy(
-            sessionId: s.id,
-            hostLabel: '${s.host.username}@${s.host.host}',
-            isConnected: s.status == SessionStatus.connected,
-          ))
+      .map((s) => _toProxy(s, isActive: _sessions.activeSession?.id == s.id))
       .toList();
+
+  @override
+  SSHSessionProxy? get activeSession {
+    final session = _sessions.activeSession;
+    if (session == null) return null;
+    return _toProxy(session, isActive: true);
+  }
 
   @override
   Future<String> execCommand(String sessionId, String command) async {
@@ -54,6 +65,21 @@ class PluginContextImpl implements YourSSHPluginContext {
       );
     }
     return result.stdout;
+  }
+
+  @override
+  Future<void> sendInput(String sessionId, String text) async {
+    final session = _sessions.sessions.where((s) => s.id == sessionId).firstOrNull;
+    if (session == null) {
+      throw PluginSSHException('Unknown session: $sessionId');
+    }
+    if (session.status != SessionStatus.connected) {
+      throw PluginSSHException('Session is not connected: $sessionId');
+    }
+
+    if (!_ssh.sendInput(sessionId, text)) {
+      throw PluginSSHException('Session has no open shell: $sessionId');
+    }
   }
 
   @override

@@ -34,4 +34,5 @@ app/build
 packages/*/.dart_tool/
 packages/*/pubspec.lock
 packages/*/.flutter-plugins-dependencies
+packages/*/build/
 .dart_tool/

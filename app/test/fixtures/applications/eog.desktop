@@ -1,0 +1,5 @@
+[Desktop Entry]
+Name=Image Viewer
+Exec=eog %U
+MimeType=image/png;image/jpeg;
+Type=Application

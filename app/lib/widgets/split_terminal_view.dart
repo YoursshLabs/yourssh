@@ -9,6 +9,7 @@ import '../providers/share_provider.dart';
 import 'terminal_view.dart';
 import 'terminal_input_bar.dart';
 import 'broadcast_toolbar.dart';
+import 'terminal_snippets_panel.dart';
 
 class SplitTerminalView extends StatelessWidget {
   const SplitTerminalView({super.key});
@@ -31,7 +32,9 @@ class SplitTerminalView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final layout = context.watch<TerminalLayoutProvider>();
-    final sessions = context.watch<SessionProvider>().sessions;
+    final sessionProvider = context.watch<SessionProvider>();
+    final sessions = sessionProvider.sessions;
+    final active = sessionProvider.activeSession;
 
     if (sessions.isEmpty) {
       return const Center(
@@ -42,15 +45,45 @@ class SplitTerminalView extends StatelessWidget {
     return Column(
       children: [
         const BroadcastToolbar(),
-        Expanded(child: _buildPanes(context, layout, sessions)),
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(child: _buildPanes(context, layout, sessions, active)),
+              if (layout.snippetsPanelVisible)
+                TerminalSnippetsPanel(
+                  canRun: _canRunSnippetTarget(context),
+                  onRunSnippet: (snippet) =>
+                      _runSnippetOnActive(context, snippet.command),
+                  onClose: layout.toggleSnippetsPanel,
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildPanes(BuildContext context, TerminalLayoutProvider layout, List<SshSession> sessions) {
+  bool _canRunSnippetTarget(BuildContext context) {
+    final active = context.read<SessionProvider>().activeSession;
+    return active != null &&
+        !active.isWatch &&
+        active.status == SessionStatus.connected;
+  }
+
+  void _runSnippetOnActive(BuildContext context, String command) {
+    final active = context.read<SessionProvider>().activeSession;
+    if (active == null || active.isWatch || active.status != SessionStatus.connected) {
+      return;
+    }
+
+    active.terminal.textInput('$command\n');
+  }
+
+  Widget _buildPanes(BuildContext context, TerminalLayoutProvider layout, List<SshSession> sessions, SshSession? active) {
+    final pane0 = active ?? sessions[0];
     switch (layout.layout) {
       case SplitLayout.single:
-        return _buildPane(context, 0, sessions[0], sessions, layout);
+        return _buildPane(context, 0, pane0, sessions, layout);
 
       case SplitLayout.horizontal:
         return Row(children: [
@@ -132,7 +165,7 @@ class SplitTerminalView extends StatelessWidget {
         Expanded(
           child: GestureDetector(
             onTap: () => context.read<SessionProvider>().setActive(session.id),
-            child: SessionTerminalView(session: session),
+            child: SessionTerminalView(key: ValueKey(session.id), session: session),
           ),
         ),
         if (showInput)

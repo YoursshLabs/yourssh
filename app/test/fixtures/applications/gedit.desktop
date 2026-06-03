@@ -1,0 +1,5 @@
+[Desktop Entry]
+Name=Text Editor
+Exec=gedit %F
+MimeType=text/plain;text/x-diff;
+Type=Application

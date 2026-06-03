@@ -59,6 +59,38 @@ class ShellIntegrationService {
     return null;
   }
 
+  /// Sentinels printed by the injected shell code. Built at runtime with
+  /// `printf '__YS_%s__' RDY` so the literal string never appears in the
+  /// echoed command line — the output scanner cannot false-positive on echo.
+  static const kReadySentinel = '__YS_RDY__';
+  static const kDoneSentinel = '__YS_DONE__';
+
+  /// Short first-phase line written to the shell instead of the full script.
+  /// bash/zsh: disables tty echo, prints RDY, then blocks in `read -rs` so
+  /// the payload that follows is consumed raw and never echoed. The explicit
+  /// `stty -echo` BEFORE the RDY printf closes the race where the payload
+  /// arrives after RDY but before `read -s` has switched the tty itself —
+  /// the kernel would echo it. Other POSIX shells: print DONE immediately so
+  /// the client skips the payload and cleans up.
+  String buildBootstrapLine() =>
+      r'[ -n "$BASH_VERSION$ZSH_VERSION" ] && '
+      r"{ stty -echo 2>/dev/null; printf '__YS_%s__' RDY; "
+      r'IFS= read -rs __ys; eval "$__ys"; unset __ys; '
+      r'stty echo 2>/dev/null; } '
+      r"|| printf '__YS_%s__\n' DONE"
+      '\n';
+
+  /// Second-phase line: the hook installer plus the DONE sentinel. Sent only
+  /// after RDY is seen, while `read -rs` is consuming stdin — never echoed.
+  /// DONE carries a trailing newline so both the remote shell and the app
+  /// land on a fresh line (col 0) once the client discards everything up to
+  /// and including the sentinel — the next prompt then renders in sync.
+  String buildPayloadLine() {
+    final body = buildInjectionScript(); // ends with '\n'
+    return '${body.substring(0, body.length - 1)}; '
+        "printf '__YS_%s__\\n' DONE\n";
+  }
+
   /// Single-line bash/zsh setup written to the shell on connect. Guarded
   /// (`__yourssh_si`) so a re-source is a no-op; appends to PROMPT_COMMAND /
   /// precmd/preexec arrays rather than overwriting; silent on other shells.

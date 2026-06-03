@@ -77,7 +77,7 @@ sudo dpkg -r yourssh
 - **Terminal sharing (multiplayer)** — share a live SSH session with a session code; guests join via the Command Palette and watch or interact in real time; built on Supabase Realtime
 - **Split terminal view** — horizontal/vertical pane splitting within a session
 - **Search-in-scrollback (Cmd/Ctrl+F)** — regex-powered search across the full terminal buffer; highlights all matches, navigate with Enter / Shift+Enter
-- **Shell integration (bash/zsh)** — injected OSC 7/133 prompt hooks surface the working directory on the session tab, a per-command status gutter (green = ok, red = failed), jump-to-prompt (Cmd/Ctrl+↑/↓), and cwd-aware path completion in the input bar; auto-on with per-host / global opt-out
+- **Shell integration (bash/zsh)** — injected OSC 7/133 prompt hooks surface the working directory on the session tab, a per-command status gutter (green = ok, red = failed), jump-to-prompt (Cmd/Ctrl+↑/↓), and cwd-aware path completion in the input bar; auto-on with per-host / global opt-out; the setup script is delivered invisibly (never echoed into your terminal or recordings)
 - **Port forwarding** — local, remote, and dynamic SOCKS5 tunnels
 - **Jump host / bastion proxy** — connect to internal servers via a bastion host; select any saved host as the jump hop in the host detail panel
 - **Local shell** — spawn native macOS/Windows/Linux shell alongside SSH sessions
@@ -86,6 +86,8 @@ sudo dpkg -r yourssh
 ### File Management
 - **Dual-panel SFTP** — browse local and remote filesystems side-by-side
 - Upload, download, rename, delete files and directories with transfer progress
+- **Sudo SFTP (root file transfers)** — per-host SFTP mode that runs the whole SFTP session as root through `sudo` (WinSCP-style), with distro auto-detection and clear error guidance
+- **View & Open with…** — read-only file preview, plus a hover submenu listing every installed app that can open the file's type; external edits are watched and auto-uploaded back to the server
 - Breadcrumb navigation and file type icons
 
 ### Credentials & Security
@@ -98,7 +100,7 @@ sudo dpkg -r yourssh
 ### Productivity
 - **Command Palette (Cmd/Ctrl+K)** — fuzzy-search all hosts, navigation sections, snippets, and app actions from a single keyboard shortcut
 - **Workspace persistence** — open SSH tabs, layout, and active session automatically restored on relaunch; no need to reconnect after restart
-- **Command snippets** — save and inject reusable command templates
+- **Command snippets** — save and inject reusable command templates; a collapsible snippets panel inside the terminal lets you browse, search, copy, and run them against the active pane
 - **Command history** — searchable history per session
 - **Hotkeys** — customizable global keyboard shortcuts
 - **Host groups** — organize connection profiles into logical folders

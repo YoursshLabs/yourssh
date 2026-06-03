@@ -104,6 +104,7 @@ class _LocalTerminalScreenState extends State<LocalTerminalScreen> {
     }
     final settings = context.watch<SettingsProvider>();
     return TerminalView(
+      key: ValueKey(session.id),
       session.terminal,
       textStyle: TerminalStyle(
         fontSize: settings.fontSize,

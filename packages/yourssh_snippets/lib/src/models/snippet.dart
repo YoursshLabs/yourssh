@@ -1,5 +1,18 @@
 import 'package:uuid/uuid.dart';
 
+/// Case-insensitive snippet search over label, command, and tag — the one
+/// filter used by both the snippets screen and the terminal side panel.
+List<Snippet> filterSnippets(List<Snippet> snippets, String query) {
+  if (query.isEmpty) return snippets;
+  final q = query.toLowerCase();
+  return snippets
+      .where((s) =>
+          s.label.toLowerCase().contains(q) ||
+          s.command.toLowerCase().contains(q) ||
+          s.tag.toLowerCase().contains(q))
+      .toList();
+}
+
 class Snippet {
   final String id;
   String label;

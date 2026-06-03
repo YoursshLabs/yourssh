@@ -48,6 +48,49 @@ void main() {
     });
   });
 
+  group('buildBootstrapLine', () {
+    final boot = s.buildBootstrapLine();
+    test('is one short line guarded on bash/zsh', () {
+      expect('\n'.allMatches(boot).length, 1); // trailing newline only
+      expect(boot.endsWith('\n'), isTrue);
+      expect(boot, contains(r'$BASH_VERSION$ZSH_VERSION'));
+      expect(boot.length, lessThan(220)); // must stay short: its echo can wrap
+    });
+    test('reads payload silently and evals it', () {
+      expect(boot, contains('IFS= read -rs __ys'));
+      expect(boot, contains(r'eval "$__ys"'));
+      expect(boot, contains('unset __ys'));
+      // Echo must be off BEFORE RDY is printed (race: payload can arrive
+      // before `read -s` flips the tty), and restored afterwards.
+      expect(boot.indexOf('stty -echo'), lessThan(boot.indexOf('RDY')));
+      expect(boot, contains('stty echo 2>/dev/null'));
+    });
+    test('sentinel literals never appear in the bootstrap source (echo-safe)', () {
+      // printf '__YS_%s__' RDY builds the sentinel at runtime, so scanning the
+      // output stream can never false-positive on the echoed command line.
+      expect(boot, isNot(contains(ShellIntegrationService.kReadySentinel)));
+      expect(boot, isNot(contains(ShellIntegrationService.kDoneSentinel)));
+      expect(boot, contains("printf '__YS_%s__' RDY"));
+      // Non-bash/zsh branch; the \n lands both sides on a fresh line (col 0)
+      // so the next prompt renders consistently after the head is discarded.
+      expect(boot, contains(r"printf '__YS_%s__\n' DONE"));
+    });
+  });
+
+  group('buildPayloadLine', () {
+    final payload = s.buildPayloadLine();
+    test('is the hook installer terminated by the DONE printf', () {
+      expect('\n'.allMatches(payload).length, 1);
+      expect(payload.endsWith("printf '__YS_%s__\\n' DONE\n"), isTrue);
+      // Hook-installer body is unchanged.
+      final body = s.buildInjectionScript();
+      expect(payload, startsWith(body.substring(0, body.length - 1)));
+    });
+    test('sentinel literal never appears in the payload source', () {
+      expect(payload, isNot(contains(ShellIntegrationService.kDoneSentinel)));
+    });
+  });
+
   group('buildInjectionScript', () {
     final script = s.buildInjectionScript();
     test('is single-line and guarded + idempotent', () {

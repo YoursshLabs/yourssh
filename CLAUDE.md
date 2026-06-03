@@ -68,7 +68,7 @@ Flutter UI (widgets/screens)
 - `SyncProvider` — holds Supabase sync config (URL/key, optional passphrase, status); `enabled` is derived from `isSupabaseConfigured` — no separate stored flag; passphrase stored in secure storage via `StorageService`
 - `KnownHostsProvider` — persists known host fingerprints; exposes `pendingChallenge` for TOFU dialog
 - `SettingsProvider` — app-wide prefs (auto-reconnect, tmux, hotkeys, feature flags for DevOps/WebTools/Snippets)
-- `TerminalLayoutProvider` — split layout (none/horizontal/vertical) and input bar visibility
+- `TerminalLayoutProvider` — split layout (none/horizontal/vertical), input bar visibility, and snippets-panel visibility (`toggleSnippetsPanel()` for the collapsible right-side snippets panel in the terminal workspace)
 - `LocalSessionProvider` — manages local shell sessions via `flutter_pty`
 - `LocalFilePanelProvider` — local filesystem state for the dual-panel SFTP view
 - `SftpPanelProvider` — remote SFTP panel state (current path, directory listing)
@@ -93,7 +93,8 @@ Flutter UI (widgets/screens)
 - `HotkeyService` — global hotkey registration via `hotkey_manager`; hotkey names (`new_session`, `close_session`, `next_session`, `prev_session`, `toggle_input_bar`, `split_horizontal`, `split_vertical`) configured in `SettingsProvider`
 - `SftpFileOpsService` — SFTP file operations (rename, delete, mkdir, permissions)
 - `SftpTransferService` — chunked upload/download with progress callbacks
-- `ExternalEditService` — "open with external app" for SFTP files: downloads to a per-session temp dir, launches the OS default app (`url_launcher`), polls mtime every 2 s and auto-uploads changes back to the server; `sftp_file_inspector.dart` (pure) decides which files the in-app editor refuses (binary extension, > 5 MB, null byte in first 8 KB)
+- `ExternalEditService` — "open with external app" for SFTP files: downloads to a per-session temp dir, launches the OS default app (`url_launcher`) or a specific app (`openExternalWith`), polls mtime every 2 s and auto-uploads changes back to the server; `sftp_file_inspector.dart` (pure) decides which files the in-app editor refuses (binary extension, > 5 MB, null byte in first 8 KB)
+- `AppDiscoveryService` — discovers installed applications for a given file path, filtered by MIME type; per-extension cache; macOS uses `LSCopyApplicationURLsForURL` via a `yourssh/app_discovery` Flutter method channel registered in `MainFlutterWindow.awakeFromNib` (NOT AppDelegate — its lifecycle overrides never fire in this app), Linux parses XDG `.desktop` files in Dart, Windows uses PowerShell registry queries
 - `McpGatewayService` — starts a remote MCP server over SSH exec and forwards a local port to it
 - `CloudflareTunnelService` — manages `cloudflared` tunnel process lifecycle
 - `MailCatcherService` — connects to a remote MailCatcher SMTP instance via port forward
@@ -102,7 +103,7 @@ Flutter UI (widgets/screens)
 - `WebToolsService` — in-app HTTP requests through a port-forwarded connection
 - `SystemAgentProxy` — proxies SSH agent socket for `AuthType.agent`
 - `RecordingService` — writes asciicast v2 (`.cast`) files; tracks active recordings keyed by `sessionId`; passive intercept pattern — `SshService` always calls `writeOutput()` / `onShellClosed()`, which no-op when not recording
-- `ShellIntegrationService` — pure (no Flutter/IO): `parseOsc(code, args)` maps xterm `onPrivateOSC` to a typed `ShellOscEvent` (OSC 7 cwd, OSC 133 A/D; C ignored), `buildInjectionScript()` returns the guarded one-line bash/zsh prompt-hook installer (auto-on, opt-out via `Host.shellIntegration` + `SettingsProvider.shellIntegrationEnabled`). `SshService.openShell` injects it after tmux/initialCommand and wires `terminal.onPrivateOSC`; `path_completion.dart` (pure) plans cwd-aware path completion for the input bar over `SshService.listDirectory`
+- `ShellIntegrationService` — pure (no Flutter/IO): `parseOsc(code, args)` maps xterm `onPrivateOSC` to a typed `ShellOscEvent` (OSC 7 cwd, OSC 133 A/D; C ignored); `buildInjectionScript()` is the guarded one-line bash/zsh prompt-hook installer (auto-on, opt-out via `Host.shellIntegration` + `SettingsProvider.shellIntegrationEnabled`), delivered **invisibly** via a two-phase handshake: `buildBootstrapLine()` (short line that disables tty echo and blocks in `read -rs`, printing `__YS_RDY__`/`__YS_DONE__` sentinels) + `buildPayloadLine()` (the installer, consumed by `read` so never echoed). `SshService.openShell` wires `terminal.onPrivateOSC` and injects only when `injection_gate.dart`'s `InjectionReadiness` confirms the line editor is reading (bracketed-paste `ESC[?2004h` toggle + settle, bare-`\n` probe fallback for bash ≤ 5.0; skipped on alt-screen/user typing/never-confirmed) while `InjectionGate` withholds and discards the bootstrap echo; `path_completion.dart` (pure) plans cwd-aware path completion for the input bar over `SshService.listDirectory`. Design: `docs/superpowers/specs/2026-06-03-invisible-shell-integration-design.md`
 - `UpdateService` — in-app update glue: `fetchLatestRelease()` (GitHub `releases/latest`, stable-only), pure `isNewerVersion` (semver, fail-closed on blank) and `assetForPlatform` (OS/arch → release asset; macOS arm64-only → null on Intel), `downloadAsset` (streamed to Downloads with progress, cleans up partial file), `launchInstaller` (macOS: strip `com.apple.quarantine` + `open` DMG; Windows: run installer `.exe`; Linux: `xdg-open`); throws typed `UpdateException`; takes an injectable `http.Client` for testing
 
 **Key models** (`app/lib/models/`):
@@ -135,7 +136,7 @@ Each implements `YourSSHPlugin` (from `yourssh_plugin_api`):
 - `onActivate(ctx)` / `onDeactivate()` — lifecycle hooks
 - `minApiVersion` — checked at runtime against `kApiVersion`
 
-`YourSSHPluginContext` exposes: `activeSessions`, `execCommand(sessionId, cmd)`, namespaced `savePreference` / `getPreference`.
+`YourSSHPluginContext` exposes: `activeSessions`, `activeSession`, `execCommand(sessionId, cmd)`, `sendInput(sessionId, text)` (types text into the session's terminal — used by Snippets to insert a snippet into the focused session), namespaced `savePreference` / `getPreference`.
 
 ### JS plugins (disk-based, runtime)
 
