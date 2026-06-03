@@ -110,8 +110,7 @@ class SudoSftpException implements Exception {
 
   @override
   String toString() =>
-      'SudoSftpException(${reason.name}): $message'
-      '${detail == null || detail!.isEmpty ? '' : '\n$detail'}';
+      detail == null || detail!.isEmpty ? message : '$message\n$detail';
 }
 
 typedef SudoExecResult = ({String stdout, String stderr, int exitCode});
