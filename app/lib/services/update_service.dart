@@ -20,9 +20,9 @@ class UpdateService {
   UpdateService({
     http.Client? client,
     this.repo = 'YoursshLabs/yourssh',
-    // ignore: prefer_initializing_formals
     Directory? downloadDir,
   })  : _client = client ?? http.Client(),
+        // ignore: prefer_initializing_formals
         _downloadDir = downloadDir;
 
   final http.Client _client;
