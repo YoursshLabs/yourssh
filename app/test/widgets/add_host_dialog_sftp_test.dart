@@ -118,6 +118,27 @@ void main() {
         popped!.host.sftpServerCommand, 'sudo /usr/lib/openssh/sftp-server');
   });
 
+  testWidgets('custom mode with empty command blocks save and shows Required',
+      (tester) async {
+    await pumpDialog(tester);
+    await fillRequired(tester);
+
+    // Select "Custom command" in the SFTP Mode dropdown.
+    await tester.tap(find.text('Default'));
+    await settleIgnoringOverflow(tester);
+    await tester.tap(find.text('Custom command').last);
+    await settleIgnoringOverflow(tester);
+
+    // Leave the SFTP server command field empty and tap Add.
+    await tester.tap(find.text('Add'));
+    await settleIgnoringOverflow(tester);
+
+    // Dialog must NOT have popped.
+    expect(popped, isNull);
+    // The 'Required' validation error from the empty command field is shown.
+    expect(find.text('Required'), findsWidgets);
+  });
+
   testWidgets('editing an existing sudo host shows Sudo selected',
       (tester) async {
     final existing = Host(
