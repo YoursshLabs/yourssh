@@ -58,7 +58,7 @@ class ExternalEditService {
   Future<void> openExternal(Host host, SftpEntry entry) async {
     final localFile = await _prepareLocalFile(host, entry);
     final launched = _appLaunch != null
-        ? await _appLaunch!(Uri.file(localFile.path), null)
+        ? await _appLaunch(Uri.file(localFile.path), null)
         : await _launch(Uri.file(localFile.path));
     if (!launched) {
       throw ExternalEditException('No application found to open ${entry.name}');
@@ -72,7 +72,7 @@ class ExternalEditService {
       Host host, SftpEntry entry, String appPath) async {
     final localFile = await _prepareLocalFile(host, entry);
     final launched = _appLaunch != null
-        ? await _appLaunch!(Uri.file(localFile.path), appPath)
+        ? await _appLaunch(Uri.file(localFile.path), appPath)
         : await _launchWithApp(localFile.path, appPath);
     if (!launched) {
       throw ExternalEditException(
