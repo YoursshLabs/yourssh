@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Invisible shell-integration setup** — the OSC 7/133 hook-installer script is no longer visible in the terminal when a session connects. It is now delivered through a silent two-phase handshake: a short bootstrap line blocks in `read -rs` (tty echo disabled), the real script is consumed without ever being echoed, and the bootstrap's own echo is erased before it is painted. Non-bash/zsh shells degrade cleanly, and session recordings no longer capture the setup script either.
+
 ### Added
 - **SFTP View mode** — right-clicking (or double-clicking) a file in the SFTP panel now shows separate **View** (read-only preview, lock icon in the AppBar, no save) and **Edit** (existing editable mode) actions so you can open log files and config files without risking accidental edits.
 - **Open with… (SFTP)** — replaces "Open with external app" with an **Open with ▶** submenu that **opens on hover** (native cascading menu) and lists every application installed on your machine that can open the file's type (macOS via `NSWorkspace`/`LSCopyApplicationURLsForURL`, Linux via XDG MIME + `.desktop` files, Windows via registry). A **Choose…** option lets you pick any application with the OS file picker. The selected app is launched with the downloaded file and yourssh watches for saves and uploads changes back automatically.
