@@ -206,9 +206,9 @@ $props.PSObject.Properties |
     }
     // 2. Scan HKCR open commands for matching exe name
     final psScript =
-        r'Get-ChildItem "HKCR:\*\shell\open\command" -ErrorAction SilentlyContinue | ' +
-        'ForEach-Object { (Get-ItemProperty \$_.PsPath)."(default)" } | ' +
-        'Where-Object { \$_ -like "*${exeName.replaceAll(r'\', r'\\')}*" } | ' +
+        r'Get-ChildItem "HKCR:\*\shell\open\command" -ErrorAction SilentlyContinue | '
+        'ForEach-Object { (Get-ItemProperty \$_.PsPath)."(default)" } | '
+        'Where-Object { \$_ -like "*${exeName.replaceAll(r'\', r'\\')}*" } | '
         'Select-Object -First 1';
     final regResult = await Process.run(
         'powershell', ['-NoProfile', '-Command', psScript]);

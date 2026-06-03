@@ -1,7 +1,6 @@
 // app/test/services/app_discovery_service_linux_test.dart
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:yourssh/models/app_option.dart';
 import 'package:yourssh/services/app_discovery_service.dart';
 
 void main() {
