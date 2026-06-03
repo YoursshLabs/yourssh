@@ -92,6 +92,9 @@ dependencies:
   # HMAC/SHA hashing for AWS Signature V4 (S3 browser)
   crypto: ^3.0.3
 
+  # AccumulatorSink<Digest> for streaming SHA-256 verification in UpdateService
+  convert: ^3.1.1
+
   # FFI utilities (Utf16 string conversion, Arena allocator) — Windows SSH agent named pipe
   ffi: ^2.1.3
 

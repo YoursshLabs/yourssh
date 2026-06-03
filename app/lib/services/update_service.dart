@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:convert/convert.dart';
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:yourssh/models/app_release.dart';
@@ -15,10 +17,16 @@ class UpdateException implements Exception {
 
 /// Network + platform glue for the in-app update flow.
 class UpdateService {
-  UpdateService({http.Client? client, this.repo = 'YoursshLabs/yourssh'})
-      : _client = client ?? http.Client();
+  UpdateService({
+    http.Client? client,
+    this.repo = 'YoursshLabs/yourssh',
+    Directory? downloadDir,
+  })  : _client = client ?? http.Client(),
+        // ignore: prefer_initializing_formals
+        _downloadDir = downloadDir;
 
   final http.Client _client;
+  final Directory? _downloadDir;
   final String repo;
 
   static final RegExp _versionSuffix = RegExp(r'[-+]');
@@ -171,9 +179,16 @@ class UpdateService {
     ReleaseAsset asset, {
     required void Function(double) onProgress,
   }) async {
-    final dir = await getDownloadsDirectory() ?? await getTemporaryDirectory();
+    // Enforce HTTPS: use tryParse so a malformed URL throws UpdateException,
+    // not a raw FormatException.
+    final rawUrl = asset.downloadUrl;
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null || uri.scheme != 'https') {
+      throw UpdateException('Download URL must use HTTPS: $rawUrl');
+    }
+    final dir = _downloadDir ?? await getDownloadsDirectory() ?? await getTemporaryDirectory();
     final file = File('${dir.path}/${asset.name}');
-    final req = http.Request('GET', Uri.parse(asset.downloadUrl));
+    final req = http.Request('GET', uri);
     final res = await _client.send(req);
     if (res.statusCode != 200) {
       throw UpdateException('Download failed (${res.statusCode})');
@@ -181,10 +196,13 @@ class UpdateService {
     final total = res.contentLength ?? asset.size;
     var received = 0;
     final sink = file.openWrite();
+    final digestOutput = AccumulatorSink<Digest>();
+    final digestInput = sha256.startChunkedConversion(digestOutput);
     try {
       await for (final chunk in res.stream) {
         received += chunk.length;
         sink.add(chunk);
+        digestInput.add(chunk);
         if (total > 0) onProgress((received / total).clamp(0.0, 1.0));
       }
       await sink.flush();
@@ -199,8 +217,27 @@ class UpdateService {
       }
       if (e is UpdateException) rethrow;
       throw UpdateException('Download failed: $e');
+    } finally {
+      digestInput.close();
     }
     await sink.close();
+
+    // Verify SHA-256 digest when the GitHub API provided one.
+    final assetDigest = asset.digest;
+    if (assetDigest != null && assetDigest.isNotEmpty) {
+      final expected = assetDigest.startsWith('sha256:')
+          ? assetDigest.substring(7)
+          : assetDigest;
+      final computed = digestOutput.events.single.toString();
+      if (computed != expected) {
+        try {
+          await file.delete();
+        } catch (_) {}
+        throw UpdateException(
+            'Digest mismatch: expected $expected, got $computed');
+      }
+    }
+
     onProgress(1.0);
     return file;
   }

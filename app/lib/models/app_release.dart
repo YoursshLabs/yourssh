@@ -14,17 +14,21 @@ class ReleaseAsset {
   final String name;
   final String downloadUrl;
   final int size;
+  // "sha256:<hex>" from GitHub API digest field; null when not provided.
+  final String? digest;
 
   const ReleaseAsset({
     required this.name,
     required this.downloadUrl,
     required this.size,
+    this.digest,
   });
 
   factory ReleaseAsset.fromJson(Map<String, dynamic> json) => ReleaseAsset(
         name: (json['name'] as String?) ?? '',
         downloadUrl: (json['browser_download_url'] as String?) ?? '',
         size: (json['size'] as num?)?.toInt() ?? 0,
+        digest: json['digest'] as String?,
       );
 }
 

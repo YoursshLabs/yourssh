@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -173,6 +174,83 @@ void main() {
       final client = MockClient((req) async => http.Response('rate limited', 403));
       final svc = UpdateService(client: client);
       await expectLater(svc.fetchLatestRelease(), throwsA(isA<UpdateException>()));
+    });
+  });
+
+  group('downloadAsset', () {
+    late Directory tmpDir;
+
+    setUp(() {
+      tmpDir = Directory.systemTemp.createTempSync('update_service_test_');
+    });
+
+    tearDown(() {
+      if (tmpDir.existsSync()) tmpDir.deleteSync(recursive: true);
+    });
+
+    ReleaseAsset asset({String? digest}) => ReleaseAsset(
+          name: 'test.dmg',
+          downloadUrl: 'https://example.com/test.dmg',
+          size: 11,
+          digest: digest,
+        );
+
+    test('non-HTTPS URL throws UpdateException', () async {
+      final svc = UpdateService(
+        client: MockClient((_) async => http.Response('', 200)),
+        downloadDir: tmpDir,
+      );
+      final bad = ReleaseAsset(
+        name: 'test.dmg',
+        downloadUrl: 'http://example.com/test.dmg',
+        size: 0,
+      );
+      await expectLater(
+        svc.downloadAsset(bad, onProgress: (_) {}),
+        throwsA(isA<UpdateException>()),
+      );
+    });
+
+    test('correct digest passes and file contains downloaded bytes', () async {
+      // sha256("hello world") = b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
+      const body = 'hello world';
+      const expectedDigest =
+          'sha256:b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9';
+      final client = MockClient(
+        (_) async => http.Response(body, 200),
+      );
+      final svc = UpdateService(client: client, downloadDir: tmpDir);
+      final file = await svc.downloadAsset(
+        asset(digest: expectedDigest),
+        onProgress: (_) {},
+      );
+      expect(file.existsSync(), isTrue);
+      expect(file.readAsStringSync(), body);
+    });
+
+    test('digest mismatch throws UpdateException and deletes file', () async {
+      final client = MockClient(
+        (_) async => http.Response('hello world', 200),
+      );
+      final svc = UpdateService(client: client, downloadDir: tmpDir);
+      await expectLater(
+        svc.downloadAsset(
+          asset(digest: 'sha256:0000000000000000000000000000000000000000000000000000000000000000'),
+          onProgress: (_) {},
+        ),
+        throwsA(isA<UpdateException>()),
+      );
+      // File must have been deleted on mismatch.
+      expect(File('${tmpDir.path}/test.dmg').existsSync(), isFalse);
+    });
+
+    test('null digest skips verification and succeeds', () async {
+      final client = MockClient(
+        (_) async => http.Response('some binary', 200),
+      );
+      final svc = UpdateService(client: client, downloadDir: tmpDir);
+      final file = await svc.downloadAsset(asset(), onProgress: (_) {});
+      expect(file.existsSync(), isTrue);
     });
   });
 }
