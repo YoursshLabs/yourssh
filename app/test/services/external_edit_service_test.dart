@@ -128,4 +128,22 @@ void main() {
     service.dispose();
     expect(service.activeWatchCount, 0);
   });
+
+  test('openExternalWith launches with the specified app path', () async {
+    final launched2 = <(Uri, String?)>[];
+    final serviceWithApp = ExternalEditService(
+      transfer,
+      appLauncher: (uri, appPath) async {
+        launched2.add((uri, appPath));
+        return true;
+      },
+      pollInterval: const Duration(milliseconds: 30),
+    );
+    addTearDown(serviceWithApp.dispose);
+
+    await serviceWithApp.openExternalWith(_host, _entry, '/Applications/TextEdit.app');
+
+    expect(launched2, hasLength(1));
+    expect(launched2.first.$2, '/Applications/TextEdit.app');
+  });
 }

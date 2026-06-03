@@ -9,6 +9,7 @@ import '../models/sftp_entry.dart';
 import 'sftp_transfer_service.dart';
 
 typedef ExternalLauncher = Future<bool> Function(Uri uri);
+typedef AppLauncher = Future<bool> Function(Uri uri, String? appPath);
 
 class ExternalEditException implements Exception {
   ExternalEditException(this.message);
@@ -28,11 +29,14 @@ class ExternalEditService {
   ExternalEditService(
     this._transferService, {
     ExternalLauncher? launcher,
+    AppLauncher? appLauncher,
     this.pollInterval = const Duration(seconds: 2),
-  }) : _launch = launcher ?? launchUrl;
+  })  : _launch = launcher ?? launchUrl,
+        _appLaunch = appLauncher;
 
   final SftpTransferService _transferService;
   final ExternalLauncher _launch;
+  final AppLauncher? _appLaunch;
   final Duration pollInterval;
 
   /// Called after a changed file was uploaded back to the server.
@@ -52,23 +56,43 @@ class ExternalEditService {
   ///
   /// Throws [ExternalEditException] when the download or launch fails.
   Future<void> openExternal(Host host, SftpEntry entry) async {
+    final localFile = await _prepareLocalFile(host, entry);
+    final launched = _appLaunch != null
+        ? await _appLaunch!(Uri.file(localFile.path), null)
+        : await _launch(Uri.file(localFile.path));
+    if (!launched) {
+      throw ExternalEditException('No application found to open ${entry.name}');
+    }
+    _startWatcher(host, entry, localFile);
+  }
+
+  /// Like [openExternal] but launches with a specific application [appPath]
+  /// instead of the OS default.
+  Future<void> openExternalWith(
+      Host host, SftpEntry entry, String appPath) async {
+    final localFile = await _prepareLocalFile(host, entry);
+    final launched = _appLaunch != null
+        ? await _appLaunch!(Uri.file(localFile.path), appPath)
+        : await _launchWithApp(localFile.path, appPath);
+    if (!launched) {
+      throw ExternalEditException(
+          'Failed to open ${entry.name} with $appPath');
+    }
+    _startWatcher(host, entry, localFile);
+  }
+
+  Future<File> _prepareLocalFile(Host host, SftpEntry entry) async {
     final tmpPath = await _transferService.downloadToTemp(host, entry);
     if (tmpPath == null) {
       throw ExternalEditException('Download failed for ${entry.name}');
     }
-    // Move into a per-session directory so concurrent edits of equally
-    // named files cannot clobber each other in the shared temp dir.
     final sessionDir = Directory(
         '${File(tmpPath).parent.path}/yourssh_edit/${_sessionCounter++}');
     await sessionDir.create(recursive: true);
-    final localFile =
-        await File(tmpPath).rename('${sessionDir.path}/${entry.name}');
+    return File(tmpPath).rename('${sessionDir.path}/${entry.name}');
+  }
 
-    if (!await _launch(Uri.file(localFile.path))) {
-      throw ExternalEditException(
-          'No application found to open ${entry.name}');
-    }
-
+  void _startWatcher(Host host, SftpEntry entry, File localFile) {
     final session = _WatchSession(
       host: host,
       entry: entry,
@@ -77,6 +101,18 @@ class ExternalEditService {
     );
     session.timer = Timer.periodic(pollInterval, (_) => _poll(session));
     _sessions.add(session);
+  }
+
+  Future<bool> _launchWithApp(String filePath, String appPath) {
+    if (Platform.isMacOS) {
+      return Process.run('open', ['-a', appPath, filePath])
+          .then((r) => r.exitCode == 0);
+    }
+    if (Platform.isWindows) {
+      return Process.run(appPath, [filePath], runInShell: true)
+          .then((r) => r.exitCode == 0);
+    }
+    return Process.run(appPath, [filePath]).then((r) => r.exitCode == 0);
   }
 
   Future<void> _poll(_WatchSession session) async {
