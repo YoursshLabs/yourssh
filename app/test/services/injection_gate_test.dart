@@ -2,6 +2,71 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/services/injection_gate.dart';
 
 void main() {
+  group('InjectionReadiness', () {
+    test('bracketed-paste ON means the line editor is reading', () {
+      final r = InjectionReadiness();
+      r.onChunk('prompt stuff \x1b[?2004h');
+      expect(r.bpOn, isTrue);
+      expect(r.bpEver, isTrue);
+    });
+
+    test('bracketed-paste OFF after ON means executing, not reading', () {
+      final r = InjectionReadiness();
+      r.onChunk('\x1b[?2004h');
+      r.onChunk('\x1b[?2004l running command');
+      expect(r.bpOn, isFalse);
+      expect(r.bpEver, isTrue);
+    });
+
+    test('last toggle in a chunk wins', () {
+      final r = InjectionReadiness();
+      r.onChunk('\x1b[?2004h\x1b[?2004l\x1b[?2004h');
+      expect(r.bpOn, isTrue);
+    });
+
+    test('toggle split across chunks still detected', () {
+      final r = InjectionReadiness();
+      r.onChunk('text\x1b[?20');
+      r.onChunk('04h');
+      expect(r.bpOn, isTrue);
+    });
+
+    test('alt-screen entry is reported (full-screen app owns the tty)', () {
+      final r = InjectionReadiness();
+      expect(r.onChunk('\x1b[?1049h'), ReadinessSignal.altScreen);
+      expect(InjectionReadiness().onChunk('\x1b[?47h'),
+          ReadinessSignal.altScreen);
+    });
+
+    test('plain output is no signal', () {
+      final r = InjectionReadiness();
+      expect(r.onChunk('Last login: Wed\n'), ReadinessSignal.none);
+      expect(r.bpOn, isFalse);
+      expect(r.bpEver, isFalse);
+    });
+
+    group('promptLikeTail', () {
+      test('classic prompts match', () {
+        expect(InjectionReadiness.promptLikeTail('bash-3.2\$ '), isTrue);
+        expect(InjectionReadiness.promptLikeTail('\r\nuser@host:~\$ '), isTrue);
+        expect(InjectionReadiness.promptLikeTail('root@box:/# '), isTrue);
+        expect(InjectionReadiness.promptLikeTail('❯ '), isTrue);
+      });
+      test('escape sequences are ignored when finding the tail', () {
+        expect(
+            InjectionReadiness.promptLikeTail(
+                '\x1b[1muser\x1b[0m@host \$ \x1b[K'),
+            isTrue);
+      });
+      test('mid-line MOTD stall does not match', () {
+        expect(InjectionReadiness.promptLikeTail('Last login:'), isFalse);
+        expect(InjectionReadiness.promptLikeTail('banner text\n'), isFalse);
+        expect(InjectionReadiness.promptLikeTail(''), isFalse);
+        expect(InjectionReadiness.promptLikeTail('\x1b[0m\r\n'), isFalse);
+      });
+    });
+  });
+
   InjectionGate gate({int maxHold = 2048}) => InjectionGate(
       readySentinel: '__YS_RDY__',
       doneSentinel: '__YS_DONE__',

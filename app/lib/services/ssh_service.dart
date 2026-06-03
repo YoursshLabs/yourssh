@@ -387,26 +387,41 @@ class SshService {
 
     // Invisible shell-integration injection (two-phase handshake; see
     // docs/superpowers/specs/2026-06-03-invisible-shell-integration-design.md).
-    // Quiescence wait → bootstrap → RDY → payload (never echoed via read -rs)
-    // → DONE → discard the withheld bootstrap echo. The held head is never
-    // written: erasing it after the fact desyncs the app cursor from the
-    // remote's and fancy prompts then paint over the wrong rows.
+    // Readiness → bootstrap → RDY → payload (never echoed via read -rs) →
+    // DONE → discard the withheld bootstrap echo. Readiness is the bracketed-
+    // paste toggle (line editor reading) + a settle period; shells without it
+    // (bash ≤ 5.0) get a bare-\n probe answered by a prompt-like tail. If
+    // readiness is never confirmed the injection is skipped entirely — a
+    // missing integration beats junk typed into a half-initialized session.
     InjectionGate? gate;
-    Timer? quiesceTimer;
-    Timer? capTimer;
+    final readiness = InjectionReadiness();
+    Timer? settleTimer;
+    Timer? quietTimer;
+    Timer? probeWindowTimer;
     Timer? doneTimer;
+    var awaitingProbe = false;
+    var sinceProbe = '';
+    var probesLeft = 4;
+    var injectionAborted = false;
+    DateTime? firstOutputAt;
+
+    void cancelReadinessTimers() {
+      settleTimer?.cancel();
+      quietTimer?.cancel();
+      probeWindowTimer?.cancel();
+    }
 
     void launchInjection() {
-      if (!siOn || gate != null) return;
-      quiesceTimer?.cancel();
-      capTimer?.cancel();
+      if (!siOn || gate != null || injectionAborted) return;
+      cancelReadinessTimers();
+      awaitingProbe = false;
       final bootstrap = shellIntegration!.buildBootstrapLine();
       gate = InjectionGate(
         readySentinel: ShellIntegrationService.kReadySentinel,
         doneSentinel: ShellIntegrationService.kDoneSentinel,
-        // Echo ≈ bootstrap + zle redraw overhead; anything much larger is
-        // real server output that must be shown, not discarded.
-        maxHold: bootstrap.length * 4,
+        // Generous: the head is echo + line-editor redraw noise; only a
+        // genuinely streaming command produces more, and that must be shown.
+        maxHold: 16384,
       );
       shell.write(Uint8List.fromList(bootstrap.codeUnits));
       doneTimer = Timer(const Duration(seconds: 2), () {
@@ -417,10 +432,44 @@ class SshService {
       });
     }
 
-    if (siOn) {
-      // Cap: inject even if the server never goes quiet (or stays silent).
-      capTimer = Timer(const Duration(seconds: 3), launchInjection);
+    // Probe fallback scheduler: after 1.2 s of silence (and a 2.5 s floor so
+    // instant-prompt frameworks have revealed their bracketed paste), send a
+    // bare "\n". A real prompt answers it; MOTD-in-progress only produces a
+    // kernel echo. Out of probes → give up cleanly.
+    void armQuietProbe() {
+      if (!siOn ||
+          gate != null ||
+          injectionAborted ||
+          awaitingProbe ||
+          readiness.bpEver) {
+        return;
+      }
+      quietTimer?.cancel();
+      quietTimer = Timer(const Duration(milliseconds: 1200), () {
+        if (gate != null || injectionAborted || readiness.bpEver) return;
+        final first = firstOutputAt;
+        if (first == null ||
+            DateTime.now().difference(first) <
+                const Duration(milliseconds: 2500)) {
+          armQuietProbe(); // too early; keep waiting
+          return;
+        }
+        if (probesLeft <= 0) {
+          injectionAborted = true; // never confirmed: skip, stay clean
+          return;
+        }
+        probesLeft--;
+        awaitingProbe = true;
+        sinceProbe = '';
+        shell.write(Uint8List.fromList('\n'.codeUnits));
+        probeWindowTimer = Timer(const Duration(seconds: 1), () {
+          awaitingProbe = false;
+          armQuietProbe();
+        });
+      });
     }
+
+    if (siOn) armQuietProbe();
 
     final done = Completer<void>();
     const utf8 = Utf8Decoder(allowMalformed: true);
@@ -436,16 +485,30 @@ class SshService {
               'terminal.output', TransformEvent(sessionId: session.id, data: text));
         }
 
-        // Quiescence detection: only arm the injection timer when the chunk
-        // looks prompt-like (no trailing newline — cursor resting mid-line).
-        // A chunk ending in \n means the server is still printing (banner,
-        // late "Last login:" MOTD) — keep waiting; the cap timer is the
-        // backstop for hosts that never settle.
-        if (siOn && gate == null) {
-          quiesceTimer?.cancel();
-          if (!text.endsWith('\n')) {
-            quiesceTimer =
-                Timer(const Duration(milliseconds: 300), launchInjection);
+        if (siOn && gate == null && !injectionAborted) {
+          firstOutputAt ??= DateTime.now();
+          final sig = readiness.onChunk(text);
+          if (sig == ReadinessSignal.altScreen) {
+            injectionAborted = true; // vim/less owns the tty — never inject
+            cancelReadinessTimers();
+          } else if (readiness.bpOn) {
+            // Line editor is reading: inject once the redraw burst settles.
+            settleTimer?.cancel();
+            settleTimer =
+                Timer(const Duration(milliseconds: 250), launchInjection);
+          } else {
+            settleTimer?.cancel();
+            if (awaitingProbe) {
+              sinceProbe += text;
+              if (!readiness.bpEver &&
+                  InjectionReadiness.promptLikeTail(sinceProbe)) {
+                // Probe answered with a prompt-looking tail (old bash).
+                settleTimer =
+                    Timer(const Duration(milliseconds: 250), launchInjection);
+              }
+            } else {
+              armQuietProbe();
+            }
           }
         }
 
@@ -476,8 +539,7 @@ class SshService {
         }
       },
       onDone: () {
-        quiesceTimer?.cancel();
-        capTimer?.cancel();
+        cancelReadinessTimers();
         doneTimer?.cancel();
         final g = gate;
         if (g != null && g.isHolding) {
@@ -498,6 +560,13 @@ class SshService {
 
     // Pipe xterm input → SSH shell
     session.terminal.onOutput = (data) {
+      // A user keystroke before the handshake starts cancels the injection:
+      // a queued probe "\n" would execute their half-typed command, and the
+      // bootstrap would be appended to whatever they are typing.
+      if (siOn && gate == null && !injectionAborted) {
+        injectionAborted = true;
+        cancelReadinessTimers();
+      }
       if (hookBus != null) {
         final result = hookBus!.fireInterceptable(
             'terminal.input', TransformEvent(sessionId: session.id, data: data));
