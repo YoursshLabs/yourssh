@@ -1,11 +1,26 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:yourssh/models/app_release.dart';
 
+/// Thrown when the update flow cannot complete (network, parse, no asset, IO).
+class UpdateException implements Exception {
+  final String message;
+  UpdateException(this.message);
+  @override
+  String toString() => 'UpdateException: $message';
+}
+
 /// Network + platform glue for the in-app update flow.
-/// Pure helpers (`isNewerVersion`, `assetForPlatform`) are unit-tested;
-/// IO methods (`fetchLatestRelease`, `downloadAsset`, `launchInstaller`)
-/// are added in later tasks.
 class UpdateService {
-  UpdateService();
+  UpdateService({http.Client? client, this.repo = 'YoursshLabs/yourssh'})
+      : _client = client ?? http.Client();
+
+  final http.Client _client;
+  final String repo;
 
   static final RegExp _versionSuffix = RegExp(r'[-+]');
 
@@ -87,5 +102,118 @@ class UpdateService {
       }
     }
     return null;
+  }
+
+  /// Fetches the latest *stable* release (GitHub's `releases/latest` excludes
+  /// drafts and pre-releases). Throws [UpdateException] on network/HTTP/parse
+  /// failure.
+  Future<AppRelease> fetchLatestRelease() async {
+    final uri = Uri.parse('https://api.github.com/repos/$repo/releases/latest');
+    try {
+      final res = await _client.get(uri, headers: const {
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      });
+      if (res.statusCode != 200) {
+        throw UpdateException('GitHub responded ${res.statusCode}');
+      }
+      final body = jsonDecode(res.body);
+      if (body is! Map<String, dynamic>) {
+        throw UpdateException('Unexpected response shape');
+      }
+      return AppRelease.fromJson(body);
+    } on UpdateException {
+      rethrow;
+    } catch (e) {
+      throw UpdateException('Could not check for updates: $e');
+    }
+  }
+
+  /// CPU architecture token used by [assetForPlatform].
+  /// macOS only ships arm64; Windows reads PROCESSOR_ARCHITECTURE; Linux
+  /// shells out to `uname -m`.
+  String currentArch() {
+    if (Platform.isMacOS) return 'arm64';
+    if (Platform.isWindows) {
+      final p = (Platform.environment['PROCESSOR_ARCHITECTURE'] ?? '').toUpperCase();
+      return p.contains('ARM64') ? 'arm64' : 'x64';
+    }
+    if (Platform.isLinux) {
+      try {
+        final m = Process.runSync('uname', const ['-m']).stdout.toString().trim();
+        return (m == 'aarch64' || m == 'arm64') ? 'arm64' : 'amd64';
+      } catch (_) {
+        return 'amd64';
+      }
+    }
+    return 'x64';
+  }
+
+  /// OS token used by [assetForPlatform].
+  String currentOs() {
+    if (Platform.isMacOS) return 'macos';
+    if (Platform.isWindows) return 'windows';
+    return 'linux';
+  }
+
+  /// Streams [asset] to the Downloads directory, reporting progress 0.0..1.0.
+  /// Removes a partial file and throws [UpdateException] on failure.
+  Future<File> downloadAsset(
+    ReleaseAsset asset, {
+    required void Function(double) onProgress,
+  }) async {
+    final dir = await getDownloadsDirectory() ?? await getTemporaryDirectory();
+    final file = File('${dir.path}/${asset.name}');
+    try {
+      final req = http.Request('GET', Uri.parse(asset.downloadUrl));
+      final res = await _client.send(req);
+      if (res.statusCode != 200) {
+        throw UpdateException('Download failed (${res.statusCode})');
+      }
+      final total = res.contentLength ?? asset.size;
+      var received = 0;
+      final sink = file.openWrite();
+      await for (final chunk in res.stream) {
+        received += chunk.length;
+        sink.add(chunk);
+        if (total > 0) onProgress((received / total).clamp(0.0, 1.0));
+      }
+      await sink.flush();
+      await sink.close();
+      onProgress(1.0);
+      return file;
+    } catch (e) {
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
+      if (e is UpdateException) rethrow;
+      throw UpdateException('Download failed: $e');
+    }
+  }
+
+  /// Hands [file] off to the OS installer. macOS strips quarantine then opens
+  /// the DMG; Windows runs the installer exe; Linux opens with the desktop
+  /// handler. Throws [UpdateException] on failure.
+  Future<void> launchInstaller(File file) async {
+    final path = file.path;
+    try {
+      if (Platform.isMacOS) {
+        // Best-effort: our own download usually carries no quarantine xattr,
+        // but strip it anyway so Gatekeeper does not block the new build.
+        await Process.run('xattr', ['-dr', 'com.apple.quarantine', path]);
+        final r = await Process.run('open', [path]);
+        if (r.exitCode != 0) throw UpdateException('open failed: ${r.stderr}');
+      } else if (Platform.isWindows) {
+        await Process.start(path, const [], mode: ProcessStartMode.detached);
+      } else {
+        final r = await Process.run('xdg-open', [path]);
+        if (r.exitCode != 0) throw UpdateException('xdg-open failed: ${r.stderr}');
+      }
+    } catch (e) {
+      if (e is UpdateException) rethrow;
+      throw UpdateException('Could not launch installer: $e');
+    }
   }
 }

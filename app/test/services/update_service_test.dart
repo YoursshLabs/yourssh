@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:yourssh/models/app_release.dart';
 import 'package:yourssh/services/update_service.dart';
 
@@ -146,6 +150,29 @@ void main() {
     });
     test('unknown os -> null', () {
       expect(svc.assetForPlatform(release(), os: 'freebsd', arch: 'x64'), isNull);
+    });
+  });
+
+  group('fetchLatestRelease', () {
+    test('parses a 200 response', () async {
+      final client = MockClient((req) async {
+        expect(req.url.toString(),
+            'https://api.github.com/repos/YoursshLabs/yourssh/releases/latest');
+        expect(req.headers['Accept'], 'application/vnd.github+json');
+        return http.Response(
+          jsonEncode({'tag_name': 'v0.2.0', 'assets': []}),
+          200,
+        );
+      });
+      final svc = UpdateService(client: client);
+      final r = await svc.fetchLatestRelease();
+      expect(r.version, '0.2.0');
+    });
+
+    test('throws UpdateException on non-200 (e.g. rate limit)', () async {
+      final client = MockClient((req) async => http.Response('rate limited', 403));
+      final svc = UpdateService(client: client);
+      expect(svc.fetchLatestRelease(), throwsA(isA<UpdateException>()));
     });
   });
 }
