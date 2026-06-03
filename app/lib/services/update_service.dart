@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -133,7 +132,17 @@ class UpdateService {
   /// macOS only ships arm64; Windows reads PROCESSOR_ARCHITECTURE; Linux
   /// shells out to `uname -m`.
   String currentArch() {
-    if (Platform.isMacOS) return 'arm64';
+    if (Platform.isMacOS) {
+      // Only arm64 artifacts are published. Detect the real arch so Intel Macs
+      // return 'x64' -> assetForPlatform returns null -> caller falls back to
+      // the browser, rather than being handed an arm64-only DMG.
+      try {
+        final m = Process.runSync('uname', const ['-m']).stdout.toString().trim();
+        return (m == 'arm64' || m == 'aarch64') ? 'arm64' : 'x64';
+      } catch (_) {
+        return 'arm64';
+      }
+    }
     if (Platform.isWindows) {
       final p = (Platform.environment['PROCESSOR_ARCHITECTURE'] ?? '').toUpperCase();
       return p.contains('ARM64') ? 'arm64' : 'x64';
@@ -164,25 +173,25 @@ class UpdateService {
   }) async {
     final dir = await getDownloadsDirectory() ?? await getTemporaryDirectory();
     final file = File('${dir.path}/${asset.name}');
+    final req = http.Request('GET', Uri.parse(asset.downloadUrl));
+    final res = await _client.send(req);
+    if (res.statusCode != 200) {
+      throw UpdateException('Download failed (${res.statusCode})');
+    }
+    final total = res.contentLength ?? asset.size;
+    var received = 0;
+    final sink = file.openWrite();
     try {
-      final req = http.Request('GET', Uri.parse(asset.downloadUrl));
-      final res = await _client.send(req);
-      if (res.statusCode != 200) {
-        throw UpdateException('Download failed (${res.statusCode})');
-      }
-      final total = res.contentLength ?? asset.size;
-      var received = 0;
-      final sink = file.openWrite();
       await for (final chunk in res.stream) {
         received += chunk.length;
         sink.add(chunk);
         if (total > 0) onProgress((received / total).clamp(0.0, 1.0));
       }
       await sink.flush();
-      await sink.close();
-      onProgress(1.0);
-      return file;
     } catch (e) {
+      // Close the sink before deleting so the partial file is releasable
+      // (notably on Windows, where an open handle blocks deletion).
+      await sink.close().catchError((_) {});
       if (await file.exists()) {
         try {
           await file.delete();
@@ -191,6 +200,9 @@ class UpdateService {
       if (e is UpdateException) rethrow;
       throw UpdateException('Download failed: $e');
     }
+    await sink.close();
+    onProgress(1.0);
+    return file;
   }
 
   /// Hands [file] off to the OS installer. macOS strips quarantine then opens
@@ -206,6 +218,7 @@ class UpdateService {
         final r = await Process.run('open', [path]);
         if (r.exitCode != 0) throw UpdateException('open failed: ${r.stderr}');
       } else if (Platform.isWindows) {
+        // Detached: we intentionally don't wait for the installer to finish.
         await Process.start(path, const [], mode: ProcessStartMode.detached);
       } else {
         final r = await Process.run('xdg-open', [path]);

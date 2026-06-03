@@ -172,7 +172,7 @@ void main() {
     test('throws UpdateException on non-200 (e.g. rate limit)', () async {
       final client = MockClient((req) async => http.Response('rate limited', 403));
       final svc = UpdateService(client: client);
-      expect(svc.fetchLatestRelease(), throwsA(isA<UpdateException>()));
+      await expectLater(svc.fetchLatestRelease(), throwsA(isA<UpdateException>()));
     });
   });
 }
