@@ -17,6 +17,8 @@ import 'theme_picker.dart';
 import 'qr_export_dialog.dart';
 import 'qr_import_dialog.dart';
 import 'package:file_picker/file_picker.dart';
+import '../providers/update_provider.dart';
+import '../models/app_release.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -61,6 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final sync = context.watch<SyncProvider>();
+    final update = context.watch<UpdateProvider>();
 
     return Material(
       color: AppColors.bg,
@@ -281,12 +284,95 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _Row(label: 'Version', trailing: Text('v$kAppVersion', style: const TextStyle(color: AppColors.textTertiary, fontSize: 12))),
                   const _Row(label: 'Build', trailing: Text('Flutter + dartssh2', style: TextStyle(color: AppColors.textTertiary, fontSize: 12))),
                 ]),
+                const SizedBox(height: 24),
+                _Section(title: 'Updates', children: [
+                  _Row(
+                    label: 'Current version',
+                    trailing: Text(
+                      'v${update.currentVersion}',
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                    ),
+                  ),
+                  _Row(
+                    label: 'Status',
+                    subtitle: _updateStatusText(update),
+                    trailing: update.status == UpdateStatus.downloading
+                        ? SizedBox(
+                            width: 120,
+                            child: LinearProgressIndicator(value: update.downloadProgress),
+                          )
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (update.status == UpdateStatus.available) ...[
+                                FilledButton(
+                                  onPressed: () =>
+                                      context.read<UpdateProvider>().downloadAndInstall(),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.accent,
+                                    foregroundColor: Colors.black,
+                                    textStyle: const TextStyle(fontSize: 12),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  ),
+                                  child: const Text('Download & install'),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              OutlinedButton(
+                                onPressed: update.status == UpdateStatus.checking
+                                    ? null
+                                    : () => context
+                                        .read<UpdateProvider>()
+                                        .checkForUpdates(manual: true),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: AppColors.border),
+                                  foregroundColor: AppColors.textSecondary,
+                                  textStyle: const TextStyle(fontSize: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                child: const Text('Check for updates'),
+                              ),
+                            ],
+                          ),
+                  ),
+                  if (update.status == UpdateStatus.available &&
+                      update.latestRelease != null &&
+                      update.latestRelease!.notes.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Text(
+                        update.latestRelease!.notes,
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        maxLines: 5,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ]),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _updateStatusText(UpdateProvider u) {
+    switch (u.status) {
+      case UpdateStatus.checking:
+        return 'Checking…';
+      case UpdateStatus.upToDate:
+        return 'You are on the latest version';
+      case UpdateStatus.available:
+        return 'New version v${u.latestRelease?.version ?? '?'} available';
+      case UpdateStatus.downloading:
+        return 'Downloading…';
+      case UpdateStatus.readyToInstall:
+        return 'Installer opened — complete it to finish updating';
+      case UpdateStatus.error:
+        return u.errorMessage ?? 'Could not check for updates';
+      case UpdateStatus.idle:
+        return 'Click "Check for updates" to look for a new version';
+    }
   }
 
   Widget _buildFontDropdown(BuildContext context, SettingsProvider settings) {

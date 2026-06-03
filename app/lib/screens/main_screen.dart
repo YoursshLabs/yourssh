@@ -47,6 +47,7 @@ import '../widgets/script_plugin_panel_screen.dart';
 import '../providers/share_provider.dart';
 import '../widgets/share_session_dialog.dart';
 import '../widgets/join_share_dialog.dart';
+import '../widgets/update_banner.dart';
 
 enum NavSection { hosts, keychain, portForwarding, sftp, localTerminal, knownHosts, recordings, settings, plugins }
 
@@ -526,6 +527,16 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               });
               _openHostPanel();
             },
+          ),
+          UpdateBanner(
+            onShowDetails: () => setState(() {
+              _activePluginId = null;
+              _activeScriptPanel = null;
+              _nav = NavSection.settings;
+              _viewingTerminal = false;
+              _showAiChat = false;
+              _sftpConnectionNotifier.value = false;
+            }),
           ),
 
           Expanded(

@@ -62,7 +62,8 @@ class SshService {
         if (!await keyFile.exists()) return const _IdentityResolution([]);
         final pem = await keyFile.readAsString();
         final passphrase = await _storage.loadPassphrase(keyEntry.id);
-        return _IdentityResolution(SSHKeyPair.fromPem(pem, passphrase ?? ''));
+        final effectivePassphrase = passphrase?.isNotEmpty == true ? passphrase : null;
+        return _IdentityResolution(SSHKeyPair.fromPem(pem, effectivePassphrase));
       case AuthType.certificate:
         if (keyEntry == null) {
           throw Exception(jumpHostLabel == null

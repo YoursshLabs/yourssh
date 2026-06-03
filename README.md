@@ -19,6 +19,8 @@ A professional, open-source SSH client for **macOS**, **Windows**, and **Linux**
 
 Get the latest release from the [Releases page](https://github.com/YoursshLabs/yourssh/releases).
 
+YourSSH also checks for new releases on launch and from **Settings → Updates**; when a newer version is available it shows a banner and can download the right build for your OS and open the installer for you. Because the app is not code-signed, this is an assisted flow (it never silently replaces itself); if no matching build exists for your platform it opens the Releases page instead.
+
 | Platform | File |
 |---|---|
 | macOS (Apple Silicon) | `YourSSH-x.x.x-macOS-arm64.dmg` |
@@ -332,6 +334,7 @@ Flutter UI (widgets / screens)
 | `TerminalLayoutProvider` | Split-terminal layout (horizontal/vertical panes) |
 | `AiChatProvider` | AI chat sidebar — multi-provider (Anthropic, OpenAI, Gemini) |
 | `PluginProvider` | Installed plugins, enable/disable state, config slot wiring |
+| `UpdateProvider` | In-app update check (GitHub releases) + download/install orchestration; drives the banner and Settings section |
 
 ### Key Services
 
@@ -358,6 +361,7 @@ Flutter UI (widgets / screens)
 | `CertificateKeyPair` | OpenSSH CA-signed certificate auth (`id_rsa-cert.pub`) |
 | `P2PSyncService` | One-shot LAN HTTP server + client for QR-based P2P host transfer |
 | `P2PSyncEncryption` | AES-256-GCM encrypt/decrypt with raw random key (no PBKDF2) for P2P sync |
+| `UpdateService` | Checks GitHub `releases/latest`, compares semver, picks the OS/arch artifact, downloads with progress, launches the OS installer |
 
 ### Plugin System
 

@@ -32,6 +32,8 @@ import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
 import 'providers/recording_provider.dart';
 import 'providers/share_provider.dart';
+import 'services/update_service.dart';
+import 'providers/update_provider.dart';
 
 String kAppVersion = '';
 
@@ -118,6 +120,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final ShareProvider _shareProvider;
   late final HealthMonitorService _healthMonitor;
   late final ShellIntegrationProvider _shellIntegrationProvider;
+  late final UpdateService _updateService;
+  late final UpdateProvider _updateProvider;
 
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
 
@@ -214,6 +218,11 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _syncProvider = SyncProvider(storage: _storage);
     _syncService = SyncService(_syncProvider);
     _shareProvider = ShareProvider(syncProvider: _syncProvider);
+    _updateService = UpdateService();
+    _updateProvider = UpdateProvider(_updateService, currentVersion: kAppVersion);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateProvider.checkForUpdates();
+    });
     _shareProvider.wireDependencies(_sessionProvider, _hookBus);
     _shareProvider.onGuestInput = (data) {
       final sessionId = _shareProvider.sharingSessionId;
@@ -284,6 +293,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _keyProvider.dispose();
     _settingsProvider.dispose();
     _shellIntegrationProvider.dispose();
+    _updateProvider.dispose();
     super.dispose();
   }
 
@@ -317,6 +327,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         ChangeNotifierProvider.value(value: _recordingProvider),
         ChangeNotifierProvider.value(value: _uiRegistry),
         ChangeNotifierProvider.value(value: _pluginEngineProvider),
+        ChangeNotifierProvider.value(value: _updateProvider),
       ],
       child: MaterialApp(
         title: 'YourSSH',
