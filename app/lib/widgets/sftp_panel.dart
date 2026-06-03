@@ -185,6 +185,26 @@ class _SftpPanelState extends State<SftpPanel> {
               ),
             ),
           ),
+          if (widget.host!.sftpMode != SftpMode.normal) ...[
+            const SizedBox(width: 4),
+            Tooltip(
+              message: 'SFTP runs elevated on this host',
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: const Text('root',
+                    style: TextStyle(
+                        color: Color(0xFFEF4444),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'monospace')),
+              ),
+            ),
+          ],
           const SizedBox(width: 4),
           Expanded(
             child: Text(prov.currentPath,
