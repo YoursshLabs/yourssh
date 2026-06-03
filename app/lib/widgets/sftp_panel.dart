@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/app_option.dart';
 import '../models/host.dart';
 import '../models/sftp_entry.dart';
 import '../providers/sftp_panel_provider.dart';
@@ -168,94 +167,20 @@ class _SftpPanelState extends State<SftpPanel> {
     }
   }
 
-  Future<void> _showOpenWithSubmenu(SftpEntry entry, Offset pos) async {
-    final discovery = context.read<AppDiscoveryService>();
-    final externalService = context.read<ExternalEditService>();
+  Future<void> _openWithApp(SftpEntry entry, String appPath) async {
     final messenger = ScaffoldMessenger.of(context);
-
-    final stubPath =
-        '/tmp/stub${entry.extension.isEmpty ? '' : '.${entry.extension}'}';
-    final apps = await discovery.getAppsFor(stubPath);
-
-    if (!mounted) return;
-    final size = MediaQuery.of(context).size;
-
-    final selected = await showMenu<_OpenWithChoice>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-          pos.dx, pos.dy, size.width - pos.dx, size.height - pos.dy),
-      color: const Color(0xFF1E1E1E),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFF2A2A2A)),
-      ),
-      items: [
-        for (final app in apps)
-          PopupMenuItem(
-            value: _OpenWithChoice(app: app),
-            height: 34,
-            child: Row(children: [
-              const Icon(Icons.apps, size: 14, color: Color(0xFF888888)),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(app.name,
-                    style: const TextStyle(
-                        color: Color(0xFFD4D4D4), fontSize: 13),
-                    overflow: TextOverflow.ellipsis),
-              ),
-              if (app.isDefault) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  decoration: BoxDecoration(
-                    color:
-                        const Color(0xFF22C55E).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                  child: const Text('default',
-                      style: TextStyle(
-                          color: Color(0xFF22C55E),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600)),
-                ),
-              ],
-            ]),
-          ),
-        if (apps.isNotEmpty) const PopupMenuDivider(height: 1),
-        const PopupMenuItem(
-          value: _OpenWithChoice(choose: true),
-          height: 34,
-          child: Row(children: [
-            Icon(Icons.folder_open_outlined,
-                size: 14, color: Color(0xFFD4D4D4)),
-            SizedBox(width: 8),
-            Text('Choose…',
-                style:
-                    TextStyle(color: Color(0xFFD4D4D4), fontSize: 13)),
-          ]),
-        ),
-      ],
-    );
-
-    if (selected == null || !mounted) return;
-
-    String? appPath = selected.app?.executablePath;
-    if (selected.choose) appPath = await _pickApp();
-    if (appPath == null) return;
-
-    _wireExternalCallbacks(externalService, messenger);
-    externalService
-        .openExternalWith(widget.host!, entry, appPath)
-        .then((_) {
+    final service = context.read<ExternalEditService>();
+    _wireExternalCallbacks(service, messenger);
+    try {
+      await service.openExternalWith(widget.host!, entry, appPath);
       messenger.showSnackBar(SnackBar(
           content: Text('Opened ${entry.name} — watching for changes'),
           duration: const Duration(seconds: 2)));
-    }).catchError((Object e) {
+    } catch (e) {
       messenger.showSnackBar(SnackBar(
           content: Text('Open with failed: $e'),
           backgroundColor: const Color(0xFF2A1A1A)));
-    });
+    }
   }
 
   Future<String?> _pickApp() async {
@@ -496,9 +421,24 @@ class _SftpPanelState extends State<SftpPanel> {
       onOpen: () => _onEntryTap(entry),
       onView: entry.isDirectory ? null : () => _openViewer(entry),
       onEdit: entry.isDirectory ? null : () => _openEditor(entry),
-      onOpenWith: entry.isDirectory
+      loadApps: entry.isDirectory
           ? null
-          : (pos) => _showOpenWithSubmenu(entry, pos),
+          : () {
+              final stub =
+                  '/tmp/stub${entry.extension.isEmpty ? '' : '.${entry.extension}'}';
+              return context.read<AppDiscoveryService>().getAppsFor(stub);
+            },
+      onOpenWithApp: entry.isDirectory
+          ? null
+          : (app) => _openWithApp(entry, app.executablePath),
+      onChooseApp: entry.isDirectory
+          ? null
+          : () async {
+              final appPath = await _pickApp();
+              if (appPath != null && mounted) {
+                await _openWithApp(entry, appPath);
+              }
+            },
       onRename: () => _showRenameDialog(prov, entry),
       onDelete: () => _showDeleteConfirm(prov, [entry]),
       child: Draggable<SftpEntry>(
@@ -738,8 +678,3 @@ class _ToolbarBtn extends StatelessWidget {
   }
 }
 
-class _OpenWithChoice {
-  const _OpenWithChoice({this.app, this.choose = false});
-  final AppOption? app;
-  final bool choose;
-}

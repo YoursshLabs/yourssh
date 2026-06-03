@@ -34,6 +34,13 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
   late SftpPanelProvider _providerA;
   late SftpPanelProvider _providerB;
   late SftpTransferProvider _transferProvider;
+  // Owned by the State (not created inside build) so the State's own methods
+  // can use them directly: `context.read` from the State's context cannot see
+  // providers created below it in build().
+  late final SftpTransferService _transferService;
+  late final SftpFileOpsService _fileOpsService;
+  late final ExternalEditService _externalEditService;
+  late final AppDiscoveryService _appDiscoveryService;
 
   @override
   void initState() {
@@ -42,12 +49,19 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
     _providerA = SftpPanelProvider();
     _providerB = SftpPanelProvider();
     _transferProvider = SftpTransferProvider();
+    final ssh = context.read<SshService>();
+    _transferService = SftpTransferService(ssh);
+    _fileOpsService = SftpFileOpsService(ssh);
+    _externalEditService = ExternalEditService(_transferService);
+    _appDiscoveryService = AppDiscoveryService();
     widget.connectionNotifier.value = false;
   }
 
   @override
   void dispose() {
     widget.connectionNotifier.value = false;
+    _externalEditService.dispose();
+    _appDiscoveryService.dispose();
     _localProvider.dispose();
     _providerA.dispose();
     _providerB.dispose();
@@ -91,7 +105,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
     if (!mounted || _hostA == null) return;
     _providerA.setLoadState(SftpPanelLoadState.loading);
     try {
-      final entries = await context.read<SftpTransferService>().listDirectory(_hostA!, _providerA.currentPath);
+      final entries = await _transferService.listDirectory(_hostA!, _providerA.currentPath);
       _providerA..setEntries(entries)..setLoadState(SftpPanelLoadState.loaded);
     } catch (e) { _providerA.setLoadState(SftpPanelLoadState.error, error: e.toString()); }
   }
@@ -100,7 +114,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
     if (!mounted || _hostB == null) return;
     _providerB.setLoadState(SftpPanelLoadState.loading);
     try {
-      final entries = await context.read<SftpTransferService>().listDirectory(_hostB!, _providerB.currentPath);
+      final entries = await _transferService.listDirectory(_hostB!, _providerB.currentPath);
       _providerB..setEntries(entries)..setLoadState(SftpPanelLoadState.loaded);
     } catch (e) { _providerB.setLoadState(SftpPanelLoadState.error, error: e.toString()); }
   }
@@ -112,7 +126,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
     if (host == null) return;
     final selected = _localProvider.selectedEntries.toList();
     if (selected.isEmpty) return;
-    final service = context.read<SftpTransferService>();
+    final service = _transferService;
     final remoteDir = _providerA.currentPath;
 
     final items = [
@@ -157,7 +171,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
     if (host == null) return;
     final selected = _providerA.selectedEntries.toList();
     if (selected.isEmpty) return;
-    final service = context.read<SftpTransferService>();
+    final service = _transferService;
     final localDir = _localProvider.currentPath;
 
     final items = [
@@ -201,7 +215,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
     if (hostA == null || hostB == null) return;
     final selected = _providerA.selectedEntries.where((e) => !e.isDirectory).toList();
     if (selected.isEmpty) return;
-    final service = context.read<SftpTransferService>();
+    final service = _transferService;
     final destDir = _providerB.currentPath;
 
     final items = [for (final e in selected) SftpTransferItem(fileName: e.name, direction: TransferDirection.upload)..totalBytes = e.size];
@@ -235,7 +249,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
     if (hostA == null || hostB == null) return;
     final selected = _providerB.selectedEntries.where((e) => !e.isDirectory).toList();
     if (selected.isEmpty) return;
-    final service = context.read<SftpTransferService>();
+    final service = _transferService;
     final destDir = _providerA.currentPath;
 
     final items = [for (final e in selected) SftpTransferItem(fileName: e.name, direction: TransferDirection.upload)..totalBytes = e.size];
@@ -281,17 +295,10 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        Provider(create: (ctx) => SftpTransferService(ctx.read<SshService>())),
-        Provider(create: (ctx) => SftpFileOpsService(ctx.read<SshService>())),
-        Provider(
-          create: (ctx) =>
-              ExternalEditService(ctx.read<SftpTransferService>()),
-          dispose: (_, ExternalEditService s) => s.dispose(),
-        ),
-        Provider(
-          create: (_) => AppDiscoveryService(),
-          dispose: (_, AppDiscoveryService s) => s.dispose(),
-        ),
+        Provider<SftpTransferService>.value(value: _transferService),
+        Provider<SftpFileOpsService>.value(value: _fileOpsService),
+        Provider<ExternalEditService>.value(value: _externalEditService),
+        Provider<AppDiscoveryService>.value(value: _appDiscoveryService),
         ChangeNotifierProvider.value(value: _transferProvider),
       ],
       child: ListenableBuilder(
