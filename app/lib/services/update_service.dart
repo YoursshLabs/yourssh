@@ -171,9 +171,14 @@ class UpdateService {
     ReleaseAsset asset, {
     required void Function(double) onProgress,
   }) async {
+    // Enforce HTTPS to prevent URL-downgrade / MITM attacks.
+    final rawUrl = asset.downloadUrl;
+    if (!rawUrl.startsWith('https://')) {
+      throw UpdateException('Download URL must use HTTPS: $rawUrl');
+    }
     final dir = await getDownloadsDirectory() ?? await getTemporaryDirectory();
     final file = File('${dir.path}/${asset.name}');
-    final req = http.Request('GET', Uri.parse(asset.downloadUrl));
+    final req = http.Request('GET', Uri.parse(rawUrl));
     final res = await _client.send(req);
     if (res.statusCode != 200) {
       throw UpdateException('Download failed (${res.statusCode})');
