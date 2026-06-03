@@ -72,6 +72,17 @@ class StorageService {
 
   Future<void> deletePassword(String hostId) => _deleteSecret('pw_$hostId');
 
+  /// Sudo password for elevated SFTP (SftpMode.sudo / custom). Stored with
+  /// the same secure-first strategy as host passwords; never synced.
+  Future<void> saveSudoPassword(String hostId, String password) =>
+      _saveSecret('sudopw_$hostId', password);
+
+  Future<String?> loadSudoPassword(String hostId) =>
+      _loadSecret('sudopw_$hostId');
+
+  Future<void> deleteSudoPassword(String hostId) =>
+      _deleteSecret('sudopw_$hostId');
+
   Future<void> savePassphrase(String keyId, String passphrase) =>
       _saveSecret('pp_$keyId', passphrase);
 

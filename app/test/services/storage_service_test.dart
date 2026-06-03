@@ -138,4 +138,18 @@ void main() {
       expect(secureStore.containsKey('sync_passphrase'), isFalse);
     });
   });
+
+  group('sudo password secret', () {
+    test('save / load / delete round-trip under sudopw_ key', () async {
+      final svc = StorageService();
+
+      await svc.saveSudoPassword('h1', 's3cret');
+      expect(secureStore['sudopw_h1'], 's3cret');
+      expect(await svc.loadSudoPassword('h1'), 's3cret');
+
+      await svc.deleteSudoPassword('h1');
+      expect(secureStore.containsKey('sudopw_h1'), isFalse);
+      expect(await svc.loadSudoPassword('h1'), isNull);
+    });
+  });
 }
