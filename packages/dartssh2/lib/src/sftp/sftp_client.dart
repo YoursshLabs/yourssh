@@ -40,6 +40,9 @@ class SftpClient {
             SftpError('Channel closed before SFTP handshake'),
             StackTrace.current,
           );
+          // Don't surface as an unhandled async error when nobody awaits
+          // [handshake] — real awaiters still receive the error.
+          _handshake.future.ignore();
         }
       },
     );

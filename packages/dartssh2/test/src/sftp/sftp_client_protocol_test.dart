@@ -384,6 +384,21 @@ void main() {
 
       await expectLater(handshakeFuture, throwsA(isA<SftpError>()));
     });
+
+    test('channel close does not raise an unhandled error when handshake is '
+        'never awaited', () async {
+      final errors = <Object>[];
+      await runZonedGuarded(() async {
+        final harness = _SftpHarness();
+        await harness.nextOutgoingPacket();
+
+        harness.closeChannel(); // handshake future intentionally not awaited
+
+        // Give the microtask queue time to surface any unhandled error.
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }, (e, st) => errors.add(e))!;
+      expect(errors, isEmpty);
+    });
   });
 }
 
