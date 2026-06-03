@@ -157,4 +157,34 @@ void main() {
     expect(external.opened, hasLength(1));
     expect(find.byType(CodeEditorScreen), findsNothing);
   });
+
+  testWidgets('readOnly mode: no save button, TextField is read-only',
+      (tester) async {
+    final service = FakeTransferService(utf8.encode('read only content'));
+    await tester.pumpWidget(MaterialApp(
+      home: Provider<SftpTransferService>.value(
+        value: service,
+        child: CodeEditorScreen(
+          host: _host,
+          entry: SftpEntry(
+            name: 'log.txt',
+            path: '/var/log/log.txt',
+            isDirectory: false,
+            size: 17,
+            modifiedAt: DateTime(2026),
+          ),
+          readOnly: true,
+        ),
+      ),
+    ));
+    await _pumpUntilFound(tester, find.byType(TextField));
+
+    // No save button
+    expect(find.byIcon(Icons.save_outlined), findsNothing);
+    // Lock icon present
+    expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+    // TextField is read-only
+    final tf = tester.widget<TextField>(find.byType(TextField));
+    expect(tf.readOnly, isTrue);
+  });
 }

@@ -66,6 +66,10 @@
         return editor.getValue();
       };
 
+      window.setReadOnly = function(readonly) {
+        editor.updateOptions({ readOnly: readonly });
+      };
+
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
         if (window.FlutterChannel) {
           window.FlutterChannel.postMessage(JSON.stringify({
