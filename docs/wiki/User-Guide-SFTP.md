@@ -20,11 +20,17 @@ You can also open SFTP for a specific session from the session toolbar.
 
 | Action | How |
 |---|---|
-| **Upload** | Select local file(s) → click **Upload** (or drag to the remote panel) |
-| **Download** | Select remote file(s) → click **Download** (or drag to the local panel) |
-| **Progress** | A transfer dialog shows per-file progress and speed |
+| **Select** | Per-row checkboxes on both panels, or click / cmd-click rows; the header checkbox selects everything matching the current filter |
+| **Upload** | Select local file(s) → click **→** (or drag to the remote panel) |
+| **Download** | Select remote file(s) → click **←** (or drag to the local panel) |
+| **Progress** | A panel docked at the bottom shows per-file progress |
 
-Transfers are chunked and show a real-time progress bar.
+Transfers run **in the background** — the panels stay fully usable while a
+batch runs, and starting another transfer queues it onto the same panel. Use
+the **—** button to minimize the panel to a slim progress strip (and **˄** to
+expand it back). Successful batches dismiss themselves after a few seconds;
+batches with errors stay until you close them. **Cancel** stops everything
+still pending.
 
 ## File Operations
 

@@ -165,12 +165,12 @@ class LocalFilePanelProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void deselectAll() => clearSelection();
+
   void clearSelection() {
     _selectedPaths.clear();
     notifyListeners();
   }
-
-  void deselectAll() => clearSelection();
 
   void selectAll() {
     for (final entry in filteredEntries) {

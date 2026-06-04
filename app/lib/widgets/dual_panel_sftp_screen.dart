@@ -19,7 +19,7 @@ import '../services/sftp_transfer_service.dart';
 import '../services/ssh_service.dart';
 import 'local_file_panel.dart';
 import 'sftp_panel.dart';
-import 'sftp_transfer_dialog.dart';
+import 'sftp_transfer_panel.dart';
 import 'source_picker_dialog.dart';
 
 /// Two-panel commander layout. Each slot points at a [PanelSource] (the
@@ -156,17 +156,6 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
     }
   }
 
-  void _showTransferDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => ChangeNotifierProvider.value(
-        value: _transferProvider,
-        child: const SftpTransferDialog(),
-      ),
-    );
-  }
-
   void _showError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -213,7 +202,6 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
           ..totalBytes = e.size,
     ];
     _transferProvider.startBatch(items);
-    _showTransferDialog();
 
     var skipped = 0;
     try {
@@ -259,7 +247,6 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
           ..totalBytes = e.size,
     ];
     _transferProvider.startBatch(items);
-    _showTransferDialog();
 
     try {
       for (int i = 0; i < selected.length; i++) {
@@ -302,7 +289,6 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
           ..totalBytes = e.size,
     ];
     _transferProvider.startBatch(items);
-    _showTransferDialog();
 
     try {
       for (int i = 0; i < selected.length; i++) {
@@ -362,7 +348,6 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
           ..totalBytes = e.size,
     ];
     _transferProvider.startBatch(items);
-    _showTransferDialog();
 
     try {
       for (int i = 0; i < selected.length; i++) {
@@ -475,15 +460,6 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
             Listenable.merge([_localLeft, _localRight, _sftpLeft, _sftpRight]),
         builder: (context, _) => Column(
           children: [
-            Consumer<SftpTransferProvider>(
-              builder: (_, tp, _) => tp.isTransferring
-                  ? LinearProgressIndicator(
-                      value: tp.overallProgress > 0 ? tp.overallProgress : null,
-                      color: const Color(0xFF22C55E),
-                      backgroundColor: const Color(0xFF1A1A1A),
-                      minHeight: 2)
-                  : const SizedBox.shrink(),
-            ),
             Expanded(
               child: Row(
                 children: [
@@ -498,6 +474,10 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
                 ],
               ),
             ),
+            // Docked, minimizable transfer progress — non-modal so the
+            // workspace stays usable while batches run (and more can be
+            // queued; SftpTransferProvider.startBatch appends).
+            const SftpTransferPanel(),
           ],
         ),
       ),

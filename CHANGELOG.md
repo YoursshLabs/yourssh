@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Local terminal as first-class tabs** — local shell sessions now live in the global top tab bar next to SSH sessions (unified `TerminalSession` model in `SessionProvider`), can be split into panes alongside SSH panes, support asciicast recording, and show a status overlay with a restart action when the shell exits.
 - **SFTP two-panel layout with switchable sources** ([#41](https://github.com/YoursshLabs/yourssh/issues/41)) — each panel can browse Local or any saved host via a source chip; unified panel headers (source chip + filter + actions) and clickable breadcrumb navigation in the remote panel replace the single `Up` button.
+- **Local panel checkboxes** — the local file panel gains per-row checkboxes and a select-all header with a selection count, matching the remote panel; select-all respects the active filter on both panels.
+- **Docked transfer panel** — transfer progress moved from a blocking centered dialog to a minimizable panel docked at the bottom of the SFTP workspace. Transfers run in the background: the panels stay fully interactive, additional transfers queue onto the running batch, the panel collapses to a slim progress strip, successful batches auto-dismiss after ~3 s, and failed ones stay visible until closed.
 - **Terminal right-click menu** — right-clicking an SSH or local terminal opens a Copy / Paste / Select All context menu (Copy is disabled when nothing is selected).
 
 ### Fixed
