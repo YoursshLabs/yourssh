@@ -56,7 +56,7 @@ TerminalTheme terminalThemeByName(String name) {
 // ── Dracula ───────────────────────────────────────────────
 const _dracula = TerminalTheme(
   cursor: Color(0xFFCCCCCC),
-  selection: Color(0xFF44475A),
+  selection: Color(0xAA44475A),
   foreground: Color(0xFFF8F8F2),
   background: Color(0xFF282A36),
   black: Color(0xFF21222C),
@@ -83,7 +83,7 @@ const _dracula = TerminalTheme(
 // ── One Dark ──────────────────────────────────────────────
 const _oneDark = TerminalTheme(
   cursor: Color(0xFFABB2BF),
-  selection: Color(0xFF3E4451),
+  selection: Color(0xAA3E4451),
   foreground: Color(0xFFABB2BF),
   background: Color(0xFF282C34),
   black: Color(0xFF282C34),
@@ -110,7 +110,7 @@ const _oneDark = TerminalTheme(
 // ── Tokyo Night ───────────────────────────────────────────
 const _tokyoNight = TerminalTheme(
   cursor: Color(0xFFC0CAF5),
-  selection: Color(0xFF364A82),
+  selection: Color(0xAA364A82),
   foreground: Color(0xFFC0CAF5),
   background: Color(0xFF1A1B26),
   black: Color(0xFF15161E),
@@ -137,7 +137,7 @@ const _tokyoNight = TerminalTheme(
 // ── Nord ──────────────────────────────────────────────────
 const _nord = TerminalTheme(
   cursor: Color(0xFFD8DEE9),
-  selection: Color(0xFF434C5E),
+  selection: Color(0xAA434C5E),
   foreground: Color(0xFFD8DEE9),
   background: Color(0xFF2E3440),
   black: Color(0xFF3B4252),
@@ -164,7 +164,7 @@ const _nord = TerminalTheme(
 // ── Solarized Dark ────────────────────────────────────────
 const _solarizedDark = TerminalTheme(
   cursor: Color(0xFF839496),
-  selection: Color(0xFF073642),
+  selection: Color(0xAA073642),
   foreground: Color(0xFF839496),
   background: Color(0xFF002B36),
   black: Color(0xFF073642),
@@ -191,7 +191,7 @@ const _solarizedDark = TerminalTheme(
 // ── Monokai ───────────────────────────────────────────────
 const _monokai = TerminalTheme(
   cursor: Color(0xFFF8F8F2),
-  selection: Color(0xFF49483E),
+  selection: Color(0xAA49483E),
   foreground: Color(0xFFF8F8F2),
   background: Color(0xFF272822),
   black: Color(0xFF272822),
@@ -218,7 +218,7 @@ const _monokai = TerminalTheme(
 // ── Monokai Pro ───────────────────────────────────────────
 const _monokaiPro = TerminalTheme(
   cursor: Color(0xFFFCFCFA),
-  selection: Color(0xFF403E41),
+  selection: Color(0xAA403E41),
   foreground: Color(0xFFFCFCFA),
   background: Color(0xFF2D2A2E),
   black: Color(0xFF403E41),
@@ -245,7 +245,7 @@ const _monokaiPro = TerminalTheme(
 // ── Gruvbox Dark ──────────────────────────────────────────
 const _gruvboxDark = TerminalTheme(
   cursor: Color(0xFFEBDBB2),
-  selection: Color(0xFF3C3836),
+  selection: Color(0xAA3C3836),
   foreground: Color(0xFFEBDBB2),
   background: Color(0xFF282828),
   black: Color(0xFF282828),
@@ -272,7 +272,7 @@ const _gruvboxDark = TerminalTheme(
 // ── Gruvbox Light ─────────────────────────────────────────
 const _gruvboxLight = TerminalTheme(
   cursor: Color(0xFF3C3836),
-  selection: Color(0xFFD5C4A1),
+  selection: Color(0xAAD5C4A1),
   foreground: Color(0xFF3C3836),
   background: Color(0xFFFBF1C7),
   black: Color(0xFFFBF1C7),
@@ -299,7 +299,7 @@ const _gruvboxLight = TerminalTheme(
 // ── Catppuccin Mocha ──────────────────────────────────────
 const _catppuccinMocha = TerminalTheme(
   cursor: Color(0xFFCDD6F4),
-  selection: Color(0xFF45475A),
+  selection: Color(0xAA45475A),
   foreground: Color(0xFFCDD6F4),
   background: Color(0xFF1E1E2E),
   black: Color(0xFF45475A),
@@ -326,7 +326,7 @@ const _catppuccinMocha = TerminalTheme(
 // ── Catppuccin Macchiato ──────────────────────────────────
 const _catppuccinMacchiato = TerminalTheme(
   cursor: Color(0xFFCAD3F5),
-  selection: Color(0xFF363A4F),
+  selection: Color(0xAA363A4F),
   foreground: Color(0xFFCAD3F5),
   background: Color(0xFF24273A),
   black: Color(0xFF494D64),
@@ -353,7 +353,7 @@ const _catppuccinMacchiato = TerminalTheme(
 // ── Catppuccin Frappé ─────────────────────────────────────
 const _catppuccinFrappe = TerminalTheme(
   cursor: Color(0xFFC6D0F5),
-  selection: Color(0xFF414559),
+  selection: Color(0xAA414559),
   foreground: Color(0xFFC6D0F5),
   background: Color(0xFF303446),
   black: Color(0xFF51576D),
@@ -380,7 +380,7 @@ const _catppuccinFrappe = TerminalTheme(
 // ── Catppuccin Latte ──────────────────────────────────────
 const _catppuccinLatte = TerminalTheme(
   cursor: Color(0xFF4C4F69),
-  selection: Color(0xFFACB0BE),
+  selection: Color(0xAAACB0BE),
   foreground: Color(0xFF4C4F69),
   background: Color(0xFFEFF1F5),
   black: Color(0xFF5C5F77),
@@ -407,7 +407,7 @@ const _catppuccinLatte = TerminalTheme(
 // ── Material Dark ─────────────────────────────────────────
 const _materialDark = TerminalTheme(
   cursor: Color(0xFFFFFFFF),
-  selection: Color(0xFF3E4452),
+  selection: Color(0xAA3E4452),
   foreground: Color(0xFFEEEEEE),
   background: Color(0xFF212121),
   black: Color(0xFF212121),
@@ -434,7 +434,7 @@ const _materialDark = TerminalTheme(
 // ── Material Ocean ────────────────────────────────────────
 const _materialOcean = TerminalTheme(
   cursor: Color(0xFF80CBC4),
-  selection: Color(0xFF1F2233),
+  selection: Color(0xAA1F2233),
   foreground: Color(0xFF8F93A2),
   background: Color(0xFF0F111A),
   black: Color(0xFF090B10),
@@ -461,7 +461,7 @@ const _materialOcean = TerminalTheme(
 // ── Palenight ─────────────────────────────────────────────
 const _palenight = TerminalTheme(
   cursor: Color(0xFFFFFFFF),
-  selection: Color(0xFF34324A),
+  selection: Color(0xAA34324A),
   foreground: Color(0xFFA6ACCD),
   background: Color(0xFF292D3E),
   black: Color(0xFF292D3E),
@@ -488,7 +488,7 @@ const _palenight = TerminalTheme(
 // ── Night Owl ─────────────────────────────────────────────
 const _nightOwl = TerminalTheme(
   cursor: Color(0xFF80A4C2),
-  selection: Color(0xFF1D3B53),
+  selection: Color(0xAA1D3B53),
   foreground: Color(0xFFD6DEEB),
   background: Color(0xFF011627),
   black: Color(0xFF011627),
@@ -515,7 +515,7 @@ const _nightOwl = TerminalTheme(
 // ── Ayu Dark ──────────────────────────────────────────────
 const _ayuDark = TerminalTheme(
   cursor: Color(0xFFE6B450),
-  selection: Color(0xFF1A2233),
+  selection: Color(0xAA1A2233),
   foreground: Color(0xFFB3B1AD),
   background: Color(0xFF0A0E14),
   black: Color(0xFF0A0E14),
@@ -542,7 +542,7 @@ const _ayuDark = TerminalTheme(
 // ── Ayu Mirage ────────────────────────────────────────────
 const _ayuMirage = TerminalTheme(
   cursor: Color(0xFFFFCC66),
-  selection: Color(0xFF2A3040),
+  selection: Color(0xAA2A3040),
   foreground: Color(0xFFCBCCC6),
   background: Color(0xFF1F2430),
   black: Color(0xFF1F2430),
@@ -569,7 +569,7 @@ const _ayuMirage = TerminalTheme(
 // ── Ayu Light ─────────────────────────────────────────────
 const _ayuLight = TerminalTheme(
   cursor: Color(0xFFFF6A00),
-  selection: Color(0xFFD1E4F4),
+  selection: Color(0xAAD1E4F4),
   foreground: Color(0xFF5C6773),
   background: Color(0xFFFAFAFA),
   black: Color(0xFF000000),
@@ -596,7 +596,7 @@ const _ayuLight = TerminalTheme(
 // ── Rose Piné ─────────────────────────────────────────────
 const _rosePine = TerminalTheme(
   cursor: Color(0xFFE0DEF4),
-  selection: Color(0xFF21202E),
+  selection: Color(0xAA21202E),
   foreground: Color(0xFFE0DEF4),
   background: Color(0xFF191724),
   black: Color(0xFF26233A),
@@ -623,7 +623,7 @@ const _rosePine = TerminalTheme(
 // ── Rose Piné Moon ────────────────────────────────────────
 const _rosePineMoon = TerminalTheme(
   cursor: Color(0xFFE0DEF4),
-  selection: Color(0xFF2A273F),
+  selection: Color(0xAA2A273F),
   foreground: Color(0xFFE0DEF4),
   background: Color(0xFF232136),
   black: Color(0xFF393552),
@@ -650,7 +650,7 @@ const _rosePineMoon = TerminalTheme(
 // ── Rose Piné Dawn ────────────────────────────────────────
 const _rosePineDawn = TerminalTheme(
   cursor: Color(0xFF575279),
-  selection: Color(0xFFDFDBEC),
+  selection: Color(0xAADFDBEC),
   foreground: Color(0xFF575279),
   background: Color(0xFFFAF4ED),
   black: Color(0xFFF2E9E1),
@@ -677,7 +677,7 @@ const _rosePineDawn = TerminalTheme(
 // ── Kanagawa ──────────────────────────────────────────────
 const _kanagawa = TerminalTheme(
   cursor: Color(0xFFC8C093),
-  selection: Color(0xFF2D4F67),
+  selection: Color(0xAA2D4F67),
   foreground: Color(0xFFDCD7BA),
   background: Color(0xFF1F1F28),
   black: Color(0xFF16161D),
@@ -704,7 +704,7 @@ const _kanagawa = TerminalTheme(
 // ── Everforest Dark ───────────────────────────────────────
 const _everforestDark = TerminalTheme(
   cursor: Color(0xFFD3C6AA),
-  selection: Color(0xFF374145),
+  selection: Color(0xAA374145),
   foreground: Color(0xFFD3C6AA),
   background: Color(0xFF2D353B),
   black: Color(0xFF343F44),
@@ -731,7 +731,7 @@ const _everforestDark = TerminalTheme(
 // ── Everforest Light ──────────────────────────────────────
 const _everforestLight = TerminalTheme(
   cursor: Color(0xFF5C6A72),
-  selection: Color(0xFFE0DEC3),
+  selection: Color(0xAAE0DEC3),
   foreground: Color(0xFF5C6A72),
   background: Color(0xFFFDF6E3),
   black: Color(0xFF5C6A72),
@@ -758,7 +758,7 @@ const _everforestLight = TerminalTheme(
 // ── Cobalt2 ───────────────────────────────────────────────
 const _cobalt2 = TerminalTheme(
   cursor: Color(0xFFFFC600),
-  selection: Color(0xFF1F3F5B),
+  selection: Color(0xAA1F3F5B),
   foreground: Color(0xFFFFFFFF),
   background: Color(0xFF122637),
   black: Color(0xFF000000),
@@ -785,7 +785,7 @@ const _cobalt2 = TerminalTheme(
 // ── Snazzy ────────────────────────────────────────────────
 const _snazzy = TerminalTheme(
   cursor: Color(0xFFEFF0EB),
-  selection: Color(0xFF3E4347),
+  selection: Color(0xAA3E4347),
   foreground: Color(0xFFEFF0EB),
   background: Color(0xFF282A36),
   black: Color(0xFF282A36),
@@ -812,7 +812,7 @@ const _snazzy = TerminalTheme(
 // ── Synthwave '84 ─────────────────────────────────────────
 const _synthwave84 = TerminalTheme(
   cursor: Color(0xFFCBE0F0),
-  selection: Color(0xFF3B294D),
+  selection: Color(0xAA3B294D),
   foreground: Color(0xFFCBE0F0),
   background: Color(0xFF2B213A),
   black: Color(0xFF262335),
@@ -839,7 +839,7 @@ const _synthwave84 = TerminalTheme(
 // ── Horizon ───────────────────────────────────────────────
 const _horizon = TerminalTheme(
   cursor: Color(0xFFE95379),
-  selection: Color(0xFF2E303E),
+  selection: Color(0xAA2E303E),
   foreground: Color(0xFFD5D8DA),
   background: Color(0xFF1C1E26),
   black: Color(0xFF1C1E26),
@@ -866,7 +866,7 @@ const _horizon = TerminalTheme(
 // ── Oceanic Next ──────────────────────────────────────────
 const _oceanicNext = TerminalTheme(
   cursor: Color(0xFFFFFFFF),
-  selection: Color(0xFF2B3651),
+  selection: Color(0xAA2B3651),
   foreground: Color(0xFFD8DEE9),
   background: Color(0xFF1B2B34),
   black: Color(0xFF1B2B34),
@@ -893,7 +893,7 @@ const _oceanicNext = TerminalTheme(
 // ── Solarized Light ───────────────────────────────────────
 const _solarizedLight = TerminalTheme(
   cursor: Color(0xFF586E75),
-  selection: Color(0xFFEEE8D5),
+  selection: Color(0xAAEEE8D5),
   foreground: Color(0xFF657B83),
   background: Color(0xFFFDF6E3),
   black: Color(0xFF073642),
@@ -920,7 +920,7 @@ const _solarizedLight = TerminalTheme(
 // ── GitHub Dark ───────────────────────────────────────────
 const _githubDark = TerminalTheme(
   cursor: Color(0xFFC9D1D9),
-  selection: Color(0xFF264F78),
+  selection: Color(0xAA264F78),
   foreground: Color(0xFFC9D1D9),
   background: Color(0xFF0D1117),
   black: Color(0xFF161B22),
@@ -947,7 +947,7 @@ const _githubDark = TerminalTheme(
 // ── GitHub Light ──────────────────────────────────────────
 const _githubLight = TerminalTheme(
   cursor: Color(0xFF24292E),
-  selection: Color(0xFFB3D7FF),
+  selection: Color(0xAAB3D7FF),
   foreground: Color(0xFF24292E),
   background: Color(0xFFFFFFFF),
   black: Color(0xFF24292E),
@@ -974,7 +974,7 @@ const _githubLight = TerminalTheme(
 // ── Atom One Light ────────────────────────────────────────
 const _atomOneLight = TerminalTheme(
   cursor: Color(0xFF526FFF),
-  selection: Color(0xFFD7D7D7),
+  selection: Color(0xAAD7D7D7),
   foreground: Color(0xFF383A42),
   background: Color(0xFFFAFAFA),
   black: Color(0xFF383A42),
