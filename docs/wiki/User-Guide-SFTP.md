@@ -6,7 +6,7 @@ The dual-panel SFTP screen lets you browse and transfer files between local and 
 
 ## Opening SFTP
 
-Click the **SFTP** tab in the top bar or select **SFTP** from the sidebar. The left panel shows your local filesystem; the right panel shows the remote.
+Click the **SFTP** tab in the top bar or select **SFTP** from the sidebar. Each panel has a **source chip** in its header — click it to switch that panel between your **Local** filesystem and any saved host, so you can go local ↔ remote or even remote ↔ remote. Connections, paths and in-flight transfers survive switching to other tabs; coming back to SFTP resumes where you left off.
 
 You can also open SFTP for a specific session from the session toolbar.
 

@@ -7,13 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.1.24] — 2026-06-04
+
+### Added
+- **Local terminal as first-class tabs** — local shell sessions now live in the global top tab bar next to SSH sessions (unified `TerminalSession` model in `SessionProvider`), can be split into panes alongside SSH panes, support asciicast recording, and show a status overlay with a restart action when the shell exits.
+- **SFTP two-panel layout with switchable sources** ([#41](https://github.com/YoursshLabs/yourssh/issues/41)) — each panel can browse Local or any saved host via a source chip; unified panel headers (source chip + filter + actions) and clickable breadcrumb navigation in the remote panel replace the single `Up` button.
+- **Terminal right-click menu** — right-clicking an SSH or local terminal opens a Copy / Paste / Select All context menu (Copy is disabled when nothing is selected).
+
 ### Fixed
 - **Copying from the terminal** ([#43](https://github.com/YoursshLabs/yourssh/issues/43)) — copy/paste was effectively unreachable on Windows/Linux: `Ctrl+C` always meant SIGINT, the only copy binding was the undiscoverable `Ctrl+Shift+C`, and the right/middle mouse buttons did nothing. The terminal now mirrors Windows Terminal behavior: `Ctrl+C` copies when a selection is active (and clears the selection, so the next `Ctrl+C` reaches the shell as SIGINT), and `Ctrl+Shift+V` joins `Ctrl+V` as a paste alias. macOS `Cmd+C`/`Cmd+V` are unchanged.
 - **Middle-click paste** — middle-click now pastes the clipboard, the standard terminal-emulator gesture. The xterm fork routed middle clicks to the right-button callbacks (and reported them to mouse-mode apps as the right button); they now use their own path, and mouse-mode apps (vim, htop) receive a proper middle-button event instead.
 - **Recording playback terminal** is now read-only, so clicks and paste gestures can no longer inject input into a replay.
+- **SFTP workspace lost on tab switch** ([#42](https://github.com/YoursshLabs/yourssh/issues/42)) — `DualPanelSftpScreen` was disposed whenever another tab became active, dropping connected hosts, paths, listings and in-flight transfers; it is now kept alive offstage (`KeepAliveOffstage`) so returning to the SFTP tab resumes where you left off.
+- **Unreadable terminal selection** ([#40](https://github.com/YoursshLabs/yourssh/issues/40)) — every bundled theme used a fully opaque selection color painted over the text layer, hiding selected text entirely; all themes now use xterm's semi-transparent default alpha (`0xAA`), guarded by a test.
+- **Windows app icon** — the packaged Windows build shipped the default Flutter icon instead of the terminal logo.
 
-### Added
-- **Terminal right-click menu** — right-clicking an SSH or local terminal opens a Copy / Paste / Select All context menu (Copy is disabled when nothing is selected).
+### Changed
+- Test suite is Windows-portable (temp-dir paths, file-lock handling, unix-socket tests skipped where unsupported), backed by a new on-demand Windows/Linux platform build-check workflow.
+- Internal refactors: SSH-only consumers (plugins, terminal sharing) read `sshSessions`/`activeSshSession`; `LocalShellService` is injected instead of constructed inline.
 
 ---
 
@@ -315,7 +328,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.23...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.24...HEAD
+[0.1.24]: https://github.com/YoursshLabs/yourssh/compare/v0.1.23...v0.1.24
 [0.1.23]: https://github.com/YoursshLabs/yourssh/compare/v0.1.22...v0.1.23
 [0.1.22]: https://github.com/YoursshLabs/yourssh/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/YoursshLabs/yourssh/compare/v0.1.20...v0.1.21
