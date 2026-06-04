@@ -9,8 +9,9 @@
 **Tech Stack:** Rust (ironrdp, tokio, flutter_rust_bridge v2), Dart/Flutter, dartssh2 (local fork).
 
 **Reference reading for the executor (do this before Task 3):**
-- Clone https://github.com/Devolutions/IronRDP and read `crates/ironrdp-client/src/rdp.rs` (connection + active session loop) and `crates/ironrdp/examples/screenshot.rs` (minimal blocking client). The Rust code in Tasks 4–8 is modeled on these; adjust to the exact API of the pinned ironrdp version when it differs.
+- Clone https://github.com/Devolutions/IronRDP and read `crates/ironrdp-client/src/rdp.rs` (connection + active session loop, `build_config`) and `crates/ironrdp/examples/screenshot.rs` (minimal blocking client). The Rust code in Tasks 4–8 is modeled on these; the ironrdp API drifts between releases, so when a name differs, the pinned version's example is the source of truth.
 - flutter_rust_bridge v2 docs: https://cjycode.com/flutter_rust_bridge/ (codegen config, `StreamSink`, `RustLib.init` with `ExternalLibrary`).
+- Known FRB limitation (drives the design): a function taking a `StreamSink<T>` parameter is generated as a Dart function returning `Stream<T>`; **its Rust return value is discarded** (FRB issue #2233). The session id therefore travels as the first stream event (`RdpEvent::Started`), never as a return value.
 
 ---
 
@@ -24,7 +25,7 @@
 - Create: `packages/yourssh_rdp/rust/Cargo.toml`
 - Create: `packages/yourssh_rdp/rust/src/lib.rs`
 - Create: `packages/yourssh_rdp/rust/src/api.rs`
-- Modify: `app/pubspec.yaml` (dependency + override)
+- Modify: `app/pubspec.yaml` (dependency)
 
 - [ ] **Step 1: Create the Dart package skeleton**
 
@@ -64,7 +65,7 @@ export 'src/rdp_client.dart';
 
 - [ ] **Step 2: Create the Rust crate**
 
-`packages/yourssh_rdp/rust/Cargo.toml` — pin ironrdp to the version used by the IronRDP repo's latest release tag at execution time (check `crates/ironrdp/Cargo.toml`); the features below come from the meta-crate:
+`packages/yourssh_rdp/rust/Cargo.toml`. **Version pinning rule:** all `ironrdp-*` crates ship together from one workspace — take the exact, mutually compatible versions from the IronRDP repo's latest release tag (`Cargo.toml` of `crates/ironrdp-client` lists the full set). The numbers below are current as of writing (meta-crate 0.15 line) and exist only so `cargo` has a starting point:
 
 ```toml
 [package]
@@ -77,15 +78,18 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 flutter_rust_bridge = "=2.7.0"
-ironrdp = { version = "0.9", features = ["connector", "session", "input", "graphics", "cliprdr", "rdpdr"] }
-ironrdp-tokio = "0.4"
-ironrdp-tls = { version = "0.2", features = ["rustls"] }
-ironrdp-cliprdr = "0.2"
-sspi = "0.14"
+ironrdp = { version = "0.15", features = ["connector", "session", "input", "graphics", "cliprdr"] }
+ironrdp-tokio = "0.9"
+ironrdp-tls = { version = "0.3", features = ["rustls"] }
+ironrdp-cliprdr = "0.4"
+# NetworkClient impl required by connect_finalize for CredSSP/NLA —
+# copy the exact dependency the ironrdp-client example uses
+# (sspi with its reqwest network-client feature).
+sspi = { version = "0.16", features = ["network_client"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "macros", "time"] }
 anyhow = "1"
+futures = "0.3"
 sha2 = "0.10"
-x509-cert = "0.2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
@@ -109,7 +113,7 @@ pub fn rdp_lib_version() -> String {
 - [ ] **Step 3: Verify the crate compiles (without frb_generated yet, comment that line out)**
 
 Run: `cd packages/yourssh_rdp/rust && cargo check`
-Expected: `Finished` with no errors. If ironrdp version numbers don't resolve, take the exact versions from the IronRDP repo release and update Cargo.toml.
+Expected: `Finished` with no errors. If version numbers don't co-resolve, fix them from the IronRDP release workspace before proceeding — do not mix versions across ironrdp crates.
 
 - [ ] **Step 4: Wire the package into the app**
 
@@ -156,23 +160,23 @@ Run:
 cargo install flutter_rust_bridge_codegen --version 2.7.0 --locked
 cd packages/yourssh_rdp && flutter_rust_bridge_codegen generate
 ```
-Expected: `lib/src/generated/` and `rust/src/frb_generated.rs` created. Re-enable the `mod frb_generated;` line in `lib.rs`. Run `cargo check` again — passes.
+Expected: `lib/src/generated/` and `rust/src/frb_generated.rs` created. Re-enable the `mod frb_generated;` line in `lib.rs`. Run `cargo check` again — passes. Generated output is **checked in** (CI never runs codegen).
 
-- [ ] **Step 3: Write the native loader (QuickJS candidate-search pattern)**
+- [ ] **Step 3: Write the native loader**
 
-`packages/yourssh_rdp/lib/src/native_loader.dart`:
+Candidate order matters: release-bundle locations (relative to the executable) first, then dev locations. `packages/yourssh_rdp/lib/src/native_loader.dart`:
 
 ```dart
 import 'dart:io';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-/// Locates the yourssh_rdp dynamic library. Mirrors the candidate-search
-/// pattern of packages/yourssh_script_engine/lib/src/native/quickjs_ffi.dart.
+/// Locates the yourssh_rdp dynamic library. Search order: bundled release
+/// locations (relative to the running executable), plain name (rpath /
+/// system lookup), then repo-relative dev paths.
 ExternalLibrary loadYoursshRdpLibrary() {
-  final names = _candidates();
   Object? lastError;
-  for (final path in names) {
+  for (final path in _candidates()) {
     try {
       return ExternalLibrary.open(path);
     } catch (e) {
@@ -183,27 +187,37 @@ ExternalLibrary loadYoursshRdpLibrary() {
 }
 
 List<String> _candidates() {
+  final exeDir = File(Platform.resolvedExecutable).parent.path;
   if (Platform.isMacOS) {
     return [
+      // Release: YourSSH.app/Contents/Frameworks/ (bundled by CI, Task 19)
+      '${File(Platform.resolvedExecutable).parent.parent.path}/Frameworks/libyourssh_rdp.dylib',
       'libyourssh_rdp.dylib',
+      // Dev: flutter run from app/ or repo root
       '${Directory.current.path}/packages/yourssh_rdp/assets/native/macos/libyourssh_rdp.dylib',
       '${Directory.current.path}/../packages/yourssh_rdp/assets/native/macos/libyourssh_rdp.dylib',
     ];
   }
   if (Platform.isLinux) {
     return [
+      '$exeDir/lib/libyourssh_rdp.so',
       'libyourssh_rdp.so',
       '${Directory.current.path}/packages/yourssh_rdp/assets/native/linux/libyourssh_rdp.so',
+      '${Directory.current.path}/../packages/yourssh_rdp/assets/native/linux/libyourssh_rdp.so',
     ];
   }
   return [
+    '$exeDir\\yourssh_rdp.dll',
     'yourssh_rdp.dll',
     '${Directory.current.path}\\packages\\yourssh_rdp\\assets\\native\\windows\\yourssh_rdp.dll',
+    '${Directory.current.path}\\..\\packages\\yourssh_rdp\\assets\\native\\windows\\yourssh_rdp.dll',
   ];
 }
 ```
 
 - [ ] **Step 4: Write build scripts**
+
+The scripts build for the **host's native architecture** (no `--target` flag) — CI runners are native per matrix job (x64 and arm64), so the produced binary always matches the bundle being built.
 
 `packages/yourssh_rdp/build.sh`:
 
@@ -261,7 +275,7 @@ void main() {
 ```
 
 Run: `cd packages/yourssh_rdp && flutter test`
-Expected: PASS (the dylib was built in Step 4). If load fails, fix candidate paths.
+Expected: PASS (the dylib was built in Step 4). This test requires the built dylib — CI must run `build.sh`/`build.ps1` before it (Task 19).
 
 - [ ] **Step 6: Commit**
 
@@ -283,9 +297,6 @@ git commit -m "feat(rdp): FRB codegen pipeline, native loader, build scripts (#4
 - [ ] **Step 1: Define the FRB-visible types in `api.rs`**
 
 ```rust
-use flutter_rust_bridge::frb;
-pub use crate::session::registry;
-
 #[derive(Clone)]
 pub struct RdpConfig {
     pub target_host: String,
@@ -305,6 +316,10 @@ pub struct RdpCertInfo {
 }
 
 pub enum RdpEvent {
+    /// Always the first event on the stream. Carries the session id used by
+    /// every sender function — FRB discards the Rust return value of a
+    /// StreamSink-taking function (issue #2233), so the id travels here.
+    Started { session_id: u32 },
     Connected { cert: RdpCertInfo },
     FrameUpdate { x: u16, y: u16, width: u16, height: u16, rgba: Vec<u8> },
     ClipboardText { text: String },
@@ -388,7 +403,7 @@ Expected: `registry_insert_send_remove ... ok`
 - [ ] **Step 4: Regenerate bindings and verify**
 
 Run: `cd packages/yourssh_rdp && flutter_rust_bridge_codegen generate && cd rust && cargo check`
-Expected: clean. Dart `lib/src/generated/api.dart` now has `RdpConfig`, `RdpEvent` (sealed), etc.
+Expected: clean. Open `lib/src/generated/api.dart` and **record the exact generated names** for the `RdpEvent` variants (FRB emits a sealed base with subclasses named like `RdpEvent_Started` and matching factory constructors). Tasks 9/12 use these names — fix them there if codegen differs.
 
 - [ ] **Step 5: Commit**
 
@@ -401,9 +416,9 @@ git commit -m "feat(rdp): API types and session command registry (#44)"
 
 **Files:**
 - Create: `packages/yourssh_rdp/rust/src/connect.rs`
-- Modify: `packages/yourssh_rdp/rust/src/api.rs`, `rust/src/lib.rs`
+- Modify: `packages/yourssh_rdp/rust/src/lib.rs` (add `mod connect;`)
 
-This task is modeled directly on `ironrdp-client/src/rdp.rs::connect`. Keep the shape; align names with the pinned ironrdp version.
+This task is modeled directly on `ironrdp-client/src/rdp.rs` (`build_config` + connect). The `connector::Config` field set drifts between releases — populate **every** field, copying defaults from the example's `build_config`; the literal below shows the semantic choices this feature needs.
 
 - [ ] **Step 1: Implement `connect.rs`**
 
@@ -438,11 +453,17 @@ pub fn build_connector_config(cfg: &RdpConfig) -> connector::Config {
         client_name: "yourssh".to_owned(),
         client_dir: "C:\\Windows\\System32\\mstscax.dll".to_owned(),
         platform: MajorPlatformType::UNSPECIFIED,
-        no_server_pointer: true,
+        enable_server_pointer: false,      // we render our own cursor
         autologon: true,
-        request_data: None,
         pointer_software_rendering: true,
         performance_flags: Default::default(),
+        // ---- remaining required fields: copy values verbatim from the
+        // ironrdp-client example's build_config (keyboard_type,
+        // keyboard_subtype, keyboard_functional_keys_count, keyboard_layout,
+        // ime_file_name, dig_product_id, request_data, and any audio /
+        // license / timezone fields the pinned version requires). Struct
+        // literals must be exhaustive — the compiler enforces completeness.
+        ..todo_copy_from_example()
     }
 }
 
@@ -467,13 +488,22 @@ pub async fn rdp_connect_stage(cfg: &RdpConfig) -> anyhow::Result<Connected> {
     };
 
     let mut framed = ironrdp_tokio::TokioFramed::new(upgraded_stream);
+
+    // connect_finalize signature (verify against pinned ironrdp-tokio):
+    //   connect_finalize(upgraded, connector, &mut framed,
+    //                    &mut network_client, server_name,
+    //                    server_public_key, kerberos_config)
+    // The NetworkClient is REQUIRED for CredSSP — use the same impl the
+    // ironrdp-client example uses (sspi's reqwest network client).
+    let mut network_client =
+        sspi::network_client::reqwest_network_client::ReqwestNetworkClient::new();
     let connection_result = ironrdp_tokio::connect_finalize(
         upgraded,
-        &mut framed,
         connector,
+        &mut framed,
+        &mut network_client,
         (&cfg.target_host).into(),
         server_public_key,
-        None,
         None,
     )
     .await?;
@@ -511,10 +541,14 @@ mod tests {
 }
 ```
 
+(`..todo_copy_from_example()` is pseudocode shorthand: there is no real spread default — write out all remaining fields explicitly.)
+
+Add `mod connect;` to `lib.rs` **in this task** so the module compiles at this commit.
+
 - [ ] **Step 2: Run tests**
 
 Run: `cargo test` in `rust/`
-Expected: both unit tests pass; full build compiles against pinned ironrdp (fix field/function name drift against the example you read — that's expected work, not scope creep).
+Expected: both unit tests pass; full build compiles against pinned ironrdp.
 
 - [ ] **Step 3: Commit**
 
@@ -527,6 +561,7 @@ git commit -m "feat(rdp): connection stage with TLS/NLA and cert fingerprint (#4
 
 **Files:**
 - Create: `packages/yourssh_rdp/rust/src/run_loop.rs`
+- Create: `packages/yourssh_rdp/rust/src/input.rs` (stub, completed in Task 6)
 - Modify: `packages/yourssh_rdp/rust/src/api.rs`, `rust/src/lib.rs`
 
 - [ ] **Step 1: Write the failing dirty-rect extraction test**
@@ -566,29 +601,52 @@ mod tests {
 Run: `cargo test extract_region`
 Expected: PASS.
 
-- [ ] **Step 3: Implement the session loop**
+- [ ] **Step 3: Create the input stub** (completed in Task 6, needed now so this task commits green)
 
-Append to `run_loop.rs` (modeled on `ironrdp-client/src/rdp.rs::active_session`):
+`input.rs`:
 
 ```rust
 use ironrdp::session::{ActiveStage, ActiveStageOutput};
 use ironrdp::session::image::DecodedImage;
-use ironrdp::pdu::geometry::Rectangle as _;
-use flutter_rust_bridge::frb;
+
+use crate::session::SessionCmd;
+
+pub struct InputState;
+
+impl InputState {
+    pub fn new() -> Self { Self }
+
+    pub fn handle(
+        &mut self,
+        _stage: &mut ActiveStage,
+        _image: &mut DecodedImage,
+        _cmd: SessionCmd,
+    ) -> anyhow::Result<Vec<ActiveStageOutput>> {
+        Ok(vec![])
+    }
+}
+```
+
+- [ ] **Step 4: Implement the session loop**
+
+Append to `run_loop.rs` (modeled on `ironrdp-client/src/rdp.rs::active_session`). Both the read path and the input path produce `ActiveStageOutput`s, routed through one helper:
+
+```rust
+use ironrdp::session::{ActiveStage, ActiveStageOutput};
+use ironrdp::session::image::DecodedImage;
 use tokio::sync::mpsc::UnboundedReceiver;
 
-use crate::api::{RdpEvent, RdpConfig};
+use crate::api::{RdpConfig, RdpEvent};
 use crate::connect::{rdp_connect_stage, Connected};
-use crate::session::SessionCmd;
 use crate::input::InputState;
+use crate::session::SessionCmd;
 
 pub async fn run_session(
     cfg: RdpConfig,
     mut cmd_rx: UnboundedReceiver<SessionCmd>,
-    sink: impl Fn(RdpEvent) + Send + 'static,
+    sink: impl Fn(RdpEvent) + Send + Sync + 'static,
 ) {
-    let result = run_session_inner(cfg, &mut cmd_rx, &sink).await;
-    match result {
+    match run_session_inner(cfg, &mut cmd_rx, &sink).await {
         Ok(reason) => sink(RdpEvent::Disconnected { reason }),
         Err(e) => sink(RdpEvent::Error { message: format!("{e:#}") }),
     }
@@ -597,7 +655,7 @@ pub async fn run_session(
 async fn run_session_inner(
     cfg: RdpConfig,
     cmd_rx: &mut UnboundedReceiver<SessionCmd>,
-    sink: &(impl Fn(RdpEvent) + Send),
+    sink: &(impl Fn(RdpEvent) + Send + Sync),
 ) -> anyhow::Result<String> {
     let Connected { mut framed, connection_result, cert } = rdp_connect_stage(&cfg).await?;
     sink(RdpEvent::Connected { cert });
@@ -611,25 +669,10 @@ async fn run_session_inner(
     let mut input = InputState::new();
 
     loop {
-        tokio::select! {
+        let outputs = tokio::select! {
             frame = framed.read_pdu() => {
                 let (action, payload) = frame?;
-                let outputs = active_stage.process(&mut image, action, &payload)?;
-                for out in outputs {
-                    match out {
-                        ActiveStageOutput::GraphicsUpdate(region) => {
-                            let (x, y) = (region.left, region.top);
-                            let (w, h) = (region.width(), region.height());
-                            sink(RdpEvent::FrameUpdate {
-                                x, y, width: w, height: h,
-                                rgba: extract_region(image.data(), image.width(), x, y, w, h),
-                            });
-                        }
-                        ActiveStageOutput::ResponseFrame(frame) => framed.write_all(&frame).await?,
-                        ActiveStageOutput::Terminate(reason) => return Ok(format!("{reason:?}")),
-                        _ => {}
-                    }
-                }
+                active_stage.process(&mut image, action, &payload)?
             }
             cmd = cmd_rx.recv() => {
                 match cmd {
@@ -638,25 +681,40 @@ async fn run_session_inner(
                         for f in frames { framed.write_all(&f).await?; }
                         return Ok("disconnected by user".into());
                     }
-                    Some(cmd) => {
-                        for frame in input.handle(&mut active_stage, cmd)? {
-                            framed.write_all(&frame).await?;
-                        }
-                    }
+                    Some(cmd) => input.handle(&mut active_stage, &mut image, cmd)?,
                 }
+            }
+        };
+        for out in outputs {
+            match out {
+                ActiveStageOutput::GraphicsUpdate(region) => {
+                    // NOTE: verify against the pinned version whether the
+                    // region carries exclusive width()/height() accessors or
+                    // inclusive right/bottom (width = right - left + 1).
+                    let (x, y) = (region.left, region.top);
+                    let (w, h) = (region.width(), region.height());
+                    sink(RdpEvent::FrameUpdate {
+                        x, y, width: w, height: h,
+                        rgba: extract_region(image.data(), image.width(), x, y, w, h),
+                    });
+                }
+                ActiveStageOutput::ResponseFrame(frame) => framed.write_all(&frame).await?,
+                ActiveStageOutput::Terminate(reason) => return Ok(format!("{reason:?}")),
+                _ => {}
             }
         }
     }
 }
 ```
 
-And expose `rdp_connect` in `api.rs`:
+And expose `rdp_connect` in `api.rs`. Because FRB discards the Rust return value of a StreamSink-taking function, the id is emitted as the first event:
 
 ```rust
-use flutter_rust_bridge::frb;
-use flutter_rust_bridge::for_generated::StreamSink; // adjust import to FRB 2.7 generated alias
+use std::sync::Arc;
+
 use tokio::sync::mpsc;
 
+use crate::frb_generated::StreamSink;
 use crate::session::{registry, SessionCmd};
 
 static RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
@@ -668,15 +726,19 @@ fn runtime() -> &'static tokio::runtime::Runtime {
     })
 }
 
-pub fn rdp_connect(config: RdpConfig, sink: StreamSink<RdpEvent>) -> u32 {
+pub fn rdp_connect(config: RdpConfig, sink: StreamSink<RdpEvent>) {
     let (tx, rx) = mpsc::unbounded_channel::<SessionCmd>();
     let id = registry::insert(tx);
+    let sink = Arc::new(sink);
+    let _ = sink.add(RdpEvent::Started { session_id: id });
+    let emit = {
+        let sink = Arc::clone(&sink);
+        move |ev: RdpEvent| { let _ = sink.add(ev); }
+    };
     runtime().spawn(async move {
-        let emit = move |ev: RdpEvent| { let _ = sink.add(ev); };
         crate::run_loop::run_session(config, rx, emit).await;
         registry::remove(id);
     });
-    id
 }
 
 pub fn rdp_disconnect(session_id: u32) {
@@ -684,12 +746,14 @@ pub fn rdp_disconnect(session_id: u32) {
 }
 ```
 
-- [ ] **Step 4: Regenerate bindings, build, test**
+Add `mod run_loop;` and `mod input;` to `lib.rs`.
+
+- [ ] **Step 5: Regenerate bindings, build, test**
 
 Run: `flutter_rust_bridge_codegen generate && cd rust && cargo test && cargo build --release`
-Expected: all tests pass, release build OK. (`input::InputState` arrives in Task 6 — to keep this task compiling, create `input.rs` now with the struct and an empty `handle` returning `Ok(vec![])`, and `mod input;` + `mod run_loop;` + `mod connect;` in `lib.rs`.)
+Expected: all tests pass, release build OK, no unused-import warnings.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add packages/yourssh_rdp
@@ -703,9 +767,12 @@ git commit -m "feat(rdp): active session loop with dirty-region frame events (#4
 
 - [ ] **Step 1: Implement `InputState` over `ironrdp::input::Database`**
 
+`ActiveStage::process_fastpath_input(&mut self, image: &mut DecodedImage, events: &[FastPathInputEvent])` returns `Vec<ActiveStageOutput>` — the run loop (Task 5) already routes those through the shared output handler:
+
 ```rust
 use ironrdp::input::{Database, MouseButton, MousePosition, Operation, Scancode, WheelRotations};
-use ironrdp::session::ActiveStage;
+use ironrdp::session::{ActiveStage, ActiveStageOutput};
+use ironrdp::session::image::DecodedImage;
 
 use crate::session::SessionCmd;
 
@@ -718,21 +785,21 @@ impl InputState {
         Self { db: Database::new() }
     }
 
-    /// Maps a SessionCmd to fastpath input frames ready to write.
     pub fn handle(
         &mut self,
         stage: &mut ActiveStage,
+        image: &mut DecodedImage,
         cmd: SessionCmd,
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
+    ) -> anyhow::Result<Vec<ActiveStageOutput>> {
         let ops = match cmd {
             SessionCmd::Mouse { x, y, button, action } => {
                 let mut ops = vec![Operation::MouseMove(MousePosition { x, y })];
                 if let Some(btn) = mouse_button(button) {
-                    ops.push(match action {
-                        1 => Operation::MouseButtonPressed(btn),
-                        2 => Operation::MouseButtonReleased(btn),
-                        _ => return self.apply(stage, ops), // 0 = move only
-                    });
+                    match action {
+                        1 => ops.push(Operation::MouseButtonPressed(btn)),
+                        2 => ops.push(Operation::MouseButtonReleased(btn)),
+                        _ => {} // 0 = move only
+                    }
                 }
                 ops
             }
@@ -746,13 +813,11 @@ impl InputState {
             }
             SessionCmd::ClipboardText(_) | SessionCmd::Disconnect => vec![],
         };
-        self.apply(stage, ops)
-    }
-
-    fn apply(&mut self, stage: &mut ActiveStage, ops: Vec<Operation>) -> anyhow::Result<Vec<Vec<u8>>> {
-        if ops.is_empty() { return Ok(vec![]); }
+        if ops.is_empty() {
+            return Ok(vec![]);
+        }
         let events = self.db.apply(ops);
-        Ok(stage.process_fastpath_input(events)?)
+        Ok(stage.process_fastpath_input(image, &events)?)
     }
 }
 
@@ -779,8 +844,6 @@ mod tests {
     }
 }
 ```
-
-(Adjust `process_fastpath_input` to the actual ActiveStage method in the pinned version — the client example shows the exact call.)
 
 - [ ] **Step 2: Expose senders in `api.rs`**
 
@@ -816,16 +879,19 @@ git commit -m "feat(rdp): mouse/wheel/keyboard input senders (#44)"
 
 - [ ] **Step 1: Implement a text-only `CliprdrBackend`**
 
-Model on `ironrdp-cliprdr`'s `CliprdrBackend` trait and the client example's clipboard wiring. The backend forwards remote text to the event sink and serves local text pushed via `SessionCmd::ClipboardText`:
+The `CliprdrBackend` trait has **12 required methods with no defaults** (verify the exact list on the pinned version): `temporary_directory`, `client_capabilities`, `on_ready`, `on_request_format_list`, `on_process_negotiated_capabilities`, `on_remote_copy`, `on_format_data_request`, `on_format_data_response`, `on_file_contents_request`, `on_file_contents_response`, `on_lock`, `on_unlock`. Implement **all of them**; everything except the four below is a no-op:
 
 ```rust
 use std::sync::{Arc, Mutex};
 
-use ironrdp_cliprdr::backend::{CliprdrBackend, CliprdrBackendFactory};
-use ironrdp_cliprdr::pdu::{ClipboardFormat, ClipboardFormatId, FormatDataRequest, FormatDataResponse};
+use ironrdp_cliprdr::backend::CliprdrBackend;
+use ironrdp_cliprdr::pdu::{
+    ClipboardFormat, ClipboardFormatId, ClipboardGeneralCapabilityFlags,
+    FormatDataRequest, FormatDataResponse,
+};
 
 /// Shared state: latest local clipboard text (set from Dart) and a callback
-/// invoked when the remote side offers text (delivered to Dart as an event).
+/// invoked when remote text arrives (delivered to Dart as an event).
 pub struct ClipboardState {
     pub local_text: Mutex<String>,
     pub on_remote_text: Box<dyn Fn(String) + Send + Sync>,
@@ -836,34 +902,40 @@ pub struct TextClipboardBackend {
 }
 
 impl CliprdrBackend for TextClipboardBackend {
-    fn client_capabilities(&self) -> ironrdp_cliprdr::pdu::ClipboardGeneralCapabilityFlags {
-        Default::default()
+    fn temporary_directory(&self) -> &str { ".cliprdr" }
+
+    fn client_capabilities(&self) -> ClipboardGeneralCapabilityFlags {
+        ClipboardGeneralCapabilityFlags::USE_LONG_FORMAT_NAMES
     }
 
-    fn on_format_list(&mut self, formats: &[ClipboardFormat]) {
-        // Remote announced new clipboard content; request unicode text if offered.
+    /// Remote announced new clipboard content. Request unicode text if offered.
+    fn on_remote_copy(&mut self, formats: &[ClipboardFormat]) {
         if formats.iter().any(|f| f.id() == ClipboardFormatId::CF_UNICODETEXT) {
             // The Cliprdr channel handle (held by run_loop) issues the
-            // FormatDataRequest; this backend only records intent.
+            // FormatDataRequest for CF_UNICODETEXT — see run_loop wiring.
         }
     }
 
+    /// Remote wants OUR clipboard — serve the latest local text.
+    /// RDP unicode text is UTF-16LE with a trailing NUL; check whether the
+    /// pinned ironrdp-cliprdr exposes a helper, otherwise encode manually.
     fn on_format_data_request(&mut self, _req: FormatDataRequest) -> Option<FormatDataResponse<'static>> {
         let text = self.state.local_text.lock().unwrap().clone();
         Some(FormatDataResponse::new_unicode_string(&text))
     }
 
+    /// Remote answered our FormatDataRequest with text → push to Dart.
     fn on_format_data_response(&mut self, resp: FormatDataResponse<'_>) {
         if let Ok(text) = resp.to_unicode_string() {
             (self.state.on_remote_text)(text);
         }
     }
 
-    // Remaining trait methods: accept defaults / no-op implementations.
+    // ... the remaining 8 trait methods: explicit no-op bodies.
 }
 ```
 
-The exact trait surface differs between ironrdp-cliprdr versions — copy the trait skeleton from the pinned version's docs and keep every non-text method a no-op. Wire the Cliprdr static channel into the connector in `run_loop.rs` the same way `ironrdp-client` does, emit `RdpEvent::ClipboardText` from `on_remote_text`, and on `SessionCmd::ClipboardText(t)`: store into `local_text` then send the cliprdr format-list announcement through the channel handle.
+Wire the Cliprdr static channel into the connector in `run_loop.rs` exactly the way `ironrdp-client` does (it attaches the cliprdr machine before `connect_begin` and processes cliprdr SVC messages in the output loop). On `SessionCmd::ClipboardText(t)`: store into `local_text`, then send the cliprdr format-list announcement (copy ownership of the clipboard) through the channel handle. Emit `RdpEvent::ClipboardText` from `on_remote_text`.
 
 - [ ] **Step 2: Expose the sender in `api.rs`**
 
@@ -890,7 +962,7 @@ git commit -m "feat(rdp): text clipboard via cliprdr (#44)"
 
 - [ ] **Step 1: Wrap the spawned session in `catch_unwind`**
 
-In `rdp_connect`'s spawn:
+The `emit` closure from Task 5 already holds an `Arc<StreamSink>`, so cloning it is cheap. In `rdp_connect`'s spawn:
 
 ```rust
 runtime().spawn(async move {
@@ -906,7 +978,7 @@ runtime().spawn(async move {
 });
 ```
 
-Add `futures = "0.3"` to Cargo.toml. Make `emit` a `Clone` closure (wrap the StreamSink in `Arc`).
+Make the `emit` closure `Clone` by deriving it from the `Arc<StreamSink>` (already the case in Task 5 — just add `#[derive(Clone)]`-equivalent by capturing the Arc in a cloneable closure or wrapping in a small struct). Verify FRB 2.7's `StreamSink` is `Send + Sync` (it is designed for cross-thread use); if `Sync` is missing, keep one `Arc<Mutex<StreamSink>>`.
 
 - [ ] **Step 2: Build + commit**
 
@@ -952,7 +1024,7 @@ void main() {
       host: 'h', port: 3389, username: 'u', password: 'p',
       width: 100, height: 50,
     );
-    expect(tiny.width, 800); // clamped to minimum 800x600
+    expect(tiny.width, 800); // clamped to minimum 800x600 (spec)
     expect(tiny.height, 600);
   });
 }
@@ -964,6 +1036,8 @@ Run: `cd packages/yourssh_rdp && flutter test test/rdp_client_test.dart`
 Expected: FAIL.
 
 - [ ] **Step 3: Implement `rdp_client.dart`**
+
+The session id arrives as the first stream event (`RdpEvent_Started`) — `connect` captures it transparently:
 
 ```dart
 import 'generated/api.dart' as frb;
@@ -998,7 +1072,7 @@ class RdpConnectionSpec {
   static int _align(int v) => v - (v % 4);
 }
 
-/// Thin typed facade over the FRB bindings. One instance per app.
+/// Thin typed facade over the FRB bindings.
 class RdpClient {
   static bool _initialized = false;
 
@@ -1012,7 +1086,7 @@ class RdpClient {
   int? get sessionId => _sessionId;
 
   Stream<frb.RdpEvent> connect(RdpConnectionSpec spec) {
-    final stream = frb.rdpConnect(
+    final raw = frb.rdpConnect(
       config: frb.RdpConfig(
         targetHost: spec.host, targetPort: spec.port,
         username: spec.username, password: spec.password,
@@ -1020,9 +1094,13 @@ class RdpClient {
         security: spec.security.wire,
       ),
     );
-    // FRB 2.x: rdpConnect returns (sessionId, Stream) — if codegen instead
-    // returns only the stream with the id in the first event, adapt here.
-    return stream;
+    return raw.map((ev) {
+      // First event carries the session id (FRB cannot return it directly).
+      if (ev case frb.RdpEvent_Started(:final sessionId)) {
+        _sessionId = sessionId;
+      }
+      return ev;
+    });
   }
 
   void sendMouse(int x, int y, {int button = 0, int action = 0}) {
@@ -1045,8 +1123,6 @@ class RdpClient {
     frb.rdpSendClipboardText(sessionId: id, text: text);
   }
 
-  void attachSession(int id) => _sessionId = id;
-
   void disconnect() {
     final id = _sessionId; if (id == null) return;
     frb.rdpDisconnect(sessionId: id);
@@ -1055,7 +1131,7 @@ class RdpClient {
 }
 ```
 
-Note for the executor: FRB generates the stream API from the Rust signature `rdp_connect(config, sink) -> u32`; the Dart shape is `(int, Stream<RdpEvent>)` or a stream-only function depending on codegen mode. Reconcile `connect`/`attachSession` with what codegen actually emits, keeping this public API.
+(`RdpEvent_Started` and field casing: use the exact generated names recorded in Task 3 Step 4.)
 
 - [ ] **Step 4: Run tests — pass**
 
@@ -1110,10 +1186,12 @@ void main() {
 }
 ```
 
+(Match constructor-arg style to the real `Host` constructor when writing the test.)
+
 - [ ] **Step 2: Run — fails**
 
 Run: `cd app && flutter test test/models/host_rdp_test.dart`
-Expected: FAIL (enums missing). Match constructor-arg style to the real `Host` constructor when writing the test.
+Expected: FAIL (enums missing).
 
 - [ ] **Step 3: Implement in `host.dart`**
 
@@ -1123,7 +1201,7 @@ enum HostProtocol { ssh, rdp }
 enum RdpSecurityMode { auto, nla, tls }
 ```
 
-Add to `Host`: `HostProtocol protocol` (default `.ssh`), `String? domain`, `RdpSecurityMode rdpSecurity` (default `.auto`) — constructor params, `toJson` (`'protocol': protocol.name`, omit/include like neighbors), `fromJson` (`HostProtocol.values.byName(json['protocol'] ?? 'ssh')`, etc.), and `copyWith` if `Host` has one. Follow the exact serialization style already used for `sftpMode`.
+Add to `Host`: `HostProtocol protocol` (default `.ssh`), `String? domain`, `RdpSecurityMode rdpSecurity` (default `.auto`) — constructor params, `toJson` (`'protocol': protocol.name`, like neighbors), `fromJson` (`HostProtocol.values.byName(json['protocol'] as String? ?? 'ssh')`, etc.), and `copyWith` if `Host` has one. Follow the exact serialization style already used for `sftpMode`.
 
 - [ ] **Step 4: Run tests — pass; run full suite + analyze**
 
@@ -1141,7 +1219,7 @@ git commit -m "feat(rdp): Host protocol/domain/rdpSecurity fields (#44)"
 
 **Files:**
 - Create: `app/lib/models/app_session.dart`
-- Modify: `app/lib/models/terminal_session.dart`, `app/lib/providers/session_provider.dart`
+- Modify: `app/lib/models/terminal_session.dart`, `app/lib/providers/session_provider.dart`, `app/lib/screens/main_screen.dart`
 - Test: `app/test/providers/session_provider_app_session_test.dart` (create)
 
 - [ ] **Step 1: Create `app_session.dart`**
@@ -1190,36 +1268,33 @@ abstract class TerminalSession extends AppSession {
 }
 ```
 
+`SshSession` and `LocalSession` keep `implements TerminalSession` — they already provide the `customLabel`/`colorTag`/`isPinned` fields the new `AppSession` setters require; verify both still satisfy the contract.
+
 - [ ] **Step 3: Write the failing provider test**
 
-```dart
-import 'package:flutter_test/flutter_test.dart';
-import 'package:yourssh/models/app_session.dart';
-import 'package:yourssh/models/terminal_session.dart';
-import 'package:yourssh/providers/session_provider.dart';
+Construct the provider exactly as `app/test/providers/session_provider_test.dart:40` does (`SessionProvider(SshService(StorageService()), TabMetadataService())`), including its secure-storage method-channel mock from lines 22–34 — copy that `setUp` boilerplate:
 
-void main() {
-  test('sessions list is typed AppSession; sshSessions filters terminals', () {
-    final p = SessionProvider(/* match existing test construction — see
-        app/test/providers/ for the established pattern */);
-    expect(p.sessions, isA<List<AppSession>>());
-    expect(p.sshSessions, isEmpty);
-  });
-}
+```dart
+test('sessions list is typed AppSession; sshSessions filters terminals', () {
+  final p = SessionProvider(SshService(StorageService()), TabMetadataService());
+  expect(p.sessions, isA<List<AppSession>>());
+  expect(p.sshSessions, isEmpty);
+});
 ```
 
-- [ ] **Step 4: Refactor `SessionProvider`**
+- [ ] **Step 4: Refactor `SessionProvider` and `MainScreen` typing**
 
 - `List<TerminalSession> _sessions` → `List<AppSession> _sessions`
 - `List<AppSession> get sessions`
 - `sshSessions` / `activeSshSession` keep `whereType<SshSession>()` filtering
 - `activeSession` returns `AppSession?`
+- **`main_screen.dart` must be retyped explicitly** (an `is RdpSession` branch added later is dead code otherwise): `_buildForeground(TerminalSession? active)` → `_buildForeground(AppSession? active)`, the `active` local in `_buildContent` (~line 677) and any `TerminalSession?` locals in the build chain (~line 501) → `AppSession?`.
 
 Run `flutter analyze` and fix every type error it reports. The fix pattern at each call site is one of:
 - consumer only uses tab behavior (label/pin/color/id) → change its parameter type to `AppSession`
 - consumer needs `terminal`/recording → add `if (session is! TerminalSession) return;` (or `whereType<TerminalSession>()`) guard
 
-Known call sites from exploration: `app/lib/screens/main_screen.dart` (tab bar + `_buildForeground`), `app/lib/widgets/split_terminal_view.dart`, `app/lib/main.dart` (recording wiring), snippets `sendInput` path in the plugin context impl, `app/lib/services/workspace_service.dart`, `app/lib/services/tab_metadata_service.dart`. The analyzer is the source of truth — fix all of them.
+Known call sites from exploration: `main_screen.dart` (tab bar + `_buildForeground` chain), `app/lib/widgets/split_terminal_view.dart`, `app/lib/main.dart` (recording wiring), snippets `sendInput` path in the plugin context impl, `app/lib/services/workspace_service.dart`, `app/lib/services/tab_metadata_service.dart`. The analyzer is the source of truth — fix all of them.
 
 - [ ] **Step 5: Run full test suite + analyze — green**
 
@@ -1243,6 +1318,7 @@ git commit -m "refactor(session): split AppSession tab interface from TerminalSe
 
 ```dart
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/host.dart';
@@ -1261,12 +1337,13 @@ void main() {
     s.attach(events.stream);
     expect(s.status, RdpSessionStatus.connecting);
 
+    events.add(const frb.RdpEvent.started(sessionId: 1));
     events.add(frb.RdpEvent.connected(
         cert: frb.RdpCertInfo(sha256Fingerprint: 'ab', subject: 's')));
     await Future<void>.delayed(Duration.zero);
     expect(s.status, RdpSessionStatus.connected);
 
-    events.add(frb.RdpEvent.disconnected(reason: 'bye'));
+    events.add(const frb.RdpEvent.disconnected(reason: 'bye'));
     await Future<void>.delayed(Duration.zero);
     expect(s.status, RdpSessionStatus.disconnected);
     expect(s.lastMessage, 'bye');
@@ -1296,6 +1373,8 @@ void main() {
 }
 ```
 
+(Factory-constructor names: use the generated names recorded in Task 3 Step 4.)
+
 - [ ] **Step 2: Run — fails**
 
 Run: `flutter test test/models/rdp_session_test.dart`
@@ -1312,6 +1391,7 @@ import 'package:flutter/foundation.dart';
 import 'package:yourssh_rdp/yourssh_rdp.dart';
 import 'package:yourssh_rdp/src/generated/api.dart' as frb;
 
+import '../services/rdp_tunnel_proxy.dart';
 import 'app_session.dart';
 import 'host.dart';
 
@@ -1325,6 +1405,7 @@ class RdpSession extends ChangeNotifier implements AppSession {
     required this.client,
     required this.width,
     required this.height,
+    this.tunnelProxy,
   }) : framebuffer = Uint8List(width * height * 4);
 
   final Host host;
@@ -1333,6 +1414,10 @@ class RdpSession extends ChangeNotifier implements AppSession {
   final int height;
   final Uint8List framebuffer;
 
+  /// Non-null when this session runs through an SSH tunnel; owned by the
+  /// session and stopped on [close].
+  final RdpTunnelProxy? tunnelProxy;
+
   @override
   String get id => _id;
   final String _id = 'rdp_${DateTime.now().microsecondsSinceEpoch}';
@@ -1340,11 +1425,14 @@ class RdpSession extends ChangeNotifier implements AppSession {
   RdpSessionStatus status = RdpSessionStatus.connecting;
   String? lastMessage;
   String? certFingerprint;
+  bool _tunnelClosed = false;
 
   /// Latest decoded frame for painting; rebuilt lazily after patches.
   ui.Image? image;
-  bool _imageDirty = false;
+  bool _decodeScheduled = false;
   StreamSubscription<frb.RdpEvent>? _sub;
+
+  void Function(String text)? onRemoteClipboardText;
 
   @override
   String? customLabel;
@@ -1363,8 +1451,14 @@ class RdpSession extends ChangeNotifier implements AppSession {
     });
   }
 
+  /// Called by the tunnel proxy when the SSH side collapsed, so the
+  /// disconnect message names the real cause (spec: "SSH tunnel closed").
+  void markTunnelClosed() => _tunnelClosed = true;
+
   void _onEvent(frb.RdpEvent ev) {
     switch (ev) {
+      case frb.RdpEvent_Started():
+        return; // id captured inside RdpClient.connect
       case frb.RdpEvent_Connected(:final cert):
         status = RdpSessionStatus.connected;
         certFingerprint = cert.sha256Fingerprint;
@@ -1375,15 +1469,13 @@ class RdpSession extends ChangeNotifier implements AppSession {
         return; // no repaint needed
       case frb.RdpEvent_Disconnected(:final reason):
         status = RdpSessionStatus.disconnected;
-        lastMessage = reason;
+        lastMessage = _tunnelClosed ? 'SSH tunnel closed' : reason;
       case frb.RdpEvent_Error(:final message):
         status = RdpSessionStatus.error;
-        lastMessage = message;
+        lastMessage = _tunnelClosed ? 'SSH tunnel closed' : message;
     }
     notifyListeners();
   }
-
-  void Function(String text)? onRemoteClipboardText;
 
   void _patch(int x, int y, int w, int h, Uint8List rgba) {
     final fbStride = width * 4;
@@ -1396,10 +1488,12 @@ class RdpSession extends ChangeNotifier implements AppSession {
   }
 
   void _scheduleDecode() {
-    if (_imageDirty) return; // coalesce bursts into one decode per frame
-    _imageDirty = true;
+    if (_decodeScheduled) return; // coalesce bursts into one decode
+    _decodeScheduled = true;
     scheduleMicrotask(() async {
-      _imageDirty = false;
+      _decodeScheduled = false;
+      // fromUint8List snapshots synchronously, so the decoded image is
+      // internally consistent even if a patch lands during the await.
       final buf = await ui.ImmutableBuffer.fromUint8List(framebuffer);
       final desc = ui.ImageDescriptor.raw(buf,
           width: width, height: height, pixelFormat: ui.PixelFormat.rgba8888);
@@ -1412,11 +1506,12 @@ class RdpSession extends ChangeNotifier implements AppSession {
   Future<void> close() async {
     await _sub?.cancel();
     client.disconnect();
+    await tunnelProxy?.stop();
   }
 }
 ```
 
-(Pattern-match syntax for `frb.RdpEvent_*` follows the sealed classes FRB generates — check `lib/src/generated/api.dart` for the exact subclass names.)
+(Subclass pattern names `frb.RdpEvent_*`: use the generated names recorded in Task 3 Step 4. `RdpTunnelProxy` is created in Task 13 — to keep this task green, create the file with the class skeleton from Task 13 Step 3 now, or reorder Tasks 12/13's commit so the proxy lands first; the test above does not exercise the proxy.)
 
 - [ ] **Step 4: Run — pass**
 
@@ -1426,7 +1521,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/lib/models/rdp_session.dart app/test/models/rdp_session_test.dart
+git add app/lib/models/rdp_session.dart app/test/models/rdp_session_test.dart app/lib/services/rdp_tunnel_proxy.dart
 git commit -m "feat(rdp): RdpSession model with framebuffer patching (#44)"
 ```
 
@@ -1434,7 +1529,8 @@ git commit -m "feat(rdp): RdpSession model with framebuffer patching (#44)"
 
 **Files:**
 - Create: `app/lib/services/rdp_tunnel_proxy.dart`
-- Modify: `app/lib/providers/session_provider.dart`, `app/lib/services/ssh_service.dart`
+- Modify: `app/lib/providers/session_provider.dart`, `app/lib/services/ssh_service.dart`, `app/lib/main.dart`
+- Modify: connect call sites — `app/lib/widgets/hosts_dashboard.dart` (~lines 572, 695), `app/lib/widgets/host_list.dart` (~line 49), command palette connect action (verify it exists in `app/lib/widgets/command_palette.dart`)
 - Test: `app/test/services/rdp_tunnel_proxy_test.dart`
 
 - [ ] **Step 1: Write the failing proxy test**
@@ -1447,7 +1543,7 @@ import 'package:yourssh/services/rdp_tunnel_proxy.dart';
 
 void main() {
   test('pipes bytes both ways through one accepted connection', () async {
-    // Fake "remote" echo server stands in for the SSHSocket end.
+    // Fake "remote" echo server stands in for the SSH-forwarded end.
     final echo = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     echo.listen((s) => s.listen(s.add));
 
@@ -1476,16 +1572,19 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement `rdp_tunnel_proxy.dart`**
 
+`sink` is typed `StreamSink<List<int>>` — that's what dartssh2's `SSHSocket.sink` is, and a `dart:io` `Socket` satisfies it too (which is what the test exploits):
+
 ```dart
 import 'dart:async';
 import 'dart:io';
 
 /// Generic byte-pipe endpoint so the proxy can be tested without dartssh2:
-/// for real tunnels, stream/sink come from an [SSHSocket] (forwardLocal).
+/// for real tunnels, stream/sink come from an SSHSocket (forwardLocal),
+/// whose sink is a StreamSink<List<int>> (NOT an IOSink).
 class TunnelEnd {
   TunnelEnd({required this.stream, required this.sink, required this.close});
   final Stream<List<int>> stream;
-  final IOSink sink;
+  final StreamSink<List<int>> sink;
   final void Function() close;
 }
 
@@ -1493,9 +1592,16 @@ class TunnelEnd {
 /// one connection, pipes it to a freshly opened tunnel end, then refuses
 /// further connections. Dies with the session ([stop]).
 class RdpTunnelProxy {
+  RdpTunnelProxy({this.onClosed});
+
+  /// Fired when the tunnel side ends before [stop] — lets the session report
+  /// "SSH tunnel closed" instead of a generic disconnect.
+  final void Function()? onClosed;
+
   ServerSocket? _server;
   Socket? _client;
   TunnelEnd? _tunnel;
+  bool _stopped = false;
 
   Future<int> start(Future<TunnelEnd> Function() openTunnel) async {
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
@@ -1509,18 +1615,26 @@ class RdpTunnelProxy {
       try {
         final tunnel = await openTunnel();
         _tunnel = tunnel;
-        unawaited(client.listen(tunnel.sink.add,
-            onDone: tunnel.close, onError: (_) => tunnel.close()).asFuture());
-        unawaited(tunnel.stream.listen(client.add,
-            onDone: client.destroy, onError: (_) => client.destroy()).asFuture());
+        client.listen(tunnel.sink.add,
+            onDone: tunnel.close, onError: (_) => tunnel.close());
+        tunnel.stream.listen(client.add,
+            onDone: () => _tunnelEnded(client),
+            onError: (_) => _tunnelEnded(client));
       } catch (_) {
         client.destroy();
+        _tunnelEnded(client);
       }
     });
     return server.port;
   }
 
+  void _tunnelEnded(Socket client) {
+    client.destroy();
+    if (!_stopped) onClosed?.call();
+  }
+
   Future<void> stop() async {
+    _stopped = true;
     await _server?.close();
     _client?.destroy();
     _tunnel?.close();
@@ -1533,11 +1647,34 @@ class RdpTunnelProxy {
 Run: `flutter test test/services/rdp_tunnel_proxy_test.dart`
 Expected: PASS.
 
-- [ ] **Step 5: Add the connect branch in `SessionProvider`**
+- [ ] **Step 5: Add `openTunnelSocket` to `SshService`**
 
-New method (alongside the existing SSH `connect`); the host-connect call site(s) (hosts dashboard / host list / command palette) switch to `connectAny`:
+This is **not** a one-liner: `forwardLocal` needs a live jump client. Reuse the existing jump-host machinery (`_ensureJumpClient` at the `ssh_service.dart:154` call path), which requires resolving the jump `Host`, its key entry, and the host-key verifier — all available through the same lookup callbacks the jump-host feature already uses:
 
 ```dart
+/// Opens a forwarded socket to [targetHost]:[targetPort] through the SSH
+/// host identified by [jumpHostId]. Reuses _ensureJumpClient (jump-host
+/// resolution via jumpHostLookup, key lookup, hostKeyVerifier) and registers
+/// the consumer host id for teardown, exactly like the jump-host connect
+/// path at ssh_service.dart:154.
+Future<SSHSocket> openTunnelSocket(
+    String jumpHostId, String targetHost, int targetPort, String forHostId) async {
+  final jumpHost = jumpHostLookup?.call(jumpHostId);
+  if (jumpHost == null) throw StateError('Jump host $jumpHostId not found');
+  final jc = await _ensureJumpClient(jumpHost /*, keyEntry:, verifyHostKey: —
+      mirror the exact arguments used in the existing jump path */);
+  _hostToJump[forHostId] = jumpHostId; // teardown bookkeeping, as SSH does
+  return jc.forwardLocal(targetHost, targetPort);
+}
+```
+
+(Adapt names — `jumpHostLookup`, `_hostToJump`, `_ensureJumpClient` parameters — to the real code; the existing jump-host connect block is the template.)
+
+- [ ] **Step 6: Add the connect branch in `SessionProvider`**
+
+```dart
+/// Branches on protocol. Call sites that connect hosts use this instead of
+/// connect(): hosts_dashboard (~572, ~695), host_list (~49), command palette.
 Future<AppSession?> connectAny(Host host) =>
     host.protocol == HostProtocol.rdp ? connectRdp(host) : connect(host);
 
@@ -1549,13 +1686,14 @@ Future<RdpSession?> connectRdp(Host host) async {
   var targetHost = host.host;
   var targetPort = host.port;
   RdpTunnelProxy? proxy;
+  RdpSession? session; // captured by the proxy callback below
   if (host.jumpHostId != null) {
-    proxy = RdpTunnelProxy();
+    proxy = RdpTunnelProxy(onClosed: () => session?.markTunnelClosed());
     final port = await proxy.start(() async {
       final sshSocket = await sshService.openTunnelSocket(
-          host.jumpHostId!, host.host, host.port);
+          host.jumpHostId!, host.host, host.port, host.id);
       return TunnelEnd(
-          stream: sshSocket.stream, sink: sshSocket.sink, close: sshSocket.close);
+          stream: sshSocket.stream, sink: sshSocket.sink, close: sshSocket.destroy);
     });
     targetHost = '127.0.0.1';
     targetPort = port;
@@ -1568,8 +1706,15 @@ Future<RdpSession?> connectRdp(Host host) async {
     security: RdpSecurity.values.byName(host.rdpSecurity.name),
     width: size.width.round(), height: size.height.round(),
   );
-  final session = RdpSession(
-      host: host, client: client, width: spec.width, height: spec.height);
+  session = RdpSession(
+      host: host, client: client,
+      width: spec.width, height: spec.height, tunnelProxy: proxy);
+  session.onRemoteClipboardText =
+      (t) => Clipboard.setData(ClipboardData(text: t));
+  // Tab metadata (rename/pin/color) — same flow the SSH connect path runs
+  // at session_provider.dart:97-108: load persisted metadata for this host
+  // and apply to the session before adding it.
+  applyTabMetadata(session); // adapt to the real method/inline code
   session.attach(client.connect(spec));
   session.addListener(notifyListeners);
   _sessions.add(session);
@@ -1580,12 +1725,13 @@ Future<RdpSession?> connectRdp(Host host) async {
 ```
 
 Wire-up notes for the executor:
-- `rdpDesktopSize` is a new injectable callback (like the existing key-lookup callbacks set in `main.dart`) returning the current workspace `Size` × `devicePixelRatio`.
-- `sshService.openTunnelSocket(jumpHostId, host, port)`: new small method on `SshService` that connects (or reuses) the jump host's `SSHClient` and returns `client.forwardLocal(host, port)` — same calls used at `ssh_service.dart:154`.
-- Adapt field/method names (`storage.loadPassword`, `_activeIndex`) to the real ones in `session_provider.dart` / `storage_service.dart`.
-- Closing an RDP tab calls `session.close()` and `proxy?.stop()` — keep the proxy on the `RdpSession` (add a `tunnelProxy` field) so the existing close-tab path can dispose it.
+- `rdpDesktopSize` is a new injectable callback **set in `main.dart`** (like the existing key-lookup callbacks): returns the terminal workspace's `RenderBox` size × `MediaQuery.devicePixelRatioOf(context)`. Concretely: expose the workspace size from `MainScreen` via a `GlobalKey` or a size-reporting callback, and register `sessionProvider.rdpDesktopSize = () => lastKnownWorkspaceSize * dpr` during app wiring.
+- `SSHSocket.destroy()` is `void` (matching `TunnelEnd.close`); do not use `close()` (it returns a `Future`).
+- Adapt field/method names (`storage.loadPassword`, `_activeIndex`, tab-metadata application) to the real ones in `session_provider.dart` / `storage_service.dart` / `tab_metadata_service.dart`.
+- Closing an RDP tab: the existing close-tab path must call `session.close()` (which stops the proxy via `tunnelProxy`).
+- Update **all** connect call sites to `connectAny`: `hosts_dashboard.dart` (~572, ~695), `host_list.dart` (~49), and the command palette connect action if present.
 
-- [ ] **Step 6: Test + analyze + commit**
+- [ ] **Step 7: Test + analyze + commit**
 
 Run: `flutter test && flutter analyze`
 Expected: green.
@@ -1617,6 +1763,7 @@ void main() {
     expect(rdpScancodeFor(PhysicalKeyboardKey.altRight), (0x38, true)); // E0
     expect(rdpScancodeFor(PhysicalKeyboardKey.arrowUp), (0x48, true));
     expect(rdpScancodeFor(PhysicalKeyboardKey.delete), (0x53, true));
+    expect(rdpScancodeFor(PhysicalKeyboardKey.pause), isNull); // E1 sequence — unsupported v1
     expect(rdpScancodeFor(PhysicalKeyboardKey.f24), isNull); // unmapped
   });
 
@@ -1650,7 +1797,12 @@ Expected: FAIL.
 import 'package:flutter/services.dart';
 
 /// (scancode, isExtended) for the RDP set-1 keyboard layer, or null if the
-/// key has no RDP equivalent.
+/// key has no single-scancode RDP equivalent.
+///
+/// Deliberately unmapped: Pause (real make code is the E1-prefixed sequence
+/// E1 1D 45, which (scancode, extended) cannot express — special-case it in
+/// Rust if ever needed). PrintScreen is mapped to the pragmatic single
+/// E0 0x37 most servers accept, not the full E0 2A E0 37 sequence.
 (int, bool)? rdpScancodeFor(PhysicalKeyboardKey key) => _table[key.usbHidUsage];
 
 (int, int) sessionPointFor({
@@ -1693,7 +1845,8 @@ final Map<int, (int, bool)> _table = {
   0x0007003D: (0x3E, false), 0x0007003E: (0x3F, false), 0x0007003F: (0x40, false), // F4-F6
   0x00070040: (0x41, false), 0x00070041: (0x42, false), 0x00070042: (0x43, false), // F7-F9
   0x00070043: (0x44, false), 0x00070044: (0x57, false), 0x00070045: (0x58, false), // F10-F12
-  0x00070046: (0x37, true),  0x00070047: (0x46, false), 0x00070048: (0x45, true),  // PrtSc ScrLk Pause
+  0x00070046: (0x37, true),  0x00070047: (0x46, false),                            // PrtSc(approx) ScrLk
+  // 0x00070048 Pause: intentionally unmapped (E1 sequence)
   0x00070049: (0x52, true),  0x0007004A: (0x47, true),  0x0007004B: (0x49, true),  // Ins Home PgUp
   0x0007004C: (0x53, true),  0x0007004D: (0x4F, true),  0x0007004E: (0x51, true),  // Del End PgDn
   0x0007004F: (0x4D, true),  0x00070050: (0x4B, true),  0x00070051: (0x50, true),  // → ← ↓
@@ -1726,33 +1879,39 @@ git commit -m "feat(rdp): scancode table and mouse coordinate mapping (#44)"
 
 **Files:**
 - Create: `app/lib/widgets/rdp_workspace.dart`
-- Modify: `app/lib/screens/main_screen.dart` (`_buildForeground`)
+- Modify: `app/lib/screens/main_screen.dart` (`_buildForeground`), `app/lib/providers/session_provider.dart` (`reconnectRdp`)
 - Test: `app/test/widgets/rdp_workspace_test.dart`
 
 - [ ] **Step 1: Write the failing widget test**
 
+State is driven through the event stream (no `notifyListeners` from outside — it's `@protected` and would trip the analyzer gate):
+
 ```dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/rdp_session.dart';
 import 'package:yourssh/widgets/rdp_workspace.dart';
 import 'package:yourssh_rdp/yourssh_rdp.dart' show RdpClient;
+import 'package:yourssh_rdp/src/generated/api.dart' as frb;
 
 void main() {
   testWidgets('shows connecting overlay, then error overlay with retry',
       (tester) async {
+    final events = StreamController<frb.RdpEvent>();
     final session = RdpSession(
         host: Host(id: 'h', label: 'w', host: 'x', port: 3389,
             username: 'u', authType: AuthType.password,
             protocol: HostProtocol.rdp),
         client: RdpClient(), width: 800, height: 600);
+    session.attach(events.stream);
+
     await tester.pumpWidget(MaterialApp(home: RdpWorkspace(session: session)));
     expect(find.textContaining('Connecting'), findsOneWidget);
 
-    session.status = RdpSessionStatus.error;
-    session.lastMessage = 'auth failed';
-    session.notifyListeners(); // make notifyListeners public-friendly via a test helper if needed
+    events.add(const frb.RdpEvent.error(message: 'auth failed'));
     await tester.pump();
     expect(find.textContaining('auth failed'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
@@ -1769,7 +1928,9 @@ Expected: FAIL.
 
 ```dart
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -1791,6 +1952,7 @@ class RdpWorkspace extends StatefulWidget {
 
 class _RdpWorkspaceState extends State<RdpWorkspace> {
   final _focusNode = FocusNode();
+  int _lastButton = 1;
 
   RdpSession get session => widget.session;
 
@@ -1805,7 +1967,7 @@ class _RdpWorkspaceState extends State<RdpWorkspace> {
     return ListenableBuilder(
       listenable: session,
       builder: (context, _) => Column(children: [
-        _Toolbar(session: session, onReconnect: widget.onReconnect),
+        _Toolbar(session: session),
         Expanded(child: _buildBody()),
       ]),
     );
@@ -1843,6 +2005,7 @@ class _RdpWorkspaceState extends State<RdpWorkspace> {
             autofocus: true,
             onFocusChange: (gained) async {
               if (!gained) return;
+              // Spec: push local clipboard to remote when the view gains focus.
               final data = await Clipboard.getData(Clipboard.kTextPlain);
               final text = data?.text;
               if (text != null && text.isNotEmpty) {
@@ -1872,17 +2035,21 @@ class _RdpWorkspaceState extends State<RdpWorkspace> {
               onPointerDown: (e) {
                 _focusNode.requestFocus();
                 final (x, y) = toSession(e.localPosition);
+                // e.buttons includes the new button on down; cache it because
+                // PointerUpEvent.buttons no longer contains it. (Single-field
+                // cache — chorded multi-button presses release as the last
+                // pressed button; acceptable v1.)
                 session.client.sendMouse(x, y,
                     button: _button(e.buttons), action: 1);
               },
               onPointerUp: (e) {
                 final (x, y) = toSession(e.localPosition);
-                session.client.sendMouse(x, y,
-                    button: _lastButton, action: 2);
+                session.client.sendMouse(x, y, button: _lastButton, action: 2);
               },
               onPointerSignal: (e) {
                 if (e is PointerScrollEvent) {
-                  session.client.sendWheel((-e.scrollDelta.dy).round().clamp(-256, 255));
+                  session.client
+                      .sendWheel((-e.scrollDelta.dy).round().clamp(-256, 255));
                 }
               },
               child: CustomPaint(
@@ -1895,21 +2062,19 @@ class _RdpWorkspaceState extends State<RdpWorkspace> {
     }
   }
 
-  int _lastButton = 1;
   int _button(int buttons) {
     _lastButton = switch (buttons) {
       kSecondaryMouseButton => 2,
       kMiddleMouseButton => 3,
-      _ => 1,
+      _ => 1, // includes chorded bitmasks — treated as left, acceptable v1
     };
     return _lastButton;
   }
 }
 
 class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.session, this.onReconnect});
+  const _Toolbar({required this.session});
   final RdpSession session;
-  final VoidCallback? onReconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -1918,7 +2083,7 @@ class _Toolbar extends StatelessWidget {
       color: AppColors.surface,
       child: Row(children: [
         const SizedBox(width: 8),
-        Text(session.host.label, style: Theme.of(context).textTheme.labelMedium),
+        Text(session.tabLabel, style: Theme.of(context).textTheme.labelMedium),
         const Spacer(),
         IconButton(
           tooltip: 'Send Ctrl+Alt+Del',
@@ -1975,27 +2140,60 @@ class _FramePainter extends CustomPainter {
 }
 ```
 
-Add `import 'dart:ui' as ui;` at the top. Hook remote clipboard → local in the place that creates the session (Task 13's `connectRdp`): `session.onRemoteClipboardText = (t) => Clipboard.setData(ClipboardData(text: t));`
+- [ ] **Step 4: Branch in `main_screen.dart` + reconnect with password re-prompt**
 
-- [ ] **Step 4: Branch in `main_screen.dart`**
-
-In `_buildForeground`, before the existing terminal path:
+In `_buildForeground` (now typed `AppSession?` from Task 11), before the existing terminal path:
 
 ```dart
 if (active is RdpSession) {
   return RdpWorkspace(
     session: active,
-    onReconnect: () => context.read<SessionProvider>().reconnectRdp(active),
+    onReconnect: () => _retryRdp(active),
   );
 }
 ```
 
-`reconnectRdp(RdpSession old)`: remove the old session, call `connectRdp(old.host)`. Add it to `SessionProvider` (reuses Task 13 code).
+`_retryRdp` in `MainScreen` implements the spec's "Retry re-prompts for the password" on auth failure:
+
+```dart
+Future<void> _retryRdp(RdpSession old) async {
+  final provider = context.read<SessionProvider>();
+  if (old.status == RdpSessionStatus.error) {
+    // Likely auth failure — re-prompt and persist before reconnecting.
+    final newPassword = await showDialog<String>(
+      context: context,
+      builder: (_) => _RdpPasswordDialog(host: old.host), // small TextField
+                       // dialog; follow sudo_password_dialog.dart's style
+    );
+    if (newPassword == null) return; // cancelled
+    await context.read<StorageService>().savePassword(old.host.id, newPassword);
+  }
+  await provider.reconnectRdp(old);
+}
+```
+
+`SessionProvider.reconnectRdp(RdpSession old)`: carry over tab metadata, then reuse `connectRdp`:
+
+```dart
+Future<void> reconnectRdp(RdpSession old) async {
+  final (label, color, pinned) = (old.customLabel, old.colorTag, old.isPinned);
+  await closeSession(old.id); // existing close path → old.close()
+  final fresh = await connectRdp(old.host);
+  if (fresh != null) {
+    fresh.customLabel = label;
+    fresh.colorTag = color;
+    fresh.isPinned = pinned;
+    notifyListeners();
+  }
+}
+```
+
+(Adapt `closeSession`/`StorageService.savePassword` to real names.)
 
 - [ ] **Step 5: Run tests + analyze; commit**
 
 Run: `flutter test && flutter analyze`
-Expected: green, including the new widget test.
+Expected: green, including the new widget test, zero analyzer warnings.
 
 ```bash
 git add -A app/lib app/test
@@ -2008,33 +2206,36 @@ git commit -m "feat(rdp): RdpWorkspace screen rendering and input capture (#44)"
 - Modify: `app/lib/widgets/add_host_dialog.dart`, `app/lib/widgets/host_list.dart`, `app/lib/widgets/hosts_dashboard.dart`, `app/lib/widgets/host_detail_panel.dart`
 - Test: `app/test/widgets/add_host_dialog_rdp_test.dart`
 
+- [ ] **Step 0: Read the real dialog first**
+
+`add_host_dialog.dart` pops a record `(host: host, password: _password.text)` (~line 66) and **must keep that return shape** — the existing `add_host_dialog_sftp_test.dart` destructures `({Host host, String password})`. Also note: the dialog has **no jump-host picker today** (`jumpHostId` is edited elsewhere — check `host_detail_panel.dart`); for RDP an "SSH tunnel via" dropdown must be **added**, not "kept".
+
 - [ ] **Step 1: Write the failing test**
 
+Mirror the pump/build setup of the existing `add_host_dialog_sftp_test.dart`:
+
 ```dart
-import 'package:flutter_test/flutter_test.dart';
-// Match the existing add_host_dialog test setup in app/test/widgets/ if one
-// exists; otherwise pump the dialog inside MaterialApp + providers it needs.
-
-void main() {
-  testWidgets('selecting RDP hides SSH-only fields and shows domain', (tester) async {
-    // pump AddHostDialog, tap the protocol segmented control "RDP"
-    // expect: auth-type dropdown gone (password field stays),
-    //         "Domain (optional)" field visible, port defaulted to 3389,
-    //         shell-integration / SFTP-mode controls absent.
-  });
-}
+testWidgets('selecting RDP hides SSH-only fields and shows domain', (tester) async {
+  // pump AddHostDialog exactly like add_host_dialog_sftp_test.dart does,
+  // tap the protocol segmented control "RDP", then:
+  // expect: auth-type dropdown gone (password field stays),
+  //         "Domain (optional)" field visible,
+  //         port field text == '3389' (when untouched),
+  //         shell-integration / SFTP-mode controls absent,
+  //         "SSH tunnel via" dropdown visible.
+  // Submit and destructure the popped ({Host host, String password}) record;
+  // expect host.protocol == HostProtocol.rdp and host.domain to round-trip.
+});
 ```
-
-Fill in the pump/tap/expect code against the real dialog structure — open `add_host_dialog.dart` first and mirror how its existing tests (if any) build it.
 
 - [ ] **Step 2: Implement the form changes**
 
 In `add_host_dialog.dart`:
 - Add a `SegmentedButton<HostProtocol>` at the top (`SSH` / `RDP`), state-held like neighbors.
-- When `HostProtocol.rdp`: default port field to 3389 (only if untouched), force `AuthType.password` and hide the auth-type selector, key/cert/agent pickers, shell-integration toggle, SFTP mode, auto-record; show a `Domain (optional)` text field and an `RDP security` dropdown (`auto`/`nla`/`tls`). Keep jump-host picker visible (labeled "SSH tunnel via").
-- Persist into the `Host` via the new fields from Task 10.
+- When `HostProtocol.rdp`: default port field to 3389 (only if untouched), force `AuthType.password` and hide the auth-type selector, key/cert/agent pickers, shell-integration toggle, SFTP mode, auto-record; show a `Domain (optional)` text field and an `RDP security` dropdown (`auto`/`nla`/`tls`); add an "SSH tunnel via" dropdown listing saved SSH hosts (writes `jumpHostId`).
+- Thread `protocol`/`domain`/`rdpSecurity`/`jumpHostId` into the `Host(...)` constructed in `_submit`, preserving the popped record shape.
 
-In `host_list.dart` / `hosts_dashboard.dart` / `host_detail_panel.dart`: where the host card/row renders the OS icon or port info, add a small "RDP" chip when `host.protocol == HostProtocol.rdp` (follow the existing badge/chip styling, e.g. the connection-health badge pattern).
+In `host_list.dart` / `hosts_dashboard.dart` / `host_detail_panel.dart`: where the host card/row renders the OS icon or port info, add a small "RDP" chip when `host.protocol == HostProtocol.rdp` (follow the existing badge/chip styling, e.g. the connection-health badge pattern). In `host_detail_panel.dart`, hide SSH-only sections for RDP hosts.
 
 - [ ] **Step 3: Run tests + analyze; commit**
 
@@ -2057,7 +2258,6 @@ git commit -m "feat(rdp): host form protocol selector, RDP fields and badges (#4
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:yourssh/models/known_host.dart';
 import 'package:yourssh/providers/known_hosts_provider.dart';
 
 void main() {
@@ -2076,8 +2276,8 @@ void main() {
 
 - [ ] **Step 2: Implement**
 
-- `KnownHost` model: add `protocol` field (`'ssh'` default, `'rdp'`), serialized additively like Task 10.
-- `KnownHostsProvider`: add
+- `KnownHost` model: add `protocol` field (`'ssh'` default, `'rdp'`), serialized additively. **Careful:** `KnownHost.fromJson` currently uses strict `as String` casts — the new field needs `json['protocol'] as String? ?? 'ssh'`. RDP entries store the cert fingerprint in the existing fingerprint field and use an empty-string sentinel for `keyType`; the SSH `verifyHostKey`/`_matches` path must filter `protocol == 'ssh'` so RDP rows never collide with SSH lookups.
+- `KnownHostsProvider`:
 
 ```dart
 enum RdpCertVerdict { trusted, unknown, mismatch }
@@ -2091,15 +2291,14 @@ RdpCertVerdict verifyRdpCert({required String host, required int port, required 
 }
 
 Future<void> acceptRdpCert({required String host, required int port, required String fingerprint}) async {
-  // upsert an entry with protocol 'rdp' and persist via the existing save path
+  // upsert an entry with protocol 'rdp' and persist via the existing save
+  // path (adapt entries/save names to the real provider)
 }
 ```
 
-(Adapt `entries` / field names to the real provider; reuse its persistence.)
-
 - Flow in `connectRdp` (Task 13): on `RdpEvent.Connected`, call `verifyRdpCert`. `trusted` → continue. `unknown` → show a TOFU dialog (fingerprint + subject + Accept/Reject; mirror the SSH `pendingChallenge` dialog style); Accept stores the pin, Reject disconnects. `mismatch` → red warning dialog ("certificate changed"), default action disconnect.
 
-Note v1 trade-off (already implicit in the spec): verification happens after the TLS handshake on first connect; the pin protects subsequent connects. Document this in a code comment.
+Note the v1 trade-off in a code comment: verification happens after the TLS handshake on first connect; the pin protects subsequent connects.
 
 - `known_hosts_screen.dart`: render RDP entries with an "RDP" chip (same chip style as Task 16).
 
@@ -2116,7 +2315,7 @@ git commit -m "feat(rdp): TOFU certificate pinning in known hosts (#44)"
 ### Task 18: Feature exclusions for RDP tabs
 
 **Files:**
-- Modify: `app/lib/screens/main_screen.dart`, `app/lib/widgets/record_button.dart`, `app/lib/widgets/terminal_input_bar.dart` call site, snippets panel toggle call site, split-layout actions
+- Modify: `app/lib/screens/main_screen.dart` (hotkey handlers for `split_horizontal` / `split_vertical` / `toggle_input_bar`), `app/lib/widgets/record_button.dart` wiring, `TerminalLayoutProvider.toggleSnippetsPanel()` trigger sites, and any split-layout toolbar/menu entry points (grep for `setSplitLayout` / `TerminalLayout` usages — hotkeys are not the only path)
 - Test: extend `app/test/providers/session_provider_app_session_test.dart`
 
 - [ ] **Step 1: Guard each terminal-only affordance**
@@ -2129,7 +2328,7 @@ final isTerminal = active is TerminalSession;
 // hide or disable the affordance when !isTerminal
 ```
 
-Find the call sites mechanically: hotkey handlers for `split_horizontal` / `split_vertical` / `toggle_input_bar` in `main_screen.dart`, the record button wiring, and `TerminalLayoutProvider.toggleSnippetsPanel()` triggers. Task 11's analyzer pass already touched most of them — this step is about UX (hide/disable), not type errors.
+Task 11's analyzer pass already fixed the type errors — this step is about UX (hide/disable), which the type system does not enforce; walk each affordance manually.
 
 - [ ] **Step 2: Add a regression test**
 
@@ -2150,14 +2349,16 @@ git add -A app/lib app/test
 git commit -m "feat(rdp): gate terminal-only features off RDP tabs (#44)"
 ```
 
-### Task 19: CI release pipeline
+### Task 19: CI — build, test, and bundle the native library
 
 **Files:**
 - Modify: `.github/workflows/release.yml`, `.github/workflows/pr-test.yml`
 
-- [ ] **Step 1: Add Rust build steps to `release.yml`**
+**Context the executor must know:** `release.yml` builds a matrix that includes **arm64 Windows (`windows-11-arm`) and arm64 Linux (`ubuntu-24.04-arm`)** alongside x64 — every matrix job needs the Rust build, and the build scripts compile for the runner's native arch (no cross-compilation). There is **no existing native-lib bundling precedent** in the workflow (the QuickJS dylib is not bundled today) — the bundling steps below are designed from scratch, not copied.
 
-For each OS job, before the `flutter build` step:
+- [ ] **Step 1: Add Rust build to every `release.yml` matrix job**
+
+Before the `flutter build` step of each OS job:
 
 ```yaml
       - uses: dtolnay/rust-toolchain@stable
@@ -2165,26 +2366,56 @@ For each OS job, before the `flutter build` step:
         with:
           workspaces: packages/yourssh_rdp/rust
       - name: Build yourssh_rdp native library
-        run: packages/yourssh_rdp/build.sh        # build.ps1 on the Windows job
+        run: packages/yourssh_rdp/build.sh        # build.ps1 on Windows jobs
 ```
 
-macOS job: ensure the dylib lands in the .app bundle — add a copy step into `YourSSH.app/Contents/Frameworks/` after `flutter build macos` (and codesign it with the same identity flow the workflow already uses). Linux/Windows: copy next to the executable in the bundle directory. Match how `libqjsbridge` is bundled today — replicate those exact steps.
+- [ ] **Step 2: Bundle the library into each artifact**
 
-- [ ] **Step 2: Add Rust tests to `pr-test.yml`**
+After `flutter build`, before packaging/signing:
+
+- **macOS** (arm64): copy into the app bundle and sign it with the same identity the workflow uses for the app, **before** the final app codesign/notarization step so the seal stays valid:
+
+```yaml
+      - name: Bundle RDP library
+        run: |
+          cp packages/yourssh_rdp/assets/native/macos/libyourssh_rdp.dylib \
+             app/build/macos/Build/Products/Release/YourSSH.app/Contents/Frameworks/
+          codesign --force --options runtime --sign "$MACOS_SIGN_IDENTITY" \
+             app/build/macos/Build/Products/Release/YourSSH.app/Contents/Frameworks/libyourssh_rdp.dylib
+```
+
+  (Slot into the existing signing flow — reuse the workflow's existing identity variable/step names.)
+
+- **Linux** (both arches): copy `libyourssh_rdp.so` into the bundle's `lib/` directory (next to the other bundled `.so` files under `app/build/linux/<arch>/release/bundle/lib/`).
+- **Windows** (both arches): copy `yourssh_rdp.dll` next to `yourssh.exe` in `app/build/windows/<arch>/runner/Release/`.
+
+These three locations are exactly the release-bundle candidates the Task 2 loader checks first.
+
+- [ ] **Step 3: Add Rust + package tests to `pr-test.yml`**
+
+`pr-test.yml` currently runs `flutter test` only in `app/` — the new package's Dart tests and the Rust tests need explicit steps. The FRB roundtrip test loads the dylib, so build it first:
 
 ```yaml
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/yourssh_rdp/rust
       - name: Rust tests (yourssh_rdp)
         run: cargo test --manifest-path packages/yourssh_rdp/rust/Cargo.toml
+      - name: Build RDP native library for Dart tests
+        run: packages/yourssh_rdp/build.sh
+      - name: Dart tests (yourssh_rdp)
+        working-directory: packages/yourssh_rdp
+        run: flutter test
 ```
 
-- [ ] **Step 3: Validate + commit**
+- [ ] **Step 4: Validate + commit**
 
-Run: `gh workflow view release.yml` after push, or at minimum `yamllint`/visual review.
+Push a branch and confirm both workflows pass end-to-end (this is the only real validation for CI changes).
 
 ```bash
 git add .github/workflows
-git commit -m "ci(rdp): build and test yourssh_rdp native library (#44)"
+git commit -m "ci(rdp): build, test, and bundle yourssh_rdp native library (#44)"
 ```
 
 ### Task 20: Manual verification matrix + docs
@@ -2197,7 +2428,7 @@ git commit -m "ci(rdp): build and test yourssh_rdp native library (#44)"
 | # | Check | Target |
 |---|---|---|
 | 1 | Direct connect, NLA, correct password → desktop renders | Windows 11 VM |
-| 2 | Wrong password → error overlay with message + Retry works | Windows 11 VM |
+| 2 | Wrong password → error overlay; Retry re-prompts password; correct entry connects | Windows 11 VM |
 | 3 | Connect via SSH tunnel (jump host) → desktop renders; killing SSH shows "SSH tunnel closed" | Windows VM behind SSH |
 | 4 | xrdp container, TLS mode → desktop renders | `docker run -p 3389:3389 danielguerra/ubuntu-xrdp` or similar |
 | 5 | Typing (letters, shortcuts Ctrl+C/V inside remote, arrows, F-keys) | both |
@@ -2205,8 +2436,8 @@ git commit -m "ci(rdp): build and test yourssh_rdp native library (#44)"
 | 7 | Ctrl+Alt+Del toolbar button opens the secure screen | Windows VM |
 | 8 | Clipboard: copy remote → paste local; copy local → focus RDP → paste remote | both |
 | 9 | TOFU dialog on first connect; no dialog on second; mismatch warning when server cert changes | both |
-| 10 | Tab behavior: rename, pin, color, next/prev hotkeys; recording/split/input-bar hidden | both |
-| 11 | Close tab → no leaked sockets (check `lsof -p <pid> | grep 3389`) | macOS |
+| 10 | Tab behavior: rename, pin, color survive reconnect; next/prev hotkeys; recording/split/input-bar/snippets hidden | both |
+| 11 | Close tab → no leaked sockets (check `lsof -p <pid> \| grep 3389`) | macOS |
 
 - [ ] **Step 2: Update docs**
 
@@ -2229,5 +2460,6 @@ Per the project's issue workflow: after the PR lands, label/type/priority issue 
 
 ## Plan self-review notes
 
-- **Spec coverage:** package+FRB (T1–2), connection/TLS/NLA + cert event (T4), framebuffer dirty regions (T5), input (T6, T14), clipboard (T7), panic guard (T8), Dart facade + resolution rules (T9), Host fields (T10), AppSession split (T11), RdpSession (T12), tunnel proxy + connect flow (T13), workspace UI + Ctrl+Alt+Del toolbar (T15), host form/badges (T16), TOFU (T17), feature exclusions (T18), CI (T19), manual matrix + docs (T20). No auto-reconnect, audio, dynamic resize — out of scope per spec.
-- **Known reality-contact points (expected, not placeholders):** exact ironrdp API names (Tasks 4–7) must be aligned with the pinned version using the `ironrdp-client` example as reference; FRB stream-return shape (Task 9); existing constructor/field names in `SessionProvider`/`StorageService`/`KnownHostsProvider` (Tasks 11, 13, 17).
+- **Spec coverage:** package+FRB (T1–2), connection/TLS/NLA + cert event (T4), framebuffer dirty regions (T5), input (T6, T14), clipboard both directions incl. focus-gain push (T7, T13, T15), panic guard (T8), Dart facade + resolution rules (T9), Host fields (T10), AppSession split incl. main_screen retyping (T11), RdpSession + "SSH tunnel closed" message (T12), tunnel proxy + connect flow + workspace-size callback + tab metadata (T13), workspace UI + Ctrl+Alt+Del + Retry-with-reprompt (T15), host form/badges + tunnel picker (T16), TOFU (T17), feature exclusions (T18), CI incl. arm64 + bundling (T19), manual matrix + docs (T20). No auto-reconnect, audio, dynamic resize, Pause key — out of scope per spec / documented limitation.
+- **Reviewed:** this plan incorporated a two-agent adversarial review (consistency-vs-spec + technical correctness, verified against docs.rs/FRB docs/the dartssh2 fork). Key corrections applied: session id via `RdpEvent::Started` (FRB #2233), `connect_finalize` NetworkClient requirement, exhaustive `connector::Config`, `process_fastpath_input(image, events)` shape, 12-method `CliprdrBackend`, `StreamSink` import path, `TunnelEnd.sink` as `StreamSink<List<int>>` + `destroy()`, ironrdp version line 0.15, Pause key dropped, arm64 CI matrix + from-scratch bundling, Retry password re-prompt, tab-metadata carry-over.
+- **Known reality-contact points (expected, not placeholders):** exact ironrdp API names (Tasks 4–7) must be aligned with the pinned version using the `ironrdp-client` example as reference; FRB generated names for `RdpEvent` variants (record them in Task 3 Step 4); existing constructor/field names in `SessionProvider`/`StorageService`/`KnownHostsProvider` (Tasks 11, 13, 17).

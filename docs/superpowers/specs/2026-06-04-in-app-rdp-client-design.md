@@ -84,7 +84,8 @@ pattern. The proxy binds loopback only, random port, accepts exactly one
 connection, and dies with the session.
 
 **Resolution:** fixed at connect time = workspace area size × devicePixelRatio,
-rounded down to a multiple of 4. Window resizes scale the rendered image
+clamped to a minimum of 800×600 and rounded down to a multiple of 4. Window
+resizes scale the rendered image
 (aspect-fit); dynamic resize (DisplayControl) is out of scope for v1.
 
 ### 3. Rendering and input
@@ -190,8 +191,11 @@ Known Hosts screen with an RDP badge.
   the cdylib into `assets/native/<os>/` (same bundling pattern as the QuickJS
   `libqjsbridge` library).
 - Release workflow gains a Rust toolchain setup + crate build step before
-  `flutter build` on each OS runner. Targets: `aarch64-apple-darwin`,
-  `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`.
+  `flutter build` on each OS runner. Targets match the existing release
+  matrix: `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`,
+  `aarch64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`,
+  `aarch64-unknown-linux-gnu` (the crate builds with the runner's native
+  toolchain on each matrix job).
 - FRB codegen output is checked in; regeneration is a dev-time step, not a
   CI dependency.
 
