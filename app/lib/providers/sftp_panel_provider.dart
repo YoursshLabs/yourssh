@@ -10,10 +10,18 @@ class SftpPanelProvider extends ChangeNotifier {
   final Set<SftpEntry> _selected = {};
   String _filterQuery = '';
   bool _filterVisible = false;
+  // Back/forward history (mirrors LocalFilePanelProvider). Starts empty:
+  // the first setPath (the panel's initial load) seeds it, so goBack never
+  // leads to a path the user never visited.
+  final List<String> _history = [];
+  int _historyIndex = -1;
   SftpPanelLoadState loadState = SftpPanelLoadState.idle;
   String? errorMessage;
 
   String get currentPath => _currentPath;
+  bool get canGoBack => _historyIndex > 0;
+  bool get canGoForward =>
+      _historyIndex >= 0 && _historyIndex < _history.length - 1;
   List<SftpEntry> get entries => List.unmodifiable(_entries);
   Set<SftpEntry> get selectedEntries => Set.unmodifiable(_selected);
   bool get filterVisible => _filterVisible;
@@ -45,8 +53,32 @@ class SftpPanelProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Sets the current path and records it in the back/forward history.
+  /// Re-setting the path already at the history cursor (Refresh) keeps the
+  /// history untouched; navigating after goBack drops the forward branch.
   void setPath(String path) {
+    if (_historyIndex < 0 || _history[_historyIndex] != path) {
+      _history.removeRange(_historyIndex + 1, _history.length);
+      _history.add(path);
+      _historyIndex = _history.length - 1;
+    }
     _currentPath = path;
+    _selected.clear();
+    notifyListeners();
+  }
+
+  void goBack() {
+    if (!canGoBack) return;
+    _historyIndex--;
+    _currentPath = _history[_historyIndex];
+    _selected.clear();
+    notifyListeners();
+  }
+
+  void goForward() {
+    if (!canGoForward) return;
+    _historyIndex++;
+    _currentPath = _history[_historyIndex];
     _selected.clear();
     notifyListeners();
   }

@@ -134,4 +134,83 @@ void main() {
       expect(p.filteredEntries.length, 2);
     });
   });
+
+  group('history', () {
+    test('setPath builds history; back/forward reflect position', () {
+      final p = SftpPanelProvider();
+      p.setPath('/home');
+      expect(p.canGoBack, isFalse,
+          reason: 'first visited path has nothing to go back to');
+      expect(p.canGoForward, isFalse);
+      p.setPath('/home/user');
+      expect(p.canGoBack, isTrue);
+      expect(p.canGoForward, isFalse);
+    });
+
+    test('goBack and goForward move through history', () {
+      final p = SftpPanelProvider();
+      p.setPath('/home');
+      p.setPath('/home/user');
+      p.goBack();
+      expect(p.currentPath, '/home');
+      expect(p.canGoBack, isFalse);
+      expect(p.canGoForward, isTrue);
+      p.goForward();
+      expect(p.currentPath, '/home/user');
+      expect(p.canGoForward, isFalse);
+    });
+
+    test('setPath mid-history truncates the forward stack', () {
+      final p = SftpPanelProvider();
+      p.setPath('/a');
+      p.setPath('/b');
+      p.goBack(); // at /a
+      p.setPath('/c');
+      expect(p.canGoForward, isFalse,
+          reason: 'navigating after goBack must drop the old forward branch');
+      p.goBack();
+      expect(p.currentPath, '/a');
+    });
+
+    test('setPath with the current path does not duplicate history', () {
+      final p = SftpPanelProvider();
+      p.setPath('/a');
+      p.setPath('/a'); // refresh button reloads the current path
+      expect(p.canGoBack, isFalse,
+          reason: 'refresh must not push a duplicate history entry');
+    });
+
+    test('goBack and goForward are no-ops at the ends', () {
+      final p = SftpPanelProvider();
+      p.setPath('/a');
+      p.goBack();
+      expect(p.currentPath, '/a');
+      p.goForward();
+      expect(p.currentPath, '/a');
+    });
+
+    test('goBack clears selection', () {
+      final p = SftpPanelProvider();
+      p.setPath('/a');
+      p.setPath('/b');
+      p.toggleSelection(SftpEntry(
+          name: 'x', path: '/b/x', isDirectory: false, size: 0,
+          modifiedAt: DateTime(2024)));
+      p.goBack();
+      expect(p.selectedEntries, isEmpty);
+    });
+
+    test('navigateUp followed by setPath records the parent in history', () {
+      // Mirrors the widget's Up button: navigateUp() mutates the path,
+      // then _loadDirectory(currentPath) calls setPath with the parent.
+      final p = SftpPanelProvider();
+      p.setPath('/home');
+      p.setPath('/home/user');
+      p.navigateUp();
+      p.setPath(p.currentPath);
+      expect(p.currentPath, '/home');
+      p.goBack();
+      expect(p.currentPath, '/home/user');
+    });
+  });
 }

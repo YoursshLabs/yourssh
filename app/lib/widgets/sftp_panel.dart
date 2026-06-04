@@ -75,11 +75,20 @@ class _SftpPanelState extends State<SftpPanel> {
   // by host id, so a source switch always recreates the State and initState
   // performs the (possibly remembered) initial load.
 
+  /// Loads [path] and records it in the back/forward history (via setPath).
   Future<void> _loadDirectory(String path) async {
+    if (widget.host == null) return;
+    widget.provider.setPath(path);
+    await _fetchEntries(path);
+  }
+
+  /// Lists [path] into the provider without touching the history — used by
+  /// _loadDirectory and by back/forward, which move the history cursor
+  /// themselves.
+  Future<void> _fetchEntries(String path) async {
     final host = widget.host;
     if (host == null) return;
     widget.provider.setLoadState(SftpPanelLoadState.loading);
-    widget.provider.setPath(path);
     try {
       final service = context.read<SftpTransferService>();
       final entries = await service.listDirectory(host, path);
@@ -474,6 +483,38 @@ class _SftpPanelState extends State<SftpPanel> {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
         children: [
+          IconButton(
+            icon: Icon(Icons.chevron_left,
+                size: 16,
+                color: prov.canGoBack
+                    ? const Color(0xFF888888)
+                    : const Color(0xFF333333)),
+            onPressed: prov.canGoBack
+                ? () {
+                    prov.goBack();
+                    _fetchEntries(prov.currentPath);
+                  }
+                : null,
+            tooltip: 'Back',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+          ),
+          IconButton(
+            icon: Icon(Icons.chevron_right,
+                size: 16,
+                color: prov.canGoForward
+                    ? const Color(0xFF888888)
+                    : const Color(0xFF333333)),
+            onPressed: prov.canGoForward
+                ? () {
+                    prov.goForward();
+                    _fetchEntries(prov.currentPath);
+                  }
+                : null,
+            tooltip: 'Forward',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+          ),
           IconButton(
             icon: const Icon(Icons.arrow_upward, size: 14, color: Color(0xFF888888)),
             onPressed: () { prov.navigateUp(); _loadDirectory(prov.currentPath); },
