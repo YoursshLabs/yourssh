@@ -1,7 +1,7 @@
 # YourSSH — Roadmap
 
 > Direction: **infra workstation for DevOps/SRE managing 10–100+ hosts**, not just an SSH client.
-> Current version: 0.1.22 · updated: 2026-06-04 (Windows local terminal input fix — vendored flutter_pty fork · SFTP download robustness · Windows Open-with discovery fixes)
+> Current version: 0.1.23 · updated: 2026-06-04 (Windows terminal typing fix — vendored xterm fork passes viewId to TextInput; affected every TerminalView on Windows)
 
 This document lists proposed features ordered by priority. Each item can be broken out into its own spec (`docs/superpowers/specs/`) when ready for implementation.
 

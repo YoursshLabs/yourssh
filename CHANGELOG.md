@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.1.23] — 2026-06-04
+
 ### Fixed
 - **Windows terminal typing (all terminals)** — after the 0.1.22 argv fix, the local PowerShell terminal still ignored printable keys: Enter produced a new prompt line (proving the ConPTY input pipe works) but typed characters never appeared. Root cause is an upstream `xterm.dart` bug ([TerminalStudio/xterm.dart#207](https://github.com/TerminalStudio/xterm.dart/issues/207)): `CustomTextEdit` opens its `TextInputConnection` without a `viewId`, which recent Flutter engines on Windows reject (`Could not set client, view ID is null`) — so text typed through the IME path is dropped while Enter/Tab/paste (hardware-key path) still work. This affected every `TerminalView` on Windows, SSH sessions included. `xterm` is now vendored as a local fork (`packages/xterm`, 4.0.0) that passes `viewId: View.maybeOf(context)?.viewId` to `TextInputConfiguration`, with a regression test asserting the attached text-input client carries the hosting viewId.
 
@@ -303,7 +307,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.22...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.23...HEAD
+[0.1.23]: https://github.com/YoursshLabs/yourssh/compare/v0.1.22...v0.1.23
 [0.1.22]: https://github.com/YoursshLabs/yourssh/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/YoursshLabs/yourssh/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/YoursshLabs/yourssh/compare/v0.1.19...v0.1.20

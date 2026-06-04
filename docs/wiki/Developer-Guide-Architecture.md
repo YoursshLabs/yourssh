@@ -19,6 +19,7 @@ yourssh/
 ├── packages/
 │   ├── dartssh2/               # Local fork of dartssh2 (SSH/SFTP/port-forward)
 │   ├── flutter_pty/            # Local fork of flutter_pty (Windows argv[0] fix)
+│   ├── xterm/                  # Local fork of xterm (Windows text-input viewId fix)
 │   ├── yourssh_plugin_api/     # Abstract plugin interface (YourSSHPlugin)
 │   ├── yourssh_devops/         # DevOps Dart plugin (containers, network tools, …)
 │   ├── yourssh_web_tools/      # Web Tools Dart plugin
