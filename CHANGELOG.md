@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Windows app icon** — the packaged Windows build shipped the default Flutter icon instead of the terminal logo.
 
 ### Changed
-- Test suite is Windows-portable (temp-dir paths, file-lock handling, unix-socket tests skipped where unsupported), backed by a new on-demand Windows/Linux platform build-check workflow.
+- Test suite is Windows-portable (temp-dir paths, file-lock handling, unix-socket tests skipped where unsupported).
 - Internal refactors: SSH-only consumers (plugins, terminal sharing) read `sshSessions`/`activeSshSession`; `LocalShellService` is injected instead of constructed inline.
 
 ---
