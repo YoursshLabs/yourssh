@@ -28,6 +28,10 @@ Because the ping rides the live channel (rather than opening a new connection), 
 
 Hover the dot for a tooltip showing latency, uptime, time since the last ping, and how many times the session has reconnected.
 
+### Notification bell
+
+A bell at the right end of the top tab bar collects in-app notifications behind an unread badge: sessions that **drop unexpectedly** (the shell closed without a pending auto-reconnect, or reconnect attempts ran out — closing a tab yourself never notifies) and **new releases** (with an inline Update button). Opening the panel marks everything read; dismiss items individually or use **Clear all**. Notifications are in-memory only and reset on app restart.
+
 ### Managing tabs
 
 | Action | How |

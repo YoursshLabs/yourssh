@@ -58,6 +58,7 @@ See [Sync](User-Guide-Sync) for full setup instructions.
 YourSSH automatically checks GitHub for a newer stable release once per 24 hours on launch, and you can trigger a manual check at any time via **Settings → Updates → Check for updates**.
 
 - When a newer version is found, a **dismissible banner** appears at the top of the app. You can dismiss it for the current version and it will not reappear until the next release.
+- The release also lands in the **notification bell** in the top tab bar (one item per version, with an inline **Update** button), so a dismissed banner doesn't mean a missed update. The bell additionally collects sessions that drop unexpectedly — opening the panel marks items read, and you can dismiss them individually or clear all.
 - Clicking **Update** (or **Download & install**) downloads the correct build for your OS and architecture and hands it off to your OS installer:
   - **macOS** — removes the `com.apple.quarantine` flag and opens the DMG. Complete the drag-to-Applications step yourself.
   - **Windows** — launches the installer `.exe`. Follow the setup wizard to complete the upgrade.

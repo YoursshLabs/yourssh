@@ -55,6 +55,7 @@ Flutter UI (widgets/)
 | `SettingsProvider` | App-wide prefs: reconnect, keep-alive, hotkeys, feature flags |
 | `AiChatProvider` | AI chat state; multi-provider (Anthropic/OpenAI/Gemini) |
 | `RecordingProvider` | Recording library; wired to SessionProvider via callback |
+| `NotificationCenterProvider` | In-memory store for the top-bar notification bell (update available, unexpected session drops); deduped, capped at 50 |
 
 ## Key Services
 
