@@ -49,5 +49,12 @@ void main() {
 
     // Remote panel path bar must show a breadcrumb too (issue #41).
     expect(find.byType(PathBreadcrumb), findsNWidgets(2));
+
+    // Unified headers: the remote chip shows the host LABEL (not user@host),
+    // and both panels expose Filter and Actions in the header row.
+    expect(find.text('alpha'), findsOneWidget);
+    expect(find.text('root@127.0.0.1'), findsNothing);
+    expect(find.text('Filter'), findsNWidgets(2));
+    expect(find.text('Actions'), findsNWidgets(2));
   });
 }

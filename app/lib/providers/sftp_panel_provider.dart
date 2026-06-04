@@ -8,12 +8,34 @@ class SftpPanelProvider extends ChangeNotifier {
   String _currentPath = '/';
   List<SftpEntry> _entries = [];
   final Set<SftpEntry> _selected = {};
+  String _filterQuery = '';
+  bool _filterVisible = false;
   SftpPanelLoadState loadState = SftpPanelLoadState.idle;
   String? errorMessage;
 
   String get currentPath => _currentPath;
   List<SftpEntry> get entries => List.unmodifiable(_entries);
   Set<SftpEntry> get selectedEntries => Set.unmodifiable(_selected);
+  bool get filterVisible => _filterVisible;
+  String get filterQuery => _filterQuery;
+
+  /// Entries matching the filter query (all entries when the query is empty).
+  List<SftpEntry> get filteredEntries {
+    if (_filterQuery.isEmpty) return List.unmodifiable(_entries);
+    final q = _filterQuery.toLowerCase();
+    return _entries.where((e) => e.name.toLowerCase().contains(q)).toList();
+  }
+
+  void setFilterQuery(String query) {
+    _filterQuery = query;
+    notifyListeners();
+  }
+
+  void toggleFilterVisible() {
+    _filterVisible = !_filterVisible;
+    if (!_filterVisible) _filterQuery = '';
+    notifyListeners();
+  }
 
   void setPath(String path) {
     _currentPath = path;

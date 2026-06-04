@@ -240,6 +240,8 @@ class _SftpPanelState extends State<SftpPanel> {
       child: Consumer<SftpPanelProvider>(
         builder: (context, prov, _) => Column(
           children: [
+            _buildHeader(prov),
+            if (prov.filterVisible) _buildFilterBar(prov),
             _buildPathBar(prov),
             Expanded(child: _buildContent(prov)),
           ],
@@ -298,26 +300,18 @@ class _SftpPanelState extends State<SftpPanel> {
     );
   }
 
-  Widget _buildPathBar(SftpPanelProvider prov) {
+  /// Header matching the local panel: source chip + Filter + Actions menu.
+  Widget _buildHeader(SftpPanelProvider prov) {
     final canRename = prov.selectedEntries.length == 1;
     final canDelete = prov.selectedEntries.isNotEmpty;
-    return Column(
-      children: [
-        Container(
-          height: 36,
-          color: const Color(0xFF141414),
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Row(
+    return Container(
+      height: 40,
+      color: const Color(0xFF161616),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_upward, size: 14, color: Color(0xFF888888)),
-            onPressed: () { prov.navigateUp(); _loadDirectory(prov.currentPath); },
-            tooltip: 'Up',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-          ),
-          // Flexible + ellipsis: long user@host must never squeeze the
-          // toolbar out of the row (the panel can be half the window).
+          // Flexible + ellipsis: a long label must never squeeze Filter /
+          // Actions out of the row (the panel can be half the window).
           Flexible(
             child: GestureDetector(
               onTap: widget.onChangeHost,
@@ -334,9 +328,10 @@ class _SftpPanelState extends State<SftpPanel> {
                     const Icon(Icons.dns, size: 11, color: Color(0xFF22C55E)),
                     const SizedBox(width: 4),
                     Flexible(
-                      child: Text('${widget.host!.username}@${widget.host!.host}',
+                      child: Text(widget.host!.label,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Color(0xFF22C55E), fontSize: 11, fontFamily: 'monospace')),
+                          style: const TextStyle(
+                              color: Color(0xFF22C55E), fontSize: 12)),
                     ),
                     const SizedBox(width: 4),
                     const Icon(Icons.unfold_more, size: 11, color: Color(0xFF555555)),
@@ -366,39 +361,142 @@ class _SftpPanelState extends State<SftpPanel> {
             ),
           ],
           const Spacer(),
-          _ToolbarBtn(icon: Icons.note_add_outlined, tooltip: 'New file',
-              enabled: true, onTap: () => _showNewFileDialog(prov)),
-          _ToolbarBtn(icon: Icons.create_new_folder_outlined, tooltip: 'New folder',
-              enabled: true, onTap: () => _showNewFolderDialog(prov)),
-          _ToolbarBtn(icon: Icons.drive_file_rename_outline, tooltip: 'Rename',
-              enabled: canRename, onTap: canRename ? () => _showRenameDialog(prov, prov.selectedEntries.first) : null),
-          _ToolbarBtn(icon: Icons.delete_outline, tooltip: 'Delete',
-              enabled: canDelete, onTap: canDelete ? () => _showDeleteConfirm(prov, prov.selectedEntries.toList()) : null),
+          _HeaderButton(
+            label: 'Filter',
+            active: prov.filterVisible,
+            onTap: prov.toggleFilterVisible,
+          ),
+          const SizedBox(width: 6),
+          PopupMenuButton<String>(
+            color: const Color(0xFF1E1E1E),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+                side: const BorderSide(color: Color(0xFF2A2A2A))),
+            tooltip: '',
+            offset: const Offset(0, 36),
+            onSelected: (v) {
+              if (v == 'new_file') _showNewFileDialog(prov);
+              if (v == 'new_folder') _showNewFolderDialog(prov);
+              if (v == 'rename') _showRenameDialog(prov, prov.selectedEntries.first);
+              if (v == 'delete') _showDeleteConfirm(prov, prov.selectedEntries.toList());
+            },
+            itemBuilder: (_) => [
+              _menuItem('new_file', Icons.note_add_outlined, 'New File'),
+              _menuItem('new_folder', Icons.create_new_folder_outlined, 'New Folder'),
+              _menuItem('rename', Icons.drive_file_rename_outline, 'Rename',
+                  enabled: canRename),
+              _menuItem('delete', Icons.delete_outline, 'Delete',
+                  enabled: canDelete, isDestructive: true),
+            ],
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: const Color(0xFF2A2A2A)),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: const [
+                Text('Actions',
+                    style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 12)),
+                SizedBox(width: 4),
+                Icon(Icons.keyboard_arrow_down, size: 14, color: Color(0xFF888888)),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _menuItem(String value, IconData icon, String label,
+      {bool enabled = true, bool isDestructive = false}) {
+    return PopupMenuItem<String>(
+      value: value,
+      enabled: enabled,
+      child: Row(children: [
+        Icon(icon,
+            size: 14,
+            color: isDestructive
+                ? Colors.red
+                : enabled
+                    ? const Color(0xFFD4D4D4)
+                    : const Color(0xFF444444)),
+        const SizedBox(width: 8),
+        Text(label,
+            style: TextStyle(
+                fontSize: 13,
+                color: isDestructive
+                    ? Colors.red
+                    : enabled
+                        ? const Color(0xFFD4D4D4)
+                        : const Color(0xFF444444))),
+      ]),
+    );
+  }
+
+  Widget _buildFilterBar(SftpPanelProvider prov) {
+    return Container(
+      color: const Color(0xFF161616),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: TextField(
+        autofocus: true,
+        style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
+        decoration: InputDecoration(
+          hintText: 'Filter by name…',
+          hintStyle: const TextStyle(color: Color(0xFF444444), fontSize: 13),
+          prefixIcon:
+              const Icon(Icons.search, size: 15, color: Color(0xFF555555)),
+          filled: true,
+          fillColor: const Color(0xFF1E1E1E),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: const BorderSide(color: Color(0xFF2A2A2A))),
+          enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: const BorderSide(color: Color(0xFF2A2A2A))),
+          focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: const BorderSide(color: Color(0xFF22C55E))),
+        ),
+        onChanged: prov.setFilterQuery,
+      ),
+    );
+  }
+
+  Widget _buildPathBar(SftpPanelProvider prov) {
+    return Container(
+      height: 34,
+      color: const Color(0xFF141414),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
           IconButton(
-            icon: const Icon(Icons.refresh, size: 14, color: Color(0xFF888888)),
-            onPressed: () => _loadDirectory(prov.currentPath),
-            tooltip: 'Refresh',
+            icon: const Icon(Icons.arrow_upward, size: 14, color: Color(0xFF888888)),
+            onPressed: () { prov.navigateUp(); _loadDirectory(prov.currentPath); },
+            tooltip: 'Up',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
-          ],
+          const SizedBox(width: 2),
+          // Breadcrumb gets the remaining row width (it was squeezed to zero
+          // when it shared the row with the host chip and toolbar buttons).
+          Expanded(
+            child: PathBreadcrumb(
+              crumbs: posixCrumbs(prov.currentPath),
+              onNavigate: _loadDirectory,
+            ),
           ),
-        ),
-        // Breadcrumb on its own row so it always gets the full panel width
-        // (in the crowded toolbar row it was squeezed to zero — issue #41
-        // follow-up).
-        Container(
-          height: 28,
-          width: double.infinity,
-          color: const Color(0xFF141414),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          alignment: Alignment.centerLeft,
-          child: PathBreadcrumb(
-            crumbs: posixCrumbs(prov.currentPath),
-            onNavigate: _loadDirectory,
+          IconButton(
+            icon: const Icon(Icons.refresh, size: 13, color: Color(0xFF555555)),
+            onPressed: () => _loadDirectory(prov.currentPath),
+            tooltip: 'Refresh',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -419,6 +517,7 @@ class _SftpPanelState extends State<SftpPanel> {
     if (prov.entries.isEmpty) {
       return const Center(child: Text('Empty directory', style: TextStyle(color: Color(0xFF555555))));
     }
+    final entries = prov.filteredEntries;
     return Column(
       children: [
         Container(
@@ -436,7 +535,7 @@ class _SftpPanelState extends State<SftpPanel> {
                 visualDensity: VisualDensity.compact,
               ),
               Text(
-                prov.selectedEntries.isEmpty ? '${prov.entries.length} items' : '${prov.selectedEntries.length} selected',
+                prov.selectedEntries.isEmpty ? '${entries.length} items' : '${prov.selectedEntries.length} selected',
                 style: const TextStyle(color: Color(0xFF555555), fontSize: 11),
               ),
             ],
@@ -444,8 +543,8 @@ class _SftpPanelState extends State<SftpPanel> {
         ),
         Expanded(
           child: ListView.builder(
-            itemCount: prov.entries.length,
-            itemBuilder: (_, i) => _buildEntryTile(prov.entries[i], prov),
+            itemCount: entries.length,
+            itemBuilder: (_, i) => _buildEntryTile(entries[i], prov),
           ),
         ),
       ],
@@ -693,23 +792,38 @@ class _SftpPanelState extends State<SftpPanel> {
   }
 }
 
-class _ToolbarBtn extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final bool enabled;
-  final VoidCallback? onTap;
+class _HeaderButton extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
 
-  const _ToolbarBtn({required this.icon, required this.tooltip, required this.enabled, this.onTap});
+  const _HeaderButton(
+      {required this.label, required this.active, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: Icon(icon, size: 15, color: enabled ? const Color(0xFF888888) : const Color(0xFF333333)),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: active
+              ? const Color(0xFF22C55E).withValues(alpha: 0.12)
+              : const Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(
+              color: active
+                  ? const Color(0xFF22C55E).withValues(alpha: 0.4)
+                  : const Color(0xFF2A2A2A)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active
+                ? const Color(0xFF22C55E)
+                : const Color(0xFFD4D4D4),
+            fontSize: 12,
+          ),
         ),
       ),
     );

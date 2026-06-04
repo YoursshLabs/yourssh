@@ -73,4 +73,36 @@ void main() {
     p.selectAll();
     expect(p.isAllSelected, true);
   });
+
+  group('filter', () {
+    SftpEntry entry(String name) => SftpEntry(
+        name: name,
+        path: '/$name',
+        isDirectory: false,
+        size: 0,
+        modifiedAt: DateTime(2024));
+
+    test('filteredEntries returns all entries when query empty', () {
+      final p = SftpPanelProvider();
+      p.setEntries([entry('alpha.txt'), entry('beta.log')]);
+      expect(p.filteredEntries.length, 2);
+    });
+
+    test('filteredEntries matches case-insensitively by name', () {
+      final p = SftpPanelProvider();
+      p.setEntries([entry('Alpha.txt'), entry('beta.log')]);
+      p.setFilterQuery('ALPHA');
+      expect(p.filteredEntries.map((e) => e.name), ['Alpha.txt']);
+    });
+
+    test('toggleFilterVisible clears the query when hiding', () {
+      final p = SftpPanelProvider();
+      p.setEntries([entry('a'), entry('b')]);
+      p.toggleFilterVisible(); // show
+      p.setFilterQuery('a');
+      p.toggleFilterVisible(); // hide → query reset
+      expect(p.filterVisible, isFalse);
+      expect(p.filteredEntries.length, 2);
+    });
+  });
 }

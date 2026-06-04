@@ -135,13 +135,40 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          const Icon(Icons.computer, size: 14, color: Color(0xFF888888)),
-          const SizedBox(width: 6),
-          const Text('Local',
-              style: TextStyle(
-                  color: Color(0xFFD4D4D4),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600)),
+          if (widget.onChangeSource != null)
+            // Clickable source chip (two-panel layout): switch this slot
+            // between Local and any saved host.
+            GestureDetector(
+              onTap: widget.onChangeSource,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E1E),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFF2A2A2A)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.laptop_mac, size: 11, color: Color(0xFF22C55E)),
+                    SizedBox(width: 4),
+                    Text('Local',
+                        style: TextStyle(color: Color(0xFF22C55E), fontSize: 12)),
+                    SizedBox(width: 4),
+                    Icon(Icons.unfold_more, size: 11, color: Color(0xFF555555)),
+                  ],
+                ),
+              ),
+            )
+          else ...[
+            const Icon(Icons.computer, size: 14, color: Color(0xFF888888)),
+            const SizedBox(width: 6),
+            const Text('Local',
+                style: TextStyle(
+                    color: Color(0xFFD4D4D4),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600)),
+          ],
           const Spacer(),
           _HeaderButton(
             label: 'Filter',
@@ -274,34 +301,6 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
             constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
           ),
           const SizedBox(width: 2),
-          if (widget.onChangeSource != null) ...[
-            GestureDetector(
-              onTap: widget.onChangeSource,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: const Color(0xFF2A2A2A)),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.laptop_mac, size: 11, color: Color(0xFF22C55E)),
-                    SizedBox(width: 4),
-                    Text('Local',
-                        style: TextStyle(
-                            color: Color(0xFF22C55E),
-                            fontSize: 11,
-                            fontFamily: 'monospace')),
-                    SizedBox(width: 4),
-                    Icon(Icons.unfold_more, size: 11, color: Color(0xFF555555)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-          ],
           Expanded(
             child: PathBreadcrumb(
               crumbs: crumbs,
