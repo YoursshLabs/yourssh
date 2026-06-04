@@ -31,6 +31,7 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 ### Terminal UX & protocol support
 - **Richer autocomplete** — _cwd-aware path completion shipped (0.1.18)._ Remaining: option / argument-aware completion sourced from snippets + built-ins, and suggesting a matching key/identity on password prompts.
 - **Zmodem (rz/sz) inline transfer** — direct file transfer inside an active SSH shell without switching to the SFTP panel.
+- **In-app RDP client (issue #44)** — control Windows / xrdp desktops inside the app (screen + mouse/keyboard + clipboard, NLA, direct or SSH-tunneled). **Spec + implementation plan ready, implementation deferred:** `docs/superpowers/specs/2026-06-04-in-app-rdp-client-design.md` + `docs/superpowers/plans/2026-06-04-in-app-rdp-client.md` (IronRDP via flutter_rust_bridge, 20 tasks, adversarially reviewed).
 - **Telnet + serial console** — multi-protocol terminal beyond SSH for legacy/network gear. Larger lift: the dartssh2 fork is SSH-only.
 
 ### Security & identity
@@ -53,7 +54,7 @@ Already shipped (not repeated in roadmap): multi-tab terminal, split view, broad
 - SFTP: trash instead of direct delete + undo last operation.
 - AI chat: explicit tool approval gating + token cost meter.
 
-> **Candidate gaps (needs follow-up research before promoting):** bundled X-server, terminal scripting/automation (e.g. Python), output triggers + tmux integration, and multi-protocol consolidation (RDP/VNC). Unverified this pass.
+> **Candidate gaps (needs follow-up research before promoting):** bundled X-server, terminal scripting/automation (e.g. Python), output triggers + tmux integration, and in-app VNC (RDP promoted to P1 with a ready plan — see above). Unverified this pass.
 
 ## P2 — Team / Enterprise (when traction exists)
 
