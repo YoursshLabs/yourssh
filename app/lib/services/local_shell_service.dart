@@ -7,6 +7,7 @@ import 'package:xterm/xterm.dart';
 import '../models/local_session.dart';
 import 'notification_service.dart';
 import 'pty_runner.dart';
+import 'recording_service.dart';
 
 typedef PtyFactory = PtyRunner Function(
   String shell,
@@ -18,6 +19,10 @@ typedef PtyFactory = PtyRunner Function(
 class LocalShellService {
   final Map<String, LocalSession> _sessions = {};
   final PtyFactory _ptyFactory;
+
+  /// Passive intercept (same pattern as SshService): set by main.dart,
+  /// no-ops when the session is not being recorded.
+  RecordingService? recordingService;
 
   LocalShellService({PtyFactory? ptyFactory})
       : _ptyFactory = ptyFactory ?? _defaultFactory;
@@ -78,6 +83,7 @@ class LocalShellService {
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen((data) {
             terminal.write(data);
+            recordingService?.writeOutput(session.id, data);
             try {
               NotificationService.instance.onTerminalData(
                 data,
@@ -100,6 +106,7 @@ class LocalShellService {
       pty.exitCode.then((code) {
         session.status = LocalSessionStatus.exited;
         terminal.write('\r\n[Process exited with code $code]\r\n');
+        recordingService?.onShellClosed(session.id);
         NotificationService.instance.removeSession(session.id);
       });
     } catch (e) {
@@ -109,6 +116,7 @@ class LocalShellService {
   }
 
   void closeSession(String sessionId) {
+    recordingService?.onShellClosed(sessionId);
     _sessions[sessionId]?.kill();
     _sessions.remove(sessionId);
     NotificationService.instance.removeSession(sessionId);

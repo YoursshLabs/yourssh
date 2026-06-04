@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xterm/xterm.dart';
 import 'package:yourssh/models/host.dart';
+import 'package:yourssh/models/local_session.dart';
 import 'package:yourssh/models/ssh_session.dart';
 import 'package:yourssh/providers/recording_provider.dart';
 import 'package:yourssh/services/recording_service.dart';
@@ -19,6 +21,29 @@ void main() {
   test('isRecording returns false initially', () {
     final provider = RecordingProvider(RecordingService(), getPath: () => tmpDir.path);
     expect(provider.isRecording('s1'), isFalse);
+  });
+
+  test('local session records into local/ folder', () async {
+    final provider =
+        RecordingProvider(RecordingService(), getPath: () => tmpDir.path);
+    final session = LocalSession(terminal: Terminal());
+
+    await provider.startRecording(session);
+    expect(provider.isRecording(session.id), isTrue);
+
+    final files = tmpDir
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.cast'))
+        .toList();
+    expect(files, hasLength(1));
+    expect(
+      files.single.path,
+      contains('${Platform.pathSeparator}local${Platform.pathSeparator}'),
+    );
+
+    await provider.stopRecording(session.id);
+    expect(provider.isRecording(session.id), isFalse);
   });
 
   test('refreshLibrary finds .cast files', () async {

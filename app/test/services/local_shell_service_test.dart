@@ -1,11 +1,13 @@
 // app/test/services/local_shell_service_test.dart
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/local_session.dart';
 import 'package:yourssh/services/local_shell_service.dart';
 import 'package:yourssh/services/pty_runner.dart';
+import 'package:yourssh/services/recording_service.dart';
 
 class FakePtyRunner implements PtyRunner {
   final _outputController = StreamController<List<int>>.broadcast();
@@ -104,6 +106,33 @@ void main() {
       final session = await badService.openShell();
       expect(session.status, LocalSessionStatus.error);
       expect(session.errorMessage, contains('pty unavailable'));
+    });
+  });
+
+  group('recording intercept', () {
+    test('pty output is forwarded to RecordingService', () async {
+      final dir = await Directory.systemTemp.createTemp('ys_rec');
+      addTearDown(() => dir.delete(recursive: true));
+
+      final rec = RecordingService();
+      service.recordingService = rec;
+
+      final session = await service.openShell();
+      await rec.startRecording(
+        session.id,
+        filePath: '${dir.path}/local/session_test.cast',
+        width: 80,
+        height: 24,
+        title: 'Local terminal',
+      );
+
+      fakePty.emitOutput(utf8.encode('hello-from-pty'));
+      await Future<void>.delayed(Duration.zero);
+
+      final path = await rec.stopRecording(session.id);
+      expect(path, isNotNull);
+      final content = await File(path!).readAsString();
+      expect(content, contains('hello-from-pty'));
     });
   });
 

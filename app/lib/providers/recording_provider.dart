@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/recording_entry.dart';
 import '../models/ssh_session.dart';
+import '../models/terminal_session.dart';
 import '../services/recording_service.dart';
 
 class RecordingProvider extends ChangeNotifier {
@@ -11,7 +12,7 @@ class RecordingProvider extends ChangeNotifier {
   /// Invoked when a recording fails to start (e.g., auto-record on connect).
   /// The UI layer should surface this — silently dropping it makes `autoRecord`
   /// look like it turned itself off, which is the bug report we keep getting.
-  void Function(SshSession session, Object error)? onStartFailed;
+  void Function(TerminalSession session, Object error)? onStartFailed;
 
   final List<RecordingEntry> _recordings = [];
   final Set<String> _activeIds = {};
@@ -30,11 +31,16 @@ class RecordingProvider extends ChangeNotifier {
 
   bool isRecording(String sessionId) => _activeIds.contains(sessionId);
 
-  Future<void> startRecording(SshSession session) async {
+  Future<void> startRecording(TerminalSession session) async {
     if (_activeIds.contains(session.id)) return;
 
     final basePath = getPath();
-    final hostFolder = '${session.host.username}@${session.host.host}';
+    final hostFolder = session is SshSession
+        ? '${session.host.username}@${session.host.host}'
+        : 'local';
+    final title = session is SshSession
+        ? '${session.host.username}@${session.host.host}'
+        : 'Local terminal';
     final now = DateTime.now();
     final ts = '${now.year}-${_pad(now.month)}-${_pad(now.day)}'
         '_${_pad(now.hour)}-${_pad(now.minute)}-${_pad(now.second)}';
@@ -47,7 +53,7 @@ class RecordingProvider extends ChangeNotifier {
         filePath: filePath,
         width: session.terminal.viewWidth,
         height: session.terminal.viewHeight,
-        title: '${session.host.username}@${session.host.host}',
+        title: title,
       );
       notifyListeners();
     } catch (e) {

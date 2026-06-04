@@ -10,6 +10,7 @@ import '../providers/settings_provider.dart';
 import '../providers/shell_integration_provider.dart';
 import '../theme/terminal_themes.dart';
 import 'command_gutter.dart';
+import 'record_button.dart';
 import 'suggestion_popup.dart';
 
 class SessionTerminalView extends StatelessWidget {
@@ -449,7 +450,7 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
         Positioned(
           top: _searchVisible ? 44 : 8,
           right: 8,
-          child: _RecordButton(session: widget.session),
+          child: RecordButton(session: widget.session),
         ),
         if (_suggestions.isNotEmpty)
           Positioned(
@@ -466,60 +467,6 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
     );
   }
 
-}
-
-class _RecordButton extends StatelessWidget {
-  final SshSession session;
-  const _RecordButton({required this.session});
-
-  @override
-  Widget build(BuildContext context) {
-    final provider = context.watch<RecordingProvider>();
-    final isRecording = provider.isRecording(session.id);
-
-    return Tooltip(
-      message: isRecording ? 'Stop recording' : 'Start recording',
-      child: GestureDetector(
-        onTap: () {
-          if (isRecording) {
-            provider.stopRecording(session.id);
-          } else {
-            provider.startRecording(session);
-          }
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: isRecording ? Colors.red.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.15),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                isRecording ? Icons.stop_circle_outlined : Icons.fiber_manual_record,
-                size: 12,
-                color: isRecording ? Colors.red : Colors.white.withValues(alpha: 0.5),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'REC',
-                style: TextStyle(
-                  color: isRecording ? Colors.red : Colors.white.withValues(alpha: 0.5),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _SearchMatch {
