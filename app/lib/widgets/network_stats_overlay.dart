@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/network_stats.dart';
+import '../models/ssh_session.dart';
 import '../providers/session_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/network_stats_service.dart';
@@ -25,7 +26,10 @@ class _NetworkStatsOverlayState extends State<NetworkStatsOverlay> {
 
   void _resetService() {
     _service?.stop();
-    final session = context.read<SessionProvider>().activeSession;
+    // Stats are for the focused session — hide on local tabs rather than
+    // falling back to another host's numbers.
+    final active = context.read<SessionProvider>().activeSession;
+    final session = active is SshSession ? active : null;
     if (session == null) return;
     _service = NetworkStatsService(
       host: session.host,

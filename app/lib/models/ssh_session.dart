@@ -6,8 +6,10 @@ import 'terminal_session.dart';
 enum SessionStatus { connecting, connected, disconnected, error }
 
 class SshSession implements TerminalSession {
+  @override
   final String id;
   final Host host;
+  @override
   final Terminal terminal;
   SessionStatus status;
   String? errorMessage;
@@ -15,8 +17,11 @@ class SshSession implements TerminalSession {
   final String? initialCommand;
   final bool isWatch;
   final String? watchedTitle;
+  @override
   String? customLabel;
+  @override
   String? colorTag;
+  @override
   bool isPinned;
 
   /// Number of reconnect attempts scheduled during this session's lifetime.

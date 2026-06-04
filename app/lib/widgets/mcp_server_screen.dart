@@ -35,7 +35,7 @@ class _McpServerScreenState extends State<McpServerScreen> {
   }
 
   Future<void> _toggle() async {
-    final session = context.read<SessionProvider>().activeSession;
+    final session = context.read<SessionProvider>().activeSshSession;
     if (session == null) return;
 
     if (_running) {
@@ -74,7 +74,7 @@ class _McpServerScreenState extends State<McpServerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final session = context.watch<SessionProvider>().activeSession;
+    final session = context.watch<SessionProvider>().activeSshSession;
 
     return Padding(
       padding: const EdgeInsets.all(24),

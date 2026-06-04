@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:xterm/xterm.dart';
 import '../models/ssh_session.dart';
 import '../providers/command_history_provider.dart';
-import '../providers/recording_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/shell_integration_provider.dart';
 import '../theme/terminal_themes.dart';

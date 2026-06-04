@@ -53,7 +53,7 @@ class _ContainersScreenState extends State<ContainersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final sessions = context.watch<SessionProvider>().sessions;
+    final sessions = context.watch<SessionProvider>().sshSessions;
     if (sessions.isEmpty) {
       return const _CenterHint(
         icon: Icons.terminal,
