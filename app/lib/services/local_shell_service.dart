@@ -45,7 +45,22 @@ class LocalShellService {
   Future<LocalSession> openShell() async {
     final terminal = Terminal(maxLines: 10000);
     final session = LocalSession(terminal: terminal);
+    _sessions[session.id] = session;
+    _spawnPty(session);
+    return session;
+  }
 
+  /// Re-runs the PTY spawn on an exited/errored session, reusing its terminal
+  /// (and scrollback). Used by the local pane's "Restart shell" button.
+  Future<void> restartShell(LocalSession session) async {
+    if (session.status == LocalSessionStatus.running) return;
+    session.status = LocalSessionStatus.running;
+    session.errorMessage = null;
+    _spawnPty(session);
+  }
+
+  void _spawnPty(LocalSession session) {
+    final terminal = session.terminal;
     final shell =
         resolveShell(Platform.environment, isWindows: Platform.isWindows);
 
@@ -58,7 +73,6 @@ class LocalShellService {
       );
 
       session.attachPty(pty);
-      _sessions[session.id] = session;
 
       pty.output
           .transform(const Utf8Decoder(allowMalformed: true))
@@ -92,8 +106,6 @@ class LocalShellService {
       session.status = LocalSessionStatus.error;
       session.errorMessage = e.toString();
     }
-
-    return session;
   }
 
   void closeSession(String sessionId) {
