@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../models/local_entry.dart';
@@ -28,7 +29,17 @@ import 'source_picker_dialog.dart';
 class DualPanelSftpScreen extends StatefulWidget {
   final ValueNotifier<bool> connectionNotifier;
 
-  const DualPanelSftpScreen({super.key, required this.connectionNotifier});
+  /// Whether the SFTP tab is currently visible. The screen stays mounted
+  /// offstage (KeepAliveOffstage, issue #42), so listings can go stale while
+  /// hidden (e.g. the host's pooled SSH client was closed with its last
+  /// terminal); flipping back to active triggers a reload of both slots.
+  final bool active;
+
+  const DualPanelSftpScreen({
+    super.key,
+    required this.connectionNotifier,
+    this.active = true,
+  });
 
   @override
   State<DualPanelSftpScreen> createState() => _DualPanelSftpScreenState();
@@ -38,8 +49,11 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
   PanelSource? _sourceLeft = const LocalSource();
   PanelSource? _sourceRight;
 
-  // Each slot owns one provider of each kind so switching a slot's source
-  // back and forth preserves both the local and the remote path.
+  // Each slot owns one provider of each kind, and the last browsed remote
+  // path is remembered per host in [_remotePathByHost] — switching a slot's
+  // source away and back resumes both local and remote panels where the
+  // user left off.
+  final Map<String, String> _remotePathByHost = {};
   late final LocalFilePanelProvider _localLeft;
   late final LocalFilePanelProvider _localRight;
   late final SftpPanelProvider _sftpLeft;
@@ -71,6 +85,17 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
   }
 
   @override
+  void didUpdateWidget(DualPanelSftpScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) {
+      // Returning to the SFTP tab — listings may be stale (host client
+      // closed, files changed) while we were offstage.
+      _reloadSlot(true);
+      _reloadSlot(false);
+    }
+  }
+
+  @override
   void dispose() {
     widget.connectionNotifier.value = false;
     _externalEditService.dispose();
@@ -96,6 +121,12 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
       builder: (_) => SourcePickerDialog(hosts: hosts, current: _sourceOf(left)),
     );
     if (!mounted || picked == null || picked == _sourceOf(left)) return;
+    // Remember where the user was on the host being switched away from, so
+    // picking it again (in either slot) resumes at that path.
+    final old = _sourceOf(left);
+    if (old is HostSource) {
+      _remotePathByHost[old.host.id] = _sftpOf(left).currentPath;
+    }
     setState(() {
       if (left) {
         _sourceLeft = picked;
@@ -144,26 +175,35 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
 
   // ── Transfer dispatch ─────────────────────────────────
 
-  Future<void> _transfer({required bool fromLeft}) async {
+  /// Moves [localEntries]/[sftpEntries] (or, when null, the source slot's
+  /// current selection) toward the opposite slot.
+  Future<void> _transfer({
+    required bool fromLeft,
+    List<LocalEntry>? localEntries,
+    List<SftpEntry>? sftpEntries,
+  }) async {
     final src = _sourceOf(fromLeft);
     final dst = _sourceOf(!fromLeft);
     if (src == null || dst == null) return;
 
     switch (transferKindFor(src, dst)) {
       case TransferKind.localCopy:
-        await _localToLocal(fromLeft);
+        await _localToLocal(fromLeft, entries: localEntries);
       case TransferKind.upload:
-        await _upload(fromLeft, (dst as HostSource).host);
+        await _upload(fromLeft, (dst as HostSource).host,
+            entries: localEntries);
       case TransferKind.download:
-        await _download(fromLeft, (src as HostSource).host);
+        await _download(fromLeft, (src as HostSource).host,
+            entries: sftpEntries);
       case TransferKind.remoteRelay:
-        await _relay(fromLeft, (src as HostSource).host, (dst as HostSource).host);
+        await _relay(fromLeft, (src as HostSource).host,
+            (dst as HostSource).host, entries: sftpEntries);
     }
   }
 
   // Local slot → local slot: plain filesystem copy.
-  Future<void> _localToLocal(bool fromLeft) async {
-    final selected = _localOf(fromLeft).selectedEntries.toList();
+  Future<void> _localToLocal(bool fromLeft, {List<LocalEntry>? entries}) async {
+    final selected = entries ?? _localOf(fromLeft).selectedEntries.toList();
     if (selected.isEmpty) return;
     final dstDir = _localOf(!fromLeft).currentPath;
 
@@ -175,6 +215,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
     _transferProvider.startBatch(items);
     _showTransferDialog();
 
+    var skipped = 0;
     try {
       for (int i = 0; i < selected.length; i++) {
         if (_transferProvider.isCancelled) break;
@@ -188,21 +229,26 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
             copied += n;
             _transferProvider.updateItem(item.id, bytesTransferred: copied);
           },
+          onSkipped: (_) => skipped++,
         );
         _transferProvider.updateItem(item.id, status: TransferStatus.done);
       }
-    } on ArgumentError {
-      _showError('Source and destination folders are the same');
+    } on ArgumentError catch (e) {
+      _showError(e.message?.toString() ?? 'Copy rejected');
     } catch (e) {
       _showError('Copy failed: $e');
     } finally {
+      if (skipped > 0) {
+        _showError('Skipped $skipped existing file(s) — not overwritten');
+      }
       await _reloadSlot(!fromLeft);
     }
   }
 
   // Local slot → remote slot.
-  Future<void> _upload(bool fromLeft, Host host) async {
-    final selected = _localOf(fromLeft).selectedEntries.toList();
+  Future<void> _upload(bool fromLeft, Host host,
+      {List<LocalEntry>? entries}) async {
+    final selected = entries ?? _localOf(fromLeft).selectedEntries.toList();
     if (selected.isEmpty) return;
     final service = _transferService;
     final remoteDir = _sftpOf(!fromLeft).currentPath;
@@ -243,8 +289,9 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
   }
 
   // Remote slot → local slot.
-  Future<void> _download(bool fromLeft, Host host) async {
-    final selected = _sftpOf(fromLeft).selectedEntries.toList();
+  Future<void> _download(bool fromLeft, Host host,
+      {List<SftpEntry>? entries}) async {
+    final selected = entries ?? _sftpOf(fromLeft).selectedEntries.toList();
     if (selected.isEmpty) return;
     final service = _transferService;
     final localDir = _localOf(!fromLeft).currentPath;
@@ -284,12 +331,30 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
   }
 
   // Remote slot → remote slot, relayed through a local temp file (files only).
-  Future<void> _relay(bool fromLeft, Host srcHost, Host dstHost) async {
-    final selected =
-        _sftpOf(fromLeft).selectedEntries.where((e) => !e.isDirectory).toList();
-    if (selected.isEmpty) return;
+  Future<void> _relay(bool fromLeft, Host srcHost, Host dstHost,
+      {List<SftpEntry>? entries}) async {
+    var selected = (entries ?? _sftpOf(fromLeft).selectedEntries.toList())
+        .where((e) => !e.isDirectory)
+        .toList();
     final service = _transferService;
     final destDir = _sftpOf(!fromLeft).currentPath;
+
+    // A same-host relay into the file's own directory would truncate and
+    // rewrite it in place (the upload opens with truncate) — refuse it the
+    // same way LocalCopyService refuses same-directory copies.
+    if (srcHost.id == dstHost.id) {
+      final before = selected.length;
+      selected = selected
+          .where((e) => p.posix.dirname(e.path) != destDir)
+          .toList();
+      if (selected.length < before) {
+        _showError(selected.isEmpty
+            ? 'Source and destination folders are the same'
+            : 'Skipped ${before - selected.length} file(s) already in the '
+                'destination folder');
+      }
+    }
+    if (selected.isEmpty) return;
 
     final items = [
       for (final e in selected)
@@ -337,23 +402,21 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
 
   // ── Drag & drop ───────────────────────────────────────
 
-  // A dropped entry always originates from the opposite slot: drags from the
-  // target slot itself resolve to the same source kind and end up as a
-  // same-directory copy, which the transfer guards reject.
+  // A dropped entry is treated as coming from the opposite slot and is
+  // passed to the transfer explicitly — never via the panels' selection
+  // state, which a drop must not disturb. Dropping an entry back onto its
+  // own panel resolves to a same-directory copy, which the transfer guards
+  // reject with a message.
   Future<void> _onDropLocalEntry(bool targetLeft, LocalEntry entry) async {
     if (entry.isDirectory) return;
     if (_sourceOf(!targetLeft) is! LocalSource) return;
-    _localOf(!targetLeft).selectOnly(entry);
-    await _transfer(fromLeft: !targetLeft);
+    await _transfer(fromLeft: !targetLeft, localEntries: [entry]);
   }
 
   Future<void> _onDropSftpEntry(bool targetLeft, SftpEntry entry) async {
     if (entry.isDirectory) return;
     if (_sourceOf(!targetLeft) is! HostSource) return;
-    final prov = _sftpOf(!targetLeft);
-    prov.clearSelection();
-    prov.toggleSelection(entry);
-    await _transfer(fromLeft: !targetLeft);
+    await _transfer(fromLeft: !targetLeft, sftpEntries: [entry]);
   }
 
   // ── Build ─────────────────────────────────────────────
@@ -374,6 +437,8 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
         panelId: left ? 'remote_left' : 'remote_right',
         provider: _sftpOf(left),
         onChangeHost: () => _pickSource(left),
+        initialPath:
+            host == null ? '/' : (_remotePathByHost[host.id] ?? '/'),
       );
     }
 

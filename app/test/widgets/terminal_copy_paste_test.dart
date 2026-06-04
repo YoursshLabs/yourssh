@@ -11,6 +11,8 @@
 //   - Ctrl+C without a selection falls through to the shell as ^C (0x03).
 //   - Ctrl+Shift+C always copies (classic terminal binding).
 //   - Ctrl+V and Ctrl+Shift+V paste.
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -235,6 +237,59 @@ void main() {
     await pressCtrlV(tester);
 
     expect(output.join(), contains('clipboard-content'));
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets(
+      'Windows: double Ctrl+C while the clipboard write is in flight — '
+      'second press sends SIGINT, not a second copy', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+
+    // Clipboard whose setData hangs until released, so the second Ctrl+C
+    // lands while the first copy is still awaiting the platform.
+    final setDataReleased = Completer<void>();
+    var setDataCalls = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          setDataCalls++;
+          await setDataReleased.future;
+        }
+        return null;
+      },
+    );
+
+    final terminal = Terminal();
+    terminal.write('hello world');
+    final output = <String>[];
+    terminal.onOutput = output.add;
+    final controller = TerminalController();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TerminalView(terminal, controller: controller, autofocus: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    selectHello(terminal, controller);
+    await tester.pump();
+
+    await pressCtrlC(tester); // copy starts, setData hangs
+    expect(setDataCalls, 1);
+    expect(controller.selection, isNull,
+        reason: 'selection must clear synchronously, not after setData');
+
+    await pressCtrlC(tester); // must fall through to the shell as ^C
+    expect(setDataCalls, 1, reason: 'second press must not copy again');
+    expect(output.join(), contains('\x03'),
+        reason: 'second press must interrupt (SIGINT)');
+
+    setDataReleased.complete();
+    await tester.pump();
     debugDefaultTargetPlatformOverride = null;
   });
 

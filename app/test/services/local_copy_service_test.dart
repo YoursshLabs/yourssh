@@ -62,6 +62,43 @@ void main() {
     );
   });
 
+  test('refuses to overwrite an existing same-named file', () async {
+    await makeFile('src/data.txt', 'new-content');
+    await makeFile('dst/data.txt', 'precious');
+
+    await expectLater(
+      LocalCopyService()
+          .copyEntry(p.join(tmp.path, 'src/data.txt'), p.join(tmp.path, 'dst')),
+      throwsA(isA<ArgumentError>()),
+    );
+    // Destination must be untouched.
+    final kept =
+        await File(p.join(tmp.path, 'dst/data.txt')).readAsString();
+    expect(kept, 'precious');
+  });
+
+  test('directory copy merges but skips existing files instead of '
+      'overwriting them', () async {
+    await makeFile('src/dir/keep.txt', 'NEW');
+    await makeFile('src/dir/fresh.txt', 'fresh');
+    await makeFile('dst/dir/keep.txt', 'OLD');
+
+    final skipped = <String>[];
+    await LocalCopyService().copyEntry(
+      p.join(tmp.path, 'src/dir'),
+      p.join(tmp.path, 'dst'),
+      onSkipped: skipped.add,
+    );
+
+    // Existing file preserved (same as the SFTP recursive transfers).
+    expect(await File(p.join(tmp.path, 'dst/dir/keep.txt')).readAsString(),
+        'OLD');
+    // New file copied.
+    expect(await File(p.join(tmp.path, 'dst/dir/fresh.txt')).readAsString(),
+        'fresh');
+    expect(skipped, hasLength(1));
+  });
+
   test('reports per-file progress bytes', () async {
     await makeFile('src/dir/one.txt', '12345');
     await makeFile('src/dir/two.txt', '678');

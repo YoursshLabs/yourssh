@@ -1,7 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/recording_entry.dart';
-import '../models/ssh_session.dart';
 import '../models/terminal_session.dart';
 import '../services/recording_service.dart';
 
@@ -17,7 +17,18 @@ class RecordingProvider extends ChangeNotifier {
   final List<RecordingEntry> _recordings = [];
   final Set<String> _activeIds = {};
 
-  RecordingProvider(this._service, {required this.getPath});
+  RecordingProvider(this._service, {required this.getPath}) {
+    // Recordings can stop without going through this provider (shell exit /
+    // disconnect → SshService/LocalShellService → RecordingService
+    // .onShellClosed). Sync our state so the REC indicator clears and the
+    // finalized .cast shows up in the library.
+    _service.onRecordingStopped = (sessionId) {
+      if (_activeIds.remove(sessionId)) {
+        notifyListeners();
+        unawaited(refreshLibrary());
+      }
+    };
+  }
 
   List<RecordingEntry> get recordings => List.unmodifiable(_recordings);
 
@@ -35,12 +46,10 @@ class RecordingProvider extends ChangeNotifier {
     if (_activeIds.contains(session.id)) return;
 
     final basePath = getPath();
-    final hostFolder = session is SshSession
-        ? '${session.host.username}@${session.host.host}'
-        : 'local';
-    final title = session is SshSession
-        ? '${session.host.username}@${session.host.host}'
-        : 'Local terminal';
+    // From the interface, not a type check — a future third session type
+    // names its own folder/title instead of being misfiled as "local".
+    final hostFolder = session.recordingFolder;
+    final title = session.recordingTitle;
     final now = DateTime.now();
     final ts = '${now.year}-${_pad(now.month)}-${_pad(now.day)}'
         '_${_pad(now.hour)}-${_pad(now.minute)}-${_pad(now.second)}';
@@ -80,15 +89,22 @@ class RecordingProvider extends ChangeNotifier {
     }
 
     final entries = <RecordingEntry>[];
-    await for (final entity in dir.list(recursive: true)) {
-      if (entity is File && entity.path.endsWith('.cast')) {
-        try {
-          final size = await entity.length();
-          entries.add(RecordingEntry.fromPath(entity.path, fileSize: size));
-        } catch (_) {
-          entries.add(RecordingEntry.fromPath(entity.path));
+    try {
+      await for (final entity in dir.list(recursive: true)) {
+        if (entity is File && entity.path.endsWith('.cast')) {
+          try {
+            final size = await entity.length();
+            entries.add(RecordingEntry.fromPath(entity.path, fileSize: size));
+          } catch (_) {
+            entries.add(RecordingEntry.fromPath(entity.path));
+          }
         }
       }
+    } on FileSystemException catch (e) {
+      // The recordings folder can vanish mid-scan (user deleted it, temp
+      // cleanup). Keep whatever was collected instead of crashing the
+      // background refresh.
+      debugPrint('[RecordingProvider] refreshLibrary aborted mid-scan: $e');
     }
 
     _recordings

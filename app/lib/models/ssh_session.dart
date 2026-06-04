@@ -71,6 +71,12 @@ class SshSession implements TerminalSession {
   @override
   bool get isLocal => false;
 
+  @override
+  String get recordingFolder => '${host.username}@${host.host}';
+
+  @override
+  String get recordingTitle => '${host.username}@${host.host}';
+
   String get statusLabel => switch (status) {
         SessionStatus.connecting => 'Connecting...',
         SessionStatus.connected => isWatch ? 'Watching' : 'Connected',

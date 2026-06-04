@@ -671,6 +671,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           active: showSftp,
           child: DualPanelSftpScreen(
             connectionNotifier: _sftpConnectionNotifier,
+            active: showSftp,
           ),
         ),
         if (!showSftp) _buildForeground(active),

@@ -23,4 +23,11 @@ abstract class TerminalSession {
   set isPinned(bool value);
 
   bool get isLocal;
+
+  /// Folder name recordings of this session are grouped under
+  /// (`{recordingsPath}/{recordingFolder}/session_*.cast`).
+  String get recordingFolder;
+
+  /// Title written into the asciicast header.
+  String get recordingTitle;
 }

@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- **Hotkeys on Linux** — app hotkeys (new/close/next/prev session, splits, input bar, command palette) are now registered in-app instead of as system-wide global hotkeys (#46). They work on Wayland, where keybinder/`XGrabKey` could never grab (startup logged `Binding '<Primary>t' failed!` and the keys silently did nothing), and they no longer steal their combos from every other application on X11/macOS/Windows while the app is running. Terminal views swallow a matching combo so a hotkey no longer also types its control sequence into the shell (e.g. Ctrl+T sending `^T`).
-- **`split_vertical` default rebound** from `ctrl+shift+v` to `ctrl+shift+e` so it no longer shadows terminal paste on Windows/Linux (#43); saved settings still on the old default are migrated on load.
-
 ---
 
 ## [0.1.24] — 2026-06-04
@@ -27,10 +23,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SFTP workspace lost on tab switch** ([#42](https://github.com/YoursshLabs/yourssh/issues/42)) — `DualPanelSftpScreen` was disposed whenever another tab became active, dropping connected hosts, paths, listings and in-flight transfers; it is now kept alive offstage (`KeepAliveOffstage`) so returning to the SFTP tab resumes where you left off.
 - **Unreadable terminal selection** ([#40](https://github.com/YoursshLabs/yourssh/issues/40)) — every bundled theme used a fully opaque selection color painted over the text layer, hiding selected text entirely; all themes now use xterm's semi-transparent default alpha (`0xAA`), guarded by a test.
 - **Windows app icon** — the packaged Windows build shipped the default Flutter icon instead of the terminal logo.
+- **Hotkeys on Linux** — app hotkeys (new/close/next/prev session, splits, input bar, command palette) are now registered in-app instead of as system-wide global hotkeys (#46). They work on Wayland, where keybinder/`XGrabKey` could never grab (startup logged `Binding '<Primary>t' failed!` and the keys silently did nothing), and they no longer steal their combos from every other application on X11/macOS/Windows while the app is running. Terminal views swallow a matching combo so a hotkey no longer also types its control sequence into the shell (e.g. Ctrl+T sending `^T`).
+- **`split_vertical` default rebound** from `ctrl+shift+v` to `ctrl+shift+e` so it no longer shadows terminal paste on Windows/Linux (#43); saved settings still on the old default are migrated on load.
+- **Pre-release review hardening** — a 9-angle adversarial code review of this release surfaced 15 findings, all fixed:
+  - A local shell that exits on its own now immediately shows the **Shell exited / Restart shell** view (the status changed without notifying the UI), and the **REC indicator clears** when a recorded shell exits or disconnects — previously it stayed red while output was silently dropped after a restart.
+  - SFTP panel: **Select All and the selection count respect the active filter** (bulk Delete can no longer touch files hidden by the filter — narrowing the filter also prunes the selection), and a filter with no hits shows **“No matches”** instead of a blank “0 items” pane.
+  - Two-panel SFTP: switching a slot's source **remembers the last path per host** and resumes there; returning to the SFTP tab **refreshes listings** that went stale while the screen was kept alive offstage; drag-and-drop no longer disturbs the opposite panel's selection.
+  - **Transfers never overwrite silently** — local→local copies refuse a same-named destination file and skip (with a notice) existing files when merging folders, matching the SFTP recursive transfers; a same-host remote relay into the file's own folder is refused instead of truncating and rewriting the file in place.
+  - Terminal `Ctrl+C` copy **clears the selection synchronously**, so a rapid second `Ctrl+C` always interrupts even while the clipboard write is still in flight (and a failing clipboard backend can no longer leave the selection stuck); copy/paste/select-all now share **one implementation** across keyboard shortcuts, middle-click and the context menu, with disposal guards after every async gap.
+  - The network-stats overlay no longer renders the **previous host's numbers over local terminal tabs**.
 
 ### Changed
 - Test suite is Windows-portable (temp-dir paths, file-lock handling, unix-socket tests skipped where unsupported).
-- Internal refactors: SSH-only consumers (plugins, terminal sharing) read `sshSessions`/`activeSshSession`; `LocalShellService` is injected instead of constructed inline.
+- Internal refactors: SSH-only consumers (plugins, terminal sharing) read `sshSessions`/`activeSshSession`; `LocalShellService` is injected instead of constructed inline; `TerminalSession` owns its recording folder/title (a future session type can't be misfiled as "local") and the pane renderer fails loudly on unknown session types instead of hard-casting to SSH.
 
 ---
 

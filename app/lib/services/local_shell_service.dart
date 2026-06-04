@@ -24,6 +24,13 @@ class LocalShellService {
   /// no-ops when the session is not being recorded.
   RecordingService? recordingService;
 
+  /// Fired whenever a session's status changes outside a provider call
+  /// (PTY exit, spawn failure). LocalSession is not observable, so without
+  /// this the UI never learns the shell died and the "Restart shell" view
+  /// stays unreachable. Wired to SessionProvider's notify by its
+  /// `localShell` setter.
+  void Function()? onSessionStateChanged;
+
   LocalShellService({PtyFactory? ptyFactory})
       : _ptyFactory = ptyFactory ?? _defaultFactory;
 
@@ -108,10 +115,12 @@ class LocalShellService {
         terminal.write('\r\n[Process exited with code $code]\r\n');
         recordingService?.onShellClosed(session.id);
         NotificationService.instance.removeSession(session.id);
+        onSessionStateChanged?.call();
       });
     } catch (e) {
       session.status = LocalSessionStatus.error;
       session.errorMessage = e.toString();
+      onSessionStateChanged?.call();
     }
   }
 

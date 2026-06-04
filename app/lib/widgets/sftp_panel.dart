@@ -20,12 +20,18 @@ class SftpPanel extends StatefulWidget {
   final SftpPanelProvider provider;
   final VoidCallback onChangeHost;
 
+  /// Directory to load on mount. The dual-panel screen passes the last path
+  /// browsed on this host so switching a slot's source away and back resumes
+  /// where the user left off.
+  final String initialPath;
+
   const SftpPanel({
     super.key,
     required this.host,
     required this.panelId,
     required this.provider,
     required this.onChangeHost,
+    this.initialPath = '/',
   });
 
   @override
@@ -41,7 +47,7 @@ class _SftpPanelState extends State<SftpPanel> {
       // (slot source switch recreates this panel mid-build), and provider
       // notifications during build are dropped by the framework.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _loadDirectory('/');
+        if (mounted) _loadDirectory(widget.initialPath);
       });
     }
     // Wired once: the upload callbacks fire from the external-edit mtime
@@ -65,21 +71,9 @@ class _SftpPanelState extends State<SftpPanel> {
     };
   }
 
-  @override
-  void didUpdateWidget(SftpPanel old) {
-    super.didUpdateWidget(old);
-    if (old.host?.id != widget.host?.id && widget.host != null) {
-      // Deferred for the same reason as initState: didUpdateWidget runs
-      // during build and must not trigger provider notifications.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        widget.provider
-          ..setLoadState(SftpPanelLoadState.idle)
-          ..setPath('/');
-        _loadDirectory('/');
-      });
-    }
-  }
+  // No didUpdateWidget host handling: the dual-panel screen keys this panel
+  // by host id, so a source switch always recreates the State and initState
+  // performs the (possibly remembered) initial load.
 
   Future<void> _loadDirectory(String path) async {
     final host = widget.host;
@@ -522,10 +516,17 @@ class _SftpPanelState extends State<SftpPanel> {
         ]),
       );
     }
-    if (prov.entries.isEmpty) {
-      return const Center(child: Text('Empty directory', style: TextStyle(color: Color(0xFF555555))));
-    }
     final entries = prov.filteredEntries;
+    if (entries.isEmpty) {
+      // Distinguish a genuinely empty directory from a filter with no hits
+      // (mirrors LocalFilePanel).
+      return Center(
+        child: Text(
+          prov.filterQuery.isNotEmpty ? 'No matches' : 'Empty directory',
+          style: const TextStyle(color: Color(0xFF555555)),
+        ),
+      );
+    }
     return Column(
       children: [
         Container(

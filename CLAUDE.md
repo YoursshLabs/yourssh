@@ -62,7 +62,7 @@ Flutter UI (widgets/screens)
 
 **Providers** (`app/lib/providers/`):
 - `HostProvider` — CRUD for saved SSH hosts; fires `onMutation` callback to trigger sync push
-- `SessionProvider` — manages active `SshSession` objects; wires key lookup, auto-reconnect, tmux, and host-key verification via callbacks set in `main.dart`
+- `SessionProvider` — manages the unified `TerminalSession` tab list (SSH sessions **and** local PTY shells; `sessions` / `sshSessions` / `activeSshSession` accessors); wires key lookup, auto-reconnect, tmux, and host-key verification via callbacks set in `main.dart`; local shells go through the injected `LocalShellService` (`newLocalSession` / `restartLocalSession`; the `localShell` setter wires the service's PTY-exit notifications into the provider's notify)
 - `KeyProvider` — SSH key entries (path + optional passphrase + optional linked certificate path)
 - `PortForwardProvider` — local/remote/dynamic `PortForward` tunnel configs (persistent rules)
 - `TunnelProvider` — active `TunnelConfig` sessions (runtime state, separate from PortForwardProvider)
@@ -71,7 +71,6 @@ Flutter UI (widgets/screens)
 - `KnownHostsProvider` — persists known host fingerprints; exposes `pendingChallenge` for TOFU dialog
 - `SettingsProvider` — app-wide prefs (auto-reconnect, tmux, hotkeys, feature flags for DevOps/WebTools/Snippets)
 - `TerminalLayoutProvider` — split layout (none/horizontal/vertical), input bar visibility, and snippets-panel visibility (`toggleSnippetsPanel()` for the collapsible right-side snippets panel in the terminal workspace)
-- `LocalSessionProvider` — manages local shell sessions via `flutter_pty`
 - `LocalFilePanelProvider` — local filesystem state for the dual-panel SFTP view
 - `SftpPanelProvider` — remote SFTP panel state (current path, directory listing)
 - `SftpTransferProvider` — in-progress upload/download transfer queue and status

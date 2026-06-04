@@ -95,6 +95,35 @@ void main() {
       expect(p.filteredEntries.map((e) => e.name), ['Alpha.txt']);
     });
 
+    test('selectAll with an active filter selects only visible entries', () {
+      final p = SftpPanelProvider();
+      p.setEntries([entry('a.txt'), entry('b.txt'), entry('secret.key')]);
+      p.setFilterQuery('txt');
+      p.selectAll();
+      expect(p.selectedEntries.map((e) => e.name),
+          unorderedEquals(['a.txt', 'b.txt']),
+          reason: 'entries hidden by the filter must never be selected — '
+              'a later Delete would remove files the user never saw');
+    });
+
+    test('isAllSelected is true when every *visible* entry is selected', () {
+      final p = SftpPanelProvider();
+      p.setEntries([entry('a.txt'), entry('b.txt'), entry('secret.key')]);
+      p.setFilterQuery('txt');
+      p.selectAll();
+      expect(p.isAllSelected, isTrue);
+    });
+
+    test('narrowing the filter prunes selected entries that became hidden',
+        () {
+      final p = SftpPanelProvider();
+      p.setEntries([entry('a.txt'), entry('secret.key')]);
+      p.selectAll(); // both selected, no filter
+      p.setFilterQuery('txt'); // secret.key now hidden
+      expect(p.selectedEntries.map((e) => e.name), ['a.txt'],
+          reason: 'select-then-filter must not keep hidden files selected');
+    });
+
     test('toggleFilterVisible clears the query when hiding', () {
       final p = SftpPanelProvider();
       p.setEntries([entry('a'), entry('b')]);

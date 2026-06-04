@@ -197,16 +197,20 @@ class SplitTerminalView extends StatelessWidget {
   }
 
   Widget _paneContent(BuildContext context, TerminalSession session) {
-    if (session is LocalSession) {
-      return LocalTerminalPane(
-        key: ValueKey(session.id),
-        session: session,
-        onRestart: () =>
-            context.read<SessionProvider>().restartLocalSession(session.id),
-      );
-    }
-    return SessionTerminalView(
-        key: ValueKey(session.id), session: session as SshSession);
+    // Exhaustive over the known session types — a future third type must
+    // fail loudly here instead of being silently treated as SSH.
+    return switch (session) {
+      LocalSession() => LocalTerminalPane(
+          key: ValueKey(session.id),
+          session: session,
+          onRestart: () =>
+              context.read<SessionProvider>().restartLocalSession(session.id),
+        ),
+      SshSession() =>
+        SessionTerminalView(key: ValueKey(session.id), session: session),
+      _ => throw UnsupportedError(
+          'Unknown TerminalSession type: ${session.runtimeType}'),
+    };
   }
 }
 

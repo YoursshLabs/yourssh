@@ -17,19 +17,27 @@ class NetworkStatsOverlay extends StatefulWidget {
 class _NetworkStatsOverlayState extends State<NetworkStatsOverlay> {
   NetworkStatsService? _service;
   NetworkStatsDelta? _delta;
+  String? _watchedSessionId;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _resetService();
+    // watch (not read): tab switches must re-evaluate which session the
+    // stats belong to — with a plain read this never re-ran and the overlay
+    // kept polling (and rendering) the previous host on local tabs.
+    final active = context.watch<SessionProvider>().activeSession;
+    final session = active is SshSession ? active : null;
+    if (session?.id == _watchedSessionId) return;
+    _watchedSessionId = session?.id;
+    _resetService(session);
   }
 
-  void _resetService() {
+  void _resetService(SshSession? session) {
     _service?.stop();
-    // Stats are for the focused session — hide on local tabs rather than
-    // falling back to another host's numbers.
-    final active = context.read<SessionProvider>().activeSession;
-    final session = active is SshSession ? active : null;
+    _service = null;
+    // Stats are for the focused session — hide on local tabs (and drop the
+    // previous host's numbers) rather than rendering them as if live here.
+    _delta = null;
     if (session == null) return;
     _service = NetworkStatsService(
       host: session.host,
@@ -37,6 +45,11 @@ class _NetworkStatsOverlayState extends State<NetworkStatsOverlay> {
       onUpdate: (delta) => setState(() => _delta = delta),
     );
     _service!.start();
+  }
+
+  @visibleForTesting
+  void debugSetDelta(NetworkStatsDelta delta) {
+    setState(() => _delta = delta);
   }
 
   @override

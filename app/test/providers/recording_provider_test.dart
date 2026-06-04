@@ -46,6 +46,28 @@ void main() {
     expect(provider.isRecording(session.id), isFalse);
   });
 
+  test('shell exit (onShellClosed) clears the provider recording state',
+      () async {
+    final service = RecordingService();
+    final provider = RecordingProvider(service, getPath: () => tmpDir.path);
+    final session = LocalSession(terminal: Terminal());
+
+    await provider.startRecording(session);
+    expect(provider.isRecording(session.id), isTrue);
+
+    var notified = false;
+    provider.addListener(() => notified = true);
+
+    // Simulates the PTY/shell dying: SshService and LocalShellService call
+    // this directly on the service, bypassing the provider.
+    service.onShellClosed(session.id);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.isRecording(session.id), isFalse,
+        reason: 'REC indicator must not stay red after the shell closed');
+    expect(notified, isTrue);
+  });
+
   test('refreshLibrary finds .cast files', () async {
     final hostDir = Directory('${tmpDir.path}/ubuntu@prod')..createSync();
     File('${hostDir.path}/session_2026-05-30_10-00-00.cast').writeAsStringSync(

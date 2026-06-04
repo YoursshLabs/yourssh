@@ -92,6 +92,16 @@ void main() {
       expect(session.status, LocalSessionStatus.exited);
     });
 
+    test('pty exit fires onSessionStateChanged so the UI can rebuild', () async {
+      var notified = 0;
+      service.onSessionStateChanged = () => notified++;
+      await service.openShell();
+      fakePty.completeExit(0);
+      await Future<void>.delayed(Duration.zero);
+      expect(notified, greaterThan(0),
+          reason: 'without a notify the "Restart shell" view never appears');
+    });
+
     test('closeSession kills the pty and removes session', () async {
       final session = await service.openShell();
       service.closeSession(session.id);

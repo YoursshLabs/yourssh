@@ -27,7 +27,15 @@ class SftpPanelProvider extends ChangeNotifier {
   }
 
   void setFilterQuery(String query) {
+    if (_filterQuery == query) return;
     _filterQuery = query;
+    // Selection must stay within what the user can see: anything the new
+    // filter hides is dropped, so bulk actions (Delete/Rename) can never
+    // touch entries that were selected and then filtered out of view.
+    if (query.isNotEmpty) {
+      final visible = filteredEntries.toSet();
+      _selected.retainWhere(visible.contains);
+    }
     notifyListeners();
   }
 
@@ -62,8 +70,10 @@ class SftpPanelProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Selects every *visible* entry — entries hidden by the filter are never
+  /// selected (mirrors LocalFilePanelProvider).
   void selectAll() {
-    for (final entry in _entries) {
+    for (final entry in filteredEntries) {
       _selected.add(entry);
     }
     notifyListeners();
@@ -71,7 +81,10 @@ class SftpPanelProvider extends ChangeNotifier {
 
   void deselectAll() => clearSelection();
 
-  bool get isAllSelected => _entries.isNotEmpty && _selected.length == _entries.length;
+  bool get isAllSelected {
+    final visible = filteredEntries;
+    return visible.isNotEmpty && visible.every(_selected.contains);
+  }
 
   void navigateUp() {
     if (_currentPath == '/') return;

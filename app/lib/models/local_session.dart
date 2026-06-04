@@ -40,6 +40,12 @@ class LocalSession implements TerminalSession {
   @override
   bool get isLocal => true;
 
+  @override
+  String get recordingFolder => 'local';
+
+  @override
+  String get recordingTitle => 'Local terminal';
+
   void attachPty(PtyRunner pty) {
     _pty = pty;
   }

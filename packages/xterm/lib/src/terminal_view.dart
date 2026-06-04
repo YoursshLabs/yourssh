@@ -6,6 +6,7 @@ import 'package:xterm/src/core/buffer/cell_offset.dart';
 
 import 'package:xterm/src/core/input/keys.dart';
 import 'package:xterm/src/terminal.dart';
+import 'package:xterm/src/ui/clipboard_ops.dart';
 import 'package:xterm/src/ui/controller.dart';
 import 'package:xterm/src/ui/cursor_type.dart';
 import 'package:xterm/src/ui/custom_text_edit.dart';
@@ -372,11 +373,12 @@ class TerminalViewState extends State<TerminalView> {
   }
 
   Future<void> _onTertiaryTapUp(TapUpDetails details) async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text;
-    if (text != null && text.isNotEmpty) {
-      widget.terminal.paste(text);
-      _controller.clearSelection();
+    final text = await terminalClipboardText();
+    // The clipboard fetch is async — the tab may have been closed (and the
+    // external controller disposed) before it resolves.
+    if (!mounted) return;
+    if (text != null) {
+      terminalPasteText(widget.terminal, _controller, text);
     }
   }
 

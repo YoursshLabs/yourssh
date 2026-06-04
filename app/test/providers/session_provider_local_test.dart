@@ -59,6 +59,23 @@ void main() {
   });
 
   group('unified session list', () {
+    test('assigning localShell wires shell-exit notifications to listeners',
+        () async {
+      final pty = _FakePty();
+      final shell = LocalShellService(ptyFactory: (s, c, r, env) => pty);
+      p.localShell = shell;
+      await p.newLocalSession();
+
+      var notified = false;
+      p.addListener(() => notified = true);
+
+      pty._exit.complete(0); // shell dies on its own (user typed `exit`)
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notified, isTrue,
+          reason: 'pane must rebuild into the "Restart shell" view');
+    });
+
     test('newLocalSession adds a local session and makes it active', () async {
       await p.newLocalSession();
       expect(p.sessions, hasLength(1));

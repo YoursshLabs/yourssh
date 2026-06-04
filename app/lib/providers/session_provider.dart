@@ -27,7 +27,15 @@ class SessionProvider extends ChangeNotifier {
   Future<void> Function(SshSession session)? recordingStart;
 
   /// Set by main.dart; required for newLocalSession/restartLocalSession.
-  LocalShellService? localShell;
+  /// The setter wires the service's out-of-band state changes (PTY exit,
+  /// spawn failure) into this provider's notify, so panes rebuild into the
+  /// "Shell exited / Restart shell" view without an unrelated trigger.
+  LocalShellService? get localShell => _localShell;
+  LocalShellService? _localShell;
+  set localShell(LocalShellService? service) {
+    _localShell = service;
+    service?.onSessionStateChanged = _safeNotify;
+  }
 
   SessionProvider(this._ssh, this._tabMetadata);
 
