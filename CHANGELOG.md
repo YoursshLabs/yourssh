@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.25] — 2026-06-04
+
+### Added
+- **Notification bell in the top tab bar** — a bell button with an unread badge opens an anchored popover listing in-app notifications: a new release being available (with an inline **Update** button that starts the download, plus a link to the full release notes in Settings → Updates) and sessions that drop unexpectedly (shell closed without a pending auto-reconnect, or reconnect attempts exhausted — user-initiated closes don't notify). Opening the panel marks everything read; items can be dismissed individually or cleared all at once. Notifications are in-memory only, capped at 50, and deduped per release version / per session.
+- **Community health files** — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, and GitHub issue templates (bug report, feature request, question).
+
+---
+
 ## [0.1.24] — 2026-06-04
 
 ### Added
@@ -339,7 +347,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.24...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.25...HEAD
+[0.1.25]: https://github.com/YoursshLabs/yourssh/compare/v0.1.24...v0.1.25
 [0.1.24]: https://github.com/YoursshLabs/yourssh/compare/v0.1.23...v0.1.24
 [0.1.23]: https://github.com/YoursshLabs/yourssh/compare/v0.1.22...v0.1.23
 [0.1.22]: https://github.com/YoursshLabs/yourssh/compare/v0.1.21...v0.1.22

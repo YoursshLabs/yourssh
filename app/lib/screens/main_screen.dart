@@ -50,6 +50,7 @@ import '../providers/share_provider.dart';
 import '../widgets/share_session_dialog.dart';
 import '../widgets/join_share_dialog.dart';
 import '../widgets/update_banner.dart';
+import '../widgets/notification_bell.dart';
 
 enum NavSection { hosts, keychain, portForwarding, sftp, knownHosts, recordings, settings, plugins }
 
@@ -94,6 +95,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _wireRecordingErrors();
     });
   }
+
+  void _showUpdateDetails() => setState(() {
+        _activePluginId = null;
+        _activeScriptPanel = null;
+        _nav = NavSection.settings;
+        _viewingTerminal = false;
+        _showAiChat = false;
+      });
 
   void _wireRecordingErrors() {
     if (!mounted) return;
@@ -546,16 +555,16 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               setState(() => _viewingTerminal = true);
               unawaited(context.read<SessionProvider>().newLocalSession());
             },
+            onShowUpdateDetails: _showUpdateDetails,
+            onOpenSession: (sessionId) {
+              final sp = context.read<SessionProvider>();
+              if (sp.sessions.any((s) => s.id == sessionId)) {
+                sp.setActive(sessionId);
+                setState(() => _viewingTerminal = true);
+              }
+            },
           ),
-          UpdateBanner(
-            onShowDetails: () => setState(() {
-              _activePluginId = null;
-              _activeScriptPanel = null;
-              _nav = NavSection.settings;
-              _viewingTerminal = false;
-              _showAiChat = false;
-            }),
-          ),
+          UpdateBanner(onShowDetails: _showUpdateDetails),
 
           Expanded(
             child: Row(
@@ -1053,6 +1062,8 @@ class _TopTabBar extends StatelessWidget {
   final ValueChanged<String> onSessionTap;
   final VoidCallback onAddSession;
   final VoidCallback onAddLocalSession;
+  final VoidCallback onShowUpdateDetails;
+  final ValueChanged<String> onOpenSession;
 
   const _TopTabBar({
     required this.sessions,
@@ -1063,6 +1074,8 @@ class _TopTabBar extends StatelessWidget {
     required this.onSessionTap,
     required this.onAddSession,
     required this.onAddLocalSession,
+    required this.onShowUpdateDetails,
+    required this.onOpenSession,
   });
 
   @override
@@ -1116,6 +1129,10 @@ class _TopTabBar extends StatelessWidget {
           ),
           // "+" button
           _AddTabBtn(onNewSsh: onAddSession, onNewLocal: onAddLocalSession),
+          NotificationBellBtn(
+            onShowUpdateDetails: onShowUpdateDetails,
+            onOpenSession: onOpenSession,
+          ),
         ],
       ),
     );

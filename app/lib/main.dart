@@ -35,6 +35,9 @@ import 'providers/recording_provider.dart';
 import 'providers/share_provider.dart';
 import 'services/update_service.dart';
 import 'providers/update_provider.dart';
+import 'models/app_notification.dart';
+import 'models/app_release.dart';
+import 'providers/notification_center_provider.dart';
 
 String kAppVersion = '';
 
@@ -124,6 +127,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final ShellIntegrationProvider _shellIntegrationProvider;
   late final UpdateService _updateService;
   late final UpdateProvider _updateProvider;
+  late final NotificationCenterProvider _notificationCenter;
+  String? _lastUpdateNotifVersion;
 
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   final _navigatorKey = GlobalKey<NavigatorState>();
@@ -239,6 +244,19 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateProvider.checkForUpdates();
     });
+    _notificationCenter = NotificationCenterProvider();
+    _updateProvider.addListener(_pushUpdateNotification);
+    // Informational by design: the disconnect item stays in the bell until
+    // the user clears it, even if the session later reconnects (spec v1).
+    _sessionProvider.onSessionDropped = (session, reason) {
+      _notificationCenter.add(AppNotification(
+        type: AppNotificationType.sessionDisconnect,
+        title: 'Session disconnected: ${session.title}',
+        body: reason,
+        dedupeKey: 'disconnect:${session.id}',
+        sessionId: session.id,
+      ));
+    };
     _shareProvider.wireDependencies(_sessionProvider, _hookBus);
     _shareProvider.onGuestInput = (data) {
       final sessionId = _shareProvider.sharingSessionId;
@@ -273,6 +291,20 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     NotificationService.instance.enabled = _settingsProvider.commandNotificationsEnabled;
   }
 
+  /// Mirrors "update available" into the notification center exactly once
+  /// per version (UpdateProvider notifies repeatedly while available).
+  void _pushUpdateNotification() {
+    if (_updateProvider.status != UpdateStatus.available) return;
+    final v = _updateProvider.latestRelease?.version;
+    if (v == null || v == _lastUpdateNotifVersion) return;
+    _lastUpdateNotifVersion = v;
+    _notificationCenter.add(AppNotification(
+      type: AppNotificationType.update,
+      title: 'New version v$v available',
+      dedupeKey: 'update:$v',
+    ));
+  }
+
   @override
   void onWindowFocus() {
     NotificationService.instance.onWindowFocus();
@@ -293,6 +325,11 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   @override
   void dispose() {
     _settingsProvider.removeListener(_syncNotificationSetting);
+    _updateProvider.removeListener(_pushUpdateNotification);
+    // A queued reconnect timer may still fire onSessionDropped during
+    // teardown — detach it before disposing the notification center.
+    _sessionProvider.onSessionDropped = null;
+    _notificationCenter.dispose();
     windowManager.removeListener(this);
     // Tear down in reverse-dependency order: consumers first (sessions, plugins,
     // recording, sync service — they read host/key/settings via callbacks), then
@@ -343,6 +380,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         ChangeNotifierProvider.value(value: _uiRegistry),
         ChangeNotifierProvider.value(value: _pluginEngineProvider),
         ChangeNotifierProvider.value(value: _updateProvider),
+        ChangeNotifierProvider.value(value: _notificationCenter),
       ],
       child: MaterialApp(
         title: 'YourSSH',

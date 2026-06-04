@@ -108,6 +108,7 @@ sudo dpkg -r yourssh
 - **Broadcast mode** — send the same input to multiple sessions at once
 - **Code editor** — edit remote files inline with a Monaco-powered editor
 - **Session recording** — record terminal output to Asciinema v2 (`.cast`) files; per-host auto-record setting; manual start/stop from the toolbar; Recording Library with in-app playback (play/pause, speed control 0.5×–5×)
+- **Notification bell** — a bell in the top tab bar collects in-app notifications (new release available with a one-click Update button, sessions that dropped unexpectedly) behind an unread badge; opening the panel marks them read, items can be dismissed individually or cleared all at once
 
 ### Design
 - Dark-only interface with a cohesive green-accent palette
@@ -340,6 +341,7 @@ Flutter UI (widgets / screens)
 | `AiChatProvider` | AI chat sidebar — multi-provider (Anthropic, OpenAI, Gemini) |
 | `PluginProvider` | Installed plugins, enable/disable state, config slot wiring |
 | `UpdateProvider` | In-app update check (GitHub releases) + download/install orchestration; drives the banner and Settings section |
+| `NotificationCenterProvider` | In-memory store behind the notification bell (update available, unexpected session drops); unread badge, dedupe, cap at 50 |
 
 ### Key Services
 

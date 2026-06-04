@@ -62,7 +62,7 @@ Flutter UI (widgets/screens)
 
 **Providers** (`app/lib/providers/`):
 - `HostProvider` — CRUD for saved SSH hosts; fires `onMutation` callback to trigger sync push
-- `SessionProvider` — manages the unified `TerminalSession` tab list (SSH sessions **and** local PTY shells; `sessions` / `sshSessions` / `activeSshSession` accessors); wires key lookup, auto-reconnect, tmux, and host-key verification via callbacks set in `main.dart`; local shells go through the injected `LocalShellService` (`newLocalSession` / `restartLocalSession`; the `localShell` setter wires the service's PTY-exit notifications into the provider's notify)
+- `SessionProvider` — manages the unified `TerminalSession` tab list (SSH sessions **and** local PTY shells; `sessions` / `sshSessions` / `activeSshSession` accessors); wires key lookup, auto-reconnect, tmux, and host-key verification via callbacks set in `main.dart`; `onSessionDropped` callback fires when a session drops without a pending auto-reconnect (not on user-initiated close) — wired to the notification center; local shells go through the injected `LocalShellService` (`newLocalSession` / `restartLocalSession`; the `localShell` setter wires the service's PTY-exit notifications into the provider's notify)
 - `KeyProvider` — SSH key entries (path + optional passphrase + optional linked certificate path)
 - `PortForwardProvider` — local/remote/dynamic `PortForward` tunnel configs (persistent rules)
 - `TunnelProvider` — active `TunnelConfig` sessions (runtime state, separate from PortForwardProvider)
@@ -81,6 +81,7 @@ Flutter UI (widgets/screens)
 - `RecordingProvider` — recording library state; `startRecording(session)` / `stopRecording(sessionId)`; `refreshLibrary()` scans disk for `.cast` files; `isRecording(sessionId)` for UI indicators; wired to `SessionProvider` via `recordingStart` callback in `main.dart`
 - `ShellIntegrationProvider` — per-session shell-integration state (cwd + command list) keyed by `sessionId`; `handleOsc(sessionId, code, args, absoluteCursorY)` routes xterm `onPrivateOSC` events through `ShellIntegrationService` into `ShellSessionState`; exposes `cwdFor`/`maybeStateFor` and a per-session `revisionFor` so consumers `context.select` to their own session; `clear(sessionId)` on shell close / disconnect
 - `UpdateProvider` — in-app update flow: launch check (debounced 24h via `last_update_check` in `SharedPreferences`) + manual check, semver compare, download progress, and install hand-off; `showBanner` derived from `status == available && version != dismissedVersion`; `dismiss()` persists per-version; surfaces state to `UpdateBanner` and the Settings Updates section
+- `NotificationCenterProvider` — in-memory store behind the notification bell in the top tab bar (`NotificationBell` widget); `add()` dedupes via `AppNotification.dedupeKey` (`update:<version>`, `disconnect:<sessionId>`) and caps at 50 items; `markAllRead()` on panel open, `clearAll()` / `remove(id)`; fed in `main.dart` by an `UpdateProvider` listener (one update notification per version) and `SessionProvider.onSessionDropped`
 
 **Services** (`app/lib/services/`):
 - `SshService` — owns `SSHClient` and `SSHSession` maps keyed by host ID; handles connect, shell, exec, sftp, `testConnection` (TCP+auth without opening a shell), disconnect
