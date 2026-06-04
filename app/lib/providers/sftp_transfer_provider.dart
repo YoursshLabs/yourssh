@@ -23,9 +23,16 @@ class SftpTransferProvider extends ChangeNotifier {
 
   int get totalCount => _items.length;
 
+  /// Starts a batch. While another batch is still transferring the new items
+  /// are **appended** (the panel is non-modal, so the user can queue more
+  /// work); otherwise the finished/cleared list is replaced.
   void startBatch(List<SftpTransferItem> items) {
-    _items = List.of(items);
-    _cancelled = false;
+    if (isTransferring) {
+      _items.addAll(items);
+    } else {
+      _items = List.of(items);
+      _cancelled = false;
+    }
     notifyListeners();
   }
 
@@ -56,8 +63,17 @@ class SftpTransferProvider extends ChangeNotifier {
     }
   }
 
+  /// Cancels every running batch (single flag — per-batch cancel is out of
+  /// scope). Unfinished items are marked skipped so [isTransferring] cannot
+  /// stay latched after the transfer loops break.
   void cancel() {
     _cancelled = true;
+    for (final item in _items) {
+      if (item.status == TransferStatus.pending ||
+          item.status == TransferStatus.inProgress) {
+        item.status = TransferStatus.skipped;
+      }
+    }
     notifyListeners();
   }
 

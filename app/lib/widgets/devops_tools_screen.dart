@@ -118,7 +118,7 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
   }
 
   Future<void> _run() async {
-    final session = context.read<SessionProvider>().activeSession;
+    final session = context.read<SessionProvider>().activeSshSession;
     if (session == null) return;
 
     final service = WebToolsService(context.read<SshService>());
@@ -285,7 +285,7 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final session = context.watch<SessionProvider>().activeSession;
+    final session = context.watch<SessionProvider>().activeSshSession;
 
     return Row(
       children: [

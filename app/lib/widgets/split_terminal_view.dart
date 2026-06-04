@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/local_session.dart';
 import '../models/ssh_session.dart';
+import '../models/terminal_session.dart';
 import '../providers/terminal_layout_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/shell_integration_provider.dart';
 import '../services/ssh_service.dart';
 import '../providers/share_provider.dart';
+import 'local_terminal_pane.dart';
 import 'terminal_view.dart';
 import 'terminal_input_bar.dart';
 import 'broadcast_toolbar.dart';
@@ -14,12 +17,12 @@ import 'terminal_snippets_panel.dart';
 class SplitTerminalView extends StatelessWidget {
   const SplitTerminalView({super.key});
 
-  void _sendCommand(SshSession session, String command) {
+  void _sendCommand(TerminalSession session, String command) {
     session.terminal.textInput(command);
   }
 
   void _broadcastCommand(
-    List<SshSession> sessions,
+    List<TerminalSession> sessions,
     String command,
     TerminalLayoutProvider layout,
   ) {
@@ -65,21 +68,23 @@ class SplitTerminalView extends StatelessWidget {
 
   bool _canRunSnippetTarget(BuildContext context) {
     final active = context.read<SessionProvider>().activeSession;
-    return active != null &&
-        !active.isWatch &&
-        active.status == SessionStatus.connected;
+    return switch (active) {
+      SshSession s => !s.isWatch && s.status == SessionStatus.connected,
+      LocalSession s => s.status == LocalSessionStatus.running,
+      _ => false,
+    };
   }
 
   void _runSnippetOnActive(BuildContext context, String command) {
-    final active = context.read<SessionProvider>().activeSession;
-    if (active == null || active.isWatch || active.status != SessionStatus.connected) {
-      return;
-    }
-
-    active.terminal.textInput('$command\n');
+    if (!_canRunSnippetTarget(context)) return;
+    context
+        .read<SessionProvider>()
+        .activeSession!
+        .terminal
+        .textInput('$command\n');
   }
 
-  Widget _buildPanes(BuildContext context, TerminalLayoutProvider layout, List<SshSession> sessions, SshSession? active) {
+  Widget _buildPanes(BuildContext context, TerminalLayoutProvider layout, List<TerminalSession> sessions, TerminalSession? active) {
     final pane0 = active ?? sessions[0];
     switch (layout.layout) {
       case SplitLayout.single:
@@ -149,8 +154,8 @@ class SplitTerminalView extends StatelessWidget {
   Widget _buildPane(
     BuildContext context,
     int paneIndex,
-    SshSession session,
-    List<SshSession> allSessions,
+    TerminalSession session,
+    List<TerminalSession> allSessions,
     TerminalLayoutProvider layout,
   ) {
     // Pane 0 reflects the global inputBarVisible toggle; other panes use it too
@@ -160,12 +165,12 @@ class SplitTerminalView extends StatelessWidget {
 
     return Column(
       children: [
-        if (session.isWatch)
+        if (session is SshSession && session.isWatch)
           _WatchBanner(session: session),
         Expanded(
           child: GestureDetector(
             onTap: () => context.read<SessionProvider>().setActive(session.id),
-            child: SessionTerminalView(key: ValueKey(session.id), session: session),
+            child: _paneContent(context, session),
           ),
         ),
         if (showInput)
@@ -173,8 +178,11 @@ class SplitTerminalView extends StatelessWidget {
             sessionId: session.id,
             cwd: context.select<ShellIntegrationProvider, String?>(
                 (p) => p.cwdFor(session.id)),
-            listDir: (dir) =>
-                context.read<SshService>().listDirectory(session.host, dir),
+            // Path completion needs a remote lister — SSH only.
+            listDir: session is SshSession
+                ? (dir) =>
+                    context.read<SshService>().listDirectory(session.host, dir)
+                : null,
             onSubmit: (cmd) {
               if (layout.broadcastEnabled) {
                 _broadcastCommand(allSessions, cmd, layout);
@@ -186,6 +194,23 @@ class SplitTerminalView extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  Widget _paneContent(BuildContext context, TerminalSession session) {
+    // Exhaustive over the known session types — a future third type must
+    // fail loudly here instead of being silently treated as SSH.
+    return switch (session) {
+      LocalSession() => LocalTerminalPane(
+          key: ValueKey(session.id),
+          session: session,
+          onRestart: () =>
+              context.read<SessionProvider>().restartLocalSession(session.id),
+        ),
+      SshSession() =>
+        SessionTerminalView(key: ValueKey(session.id), session: session),
+      _ => throw UnsupportedError(
+          'Unknown TerminalSession type: ${session.runtimeType}'),
+    };
   }
 }
 

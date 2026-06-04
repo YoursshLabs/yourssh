@@ -39,7 +39,8 @@ void main() {
 }
 
 String _tmpKeyFile() {
-  final f = File('/tmp/test_key_${DateTime.now().millisecondsSinceEpoch}');
+  final f = File('${Directory.systemTemp.path}${Platform.pathSeparator}'
+      'test_key_${DateTime.now().millisecondsSinceEpoch}');
   f.writeAsStringSync('placeholder');
   return f.path;
 }

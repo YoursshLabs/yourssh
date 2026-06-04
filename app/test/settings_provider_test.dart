@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/providers/settings_provider.dart';
@@ -57,5 +59,34 @@ void main() {
     final provider = SettingsProvider();
     await Future<void>.delayed(Duration.zero);
     expect(provider.reconnectAttempts, 0);
+  });
+
+  test('split_vertical default avoids the terminal paste combo', () async {
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.hotkeys['split_vertical'], 'ctrl+shift+e');
+  });
+
+  test('migrates saved split_vertical off ctrl+shift+v', () async {
+    SharedPreferences.setMockInitialValues({
+      'hotkeys': jsonEncode({
+        'new_session': 'ctrl+t',
+        'split_vertical': 'ctrl+shift+v',
+      }),
+    });
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.hotkeys['split_vertical'], 'ctrl+shift+e');
+    // Other saved hotkeys are untouched.
+    expect(provider.hotkeys['new_session'], 'ctrl+t');
+  });
+
+  test('keeps a user-chosen split_vertical binding', () async {
+    SharedPreferences.setMockInitialValues({
+      'hotkeys': jsonEncode({'split_vertical': 'ctrl+shift+d'}),
+    });
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.hotkeys['split_vertical'], 'ctrl+shift+d');
   });
 }

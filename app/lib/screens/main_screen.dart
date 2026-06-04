@@ -5,7 +5,9 @@ import 'package:provider/provider.dart';
 import '../services/workspace_service.dart';
 import '../models/host.dart';
 import '../models/known_host.dart';
+import '../models/local_session.dart';
 import '../models/ssh_session.dart';
+import '../models/terminal_session.dart';
 import '../models/session_health.dart';
 import '../services/health_monitor_service.dart';
 import '../providers/host_provider.dart';
@@ -21,9 +23,9 @@ import '../widgets/keychain_screen.dart';
 import '../widgets/known_hosts_screen.dart';
 import '../widgets/port_forwarding_screen.dart';
 import '../widgets/settings_screen.dart';
-import '../widgets/local_terminal_screen.dart';
 import '../widgets/network_stats_overlay.dart';
 import '../widgets/dual_panel_sftp_screen.dart';
+import '../widgets/keep_alive_offstage.dart';
 import '../widgets/split_terminal_view.dart';
 import '../widgets/new_group_panel.dart';
 import '../widgets/import_panel.dart';
@@ -49,7 +51,7 @@ import '../widgets/share_session_dialog.dart';
 import '../widgets/join_share_dialog.dart';
 import '../widgets/update_banner.dart';
 
-enum NavSection { hosts, keychain, portForwarding, sftp, localTerminal, knownHosts, recordings, settings, plugins }
+enum NavSection { hosts, keychain, portForwarding, sftp, knownHosts, recordings, settings, plugins }
 
 enum _SidePanel { none, host, newGroup, import }
 
@@ -97,7 +99,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     if (!mounted) return;
     context.read<RecordingProvider>().onStartFailed = (session, error) {
       if (!mounted) return;
-      AppSnack.error(context, 'Recording failed for ${session.host.label}: $error');
+      AppSnack.error(context, 'Recording failed for ${session.tabLabel}: $error');
     };
   }
 
@@ -237,12 +239,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   void _saveWorkspaceNow() {
-    final sessions = _sessionProvider?.sessions;
+    // SSH tabs only — local sessions are ephemeral by design.
+    final sessions = _sessionProvider?.sshSessions;
     final layout = _layoutProvider;
     if (sessions == null || layout == null) return;
+    final active = _sessionProvider?.activeSession;
     final snapshot = WorkspaceSnapshot(
       hostIds: sessions.map((s) => s.host.id).toList(),
-      activeHostId: _sessionProvider?.activeSession?.host.id,
+      activeHostId: active is SshSession ? active.host.id : null,
       layout: layout.layout,
       inputBarVisible: layout.inputBarVisible,
     );
@@ -275,6 +279,19 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _editingHost = existing;
       _initialGroup = initialGroup;
     });
+  }
+
+  /// Sidebar "Local Terminal" + command palette entry: focus the last local
+  /// tab if one exists (list order approximates recency), else open a new one.
+  void _openLocalTerminal() {
+    final provider = context.read<SessionProvider>();
+    final existing = provider.sessions.whereType<LocalSession>().lastOrNull;
+    if (existing != null) {
+      provider.setActive(existing.id);
+    } else {
+      unawaited(provider.newLocalSession());
+    }
+    setState(() => _viewingTerminal = true);
   }
 
   void _openNewGroupPanel() => setState(() {
@@ -331,7 +348,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
     // Sessions are added synchronously at connect() entry; set active now.
     if (snapshot.activeHostId != null) {
-      final targetSession = sessionProvider.sessions
+      final targetSession = sessionProvider.sshSessions
           .where((s) => s.host.id == snapshot.activeHostId)
           .firstOrNull;
       if (targetSession != null) {
@@ -414,7 +431,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         subtitle: 'Local shell',
         icon: Icons.laptop_mac,
         type: CommandType.navSection,
-        execute: () => setState(() { _nav = NavSection.localTerminal; _viewingTerminal = false; }),
+        execute: _openLocalTerminal,
       ),
       CommandItem(
         id: 'nav_recordings',
@@ -513,7 +530,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               _viewingTerminal = false;
               _showAiChat = false;
               if (s != NavSection.hosts) _closePanel();
-              if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
             }),
             onSessionTap: (_) => setState(() => _viewingTerminal = true),
             onAddSession: () {
@@ -523,9 +539,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 _nav = NavSection.hosts;
                 _viewingTerminal = false;
                 _showAiChat = false;
-                _sftpConnectionNotifier.value = false;
               });
               _openHostPanel();
+            },
+            onAddLocalSession: () {
+              setState(() => _viewingTerminal = true);
+              unawaited(context.read<SessionProvider>().newLocalSession());
             },
           ),
           UpdateBanner(
@@ -535,7 +554,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               _nav = NavSection.settings;
               _viewingTerminal = false;
               _showAiChat = false;
-              _sftpConnectionNotifier.value = false;
             }),
           ),
 
@@ -547,9 +565,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   _Sidebar(
                     selected: _nav,
                     activePluginId: _activePluginId,
+                    onOpenLocalTerminal: _openLocalTerminal,
                     onSelect: (s) {
                       if (s != NavSection.hosts) _closePanel();
-                      if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
                       setState(() {
                         _activePluginId = null;
                         _activeScriptPanel = null;
@@ -638,7 +656,30 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildContent(SshSession? active) {
+  Widget _buildContent(TerminalSession? active) {
+    final showSftp = _nav == NavSection.sftp &&
+        !(_viewingTerminal && active != null) &&
+        _activePluginId == null &&
+        _activeScriptPanel == null;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // SFTP stays mounted (offstage) once opened so its connected session,
+        // paths, and in-flight transfers survive switching tabs (issue #42).
+        KeepAliveOffstage(
+          active: showSftp,
+          child: DualPanelSftpScreen(
+            connectionNotifier: _sftpConnectionNotifier,
+            active: showSftp,
+          ),
+        ),
+        if (!showSftp) _buildForeground(active),
+      ],
+    );
+  }
+
+  Widget _buildForeground(TerminalSession? active) {
     if (_viewingTerminal && active != null) {
       return Row(
         children: [
@@ -654,8 +695,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     children: [
                       const NetworkStatsOverlay(),
                       const SizedBox(width: 8),
-                      _ShareButton(session: active),
-                      const SizedBox(width: 8),
+                      if (active is SshSession) ...[
+                        _ShareButton(session: active),
+                        const SizedBox(width: 8),
+                      ],
                       _AiChatToggle(
                         active: _showAiChat,
                         onToggle: () => setState(() => _showAiChat = !_showAiChat),
@@ -720,16 +763,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       NavSection.hosts => HostsDashboard(
           onAddHost: () => _openHostPanel(),
           onEditHost: (h) => _openHostPanel(existing: h),
-          onOpenLocalTerminal: () => setState(() => _nav = NavSection.localTerminal),
+          onOpenLocalTerminal: _openLocalTerminal,
           onNewGroup: _openNewGroupPanel,
           onImport: _openImportPanel,
         ),
       NavSection.keychain => const KeychainScreen(),
       NavSection.portForwarding => const PortForwardingScreen(),
-      NavSection.sftp => DualPanelSftpScreen(
-          connectionNotifier: _sftpConnectionNotifier,
-        ),
-      NavSection.localTerminal => const LocalTerminalScreen(),
+      // Rendered by the KeepAliveOffstage layer in _buildContent.
+      NavSection.sftp => const SizedBox.shrink(),
       NavSection.recordings => const RecordingLibraryScreen(),
       NavSection.knownHosts => const KnownHostsScreen(),
       NavSection.settings => const SettingsScreen(),
@@ -747,6 +788,7 @@ class _Sidebar extends StatelessWidget {
   final ValueChanged<NavSection> onSelect;
   final ValueChanged<String> onSelectPlugin;
   final ValueChanged<String> onSelectScriptPanel;
+  final VoidCallback onOpenLocalTerminal;
   const _Sidebar({
     required this.selected,
     required this.activePluginId,
@@ -754,6 +796,7 @@ class _Sidebar extends StatelessWidget {
     required this.onSelect,
     required this.onSelectPlugin,
     required this.onSelectScriptPanel,
+    required this.onOpenLocalTerminal,
   });
 
   @override
@@ -794,7 +837,13 @@ class _Sidebar extends StatelessWidget {
           _navItem(Icons.folder_open, 'SFTP', NavSection.sftp),
 
           const _SectionLabel('TOOLS'),
-          _navItem(Icons.laptop_mac, 'Local Terminal', NavSection.localTerminal),
+          // Action, not a nav target: local terminal lives in the top tab bar.
+          _NavItem(
+            icon: Icons.laptop_mac,
+            label: 'Local Terminal',
+            selected: false,
+            onTap: onOpenLocalTerminal,
+          ),
           _navItem(Icons.video_library_outlined, 'Recordings', NavSection.recordings),
           ...context.watch<PluginProvider>().enabledPlugins.map(
             (plugin) => _pluginNavItem(context, plugin),
@@ -996,13 +1045,14 @@ class _NavItemState extends State<_NavItem> {
 // ── Top Tab Bar ───────────────────────────────────────────
 
 class _TopTabBar extends StatelessWidget {
-  final List<SshSession> sessions;
-  final SshSession? active;
+  final List<TerminalSession> sessions;
+  final TerminalSession? active;
   final NavSection nav;
   final bool viewingTerminal;
   final ValueChanged<NavSection> onNavSelect;
   final ValueChanged<String> onSessionTap;
   final VoidCallback onAddSession;
+  final VoidCallback onAddLocalSession;
 
   const _TopTabBar({
     required this.sessions,
@@ -1012,6 +1062,7 @@ class _TopTabBar extends StatelessWidget {
     required this.onNavSelect,
     required this.onSessionTap,
     required this.onAddSession,
+    required this.onAddLocalSession,
   });
 
   @override
@@ -1064,7 +1115,7 @@ class _TopTabBar extends StatelessWidget {
             ),
           ),
           // "+" button
-          _AddTabBtn(onTap: onAddSession),
+          _AddTabBtn(onNewSsh: onAddSession, onNewLocal: onAddLocalSession),
         ],
       ),
     );
@@ -1128,7 +1179,7 @@ class _PinnedTabState extends State<_PinnedTab> {
 }
 
 class _SessionTab extends StatefulWidget {
-  final SshSession session;
+  final TerminalSession session;
   final bool isActive;
   final SessionProvider provider;
   final VoidCallback onTap;
@@ -1334,21 +1385,29 @@ class _SessionTabState extends State<_SessionTab> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Connection health dot (hidden for watch sessions)
-              if (!widget.session.isWatch)
+              // Connection health dot for SSH (hidden for watch sessions);
+              // laptop glyph for local tabs.
+              if (widget.session case final SshSession ssh
+                  when !ssh.isWatch)
                 Builder(builder: (context) {
                   final health = context
                       .watch<HealthMonitorService>()
-                      .healthFor(widget.session.host.id);
-                  final tone = badgeToneFor(widget.session.status, health);
+                      .healthFor(ssh.host.id);
+                  final tone = badgeToneFor(ssh.status, health);
                   return Padding(
                     padding: const EdgeInsets.only(right: 5),
                     child: Tooltip(
-                      message: _healthTooltip(widget.session, health),
+                      message: _healthTooltip(ssh, health),
                       child: HealthDot(tone: tone),
                     ),
                   );
-                }),
+                })
+              else if (widget.session.isLocal)
+                const Padding(
+                  padding: EdgeInsets.only(right: 5),
+                  child: Icon(Icons.laptop_mac,
+                      size: 12, color: Color(0xFF888888)),
+                ),
               // Red recording indicator
               Consumer<RecordingProvider>(
                 builder: (context, rec, _) => rec.isRecording(widget.session.id)
@@ -1447,8 +1506,9 @@ class _SessionTabState extends State<_SessionTab> {
 }
 
 class _AddTabBtn extends StatefulWidget {
-  final VoidCallback onTap;
-  const _AddTabBtn({required this.onTap});
+  final VoidCallback onNewSsh;
+  final VoidCallback onNewLocal;
+  const _AddTabBtn({required this.onNewSsh, required this.onNewLocal});
 
   @override
   State<_AddTabBtn> createState() => _AddTabBtnState();
@@ -1457,13 +1517,51 @@ class _AddTabBtn extends StatefulWidget {
 class _AddTabBtnState extends State<_AddTabBtn> {
   bool _hovered = false;
 
+  Future<void> _showAddMenu() async {
+    final box = context.findRenderObject() as RenderBox;
+    final origin = box.localToGlobal(Offset(0, box.size.height));
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+          origin.dx, origin.dy, origin.dx + 1, origin.dy + 1),
+      color: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      items: [
+        const PopupMenuItem(
+          value: 'ssh',
+          child: Row(children: [
+            Icon(Icons.dns_outlined, size: 14, color: Color(0xFFAAAAAA)),
+            SizedBox(width: 8),
+            Text('New SSH session',
+                style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
+          ]),
+        ),
+        const PopupMenuItem(
+          value: 'local',
+          child: Row(children: [
+            Icon(Icons.laptop_mac, size: 14, color: Color(0xFFAAAAAA)),
+            SizedBox(width: 8),
+            Text('New local terminal',
+                style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
+          ]),
+        ),
+      ],
+    );
+    switch (result) {
+      case 'ssh':
+        widget.onNewSsh();
+      case 'local':
+        widget.onNewLocal();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: _showAddMenu,
         child: Container(
           width: 36,
           height: 38,

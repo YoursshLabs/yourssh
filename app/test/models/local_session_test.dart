@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';
 import 'package:yourssh/models/local_session.dart';
+import 'package:yourssh/models/terminal_session.dart';
 import 'package:yourssh/services/pty_runner.dart';
 
 class FakePtyRunner implements PtyRunner {
@@ -60,6 +61,28 @@ void main() {
       final a = LocalSession(terminal: Terminal());
       final b = LocalSession(terminal: Terminal());
       expect(a.id, isNot(equals(b.id)));
+    });
+
+    test('tabLabel defaults to "Local N" with increasing N', () {
+      final a = LocalSession(terminal: Terminal());
+      final b = LocalSession(terminal: Terminal());
+      final re = RegExp(r'^Local (\d+)$');
+      final ma = re.firstMatch(a.tabLabel)!;
+      final mb = re.firstMatch(b.tabLabel)!;
+      expect(int.parse(mb.group(1)!), int.parse(ma.group(1)!) + 1);
+    });
+
+    test('customLabel overrides default tabLabel', () {
+      final s = LocalSession(terminal: Terminal());
+      s.customLabel = 'build box';
+      expect(s.tabLabel, 'build box');
+    });
+
+    test('implements TerminalSession with isLocal true', () {
+      final TerminalSession s = LocalSession(terminal: Terminal());
+      expect(s.isLocal, isTrue);
+      expect(s.isPinned, isFalse);
+      expect(s.colorTag, isNull);
     });
   });
 }

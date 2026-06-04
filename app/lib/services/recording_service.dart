@@ -6,6 +6,12 @@ import 'package:flutter/foundation.dart';
 class RecordingService {
   final Map<String, _ActiveRecording> _active = {};
 
+  /// Fired whenever a recording stops, including stops the provider did not
+  /// initiate (shell exit/disconnect via [onShellClosed]). Without this the
+  /// provider's REC indicator stays red while [writeOutput] silently no-ops.
+  /// Wired by RecordingProvider's constructor.
+  void Function(String sessionId)? onRecordingStopped;
+
   bool isRecording(String sessionId) => _active.containsKey(sessionId);
 
   Future<void> startRecording(
@@ -52,6 +58,9 @@ class RecordingService {
     final rec = _active.remove(sessionId);
     if (rec == null) return null;
     rec.stopwatch.stop();
+    // Notify as soon as the recording leaves _active — the sink flush below
+    // is async and the UI must not show a red REC indicator meanwhile.
+    onRecordingStopped?.call(sessionId);
     await rec.sink.flush();
     await rec.sink.close();
     return rec.filePath;

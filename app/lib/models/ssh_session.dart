@@ -1,12 +1,15 @@
 import 'package:uuid/uuid.dart';
 import 'package:xterm/xterm.dart';
 import 'host.dart';
+import 'terminal_session.dart';
 
 enum SessionStatus { connecting, connected, disconnected, error }
 
-class SshSession {
+class SshSession implements TerminalSession {
+  @override
   final String id;
   final Host host;
+  @override
   final Terminal terminal;
   SessionStatus status;
   String? errorMessage;
@@ -14,8 +17,11 @@ class SshSession {
   final String? initialCommand;
   final bool isWatch;
   final String? watchedTitle;
+  @override
   String? customLabel;
+  @override
   String? colorTag;
+  @override
   bool isPinned;
 
   /// Number of reconnect attempts scheduled during this session's lifetime.
@@ -59,7 +65,17 @@ class SshSession {
 
   /// Label shown on the session tab: the user's custom rename, falling back to
   /// the host's display label (the watch factory stores '[WATCH] …' there).
+  @override
   String get tabLabel => customLabel ?? host.label;
+
+  @override
+  bool get isLocal => false;
+
+  @override
+  String get recordingFolder => '${host.username}@${host.host}';
+
+  @override
+  String get recordingTitle => '${host.username}@${host.host}';
 
   String get statusLabel => switch (status) {
         SessionStatus.connecting => 'Connecting...',

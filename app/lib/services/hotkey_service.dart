@@ -25,6 +25,29 @@ class HotkeyService {
     _registered.clear();
   }
 
+  /// Whether [event] matches a registered hotkey combo.
+  ///
+  /// In-app hotkeys fire at the [HardwareKeyboard] layer, which runs before
+  /// focus dispatch but does not consume the event — terminal views call this
+  /// from their key handler to swallow the keystroke so it never reaches the
+  /// shell as a control sequence (e.g. Ctrl+T also typing ^T).
+  bool shouldSwallowKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    if (_registered.isEmpty) return false;
+    // Mirrors hotkey_manager's in-app matcher: logical key equality plus an
+    // exact modifier-set match derived from the physical keys held down.
+    final pressed = HardwareKeyboard.instance.physicalKeysPressed;
+    final heldModifiers = HotKeyModifier.values
+        .where((m) => m.physicalKeys.any(pressed.contains))
+        .toList();
+    return _registered.values.any((hotKey) {
+      final modifiers = hotKey.modifiers ?? const [];
+      return hotKey.logicalKey == event.logicalKey &&
+          heldModifiers.length == modifiers.length &&
+          heldModifiers.every(modifiers.contains);
+    });
+  }
+
   /// Parses a hotkey string like "ctrl+t", "ctrl+shift+tab", "ctrl+shift+i"
   /// Returns null if the string cannot be parsed.
   static HotKey? parse(String combo) {
@@ -54,7 +77,10 @@ class HotkeyService {
     }
 
     if (key == null) return null;
-    return HotKey(key: key, modifiers: modifiers);
+    // In-app scope: these are all app-local actions, and the default system
+    // scope grabs the combos OS-wide (keybinder/XGrabKey on Linux, which also
+    // fails outright on Wayland — issue #46).
+    return HotKey(key: key, modifiers: modifiers, scope: HotKeyScope.inapp);
   }
 
   static const Map<String, LogicalKeyboardKey> _keyMap = {

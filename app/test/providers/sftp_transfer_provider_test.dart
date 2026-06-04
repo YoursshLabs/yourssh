@@ -54,6 +54,49 @@ void main() {
       expect(p.isCancelled, false);
     });
 
+    test('startBatch appends while a batch is still transferring', () {
+      final p = SftpTransferProvider();
+      p.startBatch([
+        SftpTransferItem(id: '1', fileName: 'a.txt', direction: TransferDirection.upload)
+          ..status = TransferStatus.inProgress,
+      ]);
+      p.startBatch([
+        SftpTransferItem(id: '2', fileName: 'b.txt', direction: TransferDirection.upload),
+      ]);
+      expect(p.items.map((i) => i.id), ['1', '2'],
+          reason: 'a running batch must not be clobbered by a new one');
+    });
+
+    test('startBatch replaces the list when the previous batch finished', () {
+      final p = SftpTransferProvider();
+      p.startBatch([
+        SftpTransferItem(id: '1', fileName: 'a.txt', direction: TransferDirection.upload)
+          ..status = TransferStatus.done,
+      ]);
+      p.startBatch([
+        SftpTransferItem(id: '2', fileName: 'b.txt', direction: TransferDirection.upload),
+      ]);
+      expect(p.items.map((i) => i.id), ['2']);
+    });
+
+    test('cancel marks unfinished items skipped so isTransferring releases',
+        () {
+      final p = SftpTransferProvider();
+      p.startBatch([
+        SftpTransferItem(id: '1', fileName: 'a.txt', direction: TransferDirection.upload)
+          ..status = TransferStatus.done,
+        SftpTransferItem(id: '2', fileName: 'b.txt', direction: TransferDirection.upload)
+          ..status = TransferStatus.inProgress,
+        SftpTransferItem(id: '3', fileName: 'c.txt', direction: TransferDirection.upload),
+      ]);
+      p.cancel();
+      expect(p.items[0].status, TransferStatus.done);
+      expect(p.items[1].status, TransferStatus.skipped);
+      expect(p.items[2].status, TransferStatus.skipped);
+      expect(p.isTransferring, isFalse,
+          reason: 'a cancelled batch must not latch isTransferring');
+    });
+
     test('completedCount counts done and skipped items', () {
       final p = SftpTransferProvider();
       p.startBatch([

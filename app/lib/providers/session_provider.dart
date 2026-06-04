@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/host.dart';
+import '../models/local_session.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
+import '../models/terminal_session.dart';
+import '../services/local_shell_service.dart';
 import '../services/ssh_service.dart';
 import '../services/tab_metadata_service.dart';
 
 class SessionProvider extends ChangeNotifier {
   final SshService _ssh;
   final TabMetadataService _tabMetadata;
-  final List<SshSession> _sessions = [];
+  final List<TerminalSession> _sessions = [];
   final Map<String, Timer> _reconnectTimers = {};
   final Map<String, Timer> _countdownTimers = {};
   String? _activeSessionId;
@@ -22,6 +25,17 @@ class SessionProvider extends ChangeNotifier {
   Future<bool> Function(String host, int port, String keyType, Uint8List fp)? hostKeyVerifier;
   Future<void> Function(String hostId, String os)? onOsDetected;
   Future<void> Function(SshSession session)? recordingStart;
+
+  /// Set by main.dart; required for newLocalSession/restartLocalSession.
+  /// The setter wires the service's out-of-band state changes (PTY exit,
+  /// spawn failure) into this provider's notify, so panes rebuild into the
+  /// "Shell exited / Restart shell" view without an unrelated trigger.
+  LocalShellService? get localShell => _localShell;
+  LocalShellService? _localShell;
+  set localShell(LocalShellService? service) {
+    _localShell = service;
+    service?.onSessionStateChanged = _safeNotify;
+  }
 
   SessionProvider(this._ssh, this._tabMetadata);
 
@@ -45,17 +59,29 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<SshSession> get sessions => _sessions;
+  List<TerminalSession> get sessions => _sessions;
+
+  /// SSH-only consumers (plugin context, devops tools, sync, workspace save).
+  List<SshSession> get sshSessions =>
+      _sessions.whereType<SshSession>().toList();
 
   Host? hostForSession(String sessionId) =>
-      _sessions.where((s) => s.id == sessionId).firstOrNull?.host;
+      sshSessions.where((s) => s.id == sessionId).firstOrNull?.host;
 
-  SshSession? get activeSession => _sessions.isEmpty
+  TerminalSession? get activeSession => _sessions.isEmpty
       ? null
       : _sessions.firstWhere(
           (s) => s.id == _activeSessionId,
           orElse: () => _sessions.last,
         );
+
+  /// The active session when it is SSH, else the most recent SSH session.
+  /// Used by screens that need *an* SSH target (devops tools, MCP, share).
+  SshSession? get activeSshSession {
+    final active = activeSession;
+    if (active is SshSession) return active;
+    return sshSessions.lastOrNull;
+  }
 
   void setActive(String sessionId) {
     _activeSessionId = sessionId;
@@ -191,10 +217,38 @@ class SessionProvider extends ChangeNotifier {
     });
   }
 
+  Future<void> newLocalSession() async {
+    final shell = localShell;
+    if (shell == null) return;
+    final session = await shell.openShell();
+    _sessions.add(session);
+    _activeSessionId = session.id;
+    _safeNotify();
+  }
+
+  Future<void> restartLocalSession(String sessionId) async {
+    final session = _sessionById(sessionId);
+    if (session is! LocalSession) return;
+    await localShell?.restartShell(session);
+    _safeNotify();
+  }
+
   void closeSession(String sessionId) {
+    final session = _sessions.where((s) => s.id == sessionId).firstOrNull;
+    if (session is LocalSession) {
+      localShell?.closeSession(sessionId);
+      _sessions.remove(session);
+      if (_activeSessionId == sessionId) {
+        _activeSessionId = _sessions.isNotEmpty ? _sessions.last.id : null;
+      }
+      _safeNotify();
+      return;
+    }
+
     _reconnectTimers.remove(sessionId)?.cancel();
     _countdownTimers.remove(sessionId)?.cancel();
-    final hostId = _sessions.where((s) => s.id == sessionId).firstOrNull?.host.id;
+    final hostId =
+        sshSessions.where((s) => s.id == sessionId).firstOrNull?.host.id;
 
     _ssh.disconnectSession(sessionId);
     _sessions.removeWhere((s) => s.id == sessionId);
@@ -203,7 +257,7 @@ class SessionProvider extends ChangeNotifier {
     }
 
     // If no more sessions for this host remain, tear down the SSH client and jump client.
-    if (hostId != null && !_sessions.any((s) => s.host.id == hostId)) {
+    if (hostId != null && !sshSessions.any((s) => s.host.id == hostId)) {
       _ssh.disconnect(hostId);
     }
 
@@ -222,7 +276,8 @@ class SessionProvider extends ChangeNotifier {
   }
 
   void removeWatchSession(String sessionId) {
-    _sessions.removeWhere((s) => s.id == sessionId && s.isWatch);
+    _sessions.removeWhere(
+        (s) => s.id == sessionId && s is SshSession && s.isWatch);
     if (_activeSessionId == sessionId) {
       _activeSessionId = _sessions.isNotEmpty ? _sessions.last.id : null;
     }
@@ -245,7 +300,7 @@ class SessionProvider extends ChangeNotifier {
     _safeNotify();
   }
 
-  SshSession? _sessionById(String id) =>
+  TerminalSession? _sessionById(String id) =>
       _sessions.where((s) => s.id == id).firstOrNull;
 
   /// Persists a session's tab metadata and mirrors it onto any other live
@@ -257,7 +312,7 @@ class SessionProvider extends ChangeNotifier {
         label: session.customLabel,
         color: session.colorTag,
         pinned: session.isPinned);
-    for (final s in _sessions) {
+    for (final s in sshSessions) {
       if (!identical(s, session) && s.host.id == session.host.id) {
         s.customLabel = session.customLabel;
         s.colorTag = session.colorTag;
@@ -270,7 +325,7 @@ class SessionProvider extends ChangeNotifier {
     final session = _sessionById(sessionId);
     if (session == null) return;
     session.customLabel = label;
-    _persistTabMetadata(session);
+    if (session is SshSession) _persistTabMetadata(session);
     _safeNotify();
   }
 
@@ -278,7 +333,7 @@ class SessionProvider extends ChangeNotifier {
     final session = _sessionById(sessionId);
     if (session == null) return;
     session.colorTag = colorHex;
-    _persistTabMetadata(session);
+    if (session is SshSession) _persistTabMetadata(session);
     _safeNotify();
   }
 
@@ -286,7 +341,7 @@ class SessionProvider extends ChangeNotifier {
     final session = _sessionById(sessionId);
     if (session == null) return;
     session.isPinned = !session.isPinned;
-    _persistTabMetadata(session);
+    if (session is SshSession) _persistTabMetadata(session);
     _sortSessions();
     _safeNotify();
   }

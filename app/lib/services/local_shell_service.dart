@@ -7,6 +7,7 @@ import 'package:xterm/xterm.dart';
 import '../models/local_session.dart';
 import 'notification_service.dart';
 import 'pty_runner.dart';
+import 'recording_service.dart';
 
 typedef PtyFactory = PtyRunner Function(
   String shell,
@@ -18,6 +19,17 @@ typedef PtyFactory = PtyRunner Function(
 class LocalShellService {
   final Map<String, LocalSession> _sessions = {};
   final PtyFactory _ptyFactory;
+
+  /// Passive intercept (same pattern as SshService): set by main.dart,
+  /// no-ops when the session is not being recorded.
+  RecordingService? recordingService;
+
+  /// Fired whenever a session's status changes outside a provider call
+  /// (PTY exit, spawn failure). LocalSession is not observable, so without
+  /// this the UI never learns the shell died and the "Restart shell" view
+  /// stays unreachable. Wired to SessionProvider's notify by its
+  /// `localShell` setter.
+  void Function()? onSessionStateChanged;
 
   LocalShellService({PtyFactory? ptyFactory})
       : _ptyFactory = ptyFactory ?? _defaultFactory;
@@ -45,7 +57,22 @@ class LocalShellService {
   Future<LocalSession> openShell() async {
     final terminal = Terminal(maxLines: 10000);
     final session = LocalSession(terminal: terminal);
+    _sessions[session.id] = session;
+    _spawnPty(session);
+    return session;
+  }
 
+  /// Re-runs the PTY spawn on an exited/errored session, reusing its terminal
+  /// (and scrollback). Used by the local pane's "Restart shell" button.
+  Future<void> restartShell(LocalSession session) async {
+    if (session.status == LocalSessionStatus.running) return;
+    session.status = LocalSessionStatus.running;
+    session.errorMessage = null;
+    _spawnPty(session);
+  }
+
+  void _spawnPty(LocalSession session) {
+    final terminal = session.terminal;
     final shell =
         resolveShell(Platform.environment, isWindows: Platform.isWindows);
 
@@ -58,12 +85,12 @@ class LocalShellService {
       );
 
       session.attachPty(pty);
-      _sessions[session.id] = session;
 
       pty.output
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen((data) {
             terminal.write(data);
+            recordingService?.writeOutput(session.id, data);
             try {
               NotificationService.instance.onTerminalData(
                 data,
@@ -86,17 +113,19 @@ class LocalShellService {
       pty.exitCode.then((code) {
         session.status = LocalSessionStatus.exited;
         terminal.write('\r\n[Process exited with code $code]\r\n');
+        recordingService?.onShellClosed(session.id);
         NotificationService.instance.removeSession(session.id);
+        onSessionStateChanged?.call();
       });
     } catch (e) {
       session.status = LocalSessionStatus.error;
       session.errorMessage = e.toString();
+      onSessionStateChanged?.call();
     }
-
-    return session;
   }
 
   void closeSession(String sessionId) {
+    recordingService?.onShellClosed(sessionId);
     _sessions[sessionId]?.kill();
     _sessions.remove(sessionId);
     NotificationService.instance.removeSession(sessionId);

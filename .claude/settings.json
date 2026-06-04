@@ -1,5 +1,19 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(gh pr *)",
+            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // \"\"'); if echo \"$cmd\" | grep -q 'gh pr create'; then git fetch origin master --quiet 2>/dev/null; behind=$(git rev-list --count HEAD..origin/master 2>/dev/null); behind=${behind:-0}; if [ \"$behind\" -gt 0 ]; then jq -n --arg b \"$behind\" '{hookSpecificOutput:{hookEventName:\"PreToolUse\",permissionDecision:\"deny\",permissionDecisionReason:(\"Branch is behind origin/master by \" + $b + \" commit(s). Rebase onto latest master first: git fetch origin master && git rebase origin/master, resolve any conflicts, verify build/tests, then retry gh pr create.\")}}'; fi; fi",
+            "timeout": 30,
+            "statusMessage": "Checking branch is rebased on latest master..."
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Bash",

@@ -5,11 +5,20 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import '../models/local_entry.dart';
 import '../providers/local_file_panel_provider.dart';
+import 'path_breadcrumb.dart';
 
 class LocalFilePanel extends StatefulWidget {
   final LocalFilePanelProvider provider;
 
-  const LocalFilePanel({super.key, required this.provider});
+  /// When set, shows a "Local" source chip next to the breadcrumb that
+  /// opens the panel's source picker (two-panel SFTP layout).
+  final VoidCallback? onChangeSource;
+
+  const LocalFilePanel({
+    super.key,
+    required this.provider,
+    this.onChangeSource,
+  });
 
   @override
   State<LocalFilePanel> createState() => _LocalFilePanelState();
@@ -27,7 +36,11 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
   // ── Actions ─────────────────────────────────────────────
 
   Future<void> _createFolder() async {
-    final name = await _showInputDialog(context, title: 'New Folder', hint: 'Folder name');
+    final name = await _showInputDialog(
+      context,
+      title: 'New Folder',
+      hint: 'Folder name',
+    );
     if (name == null || name.trim().isEmpty) return;
     final newPath = p.join(widget.provider.currentPath, name.trim());
     try {
@@ -42,9 +55,17 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
     final selected = widget.provider.selectedEntries;
     if (selected.length != 1) return;
     final entry = selected.first;
-    final newName = await _showInputDialog(context,
-        title: 'Rename', hint: 'New name', initial: entry.name);
-    if (newName == null || newName.trim().isEmpty || newName.trim() == entry.name) return;
+    final newName = await _showInputDialog(
+      context,
+      title: 'Rename',
+      hint: 'New name',
+      initial: entry.name,
+    );
+    if (newName == null ||
+        newName.trim().isEmpty ||
+        newName.trim() == entry.name) {
+      return;
+    }
     final newPath = p.join(p.dirname(entry.path), newName.trim());
     try {
       if (entry.isDirectory) {
@@ -73,7 +94,10 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF888888))),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Color(0xFF888888)),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -99,7 +123,10 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: const Color(0xFF2A1A1A)),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFF2A1A1A),
+      ),
     );
   }
 
@@ -130,13 +157,45 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          const Icon(Icons.computer, size: 14, color: Color(0xFF888888)),
-          const SizedBox(width: 6),
-          const Text('Local',
+          if (widget.onChangeSource != null)
+            // Clickable source chip (two-panel layout): switch this slot
+            // between Local and any saved host.
+            GestureDetector(
+              onTap: widget.onChangeSource,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E1E),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFF2A2A2A)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.laptop_mac, size: 11, color: Color(0xFF22C55E)),
+                    SizedBox(width: 4),
+                    Text(
+                      'Local',
+                      style: TextStyle(color: Color(0xFF22C55E), fontSize: 12),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.unfold_more, size: 11, color: Color(0xFF555555)),
+                  ],
+                ),
+              ),
+            )
+          else ...[
+            const Icon(Icons.computer, size: 14, color: Color(0xFF888888)),
+            const SizedBox(width: 6),
+            const Text(
+              'Local',
               style: TextStyle(
-                  color: Color(0xFFD4D4D4),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600)),
+                color: Color(0xFFD4D4D4),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
           const Spacer(),
           _HeaderButton(
             label: 'Filter',
@@ -147,8 +206,9 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
           PopupMenuButton<String>(
             color: const Color(0xFF1E1E1E),
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-                side: const BorderSide(color: Color(0xFF2A2A2A))),
+              borderRadius: BorderRadius.circular(6),
+              side: const BorderSide(color: Color(0xFF2A2A2A)),
+            ),
             tooltip: '',
             offset: const Offset(0, 36),
             onSelected: (v) {
@@ -157,11 +217,24 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
               if (v == 'delete') _deleteSelected();
             },
             itemBuilder: (_) => [
-              _menuItem('new_folder', Icons.create_new_folder_outlined, 'New Folder'),
-              _menuItem('rename', Icons.drive_file_rename_outline, 'Rename',
-                  enabled: prov.selectedEntries.length == 1),
-              _menuItem('delete', Icons.delete_outline, 'Delete',
-                  enabled: prov.selectedEntries.isNotEmpty, isDestructive: true),
+              _menuItem(
+                'new_folder',
+                Icons.create_new_folder_outlined,
+                'New Folder',
+              ),
+              _menuItem(
+                'rename',
+                Icons.drive_file_rename_outline,
+                'Rename',
+                enabled: prov.selectedEntries.length == 1,
+              ),
+              _menuItem(
+                'delete',
+                Icons.delete_outline,
+                'Delete',
+                enabled: prov.selectedEntries.isNotEmpty,
+                isDestructive: true,
+              ),
             ],
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
@@ -170,12 +243,21 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
                 borderRadius: BorderRadius.circular(5),
                 border: Border.all(color: const Color(0xFF2A2A2A)),
               ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: const [
-                Text('Actions',
-                    style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 12)),
-                SizedBox(width: 4),
-                Icon(Icons.keyboard_arrow_down, size: 14, color: Color(0xFF888888)),
-              ]),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Text(
+                    'Actions',
+                    style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 12),
+                  ),
+                  SizedBox(width: 4),
+                  Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 14,
+                    color: Color(0xFF888888),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -183,29 +265,41 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
     );
   }
 
-  PopupMenuItem<String> _menuItem(String value, IconData icon, String label,
-      {bool enabled = true, bool isDestructive = false}) {
+  PopupMenuItem<String> _menuItem(
+    String value,
+    IconData icon,
+    String label, {
+    bool enabled = true,
+    bool isDestructive = false,
+  }) {
     return PopupMenuItem<String>(
       value: value,
       enabled: enabled,
-      child: Row(children: [
-        Icon(icon,
+      child: Row(
+        children: [
+          Icon(
+            icon,
             size: 14,
             color: isDestructive
                 ? Colors.red
                 : enabled
-                    ? const Color(0xFFD4D4D4)
-                    : const Color(0xFF444444)),
-        const SizedBox(width: 8),
-        Text(label,
+                ? const Color(0xFFD4D4D4)
+                : const Color(0xFF444444),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
             style: TextStyle(
-                fontSize: 13,
-                color: isDestructive
-                    ? Colors.red
-                    : enabled
-                        ? const Color(0xFFD4D4D4)
-                        : const Color(0xFF444444))),
-      ]),
+              fontSize: 13,
+              color: isDestructive
+                  ? Colors.red
+                  : enabled
+                  ? const Color(0xFFD4D4D4)
+                  : const Color(0xFF444444),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -219,21 +313,29 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
         decoration: InputDecoration(
           hintText: 'Filter by name…',
           hintStyle: const TextStyle(color: Color(0xFF444444), fontSize: 13),
-          prefixIcon:
-              const Icon(Icons.search, size: 15, color: Color(0xFF555555)),
+          prefixIcon: const Icon(
+            Icons.search,
+            size: 15,
+            color: Color(0xFF555555),
+          ),
           filled: true,
           fillColor: const Color(0xFF1E1E1E),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 8,
+          ),
           border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: Color(0xFF2A2A2A))),
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+          ),
           enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: Color(0xFF2A2A2A))),
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+          ),
           focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: Color(0xFF22C55E))),
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFF22C55E)),
+          ),
         ),
         onChanged: prov.setFilterQuery,
       ),
@@ -249,56 +351,34 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
       child: Row(
         children: [
           IconButton(
-            icon: Icon(Icons.chevron_left,
-                size: 16,
-                color: prov.canGoBack
-                    ? const Color(0xFF888888)
-                    : const Color(0xFF333333)),
+            icon: Icon(
+              Icons.chevron_left,
+              size: 16,
+              color: prov.canGoBack
+                  ? const Color(0xFF888888)
+                  : const Color(0xFF333333),
+            ),
             onPressed: prov.canGoBack ? prov.goBack : null,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
           ),
           IconButton(
-            icon: Icon(Icons.chevron_right,
-                size: 16,
-                color: prov.canGoForward
-                    ? const Color(0xFF888888)
-                    : const Color(0xFF333333)),
+            icon: Icon(
+              Icons.chevron_right,
+              size: 16,
+              color: prov.canGoForward
+                  ? const Color(0xFF888888)
+                  : const Color(0xFF333333),
+            ),
             onPressed: prov.canGoForward ? prov.goForward : null,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
           ),
           const SizedBox(width: 2),
           Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (int i = 0; i < crumbs.length; i++) ...[
-                    if (i > 0)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 2),
-                        child: Icon(Icons.chevron_right,
-                            size: 13, color: Color(0xFF444444)),
-                      ),
-                    GestureDetector(
-                      onTap: () => prov.loadDirectory(crumbs[i].path),
-                      child: Text(
-                        crumbs[i].label,
-                        style: TextStyle(
-                          color: i == crumbs.length - 1
-                              ? const Color(0xFFD4D4D4)
-                              : const Color(0xFF666666),
-                          fontSize: 12,
-                          fontWeight: i == crumbs.length - 1
-                              ? FontWeight.w500
-                              : FontWeight.normal,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+            child: PathBreadcrumb(
+              crumbs: crumbs,
+              onNavigate: prov.loadDirectory,
             ),
           ),
           IconButton(
@@ -321,26 +401,33 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
         children: [
           Expanded(
             flex: 5,
-            child: Text('Name',
-                style: TextStyle(color: Color(0xFF555555), fontSize: 11)),
+            child: Text(
+              'Name',
+              style: TextStyle(color: Color(0xFF555555), fontSize: 11),
+            ),
           ),
           Expanded(
             flex: 3,
-            child: Text('Date Modified',
-                style: TextStyle(color: Color(0xFF555555), fontSize: 11)),
+            child: Text(
+              'Date Modified',
+              style: TextStyle(color: Color(0xFF555555), fontSize: 11),
+            ),
           ),
           SizedBox(
             width: 70,
-            child: Text('Size',
-                style: TextStyle(
-                    color: Color(0xFF555555), fontSize: 11),
-                textAlign: TextAlign.right),
+            child: Text(
+              'Size',
+              style: TextStyle(color: Color(0xFF555555), fontSize: 11),
+              textAlign: TextAlign.right,
+            ),
           ),
           SizedBox(width: 8),
           SizedBox(
             width: 70,
-            child: Text('Kind',
-                style: TextStyle(color: Color(0xFF555555), fontSize: 11)),
+            child: Text(
+              'Kind',
+              style: TextStyle(color: Color(0xFF555555), fontSize: 11),
+            ),
           ),
         ],
       ),
@@ -350,25 +437,36 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
   Widget _buildContent(LocalFilePanelProvider prov) {
     if (prov.loadState == LocalFilePanelLoadState.loading) {
       return const Center(
-          child: CircularProgressIndicator(color: Color(0xFF22C55E)));
+        child: CircularProgressIndicator(color: Color(0xFF22C55E)),
+      );
     }
     if (prov.loadState == LocalFilePanelLoadState.error) {
       return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.error_outline, color: Colors.red, size: 28),
-          const SizedBox(height: 8),
-          Text(prov.errorMessage ?? 'Error',
-              style:
-                  const TextStyle(color: Colors.red, fontSize: 12),
-              textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          TextButton.icon(
-            onPressed: prov.reload,
-            icon: const Icon(Icons.refresh, size: 14, color: Color(0xFF888888)),
-            label: const Text('Retry',
-                style: TextStyle(color: Color(0xFF888888), fontSize: 12)),
-          ),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 28),
+            const SizedBox(height: 8),
+            Text(
+              prov.errorMessage ?? 'Error',
+              style: const TextStyle(color: Colors.red, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: prov.reload,
+              icon: const Icon(
+                Icons.refresh,
+                size: 14,
+                color: Color(0xFF888888),
+              ),
+              label: const Text(
+                'Retry',
+                style: TextStyle(color: Color(0xFF888888), fontSize: 12),
+              ),
+            ),
+          ],
+        ),
       );
     }
     final entries = prov.filteredEntries;
@@ -380,43 +478,87 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
         ),
       );
     }
-    return ListView.builder(
-      itemCount: entries.length,
-      itemBuilder: (_, i) {
-        final entry = entries[i];
-        return _LocalEntryRow(
-          entry: entry,
-          selected: prov.selectedEntries.contains(entry),
-          onTap: () {
-            final isMulti = HardwareKeyboard.instance.isMetaPressed ||
-                HardwareKeyboard.instance.isControlPressed;
-            if (isMulti) {
-              prov.toggleSelection(entry);
-            } else {
-              prov.selectOnly(entry);
-            }
-          },
-          onDoubleTap: () {
-            if (entry.isDirectory) prov.loadDirectory(entry.path);
-          },
-          onSecondaryTap: (pos) {
-            prov.selectOnly(entry);
-            _showContextMenu(entry, prov, pos);
-          },
-        );
-      },
+    return Column(
+      children: [
+        // Select-all header — parity with the remote SFTP panel.
+        Container(
+          color: const Color(0xFF141414),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            children: [
+              Checkbox(
+                key: const Key('local_select_all'),
+                value: prov.isAllSelected,
+                tristate: true,
+                onChanged: (_) =>
+                    prov.isAllSelected ? prov.deselectAll() : prov.selectAll(),
+                side: const BorderSide(color: Color(0xFF444444)),
+                activeColor: const Color(0xFF22C55E),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+              Text(
+                prov.selectedEntries.isEmpty
+                    ? '${entries.length} items'
+                    : '${prov.selectedEntries.length} selected',
+                style: const TextStyle(color: Color(0xFF555555), fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: entries.length,
+            itemBuilder: (_, i) {
+              final entry = entries[i];
+              return _LocalEntryRow(
+                entry: entry,
+                selected: prov.selectedEntries.contains(entry),
+                onToggleSelect: () => prov.toggleSelection(entry),
+                onTap: () {
+                  final isMulti =
+                      HardwareKeyboard.instance.isMetaPressed ||
+                      HardwareKeyboard.instance.isControlPressed;
+                  if (isMulti) {
+                    prov.toggleSelection(entry);
+                  } else {
+                    prov.selectOnly(entry);
+                  }
+                },
+                onDoubleTap: () {
+                  if (entry.isDirectory) prov.loadDirectory(entry.path);
+                },
+                onSecondaryTap: (pos) {
+                  prov.selectOnly(entry);
+                  _showContextMenu(entry, prov, pos);
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
-  void _showContextMenu(LocalEntry entry, LocalFilePanelProvider prov, Offset pos) {
+  void _showContextMenu(
+    LocalEntry entry,
+    LocalFilePanelProvider prov,
+    Offset pos,
+  ) {
     final size = MediaQuery.of(context).size;
     showMenu(
       context: context,
-      position: RelativeRect.fromLTRB(pos.dx, pos.dy, size.width - pos.dx, size.height - pos.dy),
+      position: RelativeRect.fromLTRB(
+        pos.dx,
+        pos.dy,
+        size.width - pos.dx,
+        size.height - pos.dy,
+      ),
       color: const Color(0xFF1E1E1E),
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
-          side: const BorderSide(color: Color(0xFF2A2A2A))),
+        borderRadius: BorderRadius.circular(6),
+        side: const BorderSide(color: Color(0xFF2A2A2A)),
+      ),
       items: [
         PopupMenuItem(
           onTap: _renameSelected,
@@ -424,94 +566,99 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
         ),
         PopupMenuItem(
           onTap: _deleteSelected,
-          child: _contextItem(Icons.delete_outline, 'Delete',
-              color: Colors.red),
+          child: _contextItem(
+            Icons.delete_outline,
+            'Delete',
+            color: Colors.red,
+          ),
         ),
       ],
     );
   }
 
-  Widget _contextItem(IconData icon, String label,
-      {Color color = const Color(0xFFD4D4D4)}) {
-    return Row(children: [
-      Icon(icon, size: 14, color: color),
-      const SizedBox(width: 8),
-      Text(label, style: TextStyle(fontSize: 13, color: color)),
-    ]);
+  Widget _contextItem(
+    IconData icon,
+    String label, {
+    Color color = const Color(0xFFD4D4D4),
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 8),
+        Text(label, style: TextStyle(fontSize: 13, color: color)),
+      ],
+    );
   }
 
   List<({String label, String path})> _buildCrumbs(String path) {
     if (Platform.isWindows) {
-      final parts =
-          path.split('\\').where((s) => s.isNotEmpty).toList();
+      final parts = path.split('\\').where((s) => s.isNotEmpty).toList();
       return [
         for (int i = 0; i < parts.length; i++)
           (
             label: parts[i],
-            path: parts.sublist(0, i + 1).join('\\') +
-                (i == 0 ? '\\' : ''),
-          )
+            path: parts.sublist(0, i + 1).join('\\') + (i == 0 ? '\\' : ''),
+          ),
       ];
     }
     final parts = path.split('/').where((s) => s.isNotEmpty).toList();
     return [
       (label: 'Macintosh HD', path: '/'),
       for (int i = 0; i < parts.length; i++)
-        (
-          label: parts[i],
-          path: '/${parts.sublist(0, i + 1).join('/')}',
-        ),
+        (label: parts[i], path: '/${parts.sublist(0, i + 1).join('/')}'),
     ];
   }
 
-  static Future<String?> _showInputDialog(BuildContext context,
-      {required String title,
-      required String hint,
-      String initial = ''}) async {
+  static Future<String?> _showInputDialog(
+    BuildContext context, {
+    required String title,
+    required String hint,
+    String initial = '',
+  }) async {
     final controller = TextEditingController(text: initial);
     return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: Text(title,
-            style: const TextStyle(
-                color: Color(0xFFD4D4D4), fontSize: 14)),
+        title: Text(
+          title,
+          style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 14),
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
-          style: const TextStyle(
-              color: Color(0xFFD4D4D4), fontSize: 13),
+          style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: const TextStyle(
-                color: Color(0xFF555555), fontSize: 13),
+            hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 13),
             filled: true,
             fillColor: const Color(0xFF111111),
             border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide:
-                    const BorderSide(color: Color(0xFF2A2A2A))),
+              borderRadius: BorderRadius.circular(6),
+              borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+            ),
             enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide:
-                    const BorderSide(color: Color(0xFF2A2A2A))),
+              borderRadius: BorderRadius.circular(6),
+              borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+            ),
             focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide:
-                    const BorderSide(color: Color(0xFF22C55E))),
+              borderRadius: BorderRadius.circular(6),
+              borderSide: const BorderSide(color: Color(0xFF22C55E)),
+            ),
           ),
           onSubmitted: (_) => Navigator.pop(ctx, controller.text),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel',
-                style: TextStyle(color: Color(0xFF888888))),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Color(0xFF888888)),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('OK',
-                style: TextStyle(color: Color(0xFF22C55E))),
+            child: const Text('OK', style: TextStyle(color: Color(0xFF22C55E))),
           ),
         ],
       ),
@@ -526,8 +673,11 @@ class _HeaderButton extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
 
-  const _HeaderButton(
-      {required this.label, required this.active, required this.onTap});
+  const _HeaderButton({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -541,16 +691,15 @@ class _HeaderButton extends StatelessWidget {
               : const Color(0xFF1E1E1E),
           borderRadius: BorderRadius.circular(5),
           border: Border.all(
-              color: active
-                  ? const Color(0xFF22C55E).withValues(alpha: 0.4)
-                  : const Color(0xFF2A2A2A)),
+            color: active
+                ? const Color(0xFF22C55E).withValues(alpha: 0.4)
+                : const Color(0xFF2A2A2A),
+          ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: active
-                ? const Color(0xFF22C55E)
-                : const Color(0xFFD4D4D4),
+            color: active ? const Color(0xFF22C55E) : const Color(0xFFD4D4D4),
             fontSize: 12,
           ),
         ),
@@ -561,8 +710,14 @@ class _HeaderButton extends StatelessWidget {
 
 IconData _fileIcon(String ext) {
   return switch (ext) {
-    'dart' || 'py' || 'js' || 'ts' || 'go' || 'rs' || 'c' || 'cpp' =>
-      Icons.code,
+    'dart' ||
+    'py' ||
+    'js' ||
+    'ts' ||
+    'go' ||
+    'rs' ||
+    'c' ||
+    'cpp' => Icons.code,
     'json' || 'yaml' || 'yml' || 'toml' || 'xml' => Icons.data_object,
     'md' || 'txt' || 'log' => Icons.article,
     'sh' || 'bash' || 'zsh' => Icons.terminal,
@@ -585,6 +740,7 @@ String _formatDate(DateTime dt) {
 class _LocalEntryRow extends StatelessWidget {
   final LocalEntry entry;
   final bool selected;
+  final VoidCallback onToggleSelect;
   final VoidCallback onTap;
   final VoidCallback onDoubleTap;
   final void Function(Offset globalPosition) onSecondaryTap;
@@ -592,6 +748,7 @@ class _LocalEntryRow extends StatelessWidget {
   const _LocalEntryRow({
     required this.entry,
     required this.selected,
+    required this.onToggleSelect,
     required this.onTap,
     required this.onDoubleTap,
     required this.onSecondaryTap,
@@ -609,86 +766,118 @@ class _LocalEntryRow extends StatelessWidget {
             color: const Color(0xFF22C55E).withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(6),
           ),
-          child: Text(entry.name,
-              style: const TextStyle(color: Color(0xFF22C55E), fontSize: 13)),
+          child: Text(
+            entry.name,
+            style: const TextStyle(color: Color(0xFF22C55E), fontSize: 13),
+          ),
         ),
       ),
-      child: GestureDetector(
-        onTap: onTap,
-        onDoubleTap: onDoubleTap,
-        onSecondaryTapUp: (d) => onSecondaryTap(d.globalPosition),
-        child: Container(
-          color: selected
-              ? const Color(0xFF22C55E).withValues(alpha: 0.08)
-              : Colors.transparent,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          child: Row(
-            children: [
-              Expanded(
-                flex: 5,
+      child: Container(
+        color: selected
+            ? const Color(0xFF22C55E).withValues(alpha: 0.08)
+            : Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+        child: Row(
+          children: [
+            // Outside the row GestureDetector so a checkbox tap can never
+            // also fire the row's select-only/double-tap handlers.
+            Checkbox(
+              value: selected,
+              onChanged: (_) => onToggleSelect(),
+              side: const BorderSide(color: Color(0xFF444444)),
+              activeColor: const Color(0xFF22C55E),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onTap,
+                onDoubleTap: onDoubleTap,
+                onSecondaryTapUp: (d) => onSecondaryTap(d.globalPosition),
                 child: Row(
                   children: [
-                    Icon(
-                      entry.isDirectory
-                          ? Icons.folder
-                          : _fileIcon(entry.extension),
-                      size: 15,
-                      color: entry.isDirectory
-                          ? const Color(0xFFFBBF24)
-                          : const Color(0xFF60A5FA),
-                    ),
-                    const SizedBox(width: 6),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
+                      flex: 5,
+                      child: Row(
                         children: [
-                          Text(entry.name,
-                              style: const TextStyle(
-                                  color: Color(0xFFD4D4D4), fontSize: 13),
-                              overflow: TextOverflow.ellipsis),
-                          Text(entry.permissions,
-                              style: const TextStyle(
-                                  color: Color(0xFF444444),
-                                  fontSize: 10,
-                                  fontFamily: 'monospace')),
+                          Icon(
+                            entry.isDirectory
+                                ? Icons.folder
+                                : _fileIcon(entry.extension),
+                            size: 15,
+                            color: entry.isDirectory
+                                ? const Color(0xFFFBBF24)
+                                : const Color(0xFF60A5FA),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  entry.name,
+                                  style: const TextStyle(
+                                    color: Color(0xFFD4D4D4),
+                                    fontSize: 13,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  entry.permissions,
+                                  style: const TextStyle(
+                                    color: Color(0xFF444444),
+                                    fontSize: 10,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
+                      ),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        _formatDate(entry.modifiedAt),
+                        style: const TextStyle(
+                          color: Color(0xFF666666),
+                          fontSize: 11,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 70,
+                      child: Text(
+                        entry.formattedSize,
+                        style: const TextStyle(
+                          color: Color(0xFF555555),
+                          fontSize: 11,
+                        ),
+                        textAlign: TextAlign.right,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 70,
+                      child: Text(
+                        entry.kindLabel,
+                        style: const TextStyle(
+                          color: Color(0xFF555555),
+                          fontSize: 11,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
               ),
-              Expanded(
-                flex: 3,
-                child: Text(
-                  _formatDate(entry.modifiedAt),
-                  style:
-                      const TextStyle(color: Color(0xFF666666), fontSize: 11),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              SizedBox(
-                width: 70,
-                child: Text(
-                  entry.formattedSize,
-                  style:
-                      const TextStyle(color: Color(0xFF555555), fontSize: 11),
-                  textAlign: TextAlign.right,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 70,
-                child: Text(
-                  entry.kindLabel,
-                  style:
-                      const TextStyle(color: Color(0xFF555555), fontSize: 11),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

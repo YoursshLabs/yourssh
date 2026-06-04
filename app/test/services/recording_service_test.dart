@@ -23,6 +23,9 @@ void main() {
     final path = '${tmpDir.path}/test.cast';
     await service.startRecording('s1', filePath: path, width: 80, height: 24, title: 'test');
     expect(service.isRecording('s1'), isTrue);
+    // Close the sink before reading — Windows locks the open file, which
+    // breaks both the read and tearDown's directory delete.
+    await service.stopRecording('s1');
     final lines = await File(path).readAsLines();
     expect(lines.first, contains('"version":2'));
     expect(lines.first, contains('"width":80'));

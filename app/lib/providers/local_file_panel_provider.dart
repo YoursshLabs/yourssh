@@ -48,8 +48,18 @@ class LocalFilePanelProvider extends ChangeNotifier {
     return _entries.where((e) => e.name.toLowerCase().contains(q)).toList();
   }
 
+  List<LocalEntry> get entries => List.unmodifiable(_entries);
+
   Set<LocalEntry> get selectedEntries {
     return _entries.where((e) => _selectedPaths.contains(e.path)).toSet();
+  }
+
+  /// True when every *visible* (filtered) entry is selected — drives the
+  /// header select-all checkbox, mirroring SftpPanelProvider.
+  bool get isAllSelected {
+    final visible = filteredEntries;
+    return visible.isNotEmpty &&
+        visible.every((e) => _selectedPaths.contains(e.path));
   }
 
   // ── Navigation ──────────────────────────────────────────
@@ -155,6 +165,8 @@ class LocalFilePanelProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void deselectAll() => clearSelection();
+
   void clearSelection() {
     _selectedPaths.clear();
     notifyListeners();
@@ -184,6 +196,12 @@ class LocalFilePanelProvider extends ChangeNotifier {
   void setFilterQuery(String query) {
     if (_filterQuery == query) return;
     _filterQuery = query;
+    // Selection must stay within what the user can see (parity with
+    // SftpPanelProvider): drop selected paths the new filter hides.
+    if (query.isNotEmpty) {
+      final visible = filteredEntries.map((e) => e.path).toSet();
+      _selectedPaths.retainWhere(visible.contains);
+    }
     notifyListeners();
   }
 

@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xterm/xterm.dart';
 import 'package:yourssh/models/host.dart';
+import 'package:yourssh/models/local_session.dart';
 import 'package:yourssh/models/ssh_session.dart';
 import 'package:yourssh/providers/recording_provider.dart';
 import 'package:yourssh/services/recording_service.dart';
@@ -21,6 +23,51 @@ void main() {
     expect(provider.isRecording('s1'), isFalse);
   });
 
+  test('local session records into local/ folder', () async {
+    final provider =
+        RecordingProvider(RecordingService(), getPath: () => tmpDir.path);
+    final session = LocalSession(terminal: Terminal());
+
+    await provider.startRecording(session);
+    expect(provider.isRecording(session.id), isTrue);
+
+    final files = tmpDir
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.cast'))
+        .toList();
+    expect(files, hasLength(1));
+    expect(
+      files.single.path,
+      contains('${Platform.pathSeparator}local${Platform.pathSeparator}'),
+    );
+
+    await provider.stopRecording(session.id);
+    expect(provider.isRecording(session.id), isFalse);
+  });
+
+  test('shell exit (onShellClosed) clears the provider recording state',
+      () async {
+    final service = RecordingService();
+    final provider = RecordingProvider(service, getPath: () => tmpDir.path);
+    final session = LocalSession(terminal: Terminal());
+
+    await provider.startRecording(session);
+    expect(provider.isRecording(session.id), isTrue);
+
+    var notified = false;
+    provider.addListener(() => notified = true);
+
+    // Simulates the PTY/shell dying: SshService and LocalShellService call
+    // this directly on the service, bypassing the provider.
+    service.onShellClosed(session.id);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.isRecording(session.id), isFalse,
+        reason: 'REC indicator must not stay red after the shell closed');
+    expect(notified, isTrue);
+  });
+
   test('refreshLibrary finds .cast files', () async {
     final hostDir = Directory('${tmpDir.path}/ubuntu@prod')..createSync();
     File('${hostDir.path}/session_2026-05-30_10-00-00.cast').writeAsStringSync(
@@ -39,7 +86,9 @@ void main() {
     final provider = RecordingProvider(RecordingService(), getPath: () => tmpDir.path);
     await provider.refreshLibrary();
     expect(provider.recordings.length, 1);
-    await provider.deleteRecording(f.path);
+    // Delete via the entry's own path (what the UI passes) — on Windows the
+    // listed path uses '\' while f.path was built with '/'.
+    await provider.deleteRecording(provider.recordings.first.filePath);
     expect(provider.recordings.isEmpty, isTrue);
     expect(f.existsSync(), isFalse);
   });

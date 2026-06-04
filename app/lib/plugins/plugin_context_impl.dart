@@ -41,13 +41,13 @@ class PluginContextImpl implements YourSSHPluginContext {
       );
 
   @override
-  List<SSHSessionProxy> get activeSessions => _sessions.sessions
+  List<SSHSessionProxy> get activeSessions => _sessions.sshSessions
       .map((s) => _toProxy(s, isActive: _sessions.activeSession?.id == s.id))
       .toList();
 
   @override
   SSHSessionProxy? get activeSession {
-    final session = _sessions.activeSession;
+    final session = _sessions.activeSshSession;
     if (session == null) return null;
     return _toProxy(session, isActive: true);
   }
@@ -69,7 +69,8 @@ class PluginContextImpl implements YourSSHPluginContext {
 
   @override
   Future<void> sendInput(String sessionId, String text) async {
-    final session = _sessions.sessions.where((s) => s.id == sessionId).firstOrNull;
+    final session =
+        _sessions.sshSessions.where((s) => s.id == sessionId).firstOrNull;
     if (session == null) {
       throw PluginSSHException('Unknown session: $sessionId');
     }

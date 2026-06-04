@@ -33,7 +33,7 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
   }
 
   Future<void> _start() async {
-    final session = context.read<SessionProvider>().activeSession;
+    final session = context.read<SessionProvider>().activeSshSession;
     if (session == null) return;
     final ok = await _service.start(session.host);
     if (ok) {
@@ -53,7 +53,7 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
   }
 
   Future<void> _stop() async {
-    final session = context.read<SessionProvider>().activeSession;
+    final session = context.read<SessionProvider>().activeSshSession;
     if (session == null) return;
     _pollTimer?.cancel();
     await _service.stop(session.host);
@@ -61,7 +61,7 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
   }
 
   Future<void> _poll() async {
-    final session = context.read<SessionProvider>().activeSession;
+    final session = context.read<SessionProvider>().activeSshSession;
     if (session == null) return;
     final emails = await _service.fetchEmails(session.host);
     if (mounted) setState(() => _emails = emails);
@@ -133,11 +133,12 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
                         : IconButton(
                             icon: const Icon(Icons.play_arrow,
                                 size: 16, color: AppColors.accent),
-                            onPressed:
-                                context.watch<SessionProvider>().activeSession !=
-                                        null
-                                    ? _start
-                                    : null,
+                            onPressed: context
+                                        .watch<SessionProvider>()
+                                        .activeSshSession !=
+                                    null
+                                ? _start
+                                : null,
                             tooltip: 'Start on port 1025',
                           ),
                   ],

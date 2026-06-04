@@ -23,7 +23,8 @@ class SettingsProvider extends ChangeNotifier {
     'prev_session': 'ctrl+shift+tab',
     'toggle_input_bar': 'ctrl+shift+i',
     'split_horizontal': 'ctrl+shift+h',
-    'split_vertical': 'ctrl+shift+v',
+    // Not ctrl+shift+v: that is terminal paste on Windows/Linux (issue #43).
+    'split_vertical': 'ctrl+shift+e',
     'command_palette': Platform.isMacOS ? 'meta+k' : 'ctrl+k',
   };
 
@@ -53,6 +54,12 @@ class SettingsProvider extends ChangeNotifier {
       try {
         final decoded = jsonDecode(hotkeysJson) as Map<String, dynamic>;
         hotkeys = decoded.map((k, v) => MapEntry(k, v as String));
+        // Migrate the old split_vertical default off ctrl+shift+v — hotkeys
+        // now swallow their combo in terminal views, so leaving it would
+        // shadow terminal paste on Windows/Linux (issues #43, #46).
+        if (hotkeys['split_vertical'] == 'ctrl+shift+v') {
+          hotkeys['split_vertical'] = 'ctrl+shift+e';
+        }
       } catch (e) {
         // Corrupted prefs: keep the built-in defaults rather than crash boot.
         debugPrint('[SettingsProvider] hotkeys JSON malformed, using defaults: $e');

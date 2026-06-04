@@ -14,7 +14,6 @@ import 'providers/port_forward_provider.dart';
 import 'providers/session_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/shell_integration_provider.dart';
-import 'providers/local_session_provider.dart';
 import 'providers/terminal_layout_provider.dart';
 import 'providers/sync_provider.dart';
 import 'providers/known_hosts_provider.dart';
@@ -22,6 +21,7 @@ import 'providers/plugin_provider.dart';
 import 'plugins/plugin_registry.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 import 'services/health_monitor_service.dart';
+import 'services/local_shell_service.dart';
 import 'services/notification_service.dart';
 import 'services/ssh_service.dart';
 import 'services/storage_service.dart';
@@ -48,7 +48,7 @@ class _SshBridgeAdapter implements SshBridgeDelegate {
 
   @override
   List<Map<String, dynamic>> activeSessions() {
-    return _getSessionProvider().sessions.map((s) => {
+    return _getSessionProvider().sshSessions.map((s) => {
           'sessionId': s.id,
           'host': s.host.host,
           'username': s.host.username,
@@ -61,7 +61,7 @@ class _SshBridgeAdapter implements SshBridgeDelegate {
   Future<Map<String, dynamic>> execCommand(
       String sessionId, String command) async {
     final session = _getSessionProvider()
-        .sessions
+        .sshSessions
         .firstWhere((s) => s.id == sessionId);
     final result = await _getSshService().exec(session.host, command);
     return {
@@ -109,6 +109,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final KeyProvider _keyProvider;
   late final SettingsProvider _settingsProvider;
   late final SessionProvider _sessionProvider;
+  late final LocalShellService _localShell;
   late final SyncProvider _syncProvider;
   late final SyncService _syncService;
   late final KnownHostsProvider _knownHostsProvider;
@@ -133,6 +134,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     windowManager.addListener(this);
     _storage = StorageService();
     _recordingService = RecordingService();
+    _localShell = LocalShellService();
+    _localShell.recordingService = _recordingService;
     _recordingProvider = RecordingProvider(
       _recordingService,
       getPath: () => _settingsProvider.recordingPath,
@@ -149,6 +152,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _ssh.isShellIntegrationEnabled =
         () => _settingsProvider.shellIntegrationEnabled;
     _sessionProvider = SessionProvider(_ssh, TabMetadataService());
+    _sessionProvider.localShell = _localShell;
     _sessionProvider.keyLookup = (id) => _keyProvider.findById(id);
     _sessionProvider.jumpHostLookup = (id) =>
         _hostProvider.allHosts.where((h) => h.id == id).firstOrNull;
@@ -239,7 +243,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _shareProvider.onGuestInput = (data) {
       final sessionId = _shareProvider.sharingSessionId;
       if (sessionId == null) return;
-      final session = _sessionProvider.sessions
+      final session = _sessionProvider.sshSessions
           .where((s) => s.id == sessionId && !s.isWatch)
           .firstOrNull;
       session?.terminal.textInput(data);
@@ -332,7 +336,6 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
           return p;
         }),
         ChangeNotifierProvider(create: (_) => TerminalLayoutProvider()),
-        ChangeNotifierProvider(create: (_) => LocalSessionProvider()),
         ChangeNotifierProvider(create: (_) => AiChatProvider()),
         ChangeNotifierProvider(create: (_) => SnippetProvider()),
         ChangeNotifierProvider.value(value: _pluginProvider),

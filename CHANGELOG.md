@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.24] — 2026-06-04
+
+### Added
+- **Local terminal as first-class tabs** — local shell sessions now live in the global top tab bar next to SSH sessions (unified `TerminalSession` model in `SessionProvider`), can be split into panes alongside SSH panes, support asciicast recording, and show a status overlay with a restart action when the shell exits.
+- **SFTP two-panel layout with switchable sources** ([#41](https://github.com/YoursshLabs/yourssh/issues/41)) — each panel can browse Local or any saved host via a source chip; unified panel headers (source chip + filter + actions) and clickable breadcrumb navigation in the remote panel replace the single `Up` button.
+- **Local panel checkboxes** — the local file panel gains per-row checkboxes and a select-all header with a selection count, matching the remote panel; select-all respects the active filter on both panels.
+- **Docked transfer panel** — transfer progress moved from a blocking centered dialog to a minimizable panel docked at the bottom of the SFTP workspace. Transfers run in the background: the panels stay fully interactive, additional transfers queue onto the running batch, the panel collapses to a slim progress strip, successful batches auto-dismiss after ~3 s, and failed ones stay visible until closed.
+- **Terminal right-click menu** — right-clicking an SSH or local terminal opens a Copy / Paste / Select All context menu (Copy is disabled when nothing is selected).
+
+### Fixed
+- **Copying from the terminal** ([#43](https://github.com/YoursshLabs/yourssh/issues/43)) — copy/paste was effectively unreachable on Windows/Linux: `Ctrl+C` always meant SIGINT, the only copy binding was the undiscoverable `Ctrl+Shift+C`, and the right/middle mouse buttons did nothing. The terminal now mirrors Windows Terminal behavior: `Ctrl+C` copies when a selection is active (and clears the selection, so the next `Ctrl+C` reaches the shell as SIGINT), and `Ctrl+Shift+V` joins `Ctrl+V` as a paste alias. macOS `Cmd+C`/`Cmd+V` are unchanged.
+- **Middle-click paste** — middle-click now pastes the clipboard, the standard terminal-emulator gesture. The xterm fork routed middle clicks to the right-button callbacks (and reported them to mouse-mode apps as the right button); they now use their own path, and mouse-mode apps (vim, htop) receive a proper middle-button event instead.
+- **Recording playback terminal** is now read-only, so clicks and paste gestures can no longer inject input into a replay.
+- **SFTP workspace lost on tab switch** ([#42](https://github.com/YoursshLabs/yourssh/issues/42)) — `DualPanelSftpScreen` was disposed whenever another tab became active, dropping connected hosts, paths, listings and in-flight transfers; it is now kept alive offstage (`KeepAliveOffstage`) so returning to the SFTP tab resumes where you left off.
+- **Unreadable terminal selection** ([#40](https://github.com/YoursshLabs/yourssh/issues/40)) — every bundled theme used a fully opaque selection color painted over the text layer, hiding selected text entirely; all themes now use xterm's semi-transparent default alpha (`0xAA`), guarded by a test.
+- **Windows app icon** — the packaged Windows build shipped the default Flutter icon instead of the terminal logo.
+- **Hotkeys on Linux** — app hotkeys (new/close/next/prev session, splits, input bar, command palette) are now registered in-app instead of as system-wide global hotkeys (#46). They work on Wayland, where keybinder/`XGrabKey` could never grab (startup logged `Binding '<Primary>t' failed!` and the keys silently did nothing), and they no longer steal their combos from every other application on X11/macOS/Windows while the app is running. Terminal views swallow a matching combo so a hotkey no longer also types its control sequence into the shell (e.g. Ctrl+T sending `^T`).
+- **`split_vertical` default rebound** from `ctrl+shift+v` to `ctrl+shift+e` so it no longer shadows terminal paste on Windows/Linux (#43); saved settings still on the old default are migrated on load.
+- **Pre-release review hardening** — a 9-angle adversarial code review of this release surfaced 15 findings, all fixed:
+  - A local shell that exits on its own now immediately shows the **Shell exited / Restart shell** view (the status changed without notifying the UI), and the **REC indicator clears** when a recorded shell exits or disconnects — previously it stayed red while output was silently dropped after a restart.
+  - SFTP panel: **Select All and the selection count respect the active filter** (bulk Delete can no longer touch files hidden by the filter — narrowing the filter also prunes the selection), and a filter with no hits shows **“No matches”** instead of a blank “0 items” pane.
+  - Two-panel SFTP: switching a slot's source **remembers the last path per host** and resumes there; returning to the SFTP tab **refreshes listings** that went stale while the screen was kept alive offstage; drag-and-drop no longer disturbs the opposite panel's selection.
+  - **Transfers never overwrite silently** — local→local copies refuse a same-named destination file and skip (with a notice) existing files when merging folders, matching the SFTP recursive transfers; a same-host remote relay into the file's own folder is refused instead of truncating and rewriting the file in place.
+  - Terminal `Ctrl+C` copy **clears the selection synchronously**, so a rapid second `Ctrl+C` always interrupts even while the clipboard write is still in flight (and a failing clipboard backend can no longer leave the selection stuck); copy/paste/select-all now share **one implementation** across keyboard shortcuts, middle-click and the context menu, with disposal guards after every async gap.
+  - The network-stats overlay no longer renders the **previous host's numbers over local terminal tabs**.
+
+### Changed
+- Test suite is Windows-portable (temp-dir paths, file-lock handling, unix-socket tests skipped where unsupported).
+- Internal refactors: SSH-only consumers (plugins, terminal sharing) read `sshSessions`/`activeSshSession`; `LocalShellService` is injected instead of constructed inline; `TerminalSession` owns its recording folder/title (a future session type can't be misfiled as "local") and the pane renderer fails loudly on unknown session types instead of hard-casting to SSH.
+
+---
+
 ## [0.1.23] — 2026-06-04
 
 ### Fixed
@@ -307,7 +339,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.23...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.24...HEAD
+[0.1.24]: https://github.com/YoursshLabs/yourssh/compare/v0.1.23...v0.1.24
 [0.1.23]: https://github.com/YoursshLabs/yourssh/compare/v0.1.22...v0.1.23
 [0.1.22]: https://github.com/YoursshLabs/yourssh/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/YoursshLabs/yourssh/compare/v0.1.20...v0.1.21

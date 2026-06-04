@@ -42,7 +42,7 @@ The active codebase is `app/` — a Flutter app targeting macOS, Windows, and Li
 - `app/` — the Flutter app
 - `packages/dartssh2` — **local fork** of dartssh2; overrides the pub.dev version via `dependency_overrides` in `app/pubspec.yaml`
 - `packages/flutter_pty` — **local fork** of flutter_pty 0.4.2 (also via `dependency_overrides`); patches `src/flutter_pty_win.c` so the Windows command line doesn't duplicate `argv[0]` (upstream issue #19 — broke keyboard input in the local PowerShell terminal)
-- `packages/xterm` — **local fork** of xterm 4.0.0 (also via `dependency_overrides`); patches `lib/src/ui/custom_text_edit.dart` to pass `viewId: View.maybeOf(context)?.viewId` to `TextInputConfiguration` (upstream issue #207 — newer Flutter engines on Windows reject a text-input client without a viewId, so printable keys never reached any `TerminalView` while Enter/Tab/paste still worked)
+- `packages/xterm` — **local fork** of xterm 4.0.0 (also via `dependency_overrides`); patches: (1) `lib/src/ui/custom_text_edit.dart` passes `viewId: View.maybeOf(context)?.viewId` to `TextInputConfiguration` (upstream issue #207 — newer Flutter engines on Windows reject a text-input client without a viewId, so printable keys never reached any `TerminalView` while Enter/Tab/paste still worked); (2) copy/paste reachability (issue #43) — `shortcut/shortcuts.dart` adds Ctrl+C → `TerminalCopyAndClearIntent` and Ctrl+Shift+V paste alias on Windows/Linux, `shortcut/actions.dart` adds `_CopySelectionAndClearAction` (enabled only with an active selection; copies then clears it so the next Ctrl+C reaches the shell as SIGINT — without a selection `ShortcutManager` ignores the key and it falls through as ^C), `ui/gesture/gesture_handler.dart` un-aliases tertiary taps from the secondary-tap callbacks (middle clicks also reported to mouse-mode apps as `TerminalMouseButton.middle`, not right), and `terminal_view.dart` pastes the clipboard on middle-click unless `readOnly`
 - `packages/yourssh_plugin_api` — abstract plugin interface (`YourSSHPlugin`, `YourSSHPluginContext`)
 - `packages/yourssh_devops` — DevOps plugin (containers (Docker/K8s), network tools, Cloudflare tunnel, mail catcher, MCP server, S3 browser)
 - `packages/yourssh_web_tools` — Web Tools plugin (in-app browser over port-forwarded HTTP)
@@ -62,7 +62,7 @@ Flutter UI (widgets/screens)
 
 **Providers** (`app/lib/providers/`):
 - `HostProvider` — CRUD for saved SSH hosts; fires `onMutation` callback to trigger sync push
-- `SessionProvider` — manages active `SshSession` objects; wires key lookup, auto-reconnect, tmux, and host-key verification via callbacks set in `main.dart`
+- `SessionProvider` — manages the unified `TerminalSession` tab list (SSH sessions **and** local PTY shells; `sessions` / `sshSessions` / `activeSshSession` accessors); wires key lookup, auto-reconnect, tmux, and host-key verification via callbacks set in `main.dart`; local shells go through the injected `LocalShellService` (`newLocalSession` / `restartLocalSession`; the `localShell` setter wires the service's PTY-exit notifications into the provider's notify)
 - `KeyProvider` — SSH key entries (path + optional passphrase + optional linked certificate path)
 - `PortForwardProvider` — local/remote/dynamic `PortForward` tunnel configs (persistent rules)
 - `TunnelProvider` — active `TunnelConfig` sessions (runtime state, separate from PortForwardProvider)
@@ -71,7 +71,6 @@ Flutter UI (widgets/screens)
 - `KnownHostsProvider` — persists known host fingerprints; exposes `pendingChallenge` for TOFU dialog
 - `SettingsProvider` — app-wide prefs (auto-reconnect, tmux, hotkeys, feature flags for DevOps/WebTools/Snippets)
 - `TerminalLayoutProvider` — split layout (none/horizontal/vertical), input bar visibility, and snippets-panel visibility (`toggleSnippetsPanel()` for the collapsible right-side snippets panel in the terminal workspace)
-- `LocalSessionProvider` — manages local shell sessions via `flutter_pty`
 - `LocalFilePanelProvider` — local filesystem state for the dual-panel SFTP view
 - `SftpPanelProvider` — remote SFTP panel state (current path, directory listing)
 - `SftpTransferProvider` — in-progress upload/download transfer queue and status
@@ -92,7 +91,7 @@ Flutter UI (widgets/screens)
 - `P2PSyncService` — LAN sync via a one-shot HTTP server; `getLocalInterfaces()` enumerates non-loopback IPv4 interfaces with friendly `displayName` (Wi-Fi / Ethernet / VPN); `startServer(encryptedPayload, hostAddress)` binds on a random port and returns the full URL; server closes after the first successful `GET /sync` response; `onServerError` callback for mid-transfer errors; `fetchPayload(url)` HTTP GET with 5 s connect + 10 s body timeout
 - `P2PSyncEncryption` — AES-256-GCM for LAN sync; `generateKey()` returns a random 32-byte key embedded in the QR URL (no PBKDF2 — key exchanged out-of-band via QR scan)
 - `LocalShellService` / `PtyRunner` — local terminal via `flutter_pty`
-- `HotkeyService` — global hotkey registration via `hotkey_manager`; hotkey names (`new_session`, `close_session`, `next_session`, `prev_session`, `toggle_input_bar`, `split_horizontal`, `split_vertical`) configured in `SettingsProvider`
+- `HotkeyService` — app hotkey registration via `hotkey_manager` with `HotKeyScope.inapp` (system scope used keybinder/XGrabKey on Linux — dead on Wayland, stole combos system-wide elsewhere; issue #46); hotkey names (`new_session`, `close_session`, `next_session`, `prev_session`, `toggle_input_bar`, `split_horizontal`, `split_vertical`, `command_palette`) configured in `SettingsProvider`; `shouldSwallowKeyEvent` lets terminal views drop a combo that already fired as a hotkey so it never reaches the shell
 - `SftpFileOpsService` — SFTP file operations (rename, delete, mkdir, permissions)
 - `SftpTransferService` — chunked upload/download with progress callbacks
 - `ExternalEditService` — "open with external app" for SFTP files: downloads to a per-session temp dir, launches the OS default app (`url_launcher`) or a specific app (`openExternalWith`), polls mtime every 2 s and auto-uploads changes back to the server; `sftp_file_inspector.dart` (pure) decides which files the in-app editor refuses (binary extension, > 5 MB, null byte in first 8 KB)

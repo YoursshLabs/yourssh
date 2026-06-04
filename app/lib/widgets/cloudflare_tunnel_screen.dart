@@ -32,7 +32,7 @@ class _CloudflareTunnelBodyState extends State<_CloudflareTunnelBody> {
   bool _showPanel = false;
 
   Future<void> _stopTunnel(TunnelConfig tunnel) async {
-    final session = context.read<SessionProvider>().activeSession;
+    final session = context.read<SessionProvider>().activeSshSession;
     if (session == null) return;
 
     final provider = context.read<TunnelProvider>();
@@ -44,7 +44,7 @@ class _CloudflareTunnelBodyState extends State<_CloudflareTunnelBody> {
   }
 
   Future<void> _startTunnel(TunnelConfig tunnel) async {
-    final session = context.read<SessionProvider>().activeSession;
+    final session = context.read<SessionProvider>().activeSshSession;
     if (session == null) return;
 
     final provider = context.read<TunnelProvider>();
@@ -72,7 +72,7 @@ class _CloudflareTunnelBodyState extends State<_CloudflareTunnelBody> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TunnelProvider>();
-    final session = context.watch<SessionProvider>().activeSession;
+    final session = context.watch<SessionProvider>().activeSshSession;
 
     return Row(
       children: [

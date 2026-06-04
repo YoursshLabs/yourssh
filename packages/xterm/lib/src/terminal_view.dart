@@ -6,6 +6,7 @@ import 'package:xterm/src/core/buffer/cell_offset.dart';
 
 import 'package:xterm/src/core/input/keys.dart';
 import 'package:xterm/src/terminal.dart';
+import 'package:xterm/src/ui/clipboard_ops.dart';
 import 'package:xterm/src/ui/controller.dart';
 import 'package:xterm/src/ui/cursor_type.dart';
 import 'package:xterm/src/ui/custom_text_edit.dart';
@@ -305,6 +306,10 @@ class TerminalViewState extends State<TerminalView> {
           widget.onSecondaryTapDown != null ? _onSecondaryTapDown : null,
       onSecondaryTapUp:
           widget.onSecondaryTapUp != null ? _onSecondaryTapUp : null,
+      // YOURSSH PATCH (issue #43): middle-click pastes the clipboard, the
+      // standard terminal-emulator gesture. Mouse-mode apps (vim, htop)
+      // still receive the click instead — see TerminalGestureHandler._tapUp.
+      onTertiaryTapUp: widget.readOnly ? null : _onTertiaryTapUp,
       readOnly: widget.readOnly,
       child: child,
     );
@@ -365,6 +370,16 @@ class TerminalViewState extends State<TerminalView> {
   void _onSecondaryTapUp(TapUpDetails details) {
     final offset = renderTerminal.getCellOffset(details.localPosition);
     widget.onSecondaryTapUp?.call(details, offset);
+  }
+
+  Future<void> _onTertiaryTapUp(TapUpDetails details) async {
+    final text = await terminalClipboardText();
+    // The clipboard fetch is async — the tab may have been closed (and the
+    // external controller disposed) before it resolves.
+    if (!mounted) return;
+    if (text != null) {
+      terminalPasteText(widget.terminal, _controller, text);
+    }
   }
 
   bool get hasInputConnection {

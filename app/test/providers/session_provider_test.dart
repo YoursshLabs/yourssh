@@ -105,7 +105,7 @@ void main() {
       await expectLater(future, completes);
 
       expect(provider.sessions, isNotEmpty);
-      expect(provider.sessions.first.status, SessionStatus.connecting);
+      expect(provider.sshSessions.first.status, SessionStatus.connecting);
 
       provider.closeSession(provider.sessions.first.id);
     });
@@ -228,8 +228,8 @@ void main() {
           SessionProvider(SshService(StorageService()), TabMetadataService());
       p2.addWatchSession(_makeSession('dup'));
       p2.addWatchSession(_makeSession('dup'));
-      final a = p2.sessions[0];
-      final b = p2.sessions[1];
+      final a = p2.sshSessions[0];
+      final b = p2.sshSessions[1];
       expect(a.host.id, b.host.id);
 
       p2.renameSession(a.id, 'shared');

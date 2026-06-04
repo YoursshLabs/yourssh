@@ -60,6 +60,19 @@ Send the same keystrokes to **all open sessions** simultaneously. Click the **Br
 
 Press **Cmd/Ctrl+F** to open the search bar. Type a regex or plain string; all matches highlight in the buffer. Navigate with **Enter** (next) / **Shift+Enter** (previous). Press **Esc** to close.
 
+## Copy & Paste
+
+Select text by dragging (double-click selects a word). Then:
+
+| Action | macOS | Windows / Linux |
+|---|---|---|
+| Copy selection | **Cmd+C** | **Ctrl+C** (with a selection) or **Ctrl+Shift+C** |
+| Paste | **Cmd+V** | **Ctrl+V** or **Ctrl+Shift+V** |
+| Context menu | right-click | right-click |
+| Paste (mouse) | middle-click | middle-click |
+
+On Windows/Linux, **Ctrl+C** copies only while text is selected — the selection is cleared after copying, so pressing it again interrupts the running program (SIGINT) as usual. Right-click opens a **Copy / Paste / Select All** menu; Copy is disabled when nothing is selected. Apps that capture the mouse (vim, htop) keep receiving mouse clicks instead of triggering selection or paste.
+
 ## Shell Integration
 
 On **bash/zsh** hosts, YourSSH injects a small, guarded prompt hook on connect so it can follow what the remote shell is doing via OSC 7 (working directory) and OSC 133 (command boundaries + exit status). It only touches the live session — it never edits your `.bashrc`/`.zshrc`.
@@ -107,6 +120,8 @@ Click the **signal bars** icon in the session toolbar to show a real-time traffi
 ## Local Terminal
 
 The sidebar also has a **Local Terminal** section that opens a native shell (zsh/bash/PowerShell) alongside SSH sessions. The terminal is focused as soon as it opens — just start typing. On Windows the shell is PowerShell (fully working since 0.1.22).
+
+Since 0.1.24 local shells are **first-class tabs**: they appear in the global top tab bar next to SSH sessions, can be split into panes alongside SSH panes, and can be recorded to asciicast just like SSH sessions. If the shell exits, the pane shows a status overlay with a **Restart shell** button.
 
 ## Related Pages
 

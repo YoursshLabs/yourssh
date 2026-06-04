@@ -130,5 +130,10 @@ void main() {
 
       await proxy.close();
     });
-  });
+  },
+      // The fake agent binds a Unix domain socket — not available on the
+      // Windows CI runner (the real Windows agent uses a named pipe).
+      skip: Platform.isWindows
+          ? 'Unix domain sockets unavailable on Windows'
+          : false);
 }

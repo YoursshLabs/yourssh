@@ -68,8 +68,11 @@ class _TerminalGestureHandlerState extends State<TerminalGestureHandler> {
       onTapDown: onTapDown,
       onSecondaryTapDown: onSecondaryTapDown,
       onSecondaryTapUp: onSecondaryTapUp,
-      onTertiaryTapDown: onSecondaryTapDown,
-      onTertiaryTapUp: onSecondaryTapUp,
+      // YOURSSH PATCH (issue #43): middle clicks were routed to the
+      // secondary-tap callbacks (and reported as the right button), so
+      // widget.onTertiaryTap* never fired. Route them to their own handlers.
+      onTertiaryTapDown: onTertiaryTapDown,
+      onTertiaryTapUp: onTertiaryTapUp,
       onLongPressStart: onLongPressStart,
       onLongPressMoveUpdate: onLongPressMoveUpdate,
       // onLongPressUp: onLongPressUp,
@@ -153,7 +156,7 @@ class _TerminalGestureHandlerState extends State<TerminalGestureHandler> {
   }
 
   void onTertiaryTapUp(TapUpDetails details) {
-    _tapUp(widget.onTertiaryTapUp, details, TerminalMouseButton.right);
+    _tapUp(widget.onTertiaryTapUp, details, TerminalMouseButton.middle);
   }
 
   void onDoubleTapDown(TapDownDetails details) {

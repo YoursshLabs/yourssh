@@ -169,5 +169,34 @@ void main() {
       provider.selectAll();
       expect(provider.selectedEntries.isEmpty, true);
     });
+
+    test('isAllSelected is true when every visible entry is selected', () {
+      provider.setEntriesForTest(
+          [_entry('doc.txt'), _entry('readme.md'), _entry('config.txt')]);
+      expect(provider.isAllSelected, isFalse);
+      provider.setFilterQuery('txt');
+      provider.selectAll();
+      expect(provider.isAllSelected, isTrue,
+          reason: 'all visible (filtered) entries are selected');
+      provider.setFilterQuery('');
+      expect(provider.isAllSelected, isFalse,
+          reason: 'readme.md is visible again but not selected');
+    });
+
+    test('deselectAll clears the selection', () {
+      provider.setEntriesForTest([_entry('a'), _entry('b')]);
+      provider.selectAll();
+      provider.deselectAll();
+      expect(provider.selectedEntries, isEmpty);
+    });
+
+    test('narrowing the filter prunes selected entries that became hidden',
+        () {
+      provider.setEntriesForTest([_entry('doc.txt'), _entry('secret.key')]);
+      provider.selectAll();
+      provider.setFilterQuery('txt');
+      expect(provider.selectedEntries.map((e) => e.name), ['doc.txt'],
+          reason: 'select-then-filter must not keep hidden files selected');
+    });
   });
 }
