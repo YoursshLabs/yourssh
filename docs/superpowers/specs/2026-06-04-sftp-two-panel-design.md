@@ -74,6 +74,21 @@ Progress reporting keeps using `SftpTransferProvider` for all kinds.
 Each slot accepts drops of both `LocalEntry` and `SftpEntry`; a drop
 triggers the same matrix dispatch as the copy buttons.
 
+## Panel header refinements (approved follow-up)
+
+Both panels share the same header structure: `[source chip] … [Filter] [Actions ▾]`.
+
+- Local panel: the static "Local" header title becomes the clickable source
+  chip (laptop icon + "Local"); the chip is removed from the breadcrumb row.
+- Remote panel: gains the same header. Its chip shows the **host label**
+  (ellipsized) instead of `user@host`, plus the `root` badge when elevated.
+- Remote panel gains the local panel's filter feature: `SftpPanelProvider`
+  adds `filterVisible` / `toggleFilterVisible` / `filterQuery` /
+  `setFilterQuery` / `filteredEntries`; the list renders `filteredEntries`.
+- Remote actions (New File, New Folder, Rename, Delete) move from inline
+  toolbar buttons into the header's Actions menu. The breadcrumb row keeps
+  Up + breadcrumb + Refresh.
+
 ## Out of scope
 
 - Server-side copy for same-host transfers.
