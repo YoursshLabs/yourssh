@@ -87,6 +87,8 @@ void main() {
     expect(back.onPressed, isNull,
         reason: 'nothing to go back to on the initial path');
     expect(forward.onPressed, isNull);
+    expect(find.byIcon(Icons.arrow_upward), findsNothing,
+        reason: 'the Up button is replaced by back/forward + breadcrumb');
   });
 
   testWidgets('back returns to the previous directory and forward redoes it',

@@ -34,19 +34,6 @@ void main() {
     expect(p.selectedEntries, isEmpty);
   });
 
-  test('navigateUp moves to parent path', () {
-    final p = SftpPanelProvider();
-    p.setPath('/home/user/projects');
-    p.navigateUp();
-    expect(p.currentPath, '/home/user');
-  });
-
-  test('navigateUp at root stays at root', () {
-    final p = SftpPanelProvider();
-    p.navigateUp();
-    expect(p.currentPath, '/');
-  });
-
   test('selectAll selects all entries', () {
     final p = SftpPanelProvider();
     p.setEntries([
@@ -198,19 +185,6 @@ void main() {
           modifiedAt: DateTime(2024)));
       p.goBack();
       expect(p.selectedEntries, isEmpty);
-    });
-
-    test('navigateUp followed by setPath records the parent in history', () {
-      // Mirrors the widget's Up button: navigateUp() mutates the path,
-      // then _loadDirectory(currentPath) calls setPath with the parent.
-      final p = SftpPanelProvider();
-      p.setPath('/home');
-      p.setPath('/home/user');
-      p.navigateUp();
-      p.setPath(p.currentPath);
-      expect(p.currentPath, '/home');
-      p.goBack();
-      expect(p.currentPath, '/home/user');
     });
   });
 }

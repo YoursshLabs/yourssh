@@ -515,13 +515,6 @@ class _SftpPanelState extends State<SftpPanel> {
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
           ),
-          IconButton(
-            icon: const Icon(Icons.arrow_upward, size: 14, color: Color(0xFF888888)),
-            onPressed: () { prov.navigateUp(); _loadDirectory(prov.currentPath); },
-            tooltip: 'Up',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-          ),
           const SizedBox(width: 2),
           // Breadcrumb gets the remaining row width (it was squeezed to zero
           // when it shared the row with the host chip and toolbar buttons).

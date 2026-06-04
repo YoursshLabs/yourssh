@@ -118,17 +118,6 @@ class SftpPanelProvider extends ChangeNotifier {
     return visible.isNotEmpty && visible.every(_selected.contains);
   }
 
-  void navigateUp() {
-    if (_currentPath == '/') return;
-    final parts = _currentPath.split('/');
-    parts.removeLast();
-    _currentPath = parts.isEmpty || (parts.length == 1 && parts.first.isEmpty)
-        ? '/'
-        : parts.join('/');
-    _selected.clear();
-    notifyListeners();
-  }
-
   void setLoadState(SftpPanelLoadState state, {String? error}) {
     loadState = state;
     errorMessage = error;

@@ -38,15 +38,18 @@ Add a history stack mirroring `LocalFilePanelProvider`:
     then `_fetchEntries(path)`
 - Back/forward handlers: call `prov.goBack()` / `prov.goForward()`,
   then `_fetchEntries(prov.currentPath)`
-- `_buildPathBar`: add `chevron_left` / `chevron_right` IconButtons
-  before the Up button, styled identically to the local panel
-  (size 16, enabled `0xFF888888`, disabled `0xFF333333`,
-  `minWidth/minHeight 24`, `onPressed: null` when unavailable)
+- `_buildPathBar`: add `chevron_left` / `chevron_right` IconButtons,
+  styled identically to the local panel (size 16, enabled `0xFF888888`,
+  disabled `0xFF333333`, `minWidth/minHeight 24`, `onPressed: null`
+  when unavailable)
+- Remove the Up button (amendment after initial approval): back/forward
+  plus the breadcrumb cover parent navigation, so the Up button and the
+  now-unused `SftpPanelProvider.navigateUp()` are deleted
 
 ### 3. Behavior
 
 - Every navigation records history: double-click into a folder,
-  breadcrumb click, Up button — standard file-manager semantics
+  breadcrumb click — standard file-manager semantics
 - Host switch recreates the panel (keyed by host id), so history
   resets; the last path per host is still remembered via `initialPath`
   (existing behavior, unchanged)
