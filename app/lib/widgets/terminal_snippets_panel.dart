@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
+import 'workspace_side_panel.dart';
 
 class TerminalSnippetsPanel extends StatefulWidget {
   final bool canRun;
@@ -27,18 +28,36 @@ class _TerminalSnippetsPanelState extends State<TerminalSnippetsPanel> {
     final snippets = context.watch<SnippetProvider>().snippets;
     final filtered = filterSnippets(snippets, _query);
 
-    return Container(
-      width: 340,
-      decoration: const BoxDecoration(
-        color: Color(0xFF141414),
-        border: Border(left: BorderSide(color: Color(0xFF2A2A2A))),
+    return WorkspaceSidePanel(
+      title: 'Snippets',
+      closeTooltip: 'Close snippets panel',
+      onClose: widget.onClose,
+      headerExtra: TextField(
+        onChanged: (value) => setState(() => _query = value),
+        style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
+        decoration: InputDecoration(
+          hintText: 'Search snippets…',
+          hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 13),
+          prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF555555)),
+          filled: true,
+          fillColor: const Color(0xFF1C1C1C),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF22C55E)),
+          ),
+          isDense: true,
+        ),
       ),
       child: Column(
         children: [
-          _PanelHeader(
-            onSearch: (value) => setState(() => _query = value),
-            onClose: widget.onClose,
-          ),
           if (!widget.canRun)
             Container(
               width: double.infinity,
@@ -70,72 +89,6 @@ class _TerminalSnippetsPanelState extends State<TerminalSnippetsPanel> {
                       );
                     },
                   ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PanelHeader extends StatelessWidget {
-  final ValueChanged<String> onSearch;
-  final VoidCallback? onClose;
-
-  const _PanelHeader({required this.onSearch, this.onClose});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const Text(
-                'Snippets',
-                style: TextStyle(
-                  color: Color(0xFFE5E5E5),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              if (onClose != null)
-                IconButton(
-                  tooltip: 'Close snippets panel',
-                  onPressed: onClose,
-                  icon: const Icon(Icons.close, size: 16, color: Color(0xFF888888)),
-                  visualDensity: VisualDensity.compact,
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            onChanged: onSearch,
-            style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
-            decoration: InputDecoration(
-              hintText: 'Search snippets…',
-              hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 13),
-              prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF555555)),
-              filled: true,
-              fillColor: const Color(0xFF1C1C1C),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFF22C55E)),
-              ),
-              isDense: true,
-            ),
           ),
         ],
       ),
