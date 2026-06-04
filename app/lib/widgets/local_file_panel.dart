@@ -10,7 +10,11 @@ import 'path_breadcrumb.dart';
 class LocalFilePanel extends StatefulWidget {
   final LocalFilePanelProvider provider;
 
-  const LocalFilePanel({super.key, required this.provider});
+  /// When set, shows a "Local" source chip next to the breadcrumb that
+  /// opens the panel's source picker (two-panel SFTP layout).
+  final VoidCallback? onChangeSource;
+
+  const LocalFilePanel({super.key, required this.provider, this.onChangeSource});
 
   @override
   State<LocalFilePanel> createState() => _LocalFilePanelState();
@@ -270,6 +274,34 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
             constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
           ),
           const SizedBox(width: 2),
+          if (widget.onChangeSource != null) ...[
+            GestureDetector(
+              onTap: widget.onChangeSource,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E1E),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFF2A2A2A)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.laptop_mac, size: 11, color: Color(0xFF22C55E)),
+                    SizedBox(width: 4),
+                    Text('Local',
+                        style: TextStyle(
+                            color: Color(0xFF22C55E),
+                            fontSize: 11,
+                            fontFamily: 'monospace')),
+                    SizedBox(width: 4),
+                    Icon(Icons.unfold_more, size: 11, color: Color(0xFF555555)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
           Expanded(
             child: PathBreadcrumb(
               crumbs: crumbs,

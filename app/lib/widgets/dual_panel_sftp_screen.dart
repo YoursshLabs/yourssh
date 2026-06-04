@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../models/local_entry.dart';
+import '../models/panel_source.dart';
 import '../models/sftp_entry.dart';
 import '../models/sftp_transfer_item.dart';
 import '../providers/host_provider.dart';
@@ -11,13 +12,19 @@ import '../providers/sftp_panel_provider.dart';
 import '../providers/sftp_transfer_provider.dart';
 import '../services/app_discovery_service.dart';
 import '../services/external_edit_service.dart';
+import '../services/local_copy_service.dart';
 import '../services/sftp_file_ops_service.dart';
 import '../services/sftp_transfer_service.dart';
 import '../services/ssh_service.dart';
 import 'local_file_panel.dart';
 import 'sftp_panel.dart';
 import 'sftp_transfer_dialog.dart';
+import 'source_picker_dialog.dart';
 
+/// Two-panel commander layout. Each slot points at a [PanelSource] (the
+/// local filesystem or any saved host) and can be switched at any time.
+/// Left defaults to Local; right starts unconnected.
+/// Design: docs/superpowers/specs/2026-06-04-sftp-two-panel-design.md
 class DualPanelSftpScreen extends StatefulWidget {
   final ValueNotifier<bool> connectionNotifier;
 
@@ -28,12 +35,16 @@ class DualPanelSftpScreen extends StatefulWidget {
 }
 
 class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
-  Host? _hostA;
-  Host? _hostB;
-  late LocalFilePanelProvider _localProvider;
-  late SftpPanelProvider _providerA;
-  late SftpPanelProvider _providerB;
-  late SftpTransferProvider _transferProvider;
+  PanelSource? _sourceLeft = const LocalSource();
+  PanelSource? _sourceRight;
+
+  // Each slot owns one provider of each kind so switching a slot's source
+  // back and forth preserves both the local and the remote path.
+  late final LocalFilePanelProvider _localLeft;
+  late final LocalFilePanelProvider _localRight;
+  late final SftpPanelProvider _sftpLeft;
+  late final SftpPanelProvider _sftpRight;
+  late final SftpTransferProvider _transferProvider;
   // Owned by the State (not created inside build) so the State's own methods
   // can use them directly: `context.read` from the State's context cannot see
   // providers created below it in build().
@@ -41,13 +52,15 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
   late final SftpFileOpsService _fileOpsService;
   late final ExternalEditService _externalEditService;
   late final AppDiscoveryService _appDiscoveryService;
+  final _localCopyService = LocalCopyService();
 
   @override
   void initState() {
     super.initState();
-    _localProvider = LocalFilePanelProvider();
-    _providerA = SftpPanelProvider();
-    _providerB = SftpPanelProvider();
+    _localLeft = LocalFilePanelProvider();
+    _localRight = LocalFilePanelProvider();
+    _sftpLeft = SftpPanelProvider();
+    _sftpRight = SftpPanelProvider();
     _transferProvider = SftpTransferProvider();
     final ssh = context.read<SshService>();
     _transferService = SftpTransferService(ssh);
@@ -62,32 +75,54 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
     widget.connectionNotifier.value = false;
     _externalEditService.dispose();
     _appDiscoveryService.dispose();
-    _localProvider.dispose();
-    _providerA.dispose();
-    _providerB.dispose();
+    _localLeft.dispose();
+    _localRight.dispose();
+    _sftpLeft.dispose();
+    _sftpRight.dispose();
     _transferProvider.dispose();
     super.dispose();
   }
 
-  Future<Host?> _showHostPicker(Host? current) {
+  // ── Slot helpers ──────────────────────────────────────
+
+  PanelSource? _sourceOf(bool left) => left ? _sourceLeft : _sourceRight;
+  LocalFilePanelProvider _localOf(bool left) => left ? _localLeft : _localRight;
+  SftpPanelProvider _sftpOf(bool left) => left ? _sftpLeft : _sftpRight;
+
+  Future<void> _pickSource(bool left) async {
     final hosts = context.read<HostProvider>().allHosts;
-    if (hosts.isEmpty) return Future.value(null);
-    return showDialog<Host>(
+    final picked = await showDialog<PanelSource>(
       context: context,
-      builder: (ctx) => _HostPickerDialog(hosts: hosts, current: current),
+      builder: (_) => SourcePickerDialog(hosts: hosts, current: _sourceOf(left)),
     );
+    if (!mounted || picked == null || picked == _sourceOf(left)) return;
+    setState(() {
+      if (left) {
+        _sourceLeft = picked;
+      } else {
+        _sourceRight = picked;
+      }
+      widget.connectionNotifier.value =
+          _sourceLeft is HostSource || _sourceRight is HostSource;
+    });
   }
 
-  Future<void> _pickHostA() async {
-    final h = await _showHostPicker(_hostA);
+  Future<void> _reloadSlot(bool left) async {
     if (!mounted) return;
-    if (h != null && h.id != _hostA?.id) setState(() { _hostA = h; widget.connectionNotifier.value = true; });
-  }
-
-  Future<void> _pickHostB() async {
-    final h = await _showHostPicker(_hostB);
-    if (!mounted) return;
-    if (h != null && h.id != _hostB?.id) setState(() => _hostB = h);
+    final src = _sourceOf(left);
+    if (src is LocalSource) {
+      await _localOf(left).reload();
+    } else if (src is HostSource) {
+      final prov = _sftpOf(left);
+      prov.setLoadState(SftpPanelLoadState.loading);
+      try {
+        final entries =
+            await _transferService.listDirectory(src.host, prov.currentPath);
+        prov..setEntries(entries)..setLoadState(SftpPanelLoadState.loaded);
+      } catch (e) {
+        prov.setLoadState(SftpPanelLoadState.error, error: e.toString());
+      }
+    }
   }
 
   void _showTransferDialog() {
@@ -101,37 +136,81 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
     );
   }
 
-  Future<void> _reloadA() async {
-    if (!mounted || _hostA == null) return;
-    _providerA.setLoadState(SftpPanelLoadState.loading);
-    try {
-      final entries = await _transferService.listDirectory(_hostA!, _providerA.currentPath);
-      _providerA..setEntries(entries)..setLoadState(SftpPanelLoadState.loaded);
-    } catch (e) { _providerA.setLoadState(SftpPanelLoadState.error, error: e.toString()); }
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(message), backgroundColor: const Color(0xFF2A1A1A)));
   }
 
-  Future<void> _reloadB() async {
-    if (!mounted || _hostB == null) return;
-    _providerB.setLoadState(SftpPanelLoadState.loading);
-    try {
-      final entries = await _transferService.listDirectory(_hostB!, _providerB.currentPath);
-      _providerB..setEntries(entries)..setLoadState(SftpPanelLoadState.loaded);
-    } catch (e) { _providerB.setLoadState(SftpPanelLoadState.error, error: e.toString()); }
+  // ── Transfer dispatch ─────────────────────────────────
+
+  Future<void> _transfer({required bool fromLeft}) async {
+    final src = _sourceOf(fromLeft);
+    final dst = _sourceOf(!fromLeft);
+    if (src == null || dst == null) return;
+
+    switch (transferKindFor(src, dst)) {
+      case TransferKind.localCopy:
+        await _localToLocal(fromLeft);
+      case TransferKind.upload:
+        await _upload(fromLeft, (dst as HostSource).host);
+      case TransferKind.download:
+        await _download(fromLeft, (src as HostSource).host);
+      case TransferKind.remoteRelay:
+        await _relay(fromLeft, (src as HostSource).host, (dst as HostSource).host);
+    }
   }
 
-  // ── Local → RemoteA ───────────────────────────────────
-
-  Future<void> _upload() async {
-    final host = _hostA;
-    if (host == null) return;
-    final selected = _localProvider.selectedEntries.toList();
+  // Local slot → local slot: plain filesystem copy.
+  Future<void> _localToLocal(bool fromLeft) async {
+    final selected = _localOf(fromLeft).selectedEntries.toList();
     if (selected.isEmpty) return;
-    final service = _transferService;
-    final remoteDir = _providerA.currentPath;
+    final dstDir = _localOf(!fromLeft).currentPath;
 
     final items = [
       for (final e in selected)
-        SftpTransferItem(fileName: e.name, direction: TransferDirection.upload)..totalBytes = e.size,
+        SftpTransferItem(fileName: e.name, direction: TransferDirection.upload)
+          ..totalBytes = e.size,
+    ];
+    _transferProvider.startBatch(items);
+    _showTransferDialog();
+
+    try {
+      for (int i = 0; i < selected.length; i++) {
+        if (_transferProvider.isCancelled) break;
+        final item = items[i];
+        _transferProvider.updateItem(item.id, status: TransferStatus.inProgress);
+        var copied = 0;
+        await _localCopyService.copyEntry(
+          selected[i].path,
+          dstDir,
+          onBytes: (n) {
+            copied += n;
+            _transferProvider.updateItem(item.id, bytesTransferred: copied);
+          },
+        );
+        _transferProvider.updateItem(item.id, status: TransferStatus.done);
+      }
+    } on ArgumentError {
+      _showError('Source and destination folders are the same');
+    } catch (e) {
+      _showError('Copy failed: $e');
+    } finally {
+      await _reloadSlot(!fromLeft);
+    }
+  }
+
+  // Local slot → remote slot.
+  Future<void> _upload(bool fromLeft, Host host) async {
+    final selected = _localOf(fromLeft).selectedEntries.toList();
+    if (selected.isEmpty) return;
+    final service = _transferService;
+    final remoteDir = _sftpOf(!fromLeft).currentPath;
+
+    final items = [
+      for (final e in selected)
+        SftpTransferItem(fileName: e.name, direction: TransferDirection.upload)
+          ..totalBytes = e.size,
     ];
     _transferProvider.startBatch(items);
     _showTransferDialog();
@@ -157,26 +236,23 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
         _transferProvider.updateItem(item.id, status: TransferStatus.done);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Upload failed: $e'), backgroundColor: const Color(0xFF2A1A1A)));
-      }
-    } finally { await _reloadA(); }
+      _showError('Upload failed: $e');
+    } finally {
+      await _reloadSlot(!fromLeft);
+    }
   }
 
-  // ── RemoteA → Local ───────────────────────────────────
-
-  Future<void> _download() async {
-    final host = _hostA;
-    if (host == null) return;
-    final selected = _providerA.selectedEntries.toList();
+  // Remote slot → local slot.
+  Future<void> _download(bool fromLeft, Host host) async {
+    final selected = _sftpOf(fromLeft).selectedEntries.toList();
     if (selected.isEmpty) return;
     final service = _transferService;
-    final localDir = _localProvider.currentPath;
+    final localDir = _localOf(!fromLeft).currentPath;
 
     final items = [
       for (final e in selected)
-        SftpTransferItem(fileName: e.name, direction: TransferDirection.download)..totalBytes = e.size,
+        SftpTransferItem(fileName: e.name, direction: TransferDirection.download)
+          ..totalBytes = e.size,
     ];
     _transferProvider.startBatch(items);
     _showTransferDialog();
@@ -201,94 +277,122 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
         _transferProvider.updateItem(item.id, status: TransferStatus.done);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Download failed: $e'), backgroundColor: const Color(0xFF2A1A1A)));
-      }
-    } finally { await _localProvider.reload(); }
+      _showError('Download failed: $e');
+    } finally {
+      await _reloadSlot(!fromLeft);
+    }
   }
 
-  // ── RemoteA → RemoteB ─────────────────────────────────
-
-  Future<void> _copyAtoB() async {
-    final hostA = _hostA; final hostB = _hostB;
-    if (hostA == null || hostB == null) return;
-    final selected = _providerA.selectedEntries.where((e) => !e.isDirectory).toList();
+  // Remote slot → remote slot, relayed through a local temp file (files only).
+  Future<void> _relay(bool fromLeft, Host srcHost, Host dstHost) async {
+    final selected =
+        _sftpOf(fromLeft).selectedEntries.where((e) => !e.isDirectory).toList();
     if (selected.isEmpty) return;
     final service = _transferService;
-    final destDir = _providerB.currentPath;
+    final destDir = _sftpOf(!fromLeft).currentPath;
 
-    final items = [for (final e in selected) SftpTransferItem(fileName: e.name, direction: TransferDirection.upload)..totalBytes = e.size];
+    final items = [
+      for (final e in selected)
+        SftpTransferItem(fileName: e.name, direction: TransferDirection.upload)
+          ..totalBytes = e.size,
+    ];
     _transferProvider.startBatch(items);
     _showTransferDialog();
 
     try {
       for (int i = 0; i < selected.length; i++) {
         if (_transferProvider.isCancelled) break;
-        final item = items[i]; final entry = selected[i];
+        final item = items[i];
+        final entry = selected[i];
         _transferProvider.updateItem(item.id, status: TransferStatus.inProgress);
-        final tmp = await service.downloadToTemp(hostA, entry);
+        final tmp = await service.downloadToTemp(srcHost, entry);
         if (tmp != null) {
-          await service.copyLocalToRemote(localPath: tmp, remoteHost: hostB, remoteDir: destDir);
+          await service.copyLocalToRemote(localPath: tmp, remoteHost: dstHost, remoteDir: destDir);
           await File(tmp).delete();
         }
         _transferProvider.updateItem(item.id, bytesTransferred: entry.size, status: TransferStatus.done);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Copy failed: $e'), backgroundColor: const Color(0xFF2A1A1A)));
-      }
-    } finally { await _reloadB(); }
+      _showError('Copy failed: $e');
+    } finally {
+      await _reloadSlot(!fromLeft);
+    }
   }
 
-  // ── RemoteB → RemoteA ─────────────────────────────────
-
-  Future<void> _copyBtoA() async {
-    final hostA = _hostA; final hostB = _hostB;
-    if (hostA == null || hostB == null) return;
-    final selected = _providerB.selectedEntries.where((e) => !e.isDirectory).toList();
-    if (selected.isEmpty) return;
-    final service = _transferService;
-    final destDir = _providerA.currentPath;
-
-    final items = [for (final e in selected) SftpTransferItem(fileName: e.name, direction: TransferDirection.upload)..totalBytes = e.size];
-    _transferProvider.startBatch(items);
-    _showTransferDialog();
-
-    try {
-      for (int i = 0; i < selected.length; i++) {
-        if (_transferProvider.isCancelled) break;
-        final item = items[i]; final entry = selected[i];
-        _transferProvider.updateItem(item.id, status: TransferStatus.inProgress);
-        final tmp = await service.downloadToTemp(hostB, entry);
-        if (tmp != null) {
-          await service.copyLocalToRemote(localPath: tmp, remoteHost: hostA, remoteDir: destDir);
-          await File(tmp).delete();
-        }
-        _transferProvider.updateItem(item.id, bytesTransferred: entry.size, status: TransferStatus.done);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Copy failed: $e'), backgroundColor: const Color(0xFF2A1A1A)));
-      }
-    } finally { await _reloadA(); }
+  /// Whether the slot has a selection the transfer matrix can move toward
+  /// the other slot.
+  bool _canTransferFrom(bool fromLeft) {
+    final src = _sourceOf(fromLeft);
+    final dst = _sourceOf(!fromLeft);
+    if (src == null || dst == null) return false;
+    return switch (transferKindFor(src, dst)) {
+      TransferKind.localCopy ||
+      TransferKind.upload =>
+        _localOf(fromLeft).selectedEntries.isNotEmpty,
+      TransferKind.download => _sftpOf(fromLeft).selectedEntries.isNotEmpty,
+      TransferKind.remoteRelay =>
+        _sftpOf(fromLeft).selectedEntries.any((e) => !e.isDirectory),
+    };
   }
 
-  // ── Drag & Drop ───────────────────────────────────────
+  // ── Drag & drop ───────────────────────────────────────
 
-  Future<void> _onLocalDroppedOnRemote(LocalEntry entry) async {
-    if (_hostA == null || entry.isDirectory) return;
-    _localProvider.selectOnly(entry);
-    await _upload();
+  // A dropped entry always originates from the opposite slot: drags from the
+  // target slot itself resolve to the same source kind and end up as a
+  // same-directory copy, which the transfer guards reject.
+  Future<void> _onDropLocalEntry(bool targetLeft, LocalEntry entry) async {
+    if (entry.isDirectory) return;
+    if (_sourceOf(!targetLeft) is! LocalSource) return;
+    _localOf(!targetLeft).selectOnly(entry);
+    await _transfer(fromLeft: !targetLeft);
   }
 
-  Future<void> _onRemoteDroppedOnLocal(SftpEntry entry) async {
-    if (_hostA == null || entry.isDirectory) return;
-    _providerA.clearSelection();
-    _providerA.toggleSelection(entry);
-    await _download();
+  Future<void> _onDropSftpEntry(bool targetLeft, SftpEntry entry) async {
+    if (entry.isDirectory) return;
+    if (_sourceOf(!targetLeft) is! HostSource) return;
+    final prov = _sftpOf(!targetLeft);
+    prov.clearSelection();
+    prov.toggleSelection(entry);
+    await _transfer(fromLeft: !targetLeft);
+  }
+
+  // ── Build ─────────────────────────────────────────────
+
+  Widget _slot(bool left) {
+    final src = _sourceOf(left);
+    final Widget panel;
+    if (src is LocalSource) {
+      panel = LocalFilePanel(
+        provider: _localOf(left),
+        onChangeSource: () => _pickSource(left),
+      );
+    } else {
+      final host = src is HostSource ? src.host : null;
+      panel = SftpPanel(
+        key: ValueKey('${left ? 'l' : 'r'}_${host?.id}'),
+        host: host,
+        panelId: left ? 'remote_left' : 'remote_right',
+        provider: _sftpOf(left),
+        onChangeHost: () => _pickSource(left),
+      );
+    }
+
+    return DragTarget<LocalEntry>(
+      onAcceptWithDetails: (d) => _onDropLocalEntry(left, d.data),
+      builder: (_, localCandidates, _) => DragTarget<SftpEntry>(
+        onAcceptWithDetails: (d) => _onDropSftpEntry(left, d.data),
+        builder: (_, sftpCandidates, _) => Container(
+          decoration: BoxDecoration(
+            border: localCandidates.isNotEmpty || sftpCandidates.isNotEmpty
+                ? Border.all(
+                    color: const Color(0xFF22C55E).withValues(alpha: 0.4),
+                    width: 2)
+                : null,
+          ),
+          child: panel,
+        ),
+      ),
+    );
   }
 
   @override
@@ -302,7 +406,8 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
         ChangeNotifierProvider.value(value: _transferProvider),
       ],
       child: ListenableBuilder(
-        listenable: Listenable.merge([_localProvider, _providerA, _providerB]),
+        listenable:
+            Listenable.merge([_localLeft, _localRight, _sftpLeft, _sftpRight]),
         builder: (context, _) => Column(
           children: [
             Consumer<SftpTransferProvider>(
@@ -317,60 +422,14 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
             Expanded(
               child: Row(
                 children: [
-                  // Local
-                  Expanded(
-                    child: DragTarget<SftpEntry>(
-                      onAcceptWithDetails: (d) => _onRemoteDroppedOnLocal(d.data),
-                      builder: (_, candidates, _) => Container(
-                        decoration: BoxDecoration(
-                          border: candidates.isNotEmpty
-                              ? Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.4), width: 2)
-                              : null,
-                        ),
-                        child: LocalFilePanel(provider: _localProvider),
-                      ),
-                    ),
-                  ),
-                  // Bar: Local ↔ RemoteA
+                  Expanded(child: _slot(true)),
                   _TransferBar(
-                    canLeft: _hostA != null && _providerA.selectedEntries.isNotEmpty,
-                    canRight: _hostA != null && _localProvider.selectedEntries.isNotEmpty,
-                    onLeft: _download,
-                    onRight: _upload,
+                    canLeft: _canTransferFrom(false),
+                    canRight: _canTransferFrom(true),
+                    onLeft: () => _transfer(fromLeft: false),
+                    onRight: () => _transfer(fromLeft: true),
                   ),
-                  // RemoteA
-                  Expanded(
-                    child: DragTarget<LocalEntry>(
-                      onAcceptWithDetails: (d) => _onLocalDroppedOnRemote(d.data),
-                      builder: (_, candidates, _) => Container(
-                        decoration: BoxDecoration(
-                          border: candidates.isNotEmpty
-                              ? Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.4), width: 2)
-                              : null,
-                        ),
-                        child: SftpPanel(
-                          key: ValueKey('ra_${_hostA?.id}'),
-                          host: _hostA, panelId: 'remote_a',
-                          provider: _providerA, onChangeHost: _pickHostA,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Bar: RemoteA ↔ RemoteB
-                  _TransferBar(
-                    canLeft: _hostA != null && _hostB != null && _providerB.selectedEntries.any((e) => !e.isDirectory),
-                    canRight: _hostA != null && _hostB != null && _providerA.selectedEntries.any((e) => !e.isDirectory),
-                    onLeft: _copyBtoA,
-                    onRight: _copyAtoB,
-                  ),
-                  // RemoteB
-                  Expanded(
-                    child: SftpPanel(
-                      key: ValueKey('rb_${_hostB?.id}'),
-                      host: _hostB, panelId: 'remote_b',
-                      provider: _providerB, onChangeHost: _pickHostB,
-                    ),
-                  ),
+                  Expanded(child: _slot(false)),
                 ],
               ),
             ),
@@ -428,83 +487,6 @@ class _Btn extends StatelessWidget {
             border: Border.all(color: enabled ? const Color(0xFF22C55E).withValues(alpha: 0.3) : const Color(0xFF252525)),
           ),
           child: Icon(icon, size: 14, color: enabled ? const Color(0xFF22C55E) : const Color(0xFF333333)),
-        ),
-      ),
-    );
-  }
-}
-
-class _HostPickerDialog extends StatelessWidget {
-  final List<Host> hosts;
-  final Host? current;
-
-  const _HostPickerDialog({required this.hosts, required this.current});
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: const Color(0xFF1A1A1A),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: SizedBox(
-        width: 380,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A)))),
-              child: Row(children: [
-                const Icon(Icons.dns_outlined, size: 15, color: Color(0xFF888888)),
-                const SizedBox(width: 8),
-                const Text('Select Remote Host',
-                    style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 13, fontWeight: FontWeight.w600)),
-                const Spacer(),
-                GestureDetector(onTap: () => Navigator.pop(context),
-                    child: const Icon(Icons.close, size: 14, color: Color(0xFF555555))),
-              ]),
-            ),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 320),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: hosts.length,
-                itemBuilder: (_, i) {
-                  final h = hosts[i];
-                  final active = h.id == current?.id;
-                  return InkWell(
-                    onTap: () => Navigator.pop(context, h),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      color: active ? const Color(0xFF22C55E).withValues(alpha: 0.08) : Colors.transparent,
-                      child: Row(children: [
-                        Container(
-                          width: 28, height: 28,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF22C55E).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Icon(Icons.dns, size: 14, color: Color(0xFF22C55E)),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(h.label, style: TextStyle(
-                              color: active ? const Color(0xFF22C55E) : const Color(0xFFD4D4D4),
-                              fontSize: 13, fontWeight: active ? FontWeight.w600 : FontWeight.normal)),
-                            Text('${h.username}@${h.host}:${h.port}',
-                                style: const TextStyle(color: Color(0xFF555555), fontSize: 11, fontFamily: 'monospace')),
-                          ],
-                        )),
-                        if (active) const Icon(Icons.check, size: 14, color: Color(0xFF22C55E)),
-                      ]),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
         ),
       ),
     );
