@@ -1,7 +1,8 @@
 # On-demand cross-platform build verification (debug builds + tests).
 # Runs when this file itself changes on develop, or manually via
 # workflow_dispatch (available once the file lands on the default branch).
-# To re-run against new commits before that: bump this comment. (run 2)
+# To re-run against new commits before that: bump this comment. (run 3:
+# terminal copy/paste fix #43)
 name: Platform Build Check
 
 on:
