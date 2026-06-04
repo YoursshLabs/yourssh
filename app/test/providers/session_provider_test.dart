@@ -121,6 +121,26 @@ void main() {
       await expectLater(future, completes);
     });
 
+    test('onSessionDropped fires with reason when connect fails and auto-reconnect is off', () async {
+      final host = Host(
+        label: 'unreachable',
+        host: '127.0.0.1',
+        port: 1,
+        username: 'x',
+      );
+      SshSession? dropped;
+      String? reason;
+      provider.onSessionDropped = (s, r) {
+        dropped = s;
+        reason = r;
+      };
+      // autoReconnectEnabled left unset -> defaults to false -> error path.
+      await provider.connect(host);
+      expect(provider.sshSessions.first.status, SessionStatus.error);
+      expect(dropped, same(provider.sshSessions.first));
+      expect(reason, isNotNull);
+    });
+
     test('loadMetadata applied to session on connect (mocked via SharedPreferences)', () async {
       SharedPreferences.setMockInitialValues({
         'tab_meta_h-load': jsonEncode({

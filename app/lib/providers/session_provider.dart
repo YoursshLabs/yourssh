@@ -26,6 +26,12 @@ class SessionProvider extends ChangeNotifier {
   Future<void> Function(String hostId, String os)? onOsDetected;
   Future<void> Function(SshSession session)? recordingStart;
 
+  /// Fired when a session drops without a pending auto-reconnect: shell
+  /// closed (a graceful `exit` is indistinguishable here — see spec caveat)
+  /// or reconnect attempts exhausted. Wired in main.dart to the
+  /// notification center.
+  void Function(SshSession session, String? reason)? onSessionDropped;
+
   /// Set by main.dart; required for newLocalSession/restartLocalSession.
   /// The setter wires the service's out-of-band state changes (PTY exit,
   /// spawn failure) into this provider's notify, so panes rebuild into the
@@ -152,6 +158,7 @@ class SessionProvider extends ChangeNotifier {
         _scheduleReconnect(session, host, attempt: 1);
       } else if (_sessions.contains(session)) {
         session.status = SessionStatus.disconnected;
+        onSessionDropped?.call(session, null);
         _safeNotify();
       }
     } catch (e) {
@@ -167,6 +174,7 @@ class SessionProvider extends ChangeNotifier {
         session.errorMessage = attempt > 1
             ? 'Failed after $attempt attempts: $e'
             : e.toString();
+        onSessionDropped?.call(session, session.errorMessage);
         _safeNotify();
       }
     }
