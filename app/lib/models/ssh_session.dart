@@ -1,10 +1,11 @@
 import 'package:uuid/uuid.dart';
 import 'package:xterm/xterm.dart';
 import 'host.dart';
+import 'terminal_session.dart';
 
 enum SessionStatus { connecting, connected, disconnected, error }
 
-class SshSession {
+class SshSession implements TerminalSession {
   final String id;
   final Host host;
   final Terminal terminal;
@@ -59,7 +60,11 @@ class SshSession {
 
   /// Label shown on the session tab: the user's custom rename, falling back to
   /// the host's display label (the watch factory stores '[WATCH] …' there).
+  @override
   String get tabLabel => customLabel ?? host.label;
+
+  @override
+  bool get isLocal => false;
 
   String get statusLabel => switch (status) {
         SessionStatus.connecting => 'Connecting...',
