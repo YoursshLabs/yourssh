@@ -13,6 +13,10 @@ import 'package:yourssh/widgets/path_breadcrumb.dart';
 void main() {
   testWidgets('connected remote slot shows the path breadcrumb',
       (tester) async {
+    // Wide surface: the header misalignment only shows when the panel is
+    // wide enough that the chip's flex share exceeds its intrinsic width.
+    await tester.binding.setSurfaceSize(const Size(1600, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     SharedPreferences.setMockInitialValues({});
     final notifier = ValueNotifier<bool>(false);
     addTearDown(notifier.dispose);
@@ -56,5 +60,15 @@ void main() {
     expect(find.text('root@127.0.0.1'), findsNothing);
     expect(find.text('Filter'), findsNWidgets(2));
     expect(find.text('Actions'), findsNWidgets(2));
+
+    // Actions must hug the right edge of BOTH panels equally (the remote
+    // header once split its free space between the chip and the spacer,
+    // leaving a gap to the right of Actions).
+    final leftActions = tester.getTopRight(find.text('Actions').first);
+    final rightActions = tester.getTopRight(find.text('Actions').last);
+    const screenWidth = 1600.0;
+    const leftPanelRightEdge = (screenWidth - 36) / 2; // 36 = transfer bar
+    expect(leftPanelRightEdge - leftActions.dx,
+        closeTo(screenWidth - rightActions.dx, 1.0));
   });
 }

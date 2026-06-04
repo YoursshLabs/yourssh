@@ -310,57 +310,65 @@ class _SftpPanelState extends State<SftpPanel> {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          // Flexible + ellipsis: a long label must never squeeze Filter /
-          // Actions out of the row (the panel can be half the window).
-          Flexible(
-            child: GestureDetector(
-              onTap: widget.onChangeHost,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: const Color(0xFF2A2A2A)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.dns, size: 11, color: Color(0xFF22C55E)),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(widget.host!.label,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Color(0xFF22C55E), fontSize: 12)),
+          // The chip+badge group owns ALL free row space (Expanded) so
+          // Filter/Actions always hug the right edge; the chip itself is
+          // loose (Flexible) inside and ellipsizes when the label is long.
+          // (Flexible chip + Spacer split the free space instead, leaving a
+          // gap to the right of Actions on wide panels.)
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: GestureDetector(
+                    onTap: widget.onChangeHost,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E1E),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFF2A2A2A)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.dns, size: 11, color: Color(0xFF22C55E)),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(widget.host!.label,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: Color(0xFF22C55E), fontSize: 12)),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.unfold_more, size: 11, color: Color(0xFF555555)),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.unfold_more, size: 11, color: Color(0xFF555555)),
-                  ],
+                  ),
                 ),
-              ),
+                if (widget.host!.sftpMode != SftpMode.normal) ...[
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message: 'SFTP runs elevated on this host',
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: const Text('root',
+                          style: TextStyle(
+                              color: Color(0xFFEF4444),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'monospace')),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          if (widget.host!.sftpMode != SftpMode.normal) ...[
-            const SizedBox(width: 4),
-            Tooltip(
-              message: 'SFTP runs elevated on this host',
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: const Text('root',
-                    style: TextStyle(
-                        color: Color(0xFFEF4444),
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: 'monospace')),
-              ),
-            ),
-          ],
-          const Spacer(),
           _HeaderButton(
             label: 'Filter',
             active: prov.filterVisible,
