@@ -24,6 +24,7 @@ import '../widgets/settings_screen.dart';
 import '../widgets/local_terminal_screen.dart';
 import '../widgets/network_stats_overlay.dart';
 import '../widgets/dual_panel_sftp_screen.dart';
+import '../widgets/keep_alive_offstage.dart';
 import '../widgets/split_terminal_view.dart';
 import '../widgets/new_group_panel.dart';
 import '../widgets/import_panel.dart';
@@ -513,7 +514,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               _viewingTerminal = false;
               _showAiChat = false;
               if (s != NavSection.hosts) _closePanel();
-              if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
             }),
             onSessionTap: (_) => setState(() => _viewingTerminal = true),
             onAddSession: () {
@@ -523,7 +523,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 _nav = NavSection.hosts;
                 _viewingTerminal = false;
                 _showAiChat = false;
-                _sftpConnectionNotifier.value = false;
               });
               _openHostPanel();
             },
@@ -535,7 +534,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               _nav = NavSection.settings;
               _viewingTerminal = false;
               _showAiChat = false;
-              _sftpConnectionNotifier.value = false;
             }),
           ),
 
@@ -549,7 +547,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     activePluginId: _activePluginId,
                     onSelect: (s) {
                       if (s != NavSection.hosts) _closePanel();
-                      if (s != NavSection.sftp) _sftpConnectionNotifier.value = false;
                       setState(() {
                         _activePluginId = null;
                         _activeScriptPanel = null;
@@ -639,6 +636,28 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildContent(SshSession? active) {
+    final showSftp = _nav == NavSection.sftp &&
+        !(_viewingTerminal && active != null) &&
+        _activePluginId == null &&
+        _activeScriptPanel == null;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // SFTP stays mounted (offstage) once opened so its connected session,
+        // paths, and in-flight transfers survive switching tabs (issue #42).
+        KeepAliveOffstage(
+          active: showSftp,
+          child: DualPanelSftpScreen(
+            connectionNotifier: _sftpConnectionNotifier,
+          ),
+        ),
+        if (!showSftp) _buildForeground(active),
+      ],
+    );
+  }
+
+  Widget _buildForeground(SshSession? active) {
     if (_viewingTerminal && active != null) {
       return Row(
         children: [
@@ -726,9 +745,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         ),
       NavSection.keychain => const KeychainScreen(),
       NavSection.portForwarding => const PortForwardingScreen(),
-      NavSection.sftp => DualPanelSftpScreen(
-          connectionNotifier: _sftpConnectionNotifier,
-        ),
+      // Rendered by the KeepAliveOffstage layer in _buildContent.
+      NavSection.sftp => const SizedBox.shrink(),
       NavSection.localTerminal => const LocalTerminalScreen(),
       NavSection.recordings => const RecordingLibraryScreen(),
       NavSection.knownHosts => const KnownHostsScreen(),
