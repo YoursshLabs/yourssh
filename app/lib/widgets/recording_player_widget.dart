@@ -144,6 +144,7 @@ class _RecordingPlayerWidgetState extends State<RecordingPlayerWidget> {
             textStyle: TerminalStyle(fontSize: settings.fontSize, fontFamily: settings.terminalFont),
             padding: EdgeInsets.zero,
             autofocus: false,
+            readOnly: true,
           ),
         ),
         Container(

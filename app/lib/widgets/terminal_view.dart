@@ -11,6 +11,7 @@ import '../theme/terminal_themes.dart';
 import 'command_gutter.dart';
 import 'record_button.dart';
 import 'suggestion_popup.dart';
+import 'terminal_context_menu.dart';
 
 class SessionTerminalView extends StatelessWidget {
   final SshSession session;
@@ -409,6 +410,12 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
           padding: showGutter ? const EdgeInsets.only(left: 10) : EdgeInsets.zero,
           autofocus: !_searchVisible,
           onKeyEvent: _handleKey,
+          onSecondaryTapUp: (details, _) => showTerminalContextMenu(
+            context: context,
+            globalPosition: details.globalPosition,
+            terminal: widget.session.terminal,
+            controller: _controller,
+          ),
         ),
         if (showGutter)
           Positioned(

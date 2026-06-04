@@ -4,15 +4,31 @@ import 'package:xterm/xterm.dart';
 import '../models/local_session.dart';
 import '../providers/settings_provider.dart';
 import 'record_button.dart';
+import 'terminal_context_menu.dart';
 
 /// Terminal pane for a local PTY session inside the split terminal workspace.
 /// Mirrors SessionTerminalView's status handling, minus SSH-only features
 /// (search, shell integration, command gutter).
-class LocalTerminalPane extends StatelessWidget {
+class LocalTerminalPane extends StatefulWidget {
   final LocalSession session;
   final VoidCallback onRestart;
   const LocalTerminalPane(
       {super.key, required this.session, required this.onRestart});
+
+  @override
+  State<LocalTerminalPane> createState() => _LocalTerminalPaneState();
+}
+
+class _LocalTerminalPaneState extends State<LocalTerminalPane> {
+  final _controller = TerminalController();
+
+  LocalSession get session => widget.session;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,10 +51,17 @@ class LocalTerminalPane extends StatelessWidget {
         TerminalView(
           key: ValueKey(session.id),
           session.terminal,
+          controller: _controller,
           autofocus: true,
           textStyle: TerminalStyle(
             fontSize: settings.fontSize,
             fontFamily: settings.terminalFont,
+          ),
+          onSecondaryTapUp: (details, _) => showTerminalContextMenu(
+            context: context,
+            globalPosition: details.globalPosition,
+            terminal: session.terminal,
+            controller: _controller,
           ),
         ),
         Positioned(
@@ -64,7 +87,7 @@ class LocalTerminalPane extends StatelessWidget {
                     color: color, fontFamily: 'monospace', fontSize: 13)),
             const SizedBox(height: 16),
             OutlinedButton.icon(
-              onPressed: onRestart,
+              onPressed: widget.onRestart,
               icon: const Icon(Icons.refresh, size: 16),
               label: const Text('Restart shell'),
             ),

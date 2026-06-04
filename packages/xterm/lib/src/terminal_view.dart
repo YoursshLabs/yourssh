@@ -305,6 +305,10 @@ class TerminalViewState extends State<TerminalView> {
           widget.onSecondaryTapDown != null ? _onSecondaryTapDown : null,
       onSecondaryTapUp:
           widget.onSecondaryTapUp != null ? _onSecondaryTapUp : null,
+      // YOURSSH PATCH (issue #43): middle-click pastes the clipboard, the
+      // standard terminal-emulator gesture. Mouse-mode apps (vim, htop)
+      // still receive the click instead — see TerminalGestureHandler._tapUp.
+      onTertiaryTapUp: widget.readOnly ? null : _onTertiaryTapUp,
       readOnly: widget.readOnly,
       child: child,
     );
@@ -365,6 +369,15 @@ class TerminalViewState extends State<TerminalView> {
   void _onSecondaryTapUp(TapUpDetails details) {
     final offset = renderTerminal.getCellOffset(details.localPosition);
     widget.onSecondaryTapUp?.call(details, offset);
+  }
+
+  Future<void> _onTertiaryTapUp(TapUpDetails details) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text != null && text.isNotEmpty) {
+      widget.terminal.paste(text);
+      _controller.clearSelection();
+    }
   }
 
   bool get hasInputConnection {

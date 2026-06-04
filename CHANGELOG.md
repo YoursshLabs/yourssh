@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Copying from the terminal** ([#43](https://github.com/YoursshLabs/yourssh/issues/43)) — copy/paste was effectively unreachable on Windows/Linux: `Ctrl+C` always meant SIGINT, the only copy binding was the undiscoverable `Ctrl+Shift+C`, and the right/middle mouse buttons did nothing. The terminal now mirrors Windows Terminal behavior: `Ctrl+C` copies when a selection is active (and clears the selection, so the next `Ctrl+C` reaches the shell as SIGINT), and `Ctrl+Shift+V` joins `Ctrl+V` as a paste alias. macOS `Cmd+C`/`Cmd+V` are unchanged.
+- **Middle-click paste** — middle-click now pastes the clipboard, the standard terminal-emulator gesture. The xterm fork routed middle clicks to the right-button callbacks (and reported them to mouse-mode apps as the right button); they now use their own path, and mouse-mode apps (vim, htop) receive a proper middle-button event instead.
+- **Recording playback terminal** is now read-only, so clicks and paste gestures can no longer inject input into a replay.
+
+### Added
+- **Terminal right-click menu** — right-clicking an SSH or local terminal opens a Copy / Paste / Select All context menu (Copy is disabled when nothing is selected).
+
 ---
 
 ## [0.1.23] — 2026-06-04
