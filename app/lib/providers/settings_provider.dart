@@ -15,6 +15,7 @@ class SettingsProvider extends ChangeNotifier {
   bool commandNotificationsEnabled = true;
   bool shellIntegrationEnabled = true;
   String terminalFont = 'MesloLGS NF';
+  String terminalType = 'xterm-256color';
   String recordingPath = '';
   Map<String, String> hotkeys = {
     'new_session': 'ctrl+t',
@@ -44,6 +45,7 @@ class SettingsProvider extends ChangeNotifier {
     commandNotificationsEnabled = prefs.getBool('commandNotificationsEnabled') ?? true;
     shellIntegrationEnabled = prefs.getBool('shellIntegrationEnabled') ?? true;
     terminalFont = prefs.getString('terminalFont') ?? 'MesloLGS NF';
+    terminalType = prefs.getString('terminalType') ?? 'xterm-256color';
     final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
     final defaultPath = home != null
         ? p.join(home, 'Documents', 'YourSSH', 'Recordings')
@@ -86,6 +88,7 @@ class SettingsProvider extends ChangeNotifier {
     bool? networkStatsEnabled,
     bool? tmuxEnabled,
     String? terminalFont,
+    String? terminalType,
     bool? commandNotificationsEnabled,
     bool? shellIntegrationEnabled,
     String? recordingPath,
@@ -99,6 +102,7 @@ class SettingsProvider extends ChangeNotifier {
     if (networkStatsEnabled != null) this.networkStatsEnabled = networkStatsEnabled;
     if (tmuxEnabled != null) this.tmuxEnabled = tmuxEnabled;
     if (terminalFont != null) this.terminalFont = terminalFont;
+    if (terminalType != null) this.terminalType = terminalType;
     if (commandNotificationsEnabled != null) this.commandNotificationsEnabled = commandNotificationsEnabled;
     if (shellIntegrationEnabled != null) this.shellIntegrationEnabled = shellIntegrationEnabled;
     if (recordingPath != null) this.recordingPath = recordingPath;
@@ -112,6 +116,7 @@ class SettingsProvider extends ChangeNotifier {
     await prefs.setBool('networkStatsEnabled', this.networkStatsEnabled);
     await prefs.setBool('tmuxEnabled', this.tmuxEnabled);
     await prefs.setString('terminalFont', this.terminalFont);
+    await prefs.setString('terminalType', this.terminalType);
     await prefs.setBool('commandNotificationsEnabled', this.commandNotificationsEnabled);
     await prefs.setBool('shellIntegrationEnabled', this.shellIntegrationEnabled);
     await prefs.setString('recordingPath', this.recordingPath);

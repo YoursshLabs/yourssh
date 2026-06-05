@@ -103,4 +103,26 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(provider.hotkeys['split_vertical'], 'ctrl+shift+d');
   });
+
+  test('terminalType defaults to xterm-256color', () async {
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.terminalType, 'xterm-256color');
+  });
+
+  test('save persists terminalType', () async {
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    await provider.save(terminalType: 'vt100');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('terminalType'), 'vt100');
+    expect(provider.terminalType, 'vt100');
+  });
+
+  test('loads persisted terminalType on init', () async {
+    SharedPreferences.setMockInitialValues({'terminalType': 'linux'});
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.terminalType, 'linux');
+  });
 }
