@@ -89,6 +89,29 @@ void main() {
       );
     });
 
+    test('roundtrip frames the request and unframes the response', () async {
+      // Fake agent: expect framed [11] (REQUEST_IDENTITIES), reply with an
+      // empty IDENTITIES_ANSWER (type 12, count 0).
+      final received = <int>[];
+      unawaited(server.first.then((client) {
+        client.listen((data) {
+          received.addAll(data);
+          final nkeys = Uint8List(4); // count = 0
+          client.add(_agentMsg([12, ...nkeys]));
+        });
+      }));
+
+      final proxy = await SystemAgentProxy.connectTo(socketPath);
+      final response = await proxy.roundtrip(Uint8List.fromList([11]));
+
+      // Request on the wire: 4-byte length prefix + body.
+      expect(received, equals([0, 0, 0, 1, 11]));
+      // Response comes back unframed: type byte + uint32 count.
+      expect(response, equals([12, 0, 0, 0, 0]));
+
+      await proxy.close();
+    });
+
     test('_AgentKeyPair.signAsync sends type 13 and receives type 14', () async {
       final algName = utf8.encode('ssh-ed25519');
       final keyBlob = Uint8List.fromList([

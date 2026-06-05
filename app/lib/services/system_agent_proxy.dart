@@ -314,6 +314,17 @@ class SystemAgentProxy {
     return pairs;
   }
 
+  /// Sends one raw (unframed) agent-protocol request and returns the raw
+  /// (unframed) response body. Length-prefix framing is handled internally.
+  /// Used by AgentForwardingHandler to relay forwarded agent requests
+  /// verbatim — the payload is never parsed, so agent extensions work.
+  Future<Uint8List> roundtrip(Uint8List requestBody) async {
+    final header = Uint8List(4);
+    ByteData.view(header.buffer).setUint32(0, requestBody.length, Endian.big);
+    _session.write(Uint8List.fromList([...header, ...requestBody]));
+    return _session.readMessage();
+  }
+
   Future<void> close() => _session.close();
 }
 
