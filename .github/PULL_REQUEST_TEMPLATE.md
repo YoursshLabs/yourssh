@@ -1,6 +1,8 @@
 <!--
 PR title must follow Conventional Commits:
-  feat(scope): ... | fix(scope): ... | docs(scope): ... | test(scope): ... | refactor(scope): ... | release: x.y.z
+  feat(scope): ... | fix(scope): ... | docs(scope): ... | test(scope): ... | refactor(scope): ...
+Release PRs include a short summary of the highlights after the version:
+  release: x.y.z — <short summary of what shipped>
 -->
 
 ## Summary
