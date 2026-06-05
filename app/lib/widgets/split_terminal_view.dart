@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:yourssh_snippets/yourssh_snippets.dart';
 import '../models/local_session.dart';
 import '../models/ssh_session.dart';
 import '../models/terminal_session.dart';
+import '../providers/plugin_provider.dart';
 import '../providers/terminal_layout_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/shell_integration_provider.dart';
@@ -36,6 +38,9 @@ class SplitTerminalView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final layout = context.watch<TerminalLayoutProvider>();
+    final snippetsEnabled = context
+        .watch<PluginProvider>()
+        .isEnabled(YourSSHSnippetsPlugin.pluginId);
     final sessionProvider = context.watch<SessionProvider>();
     final sessions = sessionProvider.sessions;
     final active = sessionProvider.activeSession;
@@ -53,7 +58,9 @@ class SplitTerminalView extends StatelessWidget {
           child: Row(
             children: [
               Expanded(child: _buildPanes(context, layout, sessions, active)),
-              if (layout.snippetsPanelVisible)
+              // Gated on the plugin too: the panel must vanish if the
+              // snippets plugin is disabled while it is open.
+              if (snippetsEnabled && layout.snippetsPanelVisible)
                 TerminalSnippetsPanel(
                   canRun: _canRunSnippetTarget(context),
                   onRunSnippet: (snippet) =>

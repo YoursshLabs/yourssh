@@ -6,6 +6,10 @@ class LocalEntry {
   final DateTime modifiedAt;
   final String permissions;
 
+  /// Raw st_mode captured at scan time (null when the stat failed); feeds
+  /// the permissions dialog without a second blocking stat at dialog-open.
+  final int? mode;
+
   const LocalEntry({
     required this.name,
     required this.path,
@@ -13,6 +17,7 @@ class LocalEntry {
     required this.size,
     required this.modifiedAt,
     required this.permissions,
+    this.mode,
   });
 
   String get extension {

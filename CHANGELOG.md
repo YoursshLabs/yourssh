@@ -9,6 +9,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.29] — 2026-06-05
+
+### Added
+- Unified right-click context menu in both SFTP panels: Open, Open with…,
+  Copy to target directory (disabled with a reason when it can't run — no
+  target panel, folders between two remote hosts, or both panels showing
+  the same folder), Refresh, New Folder, Edit Permissions, Rename, Delete
+- **Edit Permissions (chmod)** — rwx checkbox grid two-way synced with a
+  validated octal field (octal-only input, 3–4 digits, Apply disabled while
+  the value is incomplete or invalid); directories get recursive apply with
+  a hardened walk: entries whose listing omits the mode are classified via
+  lstat, symlinks are never followed (SETSTAT would chmod the link target),
+  a directory's own mode is applied after its contents, and file chmods run
+  in batches of 8; unknown current permissions fall back to a stat() and
+  then warn + gate Apply instead of silently offering `chmod 000`; the
+  local panel uses the system `chmod` (macOS/Linux)
+- Right-click context menu on port-forwarding rules: **Duplicate** (fresh
+  id, "(copy)" label, auto-start off), Edit, Delete
+- **Middle-click closes** unpinned session tabs (pinned tabs are protected)
+- **Distro-level OS icons** — Linux hosts are identified via
+  `/etc/os-release` and show their distro glyph (Ubuntu, Debian, Fedora,
+  CentOS, Rocky, Alma, Alpine, Amazon, Arch, SUSE, Red Hat) on the hosts
+  dashboard and SSH session tabs; hosts detected as generic Linux upgrade
+  on their next connect
+- **Update re-check while running** — the update check now also re-runs on
+  a 6-hour timer and on window focus (same 24h debounce), so the
+  notification bell picks up new releases without restarting the app
+
+### Fixed
+- Strict KEX (`kex-strict-c/s-v00@openssh.com`) in the bundled dartssh2
+  fork — mitigates CVE-2023-48795 "Terrapin"
+- Remote shells open at the terminal's real size instead of 80×24
+- Terminal snippets entry points (toolbar button, side panel) are hidden
+  when the Snippets plugin is disabled
+- SFTP/local panels no longer touch a disposed widget when a slow
+  operation (chmod, rename, delete, new folder) finishes after the tab
+  was closed
+- Local file listings carry the file mode from scan time — the permissions
+  dialog no longer blocks the UI thread with a synchronous stat
+- The terminal's AI chat toggle (and any open chat panel) is hidden until
+  an AI provider API key is configured
+
+### Changed
+- Displayed branding strings now use yoursshlabs.com
+- Settings: removed the redundant About section
+
+---
+
 ## [0.1.28] — 2026-06-05
 
 ### Added
@@ -385,7 +433,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.28...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.29...HEAD
+[0.1.29]: https://github.com/YoursshLabs/yourssh/compare/v0.1.28...v0.1.29
 [0.1.28]: https://github.com/YoursshLabs/yourssh/compare/v0.1.27...v0.1.28
 [0.1.27]: https://github.com/YoursshLabs/yourssh/compare/v0.1.26...v0.1.27
 [0.1.26]: https://github.com/YoursshLabs/yourssh/compare/v0.1.25...v0.1.26

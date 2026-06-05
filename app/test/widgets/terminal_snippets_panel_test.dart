@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:yourssh/providers/plugin_provider.dart';
 import 'package:yourssh/providers/terminal_layout_provider.dart';
 import 'package:yourssh/widgets/broadcast_toolbar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -85,10 +86,19 @@ void main() {
 
   testWidgets('toolbar toggle controls snippets panel visibility', (tester) async {
     final layout = TerminalLayoutProvider();
+    // The toolbar only shows the snippets button when the plugin is enabled.
+    SharedPreferences.setMockInitialValues({
+      'enabled_plugins': [YourSSHSnippetsPlugin.pluginId],
+    });
+    final plugins = PluginProvider(plugins: [YourSSHSnippetsPlugin()]);
+    await plugins.loadFromPrefs();
 
     await tester.pumpWidget(
-      ChangeNotifierProvider<TerminalLayoutProvider>.value(
-        value: layout,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<TerminalLayoutProvider>.value(value: layout),
+          ChangeNotifierProvider<PluginProvider>.value(value: plugins),
+        ],
         child: const MaterialApp(
           home: Scaffold(
             body: BroadcastToolbar(),

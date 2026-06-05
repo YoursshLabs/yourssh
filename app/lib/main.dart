@@ -267,6 +267,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateProvider.checkForUpdates();
     });
+    _updateProvider.startPeriodicChecks();
     _notificationCenter = NotificationCenterProvider();
     _updateProvider.addListener(_pushUpdateNotification);
     // Informational by design: the disconnect item stays in the bell until
@@ -331,6 +332,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   @override
   void onWindowFocus() {
     NotificationService.instance.onWindowFocus();
+    // Auto re-check on refocus (still debounced to 24h internally).
+    _updateProvider.checkForUpdates();
     if (_syncProvider.enabled) {
       _syncService.pull().then((payload) {
         if (payload != null) {

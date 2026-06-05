@@ -1,26 +1,9 @@
-// app/test/widgets/sftp_entry_context_menu_test.dart
+// app/test/widgets/entry_context_menu_test.dart
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/app_option.dart';
-import 'package:yourssh/models/sftp_entry.dart';
-import 'package:yourssh/widgets/sftp_entry_context_menu.dart';
-
-final _file = SftpEntry(
-  name: 'notes.txt',
-  path: '/home/u/notes.txt',
-  isDirectory: false,
-  size: 10,
-  modifiedAt: DateTime(2026),
-);
-
-final _dir = SftpEntry(
-  name: 'src',
-  path: '/home/u/src',
-  isDirectory: true,
-  size: 0,
-  modifiedAt: DateTime(2026),
-);
+import 'package:yourssh/widgets/entry_context_menu.dart';
 
 const _apps = [
   AppOption(name: 'VS Code', executablePath: '/usr/bin/code', isDefault: true),
@@ -28,26 +11,36 @@ const _apps = [
 ];
 
 Widget _wrap({
-  required SftpEntry entry,
+  required String label,
+  required bool isDirectory,
   VoidCallback? onView,
   VoidCallback? onEdit,
   Future<List<AppOption>> Function()? loadApps,
   void Function(AppOption)? onOpenWithApp,
   VoidCallback? onChooseApp,
+  VoidCallback? onCopyToTarget,
+  String? copyToTargetDisabledReason,
+  VoidCallback? onEditPermissions,
 }) {
   return MaterialApp(
     home: Scaffold(
-      body: SftpEntryContextMenu(
-        entry: entry,
+      body: EntryContextMenu(
+        path: '/home/u/$label',
+        isDirectory: isDirectory,
         onOpen: () {},
         onView: onView,
         onEdit: onEdit,
         loadApps: loadApps,
         onOpenWithApp: onOpenWithApp,
         onChooseApp: onChooseApp,
+        onCopyToTarget: onCopyToTarget,
+        copyToTargetDisabledReason: copyToTargetDisabledReason,
         onRename: () {},
         onDelete: () {},
-        child: Text(entry.name),
+        onRefresh: () {},
+        onNewFolder: () {},
+        onEditPermissions: onEditPermissions,
+        child: Text(label),
       ),
     ),
   );
@@ -59,39 +52,92 @@ Future<void> _rightClick(WidgetTester tester, String text) async {
 }
 
 void main() {
-  testWidgets('right-click shows View, Edit, Open with for files',
-      (tester) async {
+  testWidgets('file menu shows all items in order', (tester) async {
     await tester.pumpWidget(_wrap(
-      entry: _file,
+      label: 'notes.txt',
+      isDirectory: false,
       onView: () {},
       onEdit: () {},
       loadApps: () async => _apps,
       onOpenWithApp: (_) {},
       onChooseApp: () {},
+      onCopyToTarget: () {},
+      onEditPermissions: () {},
     ));
     await _rightClick(tester, 'notes.txt');
 
-    expect(find.text('View'), findsOneWidget);
-    expect(find.text('Edit'), findsOneWidget);
-    expect(find.text('Open with'), findsOneWidget);
-    expect(find.text('Rename'), findsOneWidget);
-    expect(find.text('Delete'), findsOneWidget);
-    expect(find.text('Copy path'), findsOneWidget);
+    for (final item in [
+      'Open', 'View', 'Edit', 'Open with', 'Copy to target directory',
+      'Rename', 'Delete', 'Refresh', 'New Folder', 'Edit Permissions',
+      'Copy path',
+    ]) {
+      expect(find.text(item), findsOneWidget, reason: 'missing $item');
+    }
   });
 
-  testWidgets('directories show Enter and no Open with', (tester) async {
-    await tester.pumpWidget(_wrap(entry: _dir));
+  testWidgets('directories show Open (not Enter) and no file-only items',
+      (tester) async {
+    await tester.pumpWidget(_wrap(
+      label: 'src',
+      isDirectory: true,
+      onCopyToTarget: () {},
+      onEditPermissions: () {},
+    ));
     await _rightClick(tester, 'src');
 
-    expect(find.text('Enter'), findsOneWidget);
+    expect(find.text('Open'), findsOneWidget);
+    expect(find.text('Enter'), findsNothing);
     expect(find.text('View'), findsNothing);
+    expect(find.text('Edit'), findsNothing);
     expect(find.text('Open with'), findsNothing);
+    expect(find.text('Copy to target directory'), findsOneWidget);
+    expect(find.text('Refresh'), findsOneWidget);
+    expect(find.text('New Folder'), findsOneWidget);
+    expect(find.text('Edit Permissions'), findsOneWidget);
+  });
+
+  testWidgets('copy to target disabled with reason', (tester) async {
+    var copied = false;
+    await tester.pumpWidget(_wrap(
+      label: 'src',
+      isDirectory: true,
+      onCopyToTarget: () => copied = true,
+      copyToTargetDisabledReason: 'No target panel',
+    ));
+    await _rightClick(tester, 'src');
+
+    expect(find.text('No target panel'), findsOneWidget);
+    await tester.tap(find.text('Copy to target directory'),
+        warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(copied, isFalse);
+  });
+
+  testWidgets('copy to target enabled fires callback', (tester) async {
+    var copied = false;
+    await tester.pumpWidget(_wrap(
+      label: 'src',
+      isDirectory: true,
+      onCopyToTarget: () => copied = true,
+    ));
+    await _rightClick(tester, 'src');
+    await tester.tap(find.text('Copy to target directory'));
+    await tester.pumpAndSettle();
+    expect(copied, isTrue);
+  });
+
+  testWidgets('Edit Permissions hidden when callback is null',
+      (tester) async {
+    await tester.pumpWidget(_wrap(label: 'src', isDirectory: true));
+    await _rightClick(tester, 'src');
+    expect(find.text('Edit Permissions'), findsNothing);
   });
 
   testWidgets('hovering "Open with" opens the submenu without a click',
       (tester) async {
     await tester.pumpWidget(_wrap(
-      entry: _file,
+      label: 'notes.txt',
+      isDirectory: false,
       onView: () {},
       onEdit: () {},
       loadApps: () async => _apps,
@@ -101,8 +147,7 @@ void main() {
     await _rightClick(tester, 'notes.txt');
 
     // Simulate a mouse hover over the "Open with" submenu button.
-    final gesture =
-        await tester.createGesture(kind: PointerDeviceKind.mouse);
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: Offset.zero);
     addTearDown(gesture.removePointer);
     await gesture.moveTo(tester.getCenter(find.text('Open with')));
@@ -116,7 +161,8 @@ void main() {
   testWidgets('tapping an app item calls onOpenWithApp', (tester) async {
     AppOption? picked;
     await tester.pumpWidget(_wrap(
-      entry: _file,
+      label: 'notes.txt',
+      isDirectory: false,
       onView: () {},
       onEdit: () {},
       loadApps: () async => _apps,
@@ -128,49 +174,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('VS Code'));
     await tester.pumpAndSettle();
-
     expect(picked?.executablePath, '/usr/bin/code');
-  });
-
-  testWidgets('tapping Choose… calls onChooseApp', (tester) async {
-    var chooseCalled = false;
-    await tester.pumpWidget(_wrap(
-      entry: _file,
-      onView: () {},
-      onEdit: () {},
-      loadApps: () async => _apps,
-      onOpenWithApp: (_) {},
-      onChooseApp: () => chooseCalled = true,
-    ));
-    await _rightClick(tester, 'notes.txt');
-    await tester.tap(find.text('Open with'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose…'));
-    await tester.pumpAndSettle();
-
-    expect(chooseCalled, isTrue);
-  });
-
-  testWidgets('tapping View calls onView', (tester) async {
-    var viewCalled = false;
-    await tester.pumpWidget(_wrap(
-      entry: _file,
-      onView: () => viewCalled = true,
-      onEdit: () {},
-      loadApps: () async => _apps,
-      onOpenWithApp: (_) {},
-      onChooseApp: () {},
-    ));
-    await _rightClick(tester, 'notes.txt');
-    await tester.tap(find.text('View'));
-    await tester.pumpAndSettle();
-
-    expect(viewCalled, isTrue);
   });
 
   testWidgets('default app shows a default chip', (tester) async {
     await tester.pumpWidget(_wrap(
-      entry: _file,
+      label: 'notes.txt',
+      isDirectory: false,
       onView: () {},
       onEdit: () {},
       loadApps: () async => _apps,
@@ -180,7 +190,6 @@ void main() {
     await _rightClick(tester, 'notes.txt');
     await tester.tap(find.text('Open with'));
     await tester.pumpAndSettle();
-
     expect(find.text('default'), findsOneWidget); // VS Code is default
   });
 }

@@ -14,6 +14,7 @@ import 'notification_service.dart';
 import 'shell_integration_service.dart';
 import 'recording_service.dart';
 import 'agent_forwarding_handler.dart';
+import 'os_detection.dart';
 import 'storage_service.dart';
 import 'sudo_sftp.dart';
 import 'system_agent_proxy.dart';
@@ -60,6 +61,13 @@ class SshService {
       sudoPasswordPrompt;
 
   SshService(this._storage, {this.hookBus, this.shellIntegration});
+
+  /// Test-only: register a (fake) client so shell/exec paths can run without
+  /// a real network connection.
+  @visibleForTesting
+  void debugSetClient(String hostId, SSHClient client) {
+    _clients[hostId] = client;
+  }
 
   // ── Identity resolution ───────────────────────────────
   //
@@ -361,10 +369,16 @@ class SshService {
     final client = _clients[session.host.id];
     if (client == null) throw Exception('Not connected');
 
+    // The tab (and thus TerminalView layout) exists before the handshake
+    // finishes, so the terminal already knows its real dimensions — open the
+    // PTY at that size instead of a fixed 80x24, which made remote output
+    // wrap at half the window width.
+    final ptyWidth = session.terminal.viewWidth;
+    final ptyHeight = session.terminal.viewHeight;
     final shell = await client.shell(
       pty: SSHPtyConfig(
-        width: 80,
-        height: 24,
+        width: ptyWidth,
+        height: ptyHeight,
         type: 'xterm-256color',
       ),
     );
@@ -607,6 +621,14 @@ class SshService {
     session.terminal.onResize = (w, h, pw, ph) {
       shell.resizeTerminal(w, h);
     };
+    // The view may have resized while the shell channel was opening (onResize
+    // was still null then, so that event was lost) — sync once so the remote
+    // never keeps a stale size.
+    if (session.terminal.viewWidth != ptyWidth ||
+        session.terminal.viewHeight != ptyHeight) {
+      shell.resizeTerminal(
+          session.terminal.viewWidth, session.terminal.viewHeight);
+    }
 
     // Wait until the remote shell actually closes
     await done.future;
@@ -928,7 +950,15 @@ class SshService {
   Future<String?> detectOs(Host host) async {
     try {
       final result = await exec(host, 'uname -s 2>/dev/null || ver');
-      return parseOsFromUname(result.stdout);
+      final os = parseOsFromUname(result.stdout);
+      if (os != 'linux') return os;
+      // Linux: best-effort distro probe — generic 'linux' on any failure.
+      try {
+        final release = await exec(host, 'cat /etc/os-release 2>/dev/null');
+        final id = parseOsReleaseId(release.stdout);
+        if (id != null) return normalizeDistroId(id);
+      } catch (_) {}
+      return 'linux';
     } catch (e) {
       debugPrint('[SshService] OS detect failed for ${host.host}: $e');
       return null;

@@ -1,3 +1,4 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/app_release.dart';
@@ -71,5 +72,67 @@ void main() {
     expect(p.showBanner, isTrue);
     p.dismiss();
     expect(p.showBanner, isFalse);
+  });
+
+  group('periodic checks', () {
+    test('timer fires an auto check and stays debounced within 24h', () {
+      fakeAsync((async) {
+        var clock = DateTime.utc(2026, 6, 3, 12);
+        final svc = _FakeService(_rel('v0.2.0'));
+        final p = UpdateProvider(
+          svc,
+          currentVersion: '0.1.18',
+          now: () => clock,
+          checkInterval: const Duration(hours: 6),
+        );
+        p.startPeriodicChecks();
+
+        // First tick: no prior check recorded -> fetches.
+        async.elapse(const Duration(hours: 6));
+        expect(svc.fetchCount, 1);
+
+        // Two more ticks inside the 24h debounce window -> no fetch.
+        async.elapse(const Duration(hours: 12));
+        expect(svc.fetchCount, 1);
+
+        // Move the injected clock past the debounce window; next tick fetches.
+        clock = clock.add(const Duration(hours: 25));
+        async.elapse(const Duration(hours: 6));
+        expect(svc.fetchCount, 2);
+
+        p.dispose();
+      });
+    });
+
+    test('startPeriodicChecks is idempotent (replaces the old timer)', () {
+      fakeAsync((async) {
+        final svc = _FakeService(_rel('v0.2.0'));
+        final p = UpdateProvider(
+          svc,
+          currentVersion: '0.1.18',
+          checkInterval: const Duration(hours: 6),
+        );
+        p.startPeriodicChecks();
+        p.startPeriodicChecks();
+        expect(async.pendingTimers.length, 1);
+        p.dispose();
+      });
+    });
+
+    test('dispose cancels the timer', () {
+      fakeAsync((async) {
+        final svc = _FakeService(_rel('v0.2.0'));
+        final p = UpdateProvider(
+          svc,
+          currentVersion: '0.1.18',
+          checkInterval: const Duration(hours: 6),
+        );
+        p.startPeriodicChecks();
+        p.dispose();
+        async.elapse(const Duration(hours: 12));
+        expect(svc.fetchCount, 0);
+        expect(async.pendingTimers, isEmpty);
+      });
+    });
   });
 }

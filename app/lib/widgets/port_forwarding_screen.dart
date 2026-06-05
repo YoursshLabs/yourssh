@@ -141,6 +141,66 @@ class _ForwardTile extends StatefulWidget {
 class _ForwardTileState extends State<_ForwardTile> {
   bool _hovered = false;
 
+  Future<void> _duplicate() async {
+    final fwd = widget.forward;
+    await context.read<PortForwardProvider>().add(PortForward(
+          label: '${fwd.label} (copy)',
+          type: fwd.type,
+          localHost: fwd.localHost,
+          localPort: fwd.localPort,
+          remoteHost: fwd.remoteHost,
+          remotePort: fwd.remotePort,
+          hostId: fwd.hostId,
+          autoStart: false, // a copy must never race the original on launch
+        ));
+  }
+
+  Future<void> _delete() async {
+    final service = context.read<PortForwardService>();
+    final provider = context.read<PortForwardProvider>();
+    await service.stop(widget.forward.id);
+    await provider.delete(widget.forward.id);
+  }
+
+  Future<void> _showContextMenu(Offset globalPos) async {
+    PopupMenuItem<String> item(String value, IconData icon, String label,
+        {Color color = const Color(0xFFCCCCCC)}) {
+      return PopupMenuItem(
+        value: value,
+        child: Row(children: [
+          Icon(icon, size: 14, color: const Color(0xFFAAAAAA)),
+          const SizedBox(width: 8),
+          Text(label, style: TextStyle(color: color, fontSize: 13)),
+        ]),
+      );
+    }
+
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPos.dx, globalPos.dy, globalPos.dx + 1, globalPos.dy + 1,
+      ),
+      color: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      items: [
+        item('duplicate', Icons.copy_outlined, 'Duplicate'),
+        item('edit', Icons.edit_outlined, 'Edit'),
+        const PopupMenuDivider(),
+        item('delete', Icons.delete_outlined, 'Delete', color: AppColors.red),
+      ],
+    );
+    if (!mounted) return;
+
+    switch (result) {
+      case 'duplicate':
+        await _duplicate();
+      case 'edit':
+        widget.onEdit(widget.forward);
+      case 'delete':
+        await _delete();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final fwd = widget.forward;
@@ -159,6 +219,7 @@ class _ForwardTileState extends State<_ForwardTile> {
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: () => widget.onEdit(fwd),
+        onSecondaryTapUp: (details) => _showContextMenu(details.globalPosition),
         child: Container(
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -230,12 +291,7 @@ class _ForwardTileState extends State<_ForwardTile> {
                 _IconAction(
                   icon: Icons.delete_outlined,
                   color: AppColors.red,
-                  onTap: () async {
-                    final service = context.read<PortForwardService>();
-                    final provider = context.read<PortForwardProvider>();
-                    await service.stop(fwd.id);
-                    await provider.delete(fwd.id);
-                  },
+                  onTap: _delete,
                 ),
               ],
             ],

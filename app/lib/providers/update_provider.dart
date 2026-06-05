@@ -1,16 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:yourssh/models/app_release.dart';
 import 'package:yourssh/services/update_service.dart';
 
-/// Drives the in-app update flow: debounced launch check + manual check,
-/// download, and install hand-off. Surfaces state to the banner and Settings.
+/// Drives the in-app update flow: debounced launch check, periodic/focus
+/// re-checks, manual check, download, and install hand-off. Surfaces state
+/// to the banner and Settings.
 class UpdateProvider extends ChangeNotifier {
   UpdateProvider(
     this._service, {
     required this.currentVersion,
     DateTime Function()? now,
+    this.checkInterval = const Duration(hours: 6),
   }) : _now = now ?? DateTime.now;
 
   static const _lastCheckKey = 'last_update_check';
@@ -20,6 +24,12 @@ class UpdateProvider extends ChangeNotifier {
   final UpdateService _service;
   final String currentVersion;
   final DateTime Function() _now;
+
+  /// How often the periodic re-check ticks. Ticks are still debounced to
+  /// 24h by [checkForUpdates], so GitHub is hit at most ~once per day.
+  final Duration checkInterval;
+
+  Timer? _periodicTimer;
 
   UpdateStatus _status = UpdateStatus.idle;
   UpdateStatus get status => _status;
@@ -81,6 +91,20 @@ class UpdateProvider extends ChangeNotifier {
       _errorMessage = 'Could not check for updates: $e';
     }
     notifyListeners();
+  }
+
+  /// Re-checks for updates while the app stays running, so a release
+  /// published after launch still reaches the notification bell. Safe to
+  /// call more than once; the previous timer is replaced.
+  void startPeriodicChecks() {
+    _periodicTimer?.cancel();
+    _periodicTimer = Timer.periodic(checkInterval, (_) => checkForUpdates());
+  }
+
+  @override
+  void dispose() {
+    _periodicTimer?.cancel();
+    super.dispose();
   }
 
   /// Downloads the matching artifact and hands it to the OS installer.

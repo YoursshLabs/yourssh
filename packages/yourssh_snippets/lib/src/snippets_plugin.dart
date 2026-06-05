@@ -3,8 +3,11 @@ import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
 import 'screens/snippets_screen.dart';
 
 class YourSSHSnippetsPlugin extends YourSSHPlugin {
+  /// Stable plugin ID, usable without an instance (e.g. enabled checks in the host app).
+  static const String pluginId = 'dev.yourssh.snippets';
+
   @override
-  String get id => 'dev.yourssh.snippets';
+  String get id => pluginId;
 
   @override
   String get name => 'Snippets';

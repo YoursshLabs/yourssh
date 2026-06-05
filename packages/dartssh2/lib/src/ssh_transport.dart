@@ -19,6 +19,7 @@ import 'package:dartssh2/src/ssh_packet.dart';
 import 'package:dartssh2/src/utils/int.dart';
 import 'package:dartssh2/src/hostkey/hostkey_ed25519.dart';
 import 'package:dartssh2/src/utils/list.dart';
+import 'package:dartssh2/src/message/msg_disconnect.dart';
 import 'package:dartssh2/src/message/msg_kex.dart';
 import 'package:dartssh2/src/message/msg_kex_dh.dart';
 import 'package:dartssh2/src/message/msg_kex_ecdh.dart';
@@ -40,6 +41,14 @@ typedef SSHHostkeyVerifyHandler = FutureOr<bool> Function(
 typedef SSHTransportReadyHandler = void Function();
 
 typedef SSHPacketHandler = void Function(Uint8List payload);
+
+/// Pseudo-algorithm advertised by clients that support the strict KEX
+/// extension mitigating CVE-2023-48795 ("Terrapin attack").
+const _kexStrictClientFlag = 'kex-strict-c-v00@openssh.com';
+
+/// Pseudo-algorithm advertised by servers that support the strict KEX
+/// extension mitigating CVE-2023-48795 ("Terrapin attack").
+const _kexStrictServerFlag = 'kex-strict-s-v00@openssh.com';
 
 class SSHTransport {
   /// Version of the SSH software. By default "DartSSH_2.0"
@@ -184,6 +193,14 @@ class SSHTransport {
   final _localPacketSN = SSHPacketSN.fromZero();
 
   final _remotePacketSN = SSHPacketSN.fromZero();
+
+  /// Whether the strict KEX extension (CVE-2023-48795, "Terrapin attack") is
+  /// in effect. Negotiated via pseudo-algorithms in the initial KEXINIT.
+  bool _strictKex = false;
+
+  /// Whether the initial key exchange has completed (first SSH_MSG_NEWKEYS
+  /// received). The strict KEX message restrictions only apply before this.
+  bool _initialKexDone = false;
 
   /// Whether a key exchange is currently in progress (initial or re-key).
   bool _kexInProgress = false;
@@ -491,9 +508,17 @@ class SSHTransport {
       //   throw SSHPacketError('Packet too long: ${payload.length}');
       // }
 
+      final messageId = SSHMessage.readMessageId(payload);
+
       _handleMessage(payload);
 
-      _remotePacketSN.increase();
+      if (_strictKex && messageId == SSH_Message_NewKeys.messageId) {
+        // Strict KEX (CVE-2023-48795): sequence numbers reset to zero
+        // after every SSH_MSG_NEWKEYS.
+        _remotePacketSN.reset();
+      } else {
+        _remotePacketSN.increase();
+      }
     }
   }
 
@@ -905,8 +930,15 @@ class SSHTransport {
     _kexInProgress = true;
     _sentKexInit = true;
 
+    final kexAlgorithms = algorithms.kex.toNameList();
+    if (_sessionId == null) {
+      // Advertise strict KEX support (CVE-2023-48795). Only meaningful in
+      // the initial key exchange; ignored by peers during re-keying.
+      kexAlgorithms.add(isClient ? _kexStrictClientFlag : _kexStrictServerFlag);
+    }
+
     final message = SSH_Message_KexInit(
-      kexAlgorithms: algorithms.kex.toNameList(),
+      kexAlgorithms: kexAlgorithms,
       // kexAlgorithms: ['curve25519-sha256'],
       serverHostKeyAlgorithms: algorithms.hostkey.toNameList(),
       encryptionClientToServer: algorithms.cipher.toNameList(),
@@ -978,10 +1010,30 @@ class SSHTransport {
     final message = SSH_Message_NewKeys();
     printTrace?.call('-> $socket: $message');
     sendPacket(message.encode());
+
+    if (_strictKex) {
+      // Strict KEX (CVE-2023-48795): sequence numbers reset to zero after
+      // every SSH_MSG_NEWKEYS.
+      _localPacketSN.reset();
+    }
   }
 
   void _handleMessage(Uint8List message) {
     final messageId = SSHMessage.readMessageId(message);
+
+    // Strict KEX (CVE-2023-48795): during the initial key exchange only
+    // messages strictly required by KEX (and disconnect) are permitted.
+    // Anything else (e.g. SSH_MSG_IGNORE, SSH_MSG_DEBUG) terminates the
+    // connection, defeating prefix truncation attacks.
+    if (_strictKex &&
+        !_initialKexDone &&
+        !_isAllowedDuringStrictKex(messageId)) {
+      throw SSHPacketError(
+        'Strict KEX violation: unexpected message $messageId '
+        'during initial key exchange',
+      );
+    }
+
     switch (messageId) {
       case SSH_Message_KexInit.messageId:
         return _handleMessageKexInit(message);
@@ -1013,6 +1065,21 @@ class SSHTransport {
     final message = SSH_Message_KexInit.decode(payload);
     printTrace?.call('<- $socket: $message');
     _remoteKexInit = payload;
+
+    // Strict KEX (CVE-2023-48795) is only negotiated in the initial key
+    // exchange; the pseudo-algorithm MUST be ignored during re-keying.
+    if (_sessionId == null) {
+      final remoteStrictFlag =
+          isClient ? _kexStrictServerFlag : _kexStrictClientFlag;
+      if (message.kexAlgorithms.contains(remoteStrictFlag)) {
+        _strictKex = true;
+        if (_remotePacketSN.value != 0) {
+          throw SSHPacketError(
+            'Strict KEX violation: KEXINIT is not the first packet',
+          );
+        }
+      }
+    }
 
     _kexType = SSHKexUtils.selectAlgorithm(
       localAlgorithms: algorithms.kex,
@@ -1227,6 +1294,7 @@ class SSHTransport {
     _applyRemoteKeys();
 
     // Key exchange round finished.
+    _initialKexDone = true;
     _kexInProgress = false;
     _sentKexInit = false;
     _kex = null;
@@ -1280,5 +1348,15 @@ class SSHTransport {
 
     final messageId = data[0];
     return (messageId >= 20 && messageId <= 49) || messageId <= 4;
+  }
+
+  /// Messages permitted during the initial key exchange when strict KEX is
+  /// in effect: SSH_MSG_DISCONNECT (1), SSH_MSG_KEXINIT (20),
+  /// SSH_MSG_NEWKEYS (21) and the kex method-specific range (30-49).
+  bool _isAllowedDuringStrictKex(int messageId) {
+    return messageId == SSH_Message_Disconnect.messageId ||
+        messageId == SSH_Message_KexInit.messageId ||
+        messageId == SSH_Message_NewKeys.messageId ||
+        (messageId >= 30 && messageId <= 49);
   }
 }

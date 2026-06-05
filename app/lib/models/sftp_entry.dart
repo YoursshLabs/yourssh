@@ -5,12 +5,17 @@ class SftpEntry {
   final int size;
   final DateTime modifiedAt;
 
+  /// Raw st_mode from the server (file-type + permission bits), null when
+  /// the server did not report it. Used by the Edit Permissions dialog.
+  final int? mode;
+
   const SftpEntry({
     required this.name,
     required this.path,
     required this.isDirectory,
     required this.size,
     required this.modifiedAt,
+    this.mode,
   });
 
   String get extension {

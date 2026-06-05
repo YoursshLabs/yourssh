@@ -2,7 +2,7 @@
 
 A professional, open-source SSH client for **macOS**, **Windows**, and **Linux** — built for developers and sysadmins who manage multiple servers.
 
-> **Current version:** 0.1.28 · [Download](https://github.com/YoursshLabs/yourssh/releases) · [Report an issue](https://github.com/YoursshLabs/yourssh/issues)
+> **Current version:** 0.1.29 · [Download](https://github.com/YoursshLabs/yourssh/releases) · [Report an issue](https://github.com/YoursshLabs/yourssh/issues)
 
 ---
 

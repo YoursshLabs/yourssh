@@ -137,8 +137,10 @@ class SessionProvider extends ChangeNotifier {
             : null,
       );
       session.status = SessionStatus.connected;
-      // Fire-and-forget: only detect if OS not yet known
-      if (host.detectedOs == null) {
+      // Fire-and-forget: detect when OS is unknown, or known only as generic
+      // 'linux' (pre-distro-detection hosts upgrade to a distro id on the
+      // next connect; genuinely unknown distros re-probe — one cheap exec).
+      if (host.detectedOs == null || host.detectedOs == 'linux') {
         _ssh.detectOs(host).then((os) {
           if (os != null) onOsDetected?.call(host.id, os);
         });

@@ -73,13 +73,13 @@ sudo dpkg -r yourssh
 ## Features
 
 ### Terminal & Connectivity
-- **Multi-tab SSH sessions** with named tabs and per-tab connection state
+- **Multi-tab SSH sessions** with named tabs, per-tab connection state, distro icons (detected via `/etc/os-release`), and middle-click to close
 - **Terminal sharing (multiplayer)** — share a live SSH session with a session code; guests join via the Command Palette and watch or interact in real time; built on Supabase Realtime
 - **Split terminal view** — horizontal/vertical pane splitting within a session
 - **Search-in-scrollback (Cmd/Ctrl+F)** — regex-powered search across the full terminal buffer; highlights all matches, navigate with Enter / Shift+Enter
 - **Copy & paste that just works** — `Ctrl+C` copies when text is selected and stays SIGINT otherwise (Windows Terminal behavior); `Cmd+C/V` on macOS, `Ctrl(+Shift)+V` to paste, right-click Copy/Paste/Select All menu, and middle-click paste
 - **Shell integration (bash/zsh)** — injected OSC 7/133 prompt hooks surface the working directory on the session tab, a per-command status gutter (green = ok, red = failed), jump-to-prompt (Cmd/Ctrl+↑/↓), and cwd-aware path completion in the input bar; auto-on with per-host / global opt-out; the setup script is delivered invisibly (never echoed into your terminal or recordings)
-- **Port forwarding** — local, remote, and dynamic SOCKS5 tunnels with start/stop per rule, auto-start on launch, live connection counters, and auto-reconnect with backoff when the SSH link drops (no terminal tab required — tunnels dial the host with stored credentials)
+- **Port forwarding** — local, remote, and dynamic SOCKS5 tunnels with start/stop per rule, auto-start on launch, live connection counters, auto-reconnect with backoff when the SSH link drops (no terminal tab required — tunnels dial the host with stored credentials), and a right-click menu to duplicate rules
 - **Jump host / bastion proxy** — connect to internal servers via a bastion host; select any saved host as the jump hop in the host detail panel
 - **SSH agent forwarding** — per-host toggle (like `ssh -A`) to hop between servers with the keys on your local machine; serves your system agent, falling back to app-Keychain keys when no agent is running — private keys never leave your machine
 - **Local shell** — spawn native macOS/Windows/Linux shell alongside SSH sessions
@@ -88,6 +88,8 @@ sudo dpkg -r yourssh
 ### File Management
 - **Dual-panel SFTP** — browse local and remote filesystems side-by-side
 - Upload, download, rename, delete files and directories with transfer progress
+- **Unified right-click menu on both panels** — Open, Open with…, View, Edit, Copy to target directory (greyed out with a reason when it can't run), Refresh, New folder, Permissions, Rename, Delete
+- **Edit Permissions (chmod)** — rwx checkbox grid synced with a validated octal field, recursive apply for directories (symlink-safe, never silently applies an unknown mode); works on remote hosts and the local panel (macOS/Linux)
 - **Sudo SFTP (root file transfers)** — per-host SFTP mode that runs the whole SFTP session as root through `sudo` (WinSCP-style), with distro auto-detection and clear error guidance
 - **View & Open with…** — read-only file preview, plus a hover submenu listing every installed app that can open the file's type; external edits are watched and auto-uploaded back to the server
 - Breadcrumb navigation and file type icons
@@ -355,7 +357,7 @@ Flutter UI (widgets / screens)
 | `SupabaseService` | Supabase HTTP wrapper (upsert/fetch/delete in `sync_data` table) |
 | `LocalShellService` | Spawns native PTY sessions on macOS/Windows/Linux |
 | `PtyRunner` | Low-level PTY wrapper used by `LocalShellService` |
-| `SftpFileOpsService` | SFTP file operations (copy, move, rename, delete) |
+| `SftpFileOpsService` | SFTP file operations (rename, delete, mkdir, chmod with recursive walk) |
 | `SftpTransferService` | Chunked SFTP upload/download with progress callbacks |
 | `CloudflareTunnelService` | Start/stop `cloudflared` quick tunnels on the remote host |
 | `LanShareService` | HTTP file server on LAN via `shelf` |

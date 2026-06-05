@@ -57,7 +57,7 @@ See [Sync](User-Guide-Sync) for full setup instructions.
 
 ## Updates
 
-YourSSH automatically checks GitHub for a newer stable release once per 24 hours on launch, and you can trigger a manual check at any time via **Settings → Updates → Check for updates**.
+YourSSH automatically checks GitHub for a newer stable release — on launch, every 6 hours while the app stays running, and whenever the window regains focus (all debounced to once per 24 hours) — so the notification bell picks up new releases even if you never restart the app. You can also trigger a manual check at any time via **Settings → Updates → Check for updates**.
 
 - When a newer version is found, a **dismissible banner** appears at the top of the app. You can dismiss it for the current version and it will not reappear until the next release.
 - The release also lands in the **notification bell** in the top tab bar (one item per version, with an inline **Update** button), so a dismissed banner doesn't mean a missed update. The bell additionally collects sessions that drop unexpectedly — opening the panel marks items read, and you can dismiss them individually or clear all.

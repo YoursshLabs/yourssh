@@ -1,6 +1,8 @@
 // app/lib/widgets/broadcast_toolbar.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:yourssh_snippets/yourssh_snippets.dart';
+import '../providers/plugin_provider.dart';
 import '../providers/terminal_layout_provider.dart';
 
 class BroadcastToolbar extends StatelessWidget {
@@ -9,6 +11,9 @@ class BroadcastToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final layout = context.watch<TerminalLayoutProvider>();
+    final snippetsEnabled = context
+        .watch<PluginProvider>()
+        .isEnabled(YourSSHSnippetsPlugin.pluginId);
 
     return Container(
       height: 36,
@@ -43,12 +48,13 @@ class BroadcastToolbar extends StatelessWidget {
             onTap: () => layout.setLayout(SplitLayout.quad),
           ),
           const SizedBox(width: 8),
-          _LayoutButton(
-            icon: Icons.code,
-            tooltip: 'Toggle Snippets Panel',
-            selected: layout.snippetsPanelVisible,
-            onTap: layout.toggleSnippetsPanel,
-          ),
+          if (snippetsEnabled)
+            _LayoutButton(
+              icon: Icons.code,
+              tooltip: 'Toggle Snippets Panel',
+              selected: layout.snippetsPanelVisible,
+              onTap: layout.toggleSnippetsPanel,
+            ),
           _LayoutButton(
             icon: Icons.tune,
             tooltip: 'Toggle Terminal Settings',

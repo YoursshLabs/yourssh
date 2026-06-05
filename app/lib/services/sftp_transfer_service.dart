@@ -118,6 +118,7 @@ class SftpTransferService {
             path: p.posix.join(path, item.filename),
             isDirectory: isDir[i],
             size: item.attr.size ?? 0,
+            mode: item.attr.mode?.value,
             modifiedAt: item.attr.modifyTime != null
                 ? DateTime.fromMillisecondsSinceEpoch(
                     item.attr.modifyTime! * 1000)

@@ -5,7 +5,12 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import '../models/local_entry.dart';
 import '../providers/local_file_panel_provider.dart';
+import '../services/app_discovery_service.dart';
+import '../util/app_launcher.dart';
+import '../util/file_mode.dart';
+import 'entry_context_menu.dart';
 import 'path_breadcrumb.dart';
+import 'permissions_dialog.dart';
 
 class LocalFilePanel extends StatefulWidget {
   final LocalFilePanelProvider provider;
@@ -14,10 +19,19 @@ class LocalFilePanel extends StatefulWidget {
   /// opens the panel's source picker (two-panel SFTP layout).
   final VoidCallback? onChangeSource;
 
+  /// Copies [entry] into the opposite panel's current directory (wired by
+  /// the dual-panel screen). Null when the panel is used standalone.
+  final void Function(LocalEntry entry)? onCopyToTarget;
+
+  /// Why copy-to-target is unavailable for [entry] (null = available).
+  final String? Function(LocalEntry entry)? copyToTargetBlockReason;
+
   const LocalFilePanel({
     super.key,
     required this.provider,
     this.onChangeSource,
+    this.onCopyToTarget,
+    this.copyToTargetBlockReason,
   });
 
   @override
@@ -45,7 +59,7 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
     final newPath = p.join(widget.provider.currentPath, name.trim());
     try {
       await Directory(newPath).create();
-      await widget.provider.reload();
+      if (mounted) await widget.provider.reload();
     } catch (e) {
       if (mounted) _showError('Failed to create folder: $e');
     }
@@ -54,7 +68,10 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
   Future<void> _renameSelected() async {
     final selected = widget.provider.selectedEntries;
     if (selected.length != 1) return;
-    final entry = selected.first;
+    await _rename(selected.first);
+  }
+
+  Future<void> _rename(LocalEntry entry) async {
     final newName = await _showInputDialog(
       context,
       title: 'Rename',
@@ -73,22 +90,24 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
       } else {
         await File(entry.path).rename(newPath);
       }
-      await widget.provider.reload();
+      if (mounted) await widget.provider.reload();
     } catch (e) {
       if (mounted) _showError('Rename failed: $e');
     }
   }
 
-  Future<void> _deleteSelected() async {
-    final selected = widget.provider.selectedEntries.toList();
-    if (selected.isEmpty) return;
+  Future<void> _deleteSelected() =>
+      _delete(widget.provider.selectedEntries.toList());
+
+  Future<void> _delete(List<LocalEntry> entries) async {
+    if (entries.isEmpty) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         title: const Text('Delete', style: TextStyle(color: Color(0xFFD4D4D4))),
         content: Text(
-          'Delete ${selected.length} item(s)? This cannot be undone.',
+          'Delete ${entries.length} item(s)? This cannot be undone.',
           style: const TextStyle(color: Color(0xFF888888), fontSize: 13),
         ),
         actions: [
@@ -108,16 +127,50 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
     );
     if (confirmed != true) return;
     try {
-      for (final entry in selected) {
+      for (final entry in entries) {
         if (entry.isDirectory) {
           await Directory(entry.path).delete(recursive: true);
         } else {
           await File(entry.path).delete();
         }
       }
-      await widget.provider.reload();
+      if (mounted) await widget.provider.reload();
     } catch (e) {
       if (mounted) _showError('Delete failed: $e');
+    }
+  }
+
+  Future<void> _openEntry(LocalEntry entry) async {
+    if (entry.isDirectory) {
+      widget.provider.loadDirectory(entry.path);
+      return;
+    }
+    final ok = await launchFileDefault(entry.path);
+    if (!ok && mounted) _showError('Could not open ${entry.name}');
+  }
+
+  Future<void> _openWith(LocalEntry entry, String appPath) async {
+    final ok = await launchFileWithApp(entry.path, appPath);
+    if (!ok && mounted) _showError('Open with failed for ${entry.name}');
+  }
+
+  Future<void> _showPermissionsDialog(LocalEntry entry) async {
+    final result = await showDialog<({int mode, bool recursive})>(
+      context: context,
+      builder: (_) => PermissionsDialog(
+        entryName: entry.name,
+        // Scan-time mode from the model — no blocking statSync at
+        // dialog-open; null (stat failed) makes the dialog gate Apply.
+        initialMode: entry.mode,
+        isDirectory: entry.isDirectory,
+      ),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await chmodLocal(entry.path, result.mode, recursive: result.recursive);
+      if (mounted) await widget.provider.reload();
+    } catch (e) {
+      if (mounted) _showError('chmod failed: $e');
     }
   }
 
@@ -511,81 +564,61 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
             itemCount: entries.length,
             itemBuilder: (_, i) {
               final entry = entries[i];
-              return _LocalEntryRow(
-                entry: entry,
-                selected: prov.selectedEntries.contains(entry),
-                onToggleSelect: () => prov.toggleSelection(entry),
-                onTap: () {
-                  final isMulti =
-                      HardwareKeyboard.instance.isMetaPressed ||
-                      HardwareKeyboard.instance.isControlPressed;
-                  if (isMulti) {
-                    prov.toggleSelection(entry);
-                  } else {
-                    prov.selectOnly(entry);
-                  }
-                },
-                onDoubleTap: () {
-                  if (entry.isDirectory) prov.loadDirectory(entry.path);
-                },
-                onSecondaryTap: (pos) {
-                  prov.selectOnly(entry);
-                  _showContextMenu(entry, prov, pos);
-                },
+              return EntryContextMenu(
+                path: entry.path,
+                isDirectory: entry.isDirectory,
+                onOpen: () => _openEntry(entry),
+                loadApps: entry.isDirectory
+                    ? null
+                    : () => context
+                        .read<AppDiscoveryService>()
+                        .getAppsFor(entry.path),
+                onOpenWithApp: entry.isDirectory
+                    ? null
+                    : (app) => _openWith(entry, app.executablePath),
+                onChooseApp: entry.isDirectory
+                    ? null
+                    : () async {
+                        final appPath = await pickApplication();
+                        if (appPath != null && mounted) {
+                          await _openWith(entry, appPath);
+                        }
+                      },
+                onCopyToTarget: widget.onCopyToTarget == null
+                    ? null
+                    : () => widget.onCopyToTarget!(entry),
+                copyToTargetDisabledReason: widget.onCopyToTarget == null
+                    ? 'No target panel'
+                    : widget.copyToTargetBlockReason?.call(entry),
+                onRename: () => _rename(entry),
+                onDelete: () => _delete([entry]),
+                onRefresh: () => widget.provider.reload(),
+                onNewFolder: _createFolder,
+                onEditPermissions: Platform.isWindows
+                    ? null
+                    : () => _showPermissionsDialog(entry),
+                child: _LocalEntryRow(
+                  entry: entry,
+                  selected: prov.selectedEntries.contains(entry),
+                  onToggleSelect: () => prov.toggleSelection(entry),
+                  onTap: () {
+                    final isMulti =
+                        HardwareKeyboard.instance.isMetaPressed ||
+                        HardwareKeyboard.instance.isControlPressed;
+                    if (isMulti) {
+                      prov.toggleSelection(entry);
+                    } else {
+                      prov.selectOnly(entry);
+                    }
+                  },
+                  onDoubleTap: () {
+                    if (entry.isDirectory) prov.loadDirectory(entry.path);
+                  },
+                ),
               );
             },
           ),
         ),
-      ],
-    );
-  }
-
-  void _showContextMenu(
-    LocalEntry entry,
-    LocalFilePanelProvider prov,
-    Offset pos,
-  ) {
-    final size = MediaQuery.of(context).size;
-    showMenu(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        pos.dx,
-        pos.dy,
-        size.width - pos.dx,
-        size.height - pos.dy,
-      ),
-      color: const Color(0xFF1E1E1E),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(6),
-        side: const BorderSide(color: Color(0xFF2A2A2A)),
-      ),
-      items: [
-        PopupMenuItem(
-          onTap: _renameSelected,
-          child: _contextItem(Icons.drive_file_rename_outline, 'Rename'),
-        ),
-        PopupMenuItem(
-          onTap: _deleteSelected,
-          child: _contextItem(
-            Icons.delete_outline,
-            'Delete',
-            color: Colors.red,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _contextItem(
-    IconData icon,
-    String label, {
-    Color color = const Color(0xFFD4D4D4),
-  }) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 8),
-        Text(label, style: TextStyle(fontSize: 13, color: color)),
       ],
     );
   }
@@ -743,7 +776,6 @@ class _LocalEntryRow extends StatelessWidget {
   final VoidCallback onToggleSelect;
   final VoidCallback onTap;
   final VoidCallback onDoubleTap;
-  final void Function(Offset globalPosition) onSecondaryTap;
 
   const _LocalEntryRow({
     required this.entry,
@@ -751,7 +783,6 @@ class _LocalEntryRow extends StatelessWidget {
     required this.onToggleSelect,
     required this.onTap,
     required this.onDoubleTap,
-    required this.onSecondaryTap,
   });
 
   @override
@@ -794,7 +825,6 @@ class _LocalEntryRow extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 onTap: onTap,
                 onDoubleTap: onDoubleTap,
-                onSecondaryTapUp: (d) => onSecondaryTap(d.globalPosition),
                 child: Row(
                   children: [
                     Expanded(
