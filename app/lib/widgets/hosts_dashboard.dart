@@ -6,6 +6,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../models/ssh_key.dart';
+import '../models/ssh_session.dart';
+import '../util/bulk_connect.dart';
 import '../util/host_query.dart';
 import '../providers/host_provider.dart';
 import '../providers/key_provider.dart';
@@ -14,6 +16,9 @@ import '../services/os_detection.dart';
 import '../services/ssh_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import 'bulk/bulk_action_bar.dart';
+import 'bulk/bulk_push_dialog.dart';
+import 'bulk/bulk_run_dialog.dart';
 import 'sftp_screen.dart';
 
 class HostsDashboard extends StatefulWidget {
@@ -32,10 +37,119 @@ class _HostsDashboardState extends State<HostsDashboard> {
   String _search = '';
   final TextEditingController _searchController = TextEditingController();
 
+  bool _selectionMode = false;
+  final Set<String> _selectedHostIds = {};
+
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onSelectionKey);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _enterSelectionMode() {
+    if (_selectionMode) return;
+    HardwareKeyboard.instance.addHandler(_onSelectionKey);
+    setState(() => _selectionMode = true);
+  }
+
+  void _exitSelectionMode() {
+    HardwareKeyboard.instance.removeHandler(_onSelectionKey);
+    setState(() {
+      _selectionMode = false;
+      _selectedHostIds.clear();
+    });
+  }
+
+  bool _onSelectionKey(KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      _exitSelectionMode();
+      return true;
+    }
+    return false;
+  }
+
+  void _toggleSelected(Host host) {
+    setState(() {
+      if (!_selectedHostIds.remove(host.id)) _selectedHostIds.add(host.id);
+    });
+  }
+
+  List<Host> _selectedHosts() => context
+      .read<HostProvider>()
+      .allHosts
+      .where((h) => _selectedHostIds.contains(h.id))
+      .toList();
+
+  void _selectAllFiltered() {
+    final hosts = context.read<HostProvider>().allHosts;
+    final query = HostQuery.parse(_search);
+    final filtered = query.isEmpty ? hosts : hosts.where(query.matches);
+    setState(() => _selectedHostIds.addAll(filtered.map((h) => h.id)));
+  }
+
+  Future<void> _connectAll() async {
+    final sessionProvider = context.read<SessionProvider>();
+    final live = {
+      for (final s in sessionProvider.sshSessions)
+        if (s.status == SessionStatus.connecting ||
+            s.status == SessionStatus.connected)
+          s.host.id,
+    };
+    final plan =
+        planConnectAll(selected: _selectedHosts(), liveHostIds: live);
+    if (plan.toConnect.length > 5) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.card,
+          title: Text('Open ${plan.toConnect.length} tabs?',
+              style: const TextStyle(
+                  color: AppColors.textPrimary, fontSize: 15)),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Open all',
+                    style: TextStyle(color: AppColors.accent))),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    for (final h in plan.toConnect) {
+      unawaited(sessionProvider.connect(h));
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(plan.skipped > 0
+          ? 'Opened ${plan.toConnect.length} tabs · ${plan.skipped} already connected'
+          : 'Opened ${plan.toConnect.length} tabs'),
+    ));
+    _exitSelectionMode();
+  }
+
+  void _openBulkRun() {
+    final hosts = _selectedHosts();
+    if (hosts.isEmpty) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => BulkRunDialog(hosts: hosts),
+    );
+  }
+
+  void _openBulkPush() {
+    final hosts = _selectedHosts();
+    if (hosts.isEmpty) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => BulkPushDialog(hosts: hosts),
+    );
   }
 
   void _toggleFacet(String facet) {
@@ -50,6 +164,7 @@ class _HostsDashboardState extends State<HostsDashboard> {
   Widget build(BuildContext context) {
     final hostProvider = context.watch<HostProvider>();
     final hosts = hostProvider.allHosts;
+    _selectedHostIds.removeWhere((id) => !hosts.any((h) => h.id == id));
     final query = HostQuery.parse(_search);
     final filtered =
         query.isEmpty ? hosts : hosts.where(query.matches).toList();
@@ -72,16 +187,27 @@ class _HostsDashboardState extends State<HostsDashboard> {
       color: AppColors.bg,
       child: Column(
         children: [
-          _TopBar(
-            controller: _searchController,
-            onSearch: (v) => setState(() => _search = v),
-            totalHosts: hosts.length,
-            filteredCount: filtered.length,
-            onAddHost: widget.onAddHost,
-            onLocalTerminal: widget.onOpenLocalTerminal,
-            onNewGroup: widget.onNewGroup,
-            onImport: widget.onImport,
-          ),
+          _selectionMode
+              ? BulkActionBar(
+                  selectedCount: _selectedHostIds.length,
+                  onSelectAll: _selectAllFiltered,
+                  onClear: () => setState(_selectedHostIds.clear),
+                  onConnectAll: _connectAll,
+                  onRunCommand: _openBulkRun,
+                  onPushFiles: _openBulkPush,
+                  onDone: _exitSelectionMode,
+                )
+              : _TopBar(
+                  controller: _searchController,
+                  onSearch: (v) => setState(() => _search = v),
+                  totalHosts: hosts.length,
+                  filteredCount: filtered.length,
+                  onAddHost: widget.onAddHost,
+                  onLocalTerminal: widget.onOpenLocalTerminal,
+                  onNewGroup: widget.onNewGroup,
+                  onImport: widget.onImport,
+                  onSelect: _enterSelectionMode,
+                ),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
@@ -129,7 +255,13 @@ class _HostsDashboardState extends State<HostsDashboard> {
                   if (filtered.isEmpty && _search.isEmpty)
                     _EmptyState(onAdd: widget.onAddHost ?? () {})
                   else
-                    _HostGrid(hosts: filtered, onEditHost: widget.onEditHost),
+                    _HostGrid(
+                      hosts: filtered,
+                      onEditHost: widget.onEditHost,
+                      selectionMode: _selectionMode,
+                      selectedIds: _selectedHostIds,
+                      onToggleSelect: _toggleSelected,
+                    ),
                 ],
               ),
             ),
@@ -151,8 +283,9 @@ class _TopBar extends StatelessWidget {
   final VoidCallback? onLocalTerminal;
   final VoidCallback? onNewGroup;
   final VoidCallback? onImport;
+  final VoidCallback? onSelect;
 
-  const _TopBar({required this.controller, required this.onSearch, required this.totalHosts, required this.filteredCount, this.onAddHost, this.onLocalTerminal, this.onNewGroup, this.onImport});
+  const _TopBar({required this.controller, required this.onSearch, required this.totalHosts, required this.filteredCount, this.onAddHost, this.onLocalTerminal, this.onNewGroup, this.onImport, this.onSelect});
 
   @override
   Widget build(BuildContext context) {
@@ -192,6 +325,12 @@ class _TopBar extends StatelessWidget {
           Text('$filteredCount of $totalHosts hosts',
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
           const SizedBox(width: 16),
+          _OutlinedBtn(
+            icon: Icons.check_box_outlined,
+            label: 'SELECT',
+            onTap: onSelect ?? () {},
+          ),
+          const SizedBox(width: 8),
           _OutlinedBtn(
             icon: Icons.terminal,
             label: 'LOCAL TERMINAL',
@@ -464,7 +603,16 @@ class _GroupCardState extends State<_GroupCard> {
 class _HostGrid extends StatelessWidget {
   final List<Host> hosts;
   final void Function(Host)? onEditHost;
-  const _HostGrid({required this.hosts, this.onEditHost});
+  final bool selectionMode;
+  final Set<String> selectedIds;
+  final void Function(Host)? onToggleSelect;
+  const _HostGrid({
+    required this.hosts,
+    this.onEditHost,
+    this.selectionMode = false,
+    this.selectedIds = const {},
+    this.onToggleSelect,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -479,7 +627,13 @@ class _HostGrid extends StatelessWidget {
           children: hosts
               .map((h) => SizedBox(
                     width: (constraints.maxWidth - spacing * (cols - 1)) / cols,
-                    child: _HostCard(host: h, onEditHost: onEditHost),
+                    child: _HostCard(
+                      host: h,
+                      onEditHost: onEditHost,
+                      selectionMode: selectionMode,
+                      selected: selectedIds.contains(h.id),
+                      onToggleSelect: () => onToggleSelect?.call(h),
+                    ),
                   ))
               .toList(),
         );
@@ -493,7 +647,16 @@ class _HostGrid extends StatelessWidget {
 class _HostCard extends StatefulWidget {
   final Host host;
   final void Function(Host)? onEditHost;
-  const _HostCard({required this.host, this.onEditHost});
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onToggleSelect;
+  const _HostCard({
+    required this.host,
+    this.onEditHost,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onToggleSelect,
+  });
 
   @override
   State<_HostCard> createState() => _HostCardState();
@@ -568,16 +731,32 @@ class _HostCardState extends State<_HostCard> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
-        onDoubleTap: () => sessionProvider.connect(widget.host),
+        onTap: widget.selectionMode ? widget.onToggleSelect : null,
+        onDoubleTap: widget.selectionMode ? null : () => sessionProvider.connect(widget.host),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: _hovered ? AppColors.cardHover : AppColors.card,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _hovered ? AppColors.border.withValues(alpha: 0.8) : AppColors.border),
+            border: Border.all(color: widget.selected ? AppColors.accent : _hovered ? AppColors.border.withValues(alpha: 0.8) : AppColors.border),
           ),
           child: Row(
             children: [
+              if (widget.selectionMode) ...[
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: Checkbox(
+                    value: widget.selected,
+                    onChanged: (_) => widget.onToggleSelect?.call(),
+                    activeColor: AppColors.accent,
+                    side: const BorderSide(color: AppColors.border),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
               // Host icon
               Container(
                 width: 36,
@@ -626,7 +805,7 @@ class _HostCardState extends State<_HostCard> {
               ),
 
               // Action buttons (show on hover)
-              if (_hovered && !_testing && _testResult == null) ...[
+              if (!widget.selectionMode && _hovered && !_testing && _testResult == null) ...[
                 _iconBtn(Icons.network_check, 'Test Connection', onTap: _test),
                 const SizedBox(width: 2),
                 _iconBtn(Icons.folder_outlined, 'SFTP', onTap: () => _openSftp(context)),
