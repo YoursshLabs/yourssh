@@ -561,6 +561,7 @@ class _ImportPanelState extends State<ImportPanel> {
           port: h.port,
           username: h.username,
           group: h.group,
+          agentForwarding: h.agentForwarding,
         ));
       } else {
         await provider.addHost(h);

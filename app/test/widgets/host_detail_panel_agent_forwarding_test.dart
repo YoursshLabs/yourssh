@@ -17,25 +17,6 @@ void main() {
 
   Host? saved;
 
-  // Settle and drain the pre-existing "ListTile background color" assertion that
-  // fires because SwitchListTile sits inside _Card (DecoratedBox with background
-  // color). This is a cosmetic issue in the production widget unrelated to the
-  // agent-forwarding behaviour under test. Re-throws anything unrelated so real
-  // failures still surface.
-  Future<void> settleIgnoringListTileAssertion(WidgetTester tester) async {
-    await tester.pumpAndSettle();
-    while (true) {
-      final ex = tester.takeException();
-      if (ex == null) break;
-      final msg = ex.toString();
-      if (!msg.contains('ListTile background color') &&
-          !msg.contains('ink splashes may be invisible') &&
-          !msg.contains('Multiple exceptions')) {
-        throw ex; // surface non-ListTile failures
-      }
-    }
-  }
-
   Future<void> pumpPanel(WidgetTester tester, {Host? existing}) async {
     saved = null;
     await tester.binding.setSurfaceSize(const Size(500, 2400));
@@ -58,7 +39,7 @@ void main() {
         ),
       ),
     );
-    await settleIgnoringListTileAssertion(tester);
+    await tester.pumpAndSettle();
   }
 
   Host existingHost({bool agentForwarding = false}) => Host(
@@ -77,12 +58,12 @@ void main() {
     expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
 
     await tester.tap(toggle);
-    await settleIgnoringListTileAssertion(tester);
+    await tester.pumpAndSettle();
 
     final save = find.text('SAVE ONLY');
     await tester.ensureVisible(save);
     await tester.tap(save);
-    await settleIgnoringListTileAssertion(tester);
+    await tester.pumpAndSettle();
 
     expect(saved, isNotNull);
     expect(saved!.agentForwarding, isTrue);

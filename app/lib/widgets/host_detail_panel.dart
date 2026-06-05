@@ -455,7 +455,8 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                         style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
                       ),
                       subtitle: const Text(
-                        'Forward your local SSH agent to this host (like ssh -A)',
+                        'Forward your local SSH agent to this host (like ssh -A). '
+                        'Applies on next connect.',
                         style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
                       ),
                       dense: true,
@@ -619,11 +620,14 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.card,
+    // Material (not Container) so descendant ListTiles find a Material
+    // ancestor with a color — a plain DecoratedBox trips Flutter's "ListTile
+    // background color or ink splashes may be invisible" assertion in tests.
+    return Material(
+      color: AppColors.card,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.border),
+        side: const BorderSide(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
