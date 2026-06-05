@@ -9,8 +9,11 @@ class PortForwardProvider extends ChangeNotifier {
 
   List<PortForward> get forwards => List.unmodifiable(_forwards);
 
+  /// Completes when the persisted rules have been loaded (auto-start waits on it).
+  late final Future<void> ready;
+
   PortForwardProvider() {
-    _load();
+    ready = _load();
   }
 
   Future<void> _load() async {
@@ -39,13 +42,30 @@ class PortForwardProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> update(PortForward fwd) async {
+    final idx = _forwards.indexWhere((f) => f.id == fwd.id);
+    if (idx == -1) return;
+    _forwards[idx] = fwd;
+    await _save();
+    notifyListeners();
+  }
+
   void setStatus(String id, ForwardStatus status, {String? error}) {
     // Forward may have been deleted between status events (e.g., during
     // teardown) — silently drop the update instead of throwing StateError.
     final fwd = _forwards.where((f) => f.id == id).firstOrNull;
-    if (fwd == null) return;
+    if (fwd == null || (fwd.status == status && fwd.errorMessage == error)) {
+      return;
+    }
     fwd.status = status;
     fwd.errorMessage = error;
+    notifyListeners();
+  }
+
+  void setConnections(String id, int connections) {
+    final fwd = _forwards.where((f) => f.id == id).firstOrNull;
+    if (fwd == null || fwd.activeConnections == connections) return;
+    fwd.activeConnections = connections;
     notifyListeners();
   }
 

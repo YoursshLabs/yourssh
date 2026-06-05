@@ -42,6 +42,10 @@ class SshService {
   Future<bool> Function(String host, int port, String keyType, Uint8List fp)?
       defaultHostKeyVerifier;
 
+  /// Optional Host.keyId → key entry resolver for auto-connect paths
+  /// (exec, tunnels) — mirrors SessionProvider.keyLookup for shells.
+  SshKeyEntry? Function(String keyId)? defaultKeyLookup;
+
   /// Prompts the user for a sudo password (elevated SFTP). Set from
   /// main.dart; returning null cancels the elevated SFTP attempt. The
   /// password is persisted (when `remember` is set) only after it validates —
@@ -602,9 +606,14 @@ class SshService {
     _recording?.onShellClosed(session.id);
   }
 
+  /// Returns the open client for [host], reconnecting with stored
+  /// credentials when there is none or the cached one is already dead.
+  Future<SSHClient> ensureClient(Host host) => _ensureClient(host);
+
   Future<SSHClient> _ensureClient(Host host) async {
     final existing = _clients[host.id];
-    if (existing != null) return existing;
+    if (existing != null && !existing.isClosed) return existing;
+    if (existing != null) _clients.remove(host.id); // dropped link — evict
     final verifier = defaultHostKeyVerifier;
     if (verifier == null) {
       throw StateError(
@@ -612,8 +621,11 @@ class SshService {
         'SshService.defaultHostKeyVerifier to allow auto-connect.',
       );
     }
+    final keyId = host.keyId;
+    final keyEntry = keyId == null ? null : defaultKeyLookup?.call(keyId);
     return connect(
       host,
+      keyEntry: keyEntry,
       verifyHostKey: (keyType, fp) => verifier(host.host, host.port, keyType, fp),
     );
   }

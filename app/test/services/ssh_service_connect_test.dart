@@ -210,4 +210,12 @@ void main() {
           () => svc.disconnectSession('no-such-session'), returnsNormally);
     });
   });
+
+  group('ensureClient', () {
+    test('throws StateError when not connected and no verifier wired', () async {
+      final svc = SshService(StorageService());
+      final host = Host(label: 'x', host: '127.0.0.1', port: 1, username: 'u');
+      expect(() => svc.ensureClient(host), throwsStateError);
+    });
+  });
 }

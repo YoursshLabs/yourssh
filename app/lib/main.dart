@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -23,6 +25,7 @@ import 'package:yourssh_snippets/yourssh_snippets.dart';
 import 'services/health_monitor_service.dart';
 import 'services/local_shell_service.dart';
 import 'services/notification_service.dart';
+import 'services/port_forward_service.dart';
 import 'services/ssh_service.dart';
 import 'services/storage_service.dart';
 import 'services/sync_service.dart';
@@ -128,6 +131,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final UpdateService _updateService;
   late final UpdateProvider _updateProvider;
   late final NotificationCenterProvider _notificationCenter;
+  late final PortForwardProvider _portForwardProvider;
+  late final PortForwardService _portForwardService;
   String? _lastUpdateNotifVersion;
 
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -174,6 +179,21 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _knownHostsProvider.load();
     _sessionProvider.hostKeyVerifier = _knownHostsProvider.verifyHostKey;
     _ssh.defaultHostKeyVerifier = _knownHostsProvider.verifyHostKey;
+    _ssh.defaultKeyLookup = (id) => _keyProvider.findById(id);
+    _portForwardProvider = PortForwardProvider();
+    _portForwardService = PortForwardService(
+      acquireTransport: (host) async =>
+          SshTunnelTransport(await _ssh.ensureClient(host)),
+      resolveHost: (id) =>
+          _hostProvider.allHosts.where((h) => h.id == id).firstOrNull,
+      onStatus: (id, status, {error}) =>
+          _portForwardProvider.setStatus(id, status, error: error),
+      onConnections: (id, n) => _portForwardProvider.setConnections(id, n),
+    );
+    _hostProvider.onHostDeleted =
+        (id) => unawaited(_portForwardService.stopForHost(id));
+    unawaited(_portForwardProvider.ready.then(
+        (_) => _portForwardService.autoStartAll(_portForwardProvider.forwards)));
     // Returns (password, remember); SshService persists it only after it
     // validates, so a wrong "remembered" password is never stored.
     _ssh.sudoPasswordPrompt = (host) async {
@@ -329,6 +349,10 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     // A queued reconnect timer may still fire onSessionDropped during
     // teardown — detach it before disposing the notification center.
     _sessionProvider.onSessionDropped = null;
+    // Dispose the provider only after stopAll's final status callbacks fire.
+    unawaited(_portForwardService
+        .stopAll()
+        .whenComplete(_portForwardProvider.dispose));
     _notificationCenter.dispose();
     windowManager.removeListener(this);
     // Tear down in reverse-dependency order: consumers first (sessions, plugins,
@@ -366,7 +390,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         ChangeNotifierProvider.value(value: _syncProvider),
         ChangeNotifierProvider.value(value: _shareProvider),
         Provider.value(value: _syncService),
-        ChangeNotifierProvider(create: (_) => PortForwardProvider()),
+        ChangeNotifierProvider.value(value: _portForwardProvider),
+        Provider.value(value: _portForwardService),
         ChangeNotifierProvider(create: (_) {
           final p = CommandHistoryProvider();
           p.init();

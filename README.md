@@ -79,7 +79,7 @@ sudo dpkg -r yourssh
 - **Search-in-scrollback (Cmd/Ctrl+F)** — regex-powered search across the full terminal buffer; highlights all matches, navigate with Enter / Shift+Enter
 - **Copy & paste that just works** — `Ctrl+C` copies when text is selected and stays SIGINT otherwise (Windows Terminal behavior); `Cmd+C/V` on macOS, `Ctrl(+Shift)+V` to paste, right-click Copy/Paste/Select All menu, and middle-click paste
 - **Shell integration (bash/zsh)** — injected OSC 7/133 prompt hooks surface the working directory on the session tab, a per-command status gutter (green = ok, red = failed), jump-to-prompt (Cmd/Ctrl+↑/↓), and cwd-aware path completion in the input bar; auto-on with per-host / global opt-out; the setup script is delivered invisibly (never echoed into your terminal or recordings)
-- **Port forwarding** — local, remote, and dynamic SOCKS5 tunnels
+- **Port forwarding** — local, remote, and dynamic SOCKS5 tunnels with start/stop per rule, auto-start on launch, live connection counters, and auto-reconnect with backoff when the SSH link drops (no terminal tab required — tunnels dial the host with stored credentials)
 - **Jump host / bastion proxy** — connect to internal servers via a bastion host; select any saved host as the jump hop in the host detail panel
 - **Local shell** — spawn native macOS/Windows/Linux shell alongside SSH sessions
 - **xterm-256color** terminal emulation with full PTY support
