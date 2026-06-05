@@ -20,11 +20,18 @@ Create SSH tunnels to expose remote ports locally, forward local ports to a remo
    - **Local port** — port on your machine
    - **Remote host / port** — destination (for Local/Remote; not needed for Dynamic)
    - **Host** — which SSH session to tunnel through
-3. Click **Save**. The rule is persisted and can be started/stopped independently.
+3. Optionally tick **Auto-start on launch** to bring the tunnel up every time the app starts.
+4. Click **Add Rule**. The rule is persisted and can be started/stopped independently. Click any rule later to edit it.
 
 ## Starting and Stopping
 
-Toggle the **Active** switch on any tunnel rule. Active tunnels show a green indicator. You can have multiple tunnels active at the same time.
+Press the **play** button on a rule to start it and the **stop** button to stop it. You can have multiple tunnels active at the same time, and tunnels don't need an open terminal tab — the app dials the SSH host with your stored credentials.
+
+Status colors: grey = idle, amber = connecting / reconnecting, green = active, red = error (the message, e.g. "Port 8080 already in use", is shown under the rule). Active rules show a live connection counter.
+
+## Auto-Reconnect
+
+If the SSH link drops while a tunnel is running, the rule switches to **reconnecting** and the app re-dials with exponential backoff (2 s doubling up to 30 s) until the tunnel is back, keeping the local port bound the whole time. Stopping the rule cancels the retry.
 
 ## Active Tunnels Panel
 

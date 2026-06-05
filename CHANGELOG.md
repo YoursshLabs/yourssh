@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.1.27] — 2026-06-05
+
 ### Added
 - **Port forwarding runtime** — saved rules can now actually start and stop. Local, remote, and dynamic (SOCKS5) tunnels run over the host's SSH connection (reusing an open one or auto-connecting with stored credentials — no terminal tab required), with auto-reconnect on dropped links (exponential backoff 2 s → 30 s, local listeners keep their port), an edit panel, an auto-start-on-launch flag, live per-tunnel connection counters, and inline error reporting (e.g. "Port 8080 already in use"). Active local forwards now appear in the Web Tools port-forward browser.
 
@@ -361,7 +365,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.26...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.27...HEAD
+[0.1.27]: https://github.com/YoursshLabs/yourssh/compare/v0.1.26...v0.1.27
 [0.1.26]: https://github.com/YoursshLabs/yourssh/compare/v0.1.25...v0.1.26
 [0.1.25]: https://github.com/YoursshLabs/yourssh/compare/v0.1.24...v0.1.25
 [0.1.24]: https://github.com/YoursshLabs/yourssh/compare/v0.1.23...v0.1.24
