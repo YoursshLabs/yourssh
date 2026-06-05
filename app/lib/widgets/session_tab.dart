@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../models/session_health.dart';
 import '../models/ssh_session.dart';
 import '../models/terminal_session.dart';
+import '../providers/host_provider.dart';
 import '../providers/recording_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/shell_integration_provider.dart';
 import '../services/health_monitor_service.dart';
+import '../services/os_detection.dart';
 import '../theme/app_theme.dart';
 import 'health_dot.dart';
 
@@ -248,6 +251,29 @@ class _SessionTabState extends State<SessionTab> {
                   child: Icon(Icons.laptop_mac,
                       size: 12, color: Color(0xFF888888)),
                 ),
+              // Distro/OS glyph — reads detectedOs from HostProvider (the
+              // session's Host snapshot goes stale after copyWith on detect).
+              if (widget.session case final SshSession ssh when !ssh.isWatch)
+                Builder(builder: (context) {
+                  final os = context.select<HostProvider, String?>((hp) {
+                    for (final h in hp.allHosts) {
+                      if (h.id == ssh.host.id) return h.detectedOs;
+                    }
+                    return null;
+                  });
+                  final asset = osIconAsset(os);
+                  if (asset == null) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 5),
+                    child: SvgPicture.asset(
+                      asset,
+                      width: 14,
+                      height: 14,
+                      colorFilter: const ColorFilter.mode(
+                          Color(0xFF888888), BlendMode.srcIn),
+                    ),
+                  );
+                }),
               // Red recording indicator
               Consumer<RecordingProvider>(
                 builder: (context, rec, _) => rec.isRecording(widget.session.id)

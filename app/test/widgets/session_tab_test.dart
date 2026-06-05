@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -99,5 +100,52 @@ void main() {
 
     await middleClick(tester, find.byType(SessionTab));
     expect(sessions.sessions, hasLength(1));
+  });
+
+  testWidgets('shows distro icon when the host has a detectedOs',
+      (tester) async {
+    final (sessions, hosts) = makeProviders();
+    final ubuntuHost = Host(
+        id: 'h2',
+        label: 'web',
+        host: '5.6.7.8',
+        port: 22,
+        username: 'u',
+        detectedOs: 'ubuntu');
+    await hosts.addHost(ubuntuHost);
+    final session = seedSession(sessions, ubuntuHost);
+
+    await tester.pumpWidget(wrap(
+        SessionTab(
+            session: session,
+            isActive: true,
+            provider: sessions,
+            onTap: () {}),
+        sessions,
+        hosts));
+
+    expect(
+        find.byWidgetPredicate((w) =>
+            w is SvgPicture &&
+            (w.bytesLoader as SvgAssetLoader).assetName ==
+                'assets/os/ubuntu.svg'),
+        findsOneWidget);
+  });
+
+  testWidgets('no OS icon when detectedOs is unknown', (tester) async {
+    final (sessions, hosts) = makeProviders();
+    await hosts.addHost(host); // detectedOs == null
+    final session = seedSession(sessions, host);
+
+    await tester.pumpWidget(wrap(
+        SessionTab(
+            session: session,
+            isActive: true,
+            provider: sessions,
+            onTap: () {}),
+        sessions,
+        hosts));
+
+    expect(find.byType(SvgPicture), findsNothing);
   });
 }
