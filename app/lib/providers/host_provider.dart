@@ -11,6 +11,9 @@ class HostProvider extends ChangeNotifier {
   /// Called after any mutation so SyncService can push.
   Future<void> Function()? onMutation;
 
+  /// Fired before a host is removed so dependents (tunnels) can shut down.
+  void Function(String hostId)? onHostDeleted;
+
   HostProvider(this._storage) {
     _load();
   }
@@ -80,6 +83,7 @@ class HostProvider extends ChangeNotifier {
   }
 
   Future<void> deleteHost(String id) async {
+    onHostDeleted?.call(id);
     _hosts.removeWhere((h) => h.id == id);
     await _storage.saveHosts(_hosts);
     await _storage.deletePassword(id);
