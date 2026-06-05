@@ -53,6 +53,9 @@ class _SSHDynamicForwardImpl implements SSHDynamicForward {
   @override
   bool get isClosed => _closed;
 
+  @override
+  int get activeConnections => _connections.length;
+
   void _handleClient(Socket client) {
     if (_closed) {
       client.destroy();

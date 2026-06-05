@@ -38,6 +38,9 @@ abstract class SSHDynamicForward {
   /// Whether this forwarder has already been closed.
   bool get isClosed;
 
+  /// Number of currently open SOCKS client connections.
+  int get activeConnections;
+
   /// Stops accepting new SOCKS connections and closes active ones.
   Future<void> close();
 }
