@@ -1092,10 +1092,12 @@ const _tokyoNightDay = TerminalTheme(
 );
 
 // ── Nord Light ────────────────────────────────────────────
-// Source: iTerm2-Color-Schemes port (no official Nord light terminal theme)
+// Source: iTerm2-Color-Schemes port (no official Nord light terminal theme).
+// cursor/selection/search darkened from the port for visibility on the
+// light background (the port's values blend to near-invisible).
 const _nordLight = TerminalTheme(
-  cursor: Color(0xFF7BB3C3),
-  selection: Color(0xAAD8DEE9),
+  cursor: Color(0xFF5E81AC),
+  selection: Color(0xAAC2C9D6),
   foreground: Color(0xFF414858),
   background: Color(0xFFE5E9F0),
   black: Color(0xFF3B4252),
@@ -1114,13 +1116,15 @@ const _nordLight = TerminalTheme(
   brightMagenta: Color(0xFFB48EAD),
   brightCyan: Color(0xFF82AFAE),
   brightWhite: Color(0xFFECEFF4),
-  searchHitBackground: Color(0xFFC5A565),
+  searchHitBackground: Color(0xFFA98239),
   searchHitBackgroundCurrent: Color(0xFFBF616A),
   searchHitForeground: Color(0xFFE5E9F0),
 );
 
 // ── Light Owl ─────────────────────────────────────────────
-// Source: iTerm2-Color-Schemes port of Sarah Drasner's Light Owl
+// Source: iTerm2-Color-Schemes port of Sarah Drasner's Light Owl.
+// searchHitBackground darkened from the bright yellow accent so the
+// background-colored hit text stays readable.
 const _lightOwl = TerminalTheme(
   cursor: Color(0xFF403F53),
   selection: Color(0xAAE0E0E0),
@@ -1142,7 +1146,7 @@ const _lightOwl = TerminalTheme(
   brightMagenta: Color(0xFFD6438A),
   brightCyan: Color(0xFF2AA298),
   brightWhite: Color(0xFFF0F0F0),
-  searchHitBackground: Color(0xFFE0AF02),
+  searchHitBackground: Color(0xFFB58900),
   searchHitBackgroundCurrent: Color(0xFFDE3D3B),
   searchHitForeground: Color(0xFFFBFBFB),
 );
