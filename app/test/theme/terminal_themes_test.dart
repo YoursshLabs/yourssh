@@ -18,4 +18,27 @@ void main() {
   test('terminalThemeByName falls back to the first theme', () {
     expect(terminalThemeByName('No Such Theme'), kTerminalThemes.first.data);
   });
+
+  test('theme names are unique', () {
+    final names = kTerminalThemes.map((e) => e.name).toList();
+    expect(names.toSet().length, names.length);
+  });
+
+  test('catalog contains the nine added themes', () {
+    expect(kTerminalThemes.length, 44);
+    const added = [
+      'Kanagawa Dragon',
+      'Kanagawa Lotus',
+      'Tokyo Night Day',
+      'Nord Light',
+      'Light Owl',
+      'Flexoki Dark',
+      'Flexoki Light',
+      'Aura',
+      'Cyberpunk',
+    ];
+    for (final name in added) {
+      expect(kTerminalThemeNames, contains(name));
+    }
+  });
 }
