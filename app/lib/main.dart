@@ -170,6 +170,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _sessionProvider.autoReconnectEnabled = () => _settingsProvider.autoReconnect;
     _sessionProvider.reconnectAttempts = () => _settingsProvider.reconnectAttempts;
     _sessionProvider.tmuxEnabled = () => _settingsProvider.tmuxEnabled;
+    _sessionProvider.terminalType = () => _settingsProvider.terminalType;
     _sessionProvider.recordingStart = (s) => _recordingProvider.startRecording(s);
     _healthMonitor = HealthMonitorService(
       measure: _ssh.measureLatency,

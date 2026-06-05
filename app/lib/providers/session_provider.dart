@@ -22,6 +22,7 @@ class SessionProvider extends ChangeNotifier {
   bool Function()? autoReconnectEnabled;
   int Function()? reconnectAttempts;
   bool Function()? tmuxEnabled;
+  String Function()? terminalType;
   Future<bool> Function(String host, int port, String keyType, Uint8List fp)? hostKeyVerifier;
   Future<void> Function(String hostId, String os)? onOsDetected;
   Future<void> Function(SshSession session)? recordingStart;
@@ -152,7 +153,11 @@ class SessionProvider extends ChangeNotifier {
         unawaited(recordingStart?.call(session) ?? Future.value());
       }
 
-      await _ssh.openShell(session, useTmux: tmuxEnabled?.call() ?? false);
+      await _ssh.openShell(
+        session,
+        useTmux: tmuxEnabled?.call() ?? false,
+        termType: terminalType?.call() ?? 'xterm-256color',
+      );
       _safeNotify();
 
       // Shell closed — try auto-reconnect

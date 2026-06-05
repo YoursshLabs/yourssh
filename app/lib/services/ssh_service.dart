@@ -365,7 +365,11 @@ class SshService {
 
   // ── Shell session (feeds into xterm Terminal) ──────────
 
-  Future<void> openShell(SshSession session, {bool useTmux = false}) async {
+  Future<void> openShell(
+    SshSession session, {
+    bool useTmux = false,
+    String termType = 'xterm-256color',
+  }) async {
     final client = _clients[session.host.id];
     if (client == null) throw Exception('Not connected');
 
@@ -379,7 +383,7 @@ class SshService {
       pty: SSHPtyConfig(
         width: ptyWidth,
         height: ptyHeight,
-        type: 'xterm-256color',
+        type: termType,
       ),
     );
 
