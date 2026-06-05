@@ -12,6 +12,7 @@ import 'local_terminal_pane.dart';
 import 'terminal_view.dart';
 import 'terminal_input_bar.dart';
 import 'broadcast_toolbar.dart';
+import 'terminal_config_panel.dart';
 import 'terminal_snippets_panel.dart';
 
 class SplitTerminalView extends StatelessWidget {
@@ -58,6 +59,11 @@ class SplitTerminalView extends StatelessWidget {
                   onRunSnippet: (snippet) =>
                       _runSnippetOnActive(context, snippet.command),
                   onClose: layout.toggleSnippetsPanel,
+                ),
+              if (layout.configPanelVisible)
+                TerminalConfigPanel(
+                  onClose: () =>
+                      layout.toggleSidePanel(SidePanel.terminalConfig),
                 ),
             ],
           ),

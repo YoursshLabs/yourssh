@@ -33,6 +33,20 @@ void main() {
     expect(provider.terminalFont, 'Inconsolata for Powerline');
   });
 
+  test('previewFontSize updates value and notifies without persisting', () async {
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    var notified = false;
+    provider.addListener(() => notified = true);
+
+    provider.previewFontSize(18);
+
+    expect(provider.fontSize, 18);
+    expect(notified, true);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getDouble('fontSize'), isNull);
+  });
+
   test('keepAliveInterval defaults to 10', () async {
     final provider = SettingsProvider();
     await Future<void>.delayed(Duration.zero);

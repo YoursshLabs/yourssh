@@ -113,7 +113,7 @@ You can also use snippets **without leaving the terminal**: toggle the collapsib
 
 ## Themes & Fonts
 
-35 built-in terminal color themes (Dracula, Solarized, Gruvbox, Nord, One Dark, and more) plus 7 monospace fonts including Nerd Font support. Configure in **Settings → Terminal**.
+44 built-in terminal color themes (Dracula, Solarized, Gruvbox, Nord, Kanagawa, Tokyo Night, Flexoki, and more — dark and light variants) plus 7 monospace fonts including Nerd Font support. Configure in **Settings → Terminal**, or without leaving the workspace: the **tune icon** in the terminal toolbar opens a right-side panel with the same theme, font size (live preview while dragging), and font controls.
 
 <!-- SCREENSHOT: Theme picker showing the grid of color previews -->
 

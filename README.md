@@ -112,7 +112,7 @@ sudo dpkg -r yourssh
 
 ### Design
 - Dark-only interface with a cohesive green-accent palette
-- **35 terminal color themes** with a visual picker (Dracula, Solarized, Gruvbox, One Dark, Nord, and more)
+- **44 terminal color themes** with a visual picker (Dracula, Solarized, Gruvbox, One Dark, Nord, Kanagawa, Tokyo Night, Flexoki, and more)
 - 7 bundled monospace fonts: 6 Powerline-compatible (DejaVu, Inconsolata, Meslo LGS, Source Code Pro, Ubuntu Mono, Roboto Mono) + MesloLGS NF (Nerd Font)
 - Network stats overlay — real-time traffic counter widget per session
 - Minimum window size enforced (800×600); fully resizable
@@ -447,7 +447,7 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 
 ### ✅ Shipped
 
-- [x] Custom terminal color themes (35 presets)
+- [x] Custom terminal color themes (44 presets)
 - [x] SSH certificate authentication (CA-signed certs)
 - [x] SSH agent authentication (`SSH_AUTH_SOCK`)
 - [x] Linux desktop target

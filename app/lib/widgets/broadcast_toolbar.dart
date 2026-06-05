@@ -49,6 +49,12 @@ class BroadcastToolbar extends StatelessWidget {
             selected: layout.snippetsPanelVisible,
             onTap: layout.toggleSnippetsPanel,
           ),
+          _LayoutButton(
+            icon: Icons.tune,
+            tooltip: 'Toggle Terminal Settings',
+            selected: layout.configPanelVisible,
+            onTap: () => layout.toggleSidePanel(SidePanel.terminalConfig),
+          ),
           const Spacer(),
           if (layout.paneCount > 1)
             InkWell(

@@ -13,7 +13,7 @@ import '../services/supabase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import 'hotkey_settings_screen.dart';
-import 'theme_picker.dart';
+import 'terminal_appearance_controls.dart';
 import 'qr_export_dialog.dart';
 import 'qr_import_dialog.dart';
 import 'package:file_picker/file_picker.dart';
@@ -28,37 +28,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  static const _bundledFonts = [
-    'monospace',
-    'MesloLGS NF',
-    'DejaVu Sans Mono for Powerline',
-    'Inconsolata for Powerline',
-    'Meslo LG S for Powerline',
-    'Source Code Pro for Powerline',
-    'Ubuntu Mono derivative Powerline',
-    'Roboto Mono for Powerline',
-  ];
-  static const _kCustom = '__custom__';
-
-  final _customFontController = TextEditingController();
-  bool _pendingCustom = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final font = context.read<SettingsProvider>().terminalFont;
-    final isCustom = !_bundledFonts.contains(font);
-    if (isCustom && _customFontController.text.isEmpty) {
-      _customFontController.text = font;
-    }
-  }
-
-  @override
-  void dispose() {
-    _customFontController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
@@ -131,74 +100,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ]),
                 const SizedBox(height: 24),
-                _Section(title: 'Terminal', children: [
-                  _Row(
-                    label: 'Color theme',
-                    trailing: ThemePickerButton(
-                      currentTheme: settings.terminalTheme,
-                      onChanged: (v) => context.read<SettingsProvider>().save(terminalTheme: v),
-                    ),
-                  ),
-                  _Row(
-                    label: 'Font size: ${settings.fontSize.round()}pt',
-                    trailing: SizedBox(
-                      width: 200,
-                      child: Slider(
-                        value: settings.fontSize,
-                        min: 10,
-                        max: 24,
-                        divisions: 14,
-                        onChanged: (v) => context.read<SettingsProvider>().save(fontSize: v),
-                      ),
-                    ),
-                  ),
-                  _Row(
-                    label: 'Terminal font',
-                    trailing: _buildFontDropdown(context, settings),
-                  ),
-                  if (_pendingCustom || !_bundledFonts.contains(settings.terminalFont))
-                    _Row(
-                      label: 'Custom font name',
-                      trailing: SizedBox(
-                        width: 220,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _customFontController,
-                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                                decoration: InputDecoration(
-                                  hintText: 'e.g. Hack Nerd Font',
-                                  hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                  filled: true,
-                                  fillColor: AppColors.bg,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                    borderSide: const BorderSide(color: AppColors.border),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                    borderSide: const BorderSide(color: AppColors.border),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            TextButton(
-                              onPressed: () {
-                                final name = _customFontController.text.trim();
-                                if (name.isEmpty) return;
-                                setState(() => _pendingCustom = false);
-                                context.read<SettingsProvider>().save(terminalFont: name);
-                              },
-                              child: const Text('Apply', style: TextStyle(fontSize: 12)),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                _Section(title: 'Terminal', children: const [
+                  TerminalAppearanceControls(layout: AppearanceControlsLayout.rows),
                 ]),
                 const SizedBox(height: 24),
                 _Section(title: 'Recording', children: [
@@ -375,37 +278,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Widget _buildFontDropdown(BuildContext context, SettingsProvider settings) {
-    final isCustom = !_bundledFonts.contains(settings.terminalFont);
-    final ddValue = (isCustom || _pendingCustom) ? _kCustom : settings.terminalFont;
-    return DropdownButton<String>(
-      value: ddValue,
-      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-      dropdownColor: AppColors.card,
-      underline: const SizedBox(),
-      items: [
-        ..._bundledFonts.map((f) => DropdownMenuItem(
-          value: f,
-          child: Text(f == 'monospace' ? 'System Default' : f, style: const TextStyle(fontSize: 12)),
-        )),
-        const DropdownMenuItem(
-          value: _kCustom,
-          child: Text('Custom…', style: TextStyle(fontSize: 12)),
-        ),
-      ],
-      onChanged: (v) {
-        if (v == _kCustom) {
-          setState(() {
-            _pendingCustom = true;
-            _customFontController.clear();
-          });
-        } else if (v != null) {
-          setState(() => _pendingCustom = false);
-          context.read<SettingsProvider>().save(terminalFont: v);
-        }
-      },
-    );
-  }
 }
 
 class _SyncSection extends StatefulWidget {

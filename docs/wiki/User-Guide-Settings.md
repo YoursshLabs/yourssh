@@ -8,9 +8,11 @@ Open **Settings** from the sidebar (gear icon).
 
 | Setting | Description |
 |---|---|
-| **Color theme** | 35 built-in themes; visual picker grid |
+| **Color theme** | 44 built-in themes; visual picker grid |
 | **Font** | 7 bundled fonts (DejaVu, Meslo LGS, Inconsolata, Source Code Pro, Ubuntu Mono, Roboto Mono, MesloLGS NF) |
 | **Font size** | Adjust terminal font size |
+
+These three controls are also available without leaving the terminal: the **tune icon** in the terminal toolbar opens a right-side appearance panel with the same settings (changes apply live to all terminals).
 
 ## Connection
 

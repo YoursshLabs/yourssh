@@ -74,4 +74,44 @@ void main() {
     p.toggleSnippetsPanel();
     expect(notificationCount, 1);
   });
+
+  test('sidePanel defaults to none', () {
+    final p = TerminalLayoutProvider();
+    expect(p.sidePanel, SidePanel.none);
+    expect(p.configPanelVisible, false);
+  });
+
+  test('toggleSidePanel opens and closes the same panel', () {
+    final p = TerminalLayoutProvider();
+    p.toggleSidePanel(SidePanel.terminalConfig);
+    expect(p.configPanelVisible, true);
+    p.toggleSidePanel(SidePanel.terminalConfig);
+    expect(p.configPanelVisible, false);
+    expect(p.sidePanel, SidePanel.none);
+  });
+
+  test('opening config panel closes snippets panel', () {
+    final p = TerminalLayoutProvider();
+    p.toggleSnippetsPanel();
+    expect(p.snippetsPanelVisible, true);
+    p.toggleSidePanel(SidePanel.terminalConfig);
+    expect(p.configPanelVisible, true);
+    expect(p.snippetsPanelVisible, false);
+  });
+
+  test('opening snippets panel closes config panel', () {
+    final p = TerminalLayoutProvider();
+    p.toggleSidePanel(SidePanel.terminalConfig);
+    p.toggleSnippetsPanel();
+    expect(p.snippetsPanelVisible, true);
+    expect(p.configPanelVisible, false);
+  });
+
+  test('toggleSidePanel notifies listeners', () {
+    final p = TerminalLayoutProvider();
+    var notificationCount = 0;
+    p.addListener(() => notificationCount++);
+    p.toggleSidePanel(SidePanel.terminalConfig);
+    expect(notificationCount, 1);
+  });
 }

@@ -68,6 +68,14 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Live font-size preview while dragging the slider: updates listeners
+  /// (terminals resize immediately) without writing SharedPreferences.
+  /// Call [save] with the final value when the drag ends.
+  void previewFontSize(double value) {
+    fontSize = value;
+    notifyListeners();
+  }
+
   Future<void> save({
     bool? autoReconnect,
     int? reconnectAttempts,
