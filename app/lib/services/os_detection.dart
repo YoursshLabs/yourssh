@@ -3,6 +3,8 @@
 library;
 
 /// detectedOs values that have a matching `assets/os/<key>.svg`.
+/// Raw distro ids must go through [normalizeDistroId] first — aliases like
+/// `amzn` are not keys.
 const Set<String> kOsIconKeys = {
   'linux', 'macos', 'windows',
   'ubuntu', 'debian', 'fedora', 'centos', 'rocky', 'alma',

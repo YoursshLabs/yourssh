@@ -37,7 +37,7 @@ void main() {
 
   group('normalizeDistroId', () {
     test('known ids pass through', () {
-      for (final id in ['ubuntu', 'debian', 'fedora', 'centos', 'rocky', 'alpine', 'arch']) {
+      for (final id in kOsIconKeys) {
         expect(normalizeDistroId(id), id);
       }
     });
@@ -67,6 +67,10 @@ void main() {
     test('null and unknown return null', () {
       expect(osIconAsset(null), isNull);
       expect(osIconAsset('beos'), isNull);
+    });
+
+    test('alias round-trips through normalizeDistroId to an asset', () {
+      expect(osIconAsset(normalizeDistroId('amzn')), 'assets/os/amazon.svg');
     });
   });
 }
