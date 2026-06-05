@@ -123,6 +123,7 @@ class _ForwardTileState extends State<_ForwardTile> {
     final statusColor = switch (fwd.status) {
       ForwardStatus.active => AppColors.accent,
       ForwardStatus.error => AppColors.red,
+      ForwardStatus.connecting || ForwardStatus.reconnecting => AppColors.orange,
       ForwardStatus.idle => AppColors.textTertiary,
     };
 

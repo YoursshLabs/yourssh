@@ -2,7 +2,7 @@ import 'package:uuid/uuid.dart';
 
 enum ForwardType { local, remote, dynamic }
 
-enum ForwardStatus { idle, active, error }
+enum ForwardStatus { idle, connecting, active, reconnecting, error }
 
 class PortForward {
   final String id;
@@ -15,6 +15,10 @@ class PortForward {
   String? hostId;
   ForwardStatus status;
   String? errorMessage;
+  bool autoStart;
+
+  /// Live piped-connection count while active. Transient, like [status].
+  int activeConnections;
 
   PortForward({
     String? id,
@@ -27,6 +31,8 @@ class PortForward {
     this.hostId,
     this.status = ForwardStatus.idle,
     this.errorMessage,
+    this.autoStart = false,
+    this.activeConnections = 0,
   }) : id = id ?? const Uuid().v4();
 
   Map<String, dynamic> toJson() => {
@@ -38,6 +44,7 @@ class PortForward {
         'remoteHost': remoteHost,
         'remotePort': remotePort,
         'hostId': hostId,
+        'autoStart': autoStart,
       };
 
   factory PortForward.fromJson(Map<String, dynamic> json) => PortForward(
@@ -49,6 +56,7 @@ class PortForward {
         remoteHost: json['remoteHost'] ?? '',
         remotePort: json['remotePort'] ?? 0,
         hostId: json['hostId'],
+        autoStart: json['autoStart'] ?? false,
       );
 
   String get typeLabel => switch (type) {
