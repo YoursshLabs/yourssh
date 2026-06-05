@@ -81,6 +81,7 @@ sudo dpkg -r yourssh
 - **Shell integration (bash/zsh)** — injected OSC 7/133 prompt hooks surface the working directory on the session tab, a per-command status gutter (green = ok, red = failed), jump-to-prompt (Cmd/Ctrl+↑/↓), and cwd-aware path completion in the input bar; auto-on with per-host / global opt-out; the setup script is delivered invisibly (never echoed into your terminal or recordings)
 - **Port forwarding** — local, remote, and dynamic SOCKS5 tunnels with start/stop per rule, auto-start on launch, live connection counters, and auto-reconnect with backoff when the SSH link drops (no terminal tab required — tunnels dial the host with stored credentials)
 - **Jump host / bastion proxy** — connect to internal servers via a bastion host; select any saved host as the jump hop in the host detail panel
+- **SSH agent forwarding** — per-host toggle (like `ssh -A`) to hop between servers with the keys on your local machine; serves your system agent, falling back to app-Keychain keys when no agent is running — private keys never leave your machine
 - **Local shell** — spawn native macOS/Windows/Linux shell alongside SSH sessions
 - **xterm-256color** terminal emulation with full PTY support
 
@@ -293,7 +294,7 @@ yourssh/
 │   ├── yourssh_plugin_api/       # Plugin interface package (stable public API)
 │   ├── yourssh_script_engine/    # JS plugin runtime (QuickJS FFI, HookBus, bridges)
 │   ├── yourssh_devops/           # DevOps plugin (S3, LAN Share)
-│   ├── dartssh2/                 # Local fork — adds signAsync() for SSH agent auth
+│   ├── dartssh2/                 # Local fork — signAsync() agent auth + agent-forwarding channels
 │   ├── flutter_pty/              # Local fork — Windows argv[0] duplication fix (local terminal input)
 │   └── xterm/                    # Local fork — passes viewId to TextInput (Windows typing fix)
 ├── macos/                        # Xcode project files (xcodegen — project.yml)
@@ -467,6 +468,7 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 - [x] **Jump host / bastion proxy** — `ProxyJump` support for multi-hop connections
 - [ ] **TOTP / keyboard-interactive 2FA** — OTP prompt for servers that require it after password
 - [x] **Windows SSH agent (Pageant)** — named-pipe agent support alongside `SSH_AUTH_SOCK`
+- [x] **SSH agent forwarding** — `ssh -A`-style per-host toggle with system agent + app-Keychain fallback (#49)
 
 ### 🔜 Phase 3 — Productivity
 

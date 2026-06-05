@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.1.28] — 2026-06-05
+
 ### Added
 - SSH Agent Forwarding (per-host toggle, like `ssh -A`): forwarded agent
   channels are served by the local system agent (`SSH_AUTH_SOCK` / Windows
@@ -374,7 +378,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.27...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.28...HEAD
+[0.1.28]: https://github.com/YoursshLabs/yourssh/compare/v0.1.27...v0.1.28
 [0.1.27]: https://github.com/YoursshLabs/yourssh/compare/v0.1.26...v0.1.27
 [0.1.26]: https://github.com/YoursshLabs/yourssh/compare/v0.1.25...v0.1.26
 [0.1.25]: https://github.com/YoursshLabs/yourssh/compare/v0.1.24...v0.1.25
