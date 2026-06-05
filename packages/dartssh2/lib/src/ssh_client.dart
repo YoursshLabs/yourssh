@@ -448,8 +448,9 @@ class SSHClient {
     if (agentHandler != null) {
       final agentOk = await channelController.sendAgentForwardingRequest();
       if (!agentOk) {
-        channelController.close();
-        throw SSHChannelRequestError('Failed to request agent forwarding');
+        // OpenSSH treats a refused auth-agent-req as a warning, not an error
+        // (e.g. sshd with AllowAgentForwarding no). Keep the session alive.
+        printDebug?.call('Agent forwarding refused by server');
       }
     }
 
@@ -515,8 +516,9 @@ class SSHClient {
     if (agentHandler != null) {
       final agentOk = await channelController.sendAgentForwardingRequest();
       if (!agentOk) {
-        channelController.close();
-        throw SSHChannelRequestError('Failed to request agent forwarding');
+        // OpenSSH treats a refused auth-agent-req as a warning, not an error
+        // (e.g. sshd with AllowAgentForwarding no). Keep the session alive.
+        printDebug?.call('Agent forwarding refused by server');
       }
     }
 
