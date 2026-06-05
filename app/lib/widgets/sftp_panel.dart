@@ -9,9 +9,11 @@ import '../services/sftp_file_inspector.dart';
 import '../services/sftp_transfer_service.dart';
 import '../services/sftp_file_ops_service.dart';
 import '../util/app_launcher.dart';
+import '../util/file_mode.dart';
 import 'code_editor_screen.dart';
 import 'path_breadcrumb.dart';
 import 'entry_context_menu.dart';
+import 'permissions_dialog.dart';
 
 class SftpPanel extends StatefulWidget {
   final Host? host;
@@ -24,6 +26,13 @@ class SftpPanel extends StatefulWidget {
   /// where the user left off.
   final String initialPath;
 
+  /// Copies [entry] into the opposite panel's current directory (wired by
+  /// the dual-panel screen). Null when the panel is used standalone.
+  final void Function(SftpEntry entry)? onCopyToTarget;
+
+  /// Why copy-to-target is unavailable for [entry] (null = available).
+  final String? Function(SftpEntry entry)? copyToTargetBlockReason;
+
   const SftpPanel({
     super.key,
     required this.host,
@@ -31,6 +40,8 @@ class SftpPanel extends StatefulWidget {
     required this.provider,
     required this.onChangeHost,
     this.initialPath = '/',
+    this.onCopyToTarget,
+    this.copyToTargetBlockReason,
   });
 
   @override
@@ -600,10 +611,17 @@ class _SftpPanelState extends State<SftpPanel> {
                 await _openWithApp(entry, appPath);
               }
             },
+      onCopyToTarget: widget.onCopyToTarget == null
+          ? null
+          : () => widget.onCopyToTarget!(entry),
+      copyToTargetDisabledReason: widget.onCopyToTarget == null
+          ? 'No target panel'
+          : widget.copyToTargetBlockReason?.call(entry),
       onRename: () => _showRenameDialog(prov, entry),
       onDelete: () => _showDeleteConfirm(prov, [entry]),
       onRefresh: () => _loadDirectory(prov.currentPath),
       onNewFolder: () => _showNewFolderDialog(prov),
+      onEditPermissions: () => _showPermissionsDialog(prov, entry),
       child: Draggable<SftpEntry>(
         data: entry,
         feedback: Material(
@@ -785,6 +803,35 @@ class _SftpPanelState extends State<SftpPanel> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Rename failed: $e'), backgroundColor: const Color(0xFF2A1A1A)));
+      }
+    }
+  }
+
+  Future<void> _showPermissionsDialog(
+      SftpPanelProvider prov, SftpEntry entry) async {
+    final result = await showDialog<({int mode, bool recursive})>(
+      context: context,
+      builder: (_) => PermissionsDialog(
+        entryName: entry.name,
+        initialMode: entry.mode ?? 0,
+        isDirectory: entry.isDirectory,
+      ),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await context.read<SftpFileOpsService>().chmod(
+            widget.host!,
+            entry.path,
+            result.mode,
+            isDirectory: entry.isDirectory,
+            recursive: result.recursive,
+          );
+      _loadDirectory(prov.currentPath);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('chmod ${modeToOctal(result.mode)} failed: $e'),
+            backgroundColor: const Color(0xFF2A1A1A)));
       }
     }
   }
