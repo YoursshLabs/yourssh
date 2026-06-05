@@ -69,4 +69,10 @@ class SSHPacketSN {
       _value++;
     }
   }
+
+  /// Resets the sequence number to zero. Used by the strict KEX extension
+  /// (CVE-2023-48795) after every SSH_MSG_NEWKEYS.
+  void reset() {
+    _value = 0;
+  }
 }
