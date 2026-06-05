@@ -371,6 +371,17 @@ void main() {
     expect(lastStatus(a.id), ForwardStatus.idle);
   });
 
+  test('concurrent starts on the same host share one dial', () async {
+    final svc = makeService();
+    final a = rule();
+    final b = rule();
+    await Future.wait([svc.start(a), svc.start(b)]);
+    expect(acquireCalls, 1);
+    expect(svc.isRunning(a.id), isTrue);
+    expect(svc.isRunning(b.id), isTrue);
+    await svc.stopAll();
+  });
+
   test('autoStartAll starts only autoStart rules', () async {
     final svc = makeService();
     final auto = rule()..autoStart = true;

@@ -349,7 +349,10 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     // A queued reconnect timer may still fire onSessionDropped during
     // teardown — detach it before disposing the notification center.
     _sessionProvider.onSessionDropped = null;
-    unawaited(_portForwardService.stopAll());
+    // Dispose the provider only after stopAll's final status callbacks fire.
+    unawaited(_portForwardService
+        .stopAll()
+        .whenComplete(_portForwardProvider.dispose));
     _notificationCenter.dispose();
     windowManager.removeListener(this);
     // Tear down in reverse-dependency order: consumers first (sessions, plugins,

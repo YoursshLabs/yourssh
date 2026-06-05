@@ -88,6 +88,20 @@ class PortForwardService {
   final Map<String, _ActiveTunnel> _tunnels = {};
   final Map<String, _HostWatcher> _watchers = {};
 
+  /// In-flight transport dials keyed by host id, so two tunnels starting on
+  /// the same host share one SSH connect instead of racing (the loser of that
+  /// race would leak a client).
+  final Map<String, Future<TunnelTransport>> _acquiring = {};
+
+  Future<TunnelTransport> _acquire(Host host) => _acquiring.putIfAbsent(
+      host.id,
+      // Block body on purpose: `Map.remove` returns the stored future, and an
+      // arrow body would hand it back to whenComplete — which then awaits the
+      // very future it is chained on (deadlock).
+      () => acquireTransport(host).whenComplete(() {
+            _acquiring.remove(host.id);
+          }));
+
   bool isRunning(String forwardId) => _tunnels.containsKey(forwardId);
 
   /// Bound local port of a running local/dynamic tunnel (tests, diagnostics).
@@ -112,7 +126,7 @@ class PortForwardService {
     _tunnels[fwd.id] = tunnel;
     onStatus(fwd.id, ForwardStatus.connecting);
     try {
-      final transport = await acquireTransport(host);
+      final transport = await _acquire(host);
       await _open(tunnel, transport);
       _watch(host, transport);
       onStatus(fwd.id, ForwardStatus.active);
@@ -127,7 +141,11 @@ class PortForwardService {
     final t = _tunnels.remove(forwardId);
     if (t == null) return;
     t.stopping = true;
-    await t.dispose();
+    try {
+      await t.dispose();
+    } catch (_) {
+      // Best-effort teardown — the tunnel is already unregistered.
+    }
     onConnections(forwardId, 0);
     onStatus(forwardId, ForwardStatus.idle);
   }
@@ -150,11 +168,10 @@ class PortForwardService {
   }
 
   /// Best-effort start of every rule flagged autoStart (app launch).
-  /// start() reports failures via onStatus and never throws.
+  /// start() reports failures via onStatus and never throws; rules on the
+  /// same host share one dial via [_acquire], so parallel start is safe.
   Future<void> autoStartAll(Iterable<PortForward> rules) async {
-    for (final rule in rules.where((r) => r.autoStart).toList()) {
-      await start(rule);
-    }
+    await Future.wait(rules.where((r) => r.autoStart).map(start).toList());
   }
 
   // ── Tunnel opening ─────────────────────────────────────
@@ -233,12 +250,10 @@ class PortForwardService {
       local.destroy();
       remote.destroy();
       t.closers.remove(finish);
-      t.connections--;
-      if (!t.stopping) onConnections(t.rule.id, t.connections);
+      if (!t.stopping) onConnections(t.rule.id, t.closers.length);
     };
     t.closers.add(finish);
-    t.connections++;
-    onConnections(t.rule.id, t.connections);
+    onConnections(t.rule.id, t.closers.length);
     unawaited(remote.stream
         .cast<List<int>>()
         .pipe(local)
@@ -285,7 +300,7 @@ class PortForwardService {
       if (remaining.isEmpty) return; // every tunnel stopped while waiting
       final TunnelTransport transport;
       try {
-        transport = await acquireTransport(watcher.host);
+        transport = await _acquire(watcher.host);
       } catch (_) {
         backoff = backoff * 2 > cap ? cap : backoff * 2;
         continue;
@@ -297,7 +312,11 @@ class PortForwardService {
           onStatus(t.rule.id, ForwardStatus.active);
         } catch (e) {
           _tunnels.remove(t.rule.id);
-          await t.dispose();
+          try {
+            await t.dispose();
+          } catch (_) {
+            // Best-effort: keep re-opening the host's remaining tunnels.
+          }
           onStatus(t.rule.id, ForwardStatus.error, error: _describe(e));
         }
       }
@@ -333,8 +352,8 @@ class _ActiveTunnel {
   Timer? socksTimer;
 
   /// One closer per live piped connection; calling it tears the pair down.
+  /// The set's length is the live connection count.
   final Set<void Function()> closers = {};
-  int connections = 0;
 
   /// Tears down everything riding the (dead) SSH connection but keeps the
   /// local listener bound so a reconnect doesn't lose the port.
@@ -342,7 +361,6 @@ class _ActiveTunnel {
     for (final close in closers.toList()) {
       close();
     }
-    connections = 0;
     await remoteSub?.cancel();
     remoteSub = null;
     remote?.close();

@@ -54,7 +54,9 @@ class PortForwardProvider extends ChangeNotifier {
     // Forward may have been deleted between status events (e.g., during
     // teardown) — silently drop the update instead of throwing StateError.
     final fwd = _forwards.where((f) => f.id == id).firstOrNull;
-    if (fwd == null) return;
+    if (fwd == null || (fwd.status == status && fwd.errorMessage == error)) {
+      return;
+    }
     fwd.status = status;
     fwd.errorMessage = error;
     notifyListeners();
