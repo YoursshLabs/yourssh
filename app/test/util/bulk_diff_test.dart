@@ -114,5 +114,23 @@ void main() {
       expect(rows[2].right, isNull);
       expect((rows[3].left!.text, rows[3].right!.text), ('z', 'z'));
     });
+
+    test('pure-added block: left is null, right carries the text', () {
+      final rows = sideBySideRows(const [DiffLine(DiffOp.added, 'x')]);
+      expect(rows, hasLength(1));
+      expect(rows[0].left, isNull);
+      expect(rows[0].right!.text, 'x');
+    });
+  });
+
+  group('lineDiff LCS cap', () {
+    test('completely different 2001-line inputs fall back to all-removed then all-added', () {
+      final a = List.generate(2001, (i) => 'a$i').join('\n');
+      final b = List.generate(2001, (i) => 'b$i').join('\n');
+      final d = lineDiff(a, b);
+      expect(d, hasLength(4002));
+      expect(d.take(2001).every((l) => l.op == DiffOp.removed), isTrue);
+      expect(d.skip(2001).every((l) => l.op == DiffOp.added), isTrue);
+    });
   });
 }

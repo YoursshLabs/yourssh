@@ -14,6 +14,7 @@ class OutputGroup {
 /// Groups successful results by identical stdout (trailing whitespace
 /// trimmed), largest group first; equal-sized groups keep first-seen order.
 /// Failed/cancelled hosts never participate.
+/// Only trailing whitespace is normalized; leading whitespace is significant.
 List<OutputGroup> groupByOutput(List<BulkHostResult> results) {
   final labelsByOutput = <String, List<String>>{};
   final firstSeen = <String, int>{};
@@ -120,6 +121,8 @@ List<DiffLine> _diffMiddle(List<String> a, List<String> b) {
 /// Pairs diff lines into side-by-side rows: a run of removed lines is
 /// zipped with the added run that follows it (changed lines align), and
 /// unmatched lines pair with null on the other side.
+/// Expects the canonical [lineDiff] ordering: within a change block,
+/// removed lines precede added lines.
 List<({DiffLine? left, DiffLine? right})> sideBySideRows(
     List<DiffLine> lines) {
   final rows = <({DiffLine? left, DiffLine? right})>[];
