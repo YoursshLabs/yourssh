@@ -153,7 +153,12 @@ class _WindowsPipeTransport implements _AgentTransport {
     }
 
     final transport = _WindowsPipeTransport._(handle, writeFile, closeHandle);
-    await transport._startReading();
+    try {
+      await transport._startReading();
+    } catch (_) {
+      closeHandle(handle); // don't leak the pipe handle on spawn failure
+      rethrow;
+    }
     return transport;
   }
 
@@ -169,11 +174,17 @@ class _WindowsPipeTransport implements _AgentTransport {
         _controller.close();
       }
     });
-    _readIsolate = await Isolate.spawn(
-      _readLoop,
-      [_handle, _receivePort.sendPort],
-      debugName: 'ssh_agent_pipe_reader',
-    );
+    try {
+      _readIsolate = await Isolate.spawn(
+        _readLoop,
+        [_handle, _receivePort.sendPort],
+        debugName: 'ssh_agent_pipe_reader',
+      );
+    } catch (_) {
+      await _portSub.cancel();
+      _receivePort.close();
+      rethrow;
+    }
   }
 
   // Top-level-compatible static function required by Isolate.spawn.
@@ -227,11 +238,16 @@ class _WindowsPipeTransport implements _AgentTransport {
 
   @override
   Future<void> close() async {
-    _readIsolate.kill(priority: Isolate.immediate);
+    // Close the pipe handle FIRST: it unblocks the reader's ReadFile so
+    // _readLoop exits through its finally and frees its calloc buffers.
+    // Killing first would terminate the isolate without running finally
+    // (it can't reach a safepoint while blocked in FFI), leaking the native
+    // buffers on every close. The kill below is only a backstop.
+    _closeFn(_handle);
+    _readIsolate.kill(priority: Isolate.beforeNextEvent);
     await _portSub.cancel();
     _receivePort.close();
     await _controller.close();
-    _closeFn(_handle);
   }
 }
 
