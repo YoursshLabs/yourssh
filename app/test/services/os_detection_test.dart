@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/services/os_detection.dart';
 
@@ -71,6 +72,16 @@ void main() {
 
     test('alias round-trips through normalizeDistroId to an asset', () {
       expect(osIconAsset(normalizeDistroId('amzn')), 'assets/os/amazon.svg');
+    });
+  });
+
+  group('icon assets', () {
+    test('every kOsIconKeys entry has an svg on disk', () {
+      // flutter test runs with cwd = app/
+      for (final key in kOsIconKeys) {
+        expect(File('assets/os/$key.svg').existsSync(), isTrue,
+            reason: 'missing assets/os/$key.svg');
+      }
     });
   });
 }

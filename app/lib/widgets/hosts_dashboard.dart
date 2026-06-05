@@ -10,6 +10,7 @@ import '../util/host_query.dart';
 import '../providers/host_provider.dart';
 import '../providers/key_provider.dart';
 import '../providers/session_provider.dart';
+import '../services/os_detection.dart';
 import '../services/ssh_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
@@ -510,15 +511,13 @@ class _HostCardState extends State<_HostCard> {
     super.dispose();
   }
 
-  static const _osAssets = {'linux', 'macos', 'windows'};
-
   Widget _osIcon(Host host) {
-    final os = host.detectedOs;
-    if (os != null && _osAssets.contains(os)) {
+    final asset = osIconAsset(host.detectedOs);
+    if (asset != null) {
       return Padding(
         padding: const EdgeInsets.all(8),
         child: SvgPicture.asset(
-          'assets/os/$os.svg',
+          asset,
           width: 20,
           height: 20,
           colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
