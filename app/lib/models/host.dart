@@ -23,6 +23,7 @@ class Host {
   bool autoRecord;
   String? jumpHostId;
   bool shellIntegration;
+  bool agentForwarding;
   SftpMode sftpMode;
   String? sftpServerCommand;
 
@@ -41,6 +42,7 @@ class Host {
     this.autoRecord = false,
     this.jumpHostId,
     this.shellIntegration = true,
+    this.agentForwarding = false,
     this.sftpMode = SftpMode.normal,
     this.sftpServerCommand,
   })  : id = id ?? const Uuid().v4(),
@@ -64,6 +66,7 @@ class Host {
         'autoRecord': autoRecord,
         'jumpHostId': jumpHostId,
         'shellIntegration': shellIntegration,
+        'agentForwarding': agentForwarding,
         'sftpMode': sftpMode.name,
         'sftpServerCommand': sftpServerCommand,
       };
@@ -114,6 +117,7 @@ class Host {
       autoRecord: (json['autoRecord'] as bool?) ?? false,
       jumpHostId: json['jumpHostId'] as String?,
       shellIntegration: (json['shellIntegration'] as bool?) ?? true,
+      agentForwarding: (json['agentForwarding'] as bool?) ?? false,
       sftpMode: parseSftpMode(),
       sftpServerCommand: json['sftpServerCommand'] as String?,
     );
@@ -131,6 +135,7 @@ class Host {
     bool? autoRecord,
     Object? jumpHostId = const _Unset(),
     bool? shellIntegration,
+    bool? agentForwarding,
     SftpMode? sftpMode,
     Object? sftpServerCommand = const _Unset(),
   }) =>
@@ -149,6 +154,7 @@ class Host {
         autoRecord: autoRecord ?? this.autoRecord,
         jumpHostId: jumpHostId is _Unset ? this.jumpHostId : jumpHostId as String?,
         shellIntegration: shellIntegration ?? this.shellIntegration,
+        agentForwarding: agentForwarding ?? this.agentForwarding,
         sftpMode: sftpMode ?? this.sftpMode,
         sftpServerCommand: sftpServerCommand is _Unset
             ? this.sftpServerCommand
