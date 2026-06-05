@@ -19,8 +19,8 @@ class _BulkDiffViewState extends State<BulkDiffView> {
   int _baseline = 0;
   int? _selected; // null → show baseline
   bool _compare = false;
-  String? _hostA;
-  String? _hostB;
+  String? _hostAId;
+  String? _hostBId;
 
   @override
   Widget build(BuildContext context) {
@@ -34,10 +34,11 @@ class _BulkDiffViewState extends State<BulkDiffView> {
             style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
       );
     }
-    // Guard stale indices when a re-run produced fewer groups.
-    final baseline = _baseline < groups.length ? _baseline : 0;
-    final selected =
-        (_selected != null && _selected! < groups.length) ? _selected! : baseline;
+    // Normalize stale indices when a re-run produced fewer groups.
+    if (_baseline >= groups.length) _baseline = 0;
+    if (_selected != null && _selected! >= groups.length) _selected = null;
+    final baseline = _baseline;
+    final selected = _selected ?? baseline;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -119,9 +120,9 @@ class _BulkDiffViewState extends State<BulkDiffView> {
           child: _compare
               ? _HostCompare(
                   results: widget.results,
-                  hostA: _hostA,
-                  hostB: _hostB,
-                  onPick: (a, b) => setState(() { _hostA = a; _hostB = b; }),
+                  hostAId: _hostAId,
+                  hostBId: _hostBId,
+                  onPick: (a, b) => setState(() { _hostAId = a; _hostBId = b; }),
                 )
               : selected == baseline
                   ? _PlainOutput(output: groups[baseline].output)
@@ -260,22 +261,21 @@ class _UnifiedDiff extends StatelessWidget {
 
 class _HostCompare extends StatelessWidget {
   final List<BulkHostResult> results;
-  final String? hostA;
-  final String? hostB;
+  final String? hostAId;
+  final String? hostBId;
   final void Function(String? a, String? b) onPick;
   const _HostCompare(
       {required this.results,
-      required this.hostA,
-      required this.hostB,
+      required this.hostAId,
+      required this.hostBId,
       required this.onPick});
 
   @override
   Widget build(BuildContext context) {
     final ok =
         results.where((r) => r.status == BulkHostStatus.success).toList();
-    final labels = [for (final r in ok) r.host.label];
-    final a = ok.where((r) => r.host.label == hostA).firstOrNull;
-    final b = ok.where((r) => r.host.label == hostB).firstOrNull;
+    final a = ok.where((r) => r.host.id == hostAId).firstOrNull;
+    final b = ok.where((r) => r.host.id == hostBId).firstOrNull;
 
     DropdownButton<String> picker(String? value, bool isA) =>
         DropdownButton<String>(
@@ -286,10 +286,10 @@ class _HostCompare extends StatelessWidget {
           dropdownColor: AppColors.card,
           style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
           items: [
-            for (final l in labels)
-              DropdownMenuItem(value: l, child: Text(l)),
+            for (final r in ok)
+              DropdownMenuItem(value: r.host.id, child: Text(r.host.label)),
           ],
-          onChanged: (v) => onPick(isA ? v : hostA, isA ? hostB : v),
+          onChanged: (v) => onPick(isA ? v : hostAId, isA ? hostBId : v),
         );
 
     return Column(
@@ -299,13 +299,13 @@ class _HostCompare extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              picker(hostA, true),
+              picker(hostAId, true),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12),
                 child: Icon(Icons.compare_arrows,
                     size: 16, color: AppColors.textSecondary),
               ),
-              picker(hostB, false),
+              picker(hostBId, false),
             ],
           ),
         ),
@@ -356,13 +356,15 @@ class _SideBySide extends StatelessWidget {
     return ListView.builder(
       padding: const EdgeInsets.all(12),
       itemCount: rows.length,
-      itemBuilder: (_, i) => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _cell(rows[i].left),
-          Container(width: 1, height: 16, color: AppColors.border),
-          _cell(rows[i].right),
-        ],
+      itemBuilder: (_, i) => IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _cell(rows[i].left),
+            Container(width: 1, color: AppColors.border),
+            _cell(rows[i].right),
+          ],
+        ),
       ),
     );
   }

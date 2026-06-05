@@ -57,4 +57,15 @@ void main() {
     await tester.pumpWidget(_wrap(const BulkDiffView(results: [])));
     expect(find.text('No successful output to compare.'), findsOneWidget);
   });
+
+  testWidgets('compare mode tolerates duplicate host labels', (tester) async {
+    await tester.pumpWidget(_wrap(BulkDiffView(results: [
+      _ok('same-label', 'out-1'),
+      _ok('same-label', 'out-2'),
+    ])));
+    await tester.tap(find.text('COMPARE TWO HOSTS'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DropdownButton<String>), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
 }
