@@ -104,6 +104,7 @@ void main() {
 
     expect(client.capturedPty?.width, 187);
     expect(client.capturedPty?.height, 43);
+    expect(client.capturedPty?.type, 'xterm-256color');
 
     await shell.close();
     await shellDone;
@@ -130,6 +131,26 @@ void main() {
     await pumpEventQueue();
 
     expect(shell.resizes, contains((120, 30)));
+
+    await shell.close();
+    await shellDone;
+  });
+
+  test('openShell passes custom termType to SSHPtyConfig', () async {
+    final svc = SshService(StorageService());
+    final host =
+        Host(label: 'fake', host: 'example.com', port: 22, username: 'u');
+    final session = SshSession(host: host);
+    session.terminal.resize(80, 24);
+
+    final shell = _FakeShell();
+    final client = _FakeClient(shell);
+    svc.debugSetClient(host.id, client);
+
+    final shellDone = svc.openShell(session, termType: 'vt100');
+    await pumpEventQueue();
+
+    expect(client.capturedPty?.type, 'vt100');
 
     await shell.close();
     await shellDone;
