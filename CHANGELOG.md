@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.26] — 2026-06-05
+
+### Added
+- **Terminal appearance side panel** — the tune icon in the terminal toolbar opens a right-side panel to change the color theme, font size, and font family without leaving the workspace. The font-size slider previews live on every terminal while dragging and persists once on release. The panel shares its controls with Settings → Terminal and is mutually exclusive with the snippets panel (opening one closes the other); both panels now share a common frame.
+- **Nine new terminal themes** (35 → 44) — Kanagawa Dragon, Kanagawa Lotus, Tokyo Night Day, Nord Light, Light Owl, Flexoki Dark, Flexoki Light, Aura, and Cyberpunk, sourced from their authors' published palettes and grouped next to their families in the picker. Cursor, selection, and search-hit colors on the light variants are tuned for visibility.
+
+### Fixed
+- A font size stored outside the slider's 10–24 pt range (e.g. hand-edited preferences) no longer crashes the appearance controls — the slider clamps the displayed value.
+
+---
+
 ## [0.1.25] — 2026-06-04
 
 ### Added
@@ -347,7 +358,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.25...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.26...HEAD
+[0.1.26]: https://github.com/YoursshLabs/yourssh/compare/v0.1.25...v0.1.26
 [0.1.25]: https://github.com/YoursshLabs/yourssh/compare/v0.1.24...v0.1.25
 [0.1.24]: https://github.com/YoursshLabs/yourssh/compare/v0.1.23...v0.1.24
 [0.1.23]: https://github.com/YoursshLabs/yourssh/compare/v0.1.22...v0.1.23

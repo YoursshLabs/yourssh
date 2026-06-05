@@ -1,7 +1,7 @@
 # YourSSH — Roadmap
 
 > Direction: **infra workstation for DevOps/SRE managing 10–100+ hosts**, not just an SSH client.
-> Current version: 0.1.25 · updated: 2026-06-05 (terminal appearance side panel in the workspace; theme catalog grown 35 → 44)
+> Current version: 0.1.26 · updated: 2026-06-05 (terminal appearance side panel in the workspace; theme catalog grown 35 → 44)
 
 This document lists proposed features ordered by priority. Each item can be broken out into its own spec (`docs/superpowers/specs/`) when ready for implementation.
 

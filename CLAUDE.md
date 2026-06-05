@@ -70,7 +70,7 @@ Flutter UI (widgets/screens)
 - `SyncProvider` — holds Supabase sync config (URL/key, optional passphrase, status); `enabled` is derived from `isSupabaseConfigured` — no separate stored flag; passphrase stored in secure storage via `StorageService`
 - `KnownHostsProvider` — persists known host fingerprints; exposes `pendingChallenge` for TOFU dialog
 - `SettingsProvider` — app-wide prefs (auto-reconnect, tmux, hotkeys, feature flags for DevOps/WebTools/Snippets)
-- `TerminalLayoutProvider` — split layout (none/horizontal/vertical), input bar visibility, and snippets-panel visibility (`toggleSnippetsPanel()` for the collapsible right-side snippets panel in the terminal workspace)
+- `TerminalLayoutProvider` — split layout (none/horizontal/vertical), input bar visibility, and the right-side workspace panel via the `SidePanel` enum (`none`/`snippets`/`terminalConfig`; `toggleSidePanel()` opens one panel at a time — opening one closes the other; `toggleSnippetsPanel()` kept as alias). The snippets panel and the terminal-appearance config panel (`TerminalConfigPanel`, toggled by the tune icon; hosts `TerminalAppearanceControls`, the theme/font-size/font controls shared with Settings → Terminal) both render inside the shared `WorkspaceSidePanel` frame (340px, header + close)
 - `LocalFilePanelProvider` — local filesystem state for the dual-panel SFTP view
 - `SftpPanelProvider` — remote SFTP panel state (current path, directory listing)
 - `SftpTransferProvider` — in-progress upload/download transfer queue and status
