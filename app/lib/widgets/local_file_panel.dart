@@ -160,7 +160,9 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
       context: context,
       builder: (_) => PermissionsDialog(
         entryName: entry.name,
-        initialMode: stat.mode,
+        // notFound stats report mode 0 — treat as unknown, not 000.
+        initialMode:
+            stat.type == FileSystemEntityType.notFound ? null : stat.mode,
         isDirectory: entry.isDirectory,
       ),
     );

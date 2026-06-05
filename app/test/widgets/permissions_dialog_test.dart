@@ -5,7 +5,7 @@ import 'package:yourssh/widgets/permissions_dialog.dart';
 
 Future<({int mode, bool recursive})?> _open(
   WidgetTester tester, {
-  required int initialMode,
+  required int? initialMode,
   bool isDirectory = false,
 }) async {
   ({int mode, bool recursive})? result;
@@ -86,6 +86,48 @@ void main() {
     await tester.tap(find.text('Apply'));
     await tester.pumpAndSettle();
     expect(result, (mode: 0x1ED, recursive: false));
+  });
+
+  TextButton applyButton(WidgetTester tester) => tester.widget<TextButton>(
+        find.ancestor(
+            of: find.text('Apply'), matching: find.byType(TextButton)),
+      );
+
+  testWidgets('Apply is disabled while the octal text is incomplete',
+      (tester) async {
+    await _open(tester, initialMode: 0x1A4); // 0o644
+    await tester.enterText(find.byType(TextField), '64'); // half-typed
+    await tester.pump();
+    expect(applyButton(tester).onPressed, isNull);
+    expect(find.text('3–4 octal digits'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '640');
+    await tester.pump();
+    expect(applyButton(tester).onPressed, isNotNull);
+  });
+
+  testWidgets('non-octal characters are filtered out of the field',
+      (tester) async {
+    await _open(tester, initialMode: 0x1A4);
+    await tester.enterText(find.byType(TextField), '9a8b');
+    await tester.pump();
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller!.text, isEmpty); // everything non-octal dropped
+    expect(applyButton(tester).onPressed, isNull);
+  });
+
+  testWidgets('unknown initialMode shows a warning and gates Apply',
+      (tester) async {
+    await _open(tester, initialMode: null);
+    expect(
+        find.text('Current permissions unknown — set them before applying.'),
+        findsOneWidget);
+    expect(applyButton(tester).onPressed, isNull);
+
+    await tester.tap(find.byKey(const Key('perm_u_r')));
+    await tester.pump();
+    expect(find.widgetWithText(TextField, '400'), findsOneWidget);
+    expect(applyButton(tester).onPressed, isNotNull);
   });
 
   testWidgets('recursive checkbox only shown for directories',

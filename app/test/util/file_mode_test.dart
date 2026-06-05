@@ -31,5 +31,12 @@ void main() {
       expect(parseOctal('77777'), isNull); // too long
       expect(parseOctal('abc'), isNull);
     });
+
+    test('rejects 1- and 2-digit strings (partially typed modes)', () {
+      // '64' is 0o064, not a truncated 0o644 — applying it would silently
+      // strip owner permissions, so short strings never parse.
+      expect(parseOctal('7'), isNull);
+      expect(parseOctal('64'), isNull);
+    });
   });
 }

@@ -54,6 +54,18 @@ class SftpFileOpsService {
     }
   }
 
+  /// The full st_mode value for [path] via stat(), or null when the server
+  /// doesn't report one. Fallback for listings that omitted the permissions
+  /// attribute (legal in SFTP v3) so the chmod dialog never opens at 000.
+  Future<int?> statMode(Host host, String path) async {
+    final sftp = await _sshService.openSftp(host);
+    try {
+      return (await sftp.stat(path)).mode?.value;
+    } finally {
+      sftp.close();
+    }
+  }
+
   /// Sets permission bits [mode] (e.g. 0x1ED for 0o755) on [path].
   /// With [recursive] and [isDirectory], applies the same bits to every
   /// child, like `chmod -R`.

@@ -809,11 +809,23 @@ class _SftpPanelState extends State<SftpPanel> {
 
   Future<void> _showPermissionsDialog(
       SftpPanelProvider prov, SftpEntry entry) async {
+    // Listings may legally omit permissions (SFTP v3) — stat() as fallback;
+    // if that fails too, pass null so the dialog warns and gates Apply
+    // instead of silently opening at 000.
+    var initialMode = entry.mode;
+    if (initialMode == null) {
+      try {
+        initialMode = await context
+            .read<SftpFileOpsService>()
+            .statMode(widget.host!, entry.path);
+      } catch (_) {}
+      if (!mounted) return;
+    }
     final result = await showDialog<({int mode, bool recursive})>(
       context: context,
       builder: (_) => PermissionsDialog(
         entryName: entry.name,
-        initialMode: entry.mode ?? 0,
+        initialMode: initialMode,
         isDirectory: entry.isDirectory,
       ),
     );
@@ -826,7 +838,7 @@ class _SftpPanelState extends State<SftpPanel> {
             isDirectory: entry.isDirectory,
             recursive: result.recursive,
           );
-      _loadDirectory(prov.currentPath);
+      if (mounted) _loadDirectory(prov.currentPath);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
