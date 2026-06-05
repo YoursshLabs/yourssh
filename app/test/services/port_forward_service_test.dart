@@ -306,4 +306,79 @@ void main() {
       expect(lastStatus(fwd.id), ForwardStatus.idle);
     });
   });
+
+  test('drop triggers reconnecting then active; backoff doubles capped at 30s',
+      () async {
+    final svc = makeService();
+    final fwd = rule();
+    await svc.start(fwd);
+    expect(lastStatus(fwd.id), ForwardStatus.active);
+    final port = svc.localPortFor(fwd.id)!;
+
+    acquireFailures = 5; // 5 failed dials before success
+    transports.add(FakeTransport());
+    transports.first.drop();
+    await pumpEventQueue();
+
+    expect(lastStatus(fwd.id), ForwardStatus.active); // re-established
+    expect(
+        delays,
+        const [
+          Duration(seconds: 2),
+          Duration(seconds: 4),
+          Duration(seconds: 8),
+          Duration(seconds: 16),
+          Duration(seconds: 30),
+          Duration(seconds: 30),
+        ]);
+    // Local listener kept its port across the drop.
+    expect(svc.localPortFor(fwd.id), port);
+    expect(
+        statuses.map((s) => s.$2).toList(),
+        containsAllInOrder([
+          ForwardStatus.connecting,
+          ForwardStatus.active,
+          ForwardStatus.reconnecting,
+          ForwardStatus.active,
+        ]));
+    await svc.stop(fwd.id);
+  });
+
+  test('stop during reconnect cancels the retry loop', () async {
+    final svc = makeService();
+    final fwd = rule();
+    await svc.start(fwd);
+    final callsAfterStart = acquireCalls;
+
+    delayGate = Completer<void>();
+    transports.first.drop();
+    await pumpEventQueue();
+    expect(lastStatus(fwd.id), ForwardStatus.reconnecting);
+
+    await svc.stop(fwd.id);
+    expect(lastStatus(fwd.id), ForwardStatus.idle);
+    delayGate!.complete();
+    await pumpEventQueue();
+    expect(acquireCalls, callsAfterStart); // no re-dial after stop
+  });
+
+  test('stopForHost stops only that host\'s tunnels', () async {
+    final svc = makeService();
+    final a = rule();
+    await svc.start(a);
+    await svc.stopForHost('h1');
+    expect(svc.isRunning(a.id), isFalse);
+    expect(lastStatus(a.id), ForwardStatus.idle);
+  });
+
+  test('autoStartAll starts only autoStart rules', () async {
+    final svc = makeService();
+    final auto = rule()..autoStart = true;
+    final manual = rule();
+    await svc.autoStartAll([auto, manual]);
+    expect(svc.isRunning(auto.id), isTrue);
+    expect(svc.isRunning(manual.id), isFalse);
+    await svc.stopAll();
+    expect(svc.isRunning(auto.id), isFalse);
+  });
 }
