@@ -5,11 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/services/system_agent_proxy.dart';
 
-Uint8List _agentMsg(List<int> body) {
-  final header = Uint8List(4);
-  ByteData.view(header.buffer).setUint32(0, body.length, Endian.big);
-  return Uint8List.fromList([...header, ...body]);
-}
+import '../helpers/agent_protocol.dart';
 
 List<int> _strField(List<int> data) {
   final len = Uint8List(4);
@@ -53,7 +49,7 @@ void main() {
             ..._strField(keyBlob),
             ..._strField(utf8.encode('test-key')),
           ];
-          client.add(_agentMsg(response));
+          client.add(agentMsg(response));
         });
       }));
 
@@ -72,7 +68,7 @@ void main() {
         client.listen((_) {
           final nkeys = Uint8List(4);
           final response = [12, ...nkeys];
-          client.add(_agentMsg(response));
+          client.add(agentMsg(response));
         });
       }));
 
@@ -97,7 +93,7 @@ void main() {
         client.listen((data) {
           received.addAll(data);
           final nkeys = Uint8List(4); // count = 0
-          client.add(_agentMsg([12, ...nkeys]));
+          client.add(agentMsg([12, ...nkeys]));
         });
       }));
 
@@ -134,11 +130,11 @@ void main() {
               ..._strField(keyBlob),
               ..._strField(utf8.encode('test-key')),
             ];
-            client.add(_agentMsg(response));
+            client.add(agentMsg(response));
           } else {
             // Respond to SIGN_REQUEST (13) with SIGN_RESPONSE (14)
             final response = [14, ..._strField(fakeSignature)];
-            client.add(_agentMsg(response));
+            client.add(agentMsg(response));
           }
         });
       }));

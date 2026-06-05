@@ -6,11 +6,7 @@ import 'package:yourssh/models/ssh_key.dart';
 import 'package:yourssh/services/agent_forwarding_handler.dart';
 import 'package:yourssh/services/system_agent_proxy.dart';
 
-Uint8List _agentMsg(List<int> body) {
-  final header = Uint8List(4);
-  ByteData.view(header.buffer).setUint32(0, body.length, Endian.big);
-  return Uint8List.fromList([...header, ...body]);
-}
+import '../helpers/agent_protocol.dart';
 
 void main() {
   group('AgentForwardingHandler', () {
@@ -28,7 +24,7 @@ void main() {
       // empty IDENTITIES_ANSWER (type 12, count 0).
       server.listen((client) {
         client.listen((_) {
-          client.add(_agentMsg([12, 0, 0, 0, 0]));
+          client.add(agentMsg([12, 0, 0, 0, 0]));
         });
       });
     });
