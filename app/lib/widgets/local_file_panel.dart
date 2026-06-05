@@ -155,14 +155,13 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
   }
 
   Future<void> _showPermissionsDialog(LocalEntry entry) async {
-    final stat = FileStat.statSync(entry.path);
     final result = await showDialog<({int mode, bool recursive})>(
       context: context,
       builder: (_) => PermissionsDialog(
         entryName: entry.name,
-        // notFound stats report mode 0 — treat as unknown, not 000.
-        initialMode:
-            stat.type == FileSystemEntityType.notFound ? null : stat.mode,
+        // Scan-time mode from the model — no blocking statSync at
+        // dialog-open; null (stat failed) makes the dialog gate Apply.
+        initialMode: entry.mode,
         isDirectory: entry.isDirectory,
       ),
     );

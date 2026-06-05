@@ -133,6 +133,10 @@ class LocalFilePanelProvider extends ChangeNotifier {
           size: stat.size,
           modifiedAt: stat.modified,
           permissions: (entity is Directory ? 'd' : '-') + stat.modeString(),
+          // notFound stats (entry raced a delete) report mode 0 — keep null
+          // so the permissions dialog treats it as unknown, not 000.
+          mode:
+              stat.type == FileSystemEntityType.notFound ? null : stat.mode,
         ));
       }
       if (token != _fetchToken) return;
