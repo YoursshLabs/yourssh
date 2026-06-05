@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/port_forward.dart';
@@ -242,5 +243,67 @@ void main() {
     expect(svc.isRunning(fwd.id), isFalse);
     final rebind = await ServerSocket.bind('127.0.0.1', port);
     await rebind.close();
+  });
+
+  test('remote forward pipes incoming channels to the local target', () async {
+    // Local "service" the tunnel should deliver to.
+    final echo = await ServerSocket.bind('127.0.0.1', 0);
+    final echoData = <int>[];
+    echo.listen((s) => s.listen((d) {
+          echoData.addAll(d);
+          s.add([42]);
+        }));
+
+    final svc = makeService();
+    final fwd = PortForward(
+        label: 'r',
+        type: ForwardType.remote,
+        localHost: '127.0.0.1',
+        localPort: echo.port,
+        remotePort: 9000,
+        hostId: 'h1');
+    await svc.start(fwd);
+    expect(lastStatus(fwd.id), ForwardStatus.active);
+
+    final channel = FakeSshSocket();
+    transports.last.remoteListener!.controller.add(channel);
+    await pumpEventQueue();
+    channel.inbound.add(Uint8List.fromList([7, 7]));
+    await pumpEventQueue();
+    expect(echoData, [7, 7]);
+    expect(channel.outbound, [42]);
+    expect(conns[fwd.id], 1);
+
+    await svc.stop(fwd.id);
+    expect(transports.last.remoteListener!.closed, isTrue);
+    await echo.close();
+  });
+
+  test('remote forward refused by server reports error', () async {
+    final svc = makeService();
+    transports.last.refuseRemote = true;
+    final fwd = rule(type: ForwardType.remote);
+    await svc.start(fwd);
+    expect(lastStatus(fwd.id), ForwardStatus.error);
+    expect(statuses.last.$3, 'Server refused the remote forward request');
+  });
+
+  test('dynamic forward starts SOCKS server and samples connections', () {
+    fakeAsync((fa) {
+      final svc = makeService();
+      final fwd = rule(type: ForwardType.dynamic, localPort: 1080);
+      svc.start(fwd);
+      fa.flushMicrotasks();
+      expect(lastStatus(fwd.id), ForwardStatus.active);
+
+      transports.last.dynamicForward!.connectionCount = 5;
+      fa.elapse(const Duration(seconds: 2));
+      expect(conns[fwd.id], 5);
+
+      svc.stop(fwd.id);
+      fa.flushMicrotasks();
+      expect(transports.last.dynamicForward!.closed, isTrue);
+      expect(lastStatus(fwd.id), ForwardStatus.idle);
+    });
   });
 }
