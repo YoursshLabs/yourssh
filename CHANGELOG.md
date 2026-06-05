@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- SSH Agent Forwarding (per-host toggle, like `ssh -A`): forwarded agent
+  channels are served by the local system agent (`SSH_AUTH_SOCK` / Windows
+  OpenSSH agent pipe), falling back to keys stored in the app Keychain when
+  no system agent is running. A server refusing the forwarding request no
+  longer aborts the session. ([#49](https://github.com/YoursshLabs/yourssh/issues/49))
+
 ---
 
 ## [0.1.27] — 2026-06-05
