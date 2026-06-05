@@ -1,5 +1,3 @@
-import 'dart:io';
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/host.dart';
@@ -10,6 +8,7 @@ import '../services/external_edit_service.dart';
 import '../services/sftp_file_inspector.dart';
 import '../services/sftp_transfer_service.dart';
 import '../services/sftp_file_ops_service.dart';
+import '../util/app_launcher.dart';
 import 'code_editor_screen.dart';
 import 'path_breadcrumb.dart';
 import 'sftp_entry_context_menu.dart';
@@ -212,25 +211,6 @@ class _SftpPanelState extends State<SftpPanel> {
           content: Text('Open with failed: $e'),
           backgroundColor: const Color(0xFF2A1A1A)));
     }
-  }
-
-  Future<String?> _pickApp() async {
-    if (Platform.isMacOS) {
-      const typeGroup =
-          XTypeGroup(label: 'Applications', extensions: ['app']);
-      final file = await openFile(
-          acceptedTypeGroups: [typeGroup],
-          initialDirectory: '/Applications');
-      return file?.path;
-    }
-    if (Platform.isWindows) {
-      const typeGroup =
-          XTypeGroup(label: 'Executables', extensions: ['exe']);
-      final file = await openFile(acceptedTypeGroups: [typeGroup]);
-      return file?.path;
-    }
-    final file = await openFile();
-    return file?.path;
   }
 
   @override
@@ -614,7 +594,7 @@ class _SftpPanelState extends State<SftpPanel> {
       onChooseApp: entry.isDirectory
           ? null
           : () async {
-              final appPath = await _pickApp();
+              final appPath = await pickApplication();
               if (appPath != null && mounted) {
                 await _openWithApp(entry, appPath);
               }

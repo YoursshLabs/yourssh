@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart' show launchUrl;
 
 import '../models/host.dart';
 import '../models/sftp_entry.dart';
+import '../util/app_launcher.dart';
 import 'sftp_transfer_service.dart';
 
 typedef ExternalLauncher = Future<bool> Function(Uri uri);
@@ -103,17 +104,8 @@ class ExternalEditService {
     _sessions.add(session);
   }
 
-  Future<bool> _launchWithApp(String filePath, String appPath) {
-    if (Platform.isMacOS) {
-      return Process.run('open', ['-a', appPath, filePath])
-          .then((r) => r.exitCode == 0);
-    }
-    if (Platform.isWindows) {
-      return Process.run(appPath, [filePath], runInShell: true)
-          .then((r) => r.exitCode == 0);
-    }
-    return Process.run(appPath, [filePath]).then((r) => r.exitCode == 0);
-  }
+  Future<bool> _launchWithApp(String filePath, String appPath) =>
+      launchFileWithApp(filePath, appPath);
 
   Future<void> _poll(_WatchSession session) async {
     if (session.uploading) return;
