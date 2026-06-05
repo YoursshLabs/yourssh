@@ -204,6 +204,11 @@ class _SessionTabState extends State<SessionTab> {
         onDoubleTap: _startRename,
         onSecondaryTapUp: (details) =>
             _showTabContextMenu(context, details.globalPosition),
+        // Middle-click closes the tab; pinned tabs are protected (consistent
+        // with the hidden X button — close stays reachable via the menu).
+        onTertiaryTapUp: widget.session.isPinned
+            ? null
+            : (_) => widget.provider.closeSession(widget.session.id),
         child: Container(
           height: 38,
           padding: const EdgeInsets.symmetric(horizontal: 12),
