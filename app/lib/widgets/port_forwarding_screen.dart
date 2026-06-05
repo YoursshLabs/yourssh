@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/port_forward.dart';
 import '../providers/host_provider.dart';
 import '../providers/port_forward_provider.dart';
+import '../services/port_forward_service.dart';
 import '../theme/app_theme.dart';
 
 class PortForwardingScreen extends StatefulWidget {
@@ -15,6 +16,17 @@ class PortForwardingScreen extends StatefulWidget {
 
 class _PortForwardingScreenState extends State<PortForwardingScreen> {
   bool _showPanel = false;
+  PortForward? _editing;
+
+  void _openEditor([PortForward? fwd]) => setState(() {
+        _editing = fwd;
+        _showPanel = true;
+      });
+
+  void _closePanel() => setState(() {
+        _showPanel = false;
+        _editing = null;
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -27,16 +39,17 @@ class _PortForwardingScreenState extends State<PortForwardingScreen> {
             color: AppColors.bg,
             child: Column(
               children: [
-                _TopBar(onAdd: () => setState(() => _showPanel = true)),
+                _TopBar(onAdd: _openEditor),
                 Expanded(
                   child: provider.forwards.isEmpty
-                      ? _EmptyState(
-                          onAdd: () => setState(() => _showPanel = true))
+                      ? _EmptyState(onAdd: _openEditor)
                       : ListView.builder(
                           padding: const EdgeInsets.all(24),
                           itemCount: provider.forwards.length,
-                          itemBuilder: (_, i) =>
-                              _ForwardTile(forward: provider.forwards[i]),
+                          itemBuilder: (_, i) => _ForwardTile(
+                            forward: provider.forwards[i],
+                            onEdit: _openEditor,
+                          ),
                         ),
                 ),
               ],
@@ -45,10 +58,20 @@ class _PortForwardingScreenState extends State<PortForwardingScreen> {
         ),
         if (_showPanel)
           _ForwardPanel(
-            onClose: () => setState(() => _showPanel = false),
+            key: ValueKey(_editing?.id ?? 'new'),
+            initial: _editing,
+            onClose: _closePanel,
             onSave: (forward) async {
-              await context.read<PortForwardProvider>().add(forward);
-              if (mounted) setState(() => _showPanel = false);
+              final provider = context.read<PortForwardProvider>();
+              final service = context.read<PortForwardService>();
+              if (_editing != null) {
+                // A running tunnel keeps its old config — stop before saving.
+                if (service.isRunning(forward.id)) await service.stop(forward.id);
+                await provider.update(forward);
+              } else {
+                await provider.add(forward);
+              }
+              if (mounted) _closePanel();
             },
           ),
       ],
@@ -108,7 +131,8 @@ class _TopBar extends StatelessWidget {
 
 class _ForwardTile extends StatefulWidget {
   final PortForward forward;
-  const _ForwardTile({required this.forward});
+  final void Function(PortForward) onEdit;
+  const _ForwardTile({required this.forward, required this.onEdit});
 
   @override
   State<_ForwardTile> createState() => _ForwardTileState();
@@ -126,67 +150,122 @@ class _ForwardTileState extends State<_ForwardTile> {
       ForwardStatus.connecting || ForwardStatus.reconnecting => AppColors.orange,
       ForwardStatus.idle => AppColors.textTertiary,
     };
+    final running = fwd.status == ForwardStatus.active ||
+        fwd.status == ForwardStatus.connecting ||
+        fwd.status == ForwardStatus.reconnecting;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: _hovered ? AppColors.cardHover : AppColors.card,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              margin: const EdgeInsets.only(right: 12),
-              decoration:
-                  BoxDecoration(shape: BoxShape.circle, color: statusColor),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(fwd.label,
-                          style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500)),
-                      const SizedBox(width: 8),
-                      _Badge(fwd.typeLabel),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(fwd.summary,
-                      style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 11)),
-                ],
+      child: GestureDetector(
+        onTap: () => widget.onEdit(fwd),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: _hovered ? AppColors.cardHover : AppColors.card,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(right: 12),
+                decoration:
+                    BoxDecoration(shape: BoxShape.circle, color: statusColor),
               ),
-            ),
-            if (_hovered)
-              GestureDetector(
-                onTap: () =>
-                    context.read<PortForwardProvider>().delete(fwd.id),
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: AppColors.bg,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: const Icon(Icons.delete_outlined,
-                      size: 14, color: AppColors.red),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(fwd.label,
+                            style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(width: 8),
+                        _Badge(fwd.typeLabel),
+                        if (fwd.status == ForwardStatus.active) ...[
+                          const SizedBox(width: 6),
+                          _Badge('${fwd.activeConnections} conn'),
+                        ],
+                        if (fwd.status == ForwardStatus.reconnecting) ...[
+                          const SizedBox(width: 6),
+                          const _Badge('reconnecting…'),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(fwd.summary,
+                        style: const TextStyle(
+                            color: AppColors.textSecondary, fontSize: 11)),
+                    if (fwd.status == ForwardStatus.error &&
+                        fwd.errorMessage != null) ...[
+                      const SizedBox(height: 2),
+                      Text(fwd.errorMessage!,
+                          style: const TextStyle(
+                              color: AppColors.red, fontSize: 11)),
+                    ],
+                  ],
                 ),
               ),
-          ],
+              _IconAction(
+                icon: running ? Icons.stop : Icons.play_arrow,
+                color: running ? AppColors.red : AppColors.accent,
+                onTap: () {
+                  final service = context.read<PortForwardService>();
+                  if (running) {
+                    service.stop(fwd.id);
+                  } else {
+                    service.start(fwd);
+                  }
+                },
+              ),
+              if (_hovered) ...[
+                const SizedBox(width: 6),
+                _IconAction(
+                  icon: Icons.delete_outlined,
+                  color: AppColors.red,
+                  onTap: () async {
+                    final service = context.read<PortForwardService>();
+                    final provider = context.read<PortForwardProvider>();
+                    await service.stop(fwd.id);
+                    await provider.delete(fwd.id);
+                  },
+                ),
+              ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _IconAction extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _IconAction(
+      {required this.icon, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Icon(icon, size: 14, color: color),
       ),
     );
   }
@@ -262,9 +341,11 @@ class _EmptyState extends StatelessWidget {
 // ── Forward Panel ─────────────────────────────────────────
 
 class _ForwardPanel extends StatefulWidget {
+  final PortForward? initial;
   final VoidCallback onClose;
   final Future<void> Function(PortForward) onSave;
-  const _ForwardPanel({required this.onClose, required this.onSave});
+  const _ForwardPanel(
+      {super.key, this.initial, required this.onClose, required this.onSave});
 
   @override
   State<_ForwardPanel> createState() => _ForwardPanelState();
@@ -279,7 +360,24 @@ class _ForwardPanelState extends State<_ForwardPanel> {
   final _remotePort = TextEditingController();
   ForwardType _type = ForwardType.local;
   String? _selectedHostId;
+  bool _autoStart = false;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final init = widget.initial;
+    if (init != null) {
+      _label.text = init.label;
+      _localHost.text = init.localHost;
+      _localPort.text = init.localPort.toString();
+      _remoteHost.text = init.remoteHost;
+      _remotePort.text = init.remotePort == 0 ? '' : init.remotePort.toString();
+      _type = init.type;
+      _selectedHostId = init.hostId;
+      _autoStart = init.autoStart;
+    }
+  }
 
   @override
   void dispose() {
@@ -294,6 +392,7 @@ class _ForwardPanelState extends State<_ForwardPanel> {
     setState(() => _saving = true);
     try {
       await widget.onSave(PortForward(
+        id: widget.initial?.id,
         label: _label.text.trim(),
         type: _type,
         localHost: _localHost.text.trim(),
@@ -301,6 +400,7 @@ class _ForwardPanelState extends State<_ForwardPanel> {
         remoteHost: _remoteHost.text.trim(),
         remotePort: int.tryParse(_remotePort.text) ?? 0,
         hostId: _selectedHostId,
+        autoStart: _autoStart,
       ));
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -379,7 +479,9 @@ class _ForwardPanelState extends State<_ForwardPanel> {
                   ],
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedHostId,
+                    initialValue: hosts.any((h) => h.id == _selectedHostId)
+                        ? _selectedHostId
+                        : null,
                     decoration: _inputDecoration('SSH Host (optional)'),
                     hint: const Text('Select host',
                         style: TextStyle(
@@ -393,6 +495,29 @@ class _ForwardPanelState extends State<_ForwardPanel> {
                         .toList(),
                     onChanged: (v) =>
                         setState(() => _selectedHostId = v),
+                  ),
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: () => setState(() => _autoStart = !_autoStart),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: Checkbox(
+                            value: _autoStart,
+                            activeColor: AppColors.accent,
+                            checkColor: Colors.black,
+                            onChanged: (v) =>
+                                setState(() => _autoStart = v ?? false),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('Auto-start on launch',
+                            style: TextStyle(
+                                color: AppColors.textSecondary, fontSize: 13)),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 24),
                   SizedBox(
@@ -408,8 +533,8 @@ class _ForwardPanelState extends State<_ForwardPanel> {
                               height: 16,
                               child: CircularProgressIndicator(
                                   strokeWidth: 2, color: Colors.black))
-                          : const Text('Add Rule',
-                              style: TextStyle(
+                          : Text(widget.initial == null ? 'Add Rule' : 'Save',
+                              style: const TextStyle(
                                   fontWeight: FontWeight.w600)),
                     ),
                   ),
@@ -431,9 +556,12 @@ class _ForwardPanelState extends State<_ForwardPanel> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          const Expanded(
-            child: Text('New Port Forward Rule',
-                style: TextStyle(
+          Expanded(
+            child: Text(
+                widget.initial == null
+                    ? 'New Port Forward Rule'
+                    : 'Edit Port Forward Rule',
+                style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 14,
                     fontWeight: FontWeight.w600)),
