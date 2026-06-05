@@ -32,7 +32,12 @@ class SSHSession {
   /// be available on the [stdout] and [stderr] streams at this time.
   Future<void> get done => _channel.done;
 
-  SSHSession(this._channel) {
+  /// True if [SSHClient.agentHandler] was set but the server refused the
+  /// `auth-agent-req@openssh.com` request for this session (e.g. sshd with
+  /// `AllowAgentForwarding no`). Informational — the session itself works.
+  final bool agentForwardingRefused;
+
+  SSHSession(this._channel, {this.agentForwardingRefused = false}) {
     _channel.setRequestHandler(_handleRequest);
 
     _channelDataSubscription = _channel.stream.listen(

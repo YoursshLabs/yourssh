@@ -445,14 +445,10 @@ class SSHClient {
       }
     }
 
-    if (agentHandler != null) {
-      final agentOk = await channelController.sendAgentForwardingRequest();
-      if (!agentOk) {
-        // OpenSSH treats a refused auth-agent-req as a warning, not an error
-        // (e.g. sshd with AllowAgentForwarding no). Keep the session alive.
-        printDebug?.call('Agent forwarding refused by server');
-      }
-    }
+    // Agent forwarding is requested only on shell() sessions: exec channels
+    // are short-lived one-shot commands where the extra awaited
+    // channel-request round-trip per exec is pure overhead. Interactive
+    // hops (ssh -A style) happen from a shell.
 
     if (pty != null) {
       final ptyOk = await channelController.sendPtyReq(
@@ -513,11 +509,15 @@ class SSHClient {
       }
     }
 
+    var agentForwardingRefused = false;
     if (agentHandler != null) {
       final agentOk = await channelController.sendAgentForwardingRequest();
       if (!agentOk) {
         // OpenSSH treats a refused auth-agent-req as a warning, not an error
-        // (e.g. sshd with AllowAgentForwarding no). Keep the session alive.
+        // (e.g. sshd with AllowAgentForwarding no). Keep the session alive
+        // and let callers surface the refusal via
+        // [SSHSession.agentForwardingRefused].
+        agentForwardingRefused = true;
         printDebug?.call('Agent forwarding refused by server');
       }
     }
@@ -554,7 +554,10 @@ class SSHClient {
       throw SSHChannelRequestError('Failed to start shell');
     }
 
-    return SSHSession(channelController.channel);
+    return SSHSession(
+      channelController.channel,
+      agentForwardingRefused: agentForwardingRefused,
+    );
   }
 
   Future<void> subsystem(String subsystem) async {
