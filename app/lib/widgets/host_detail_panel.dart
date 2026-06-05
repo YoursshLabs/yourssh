@@ -44,6 +44,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   ({bool success, int latencyMs, String? error})? _testResult;
   bool _autoRecord = false;
   bool _shellIntegration = true;
+  bool _agentForwarding = false;
   String? _selectedJumpHostId;
   late SftpMode _sftpMode;
   late final TextEditingController _sftpCommand;
@@ -65,6 +66,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     _selectedKeyId = h?.keyId;
     _autoRecord = h?.autoRecord ?? false;
     _shellIntegration = h?.shellIntegration ?? true;
+    _agentForwarding = h?.agentForwarding ?? false;
     _selectedJumpHostId = h?.jumpHostId;
     _sftpMode = h?.sftpMode ?? SftpMode.normal;
     _sftpCommand = TextEditingController(text: h?.sftpServerCommand ?? '');
@@ -101,6 +103,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       tags: tags,
       autoRecord: _autoRecord,
       shellIntegration: _shellIntegration,
+      agentForwarding: _agentForwarding,
       jumpHostId: _selectedJumpHostId,
       sftpMode: _sftpMode,
       sftpServerCommand:
@@ -411,7 +414,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                   ]),
 
                   const SizedBox(height: 16),
-                  _sectionLabel('RECORDING'),
+                  _sectionLabel('SESSION'),
                   const SizedBox(height: 6),
                   _Card(children: [
                     SwitchListTile(
@@ -438,6 +441,21 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                       ),
                       subtitle: const Text(
                         'cwd, command status & path completion on bash/zsh',
+                        style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
+                      ),
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      activeThumbColor: AppColors.accent,
+                    ),
+                    SwitchListTile(
+                      value: _agentForwarding,
+                      onChanged: (v) => setState(() => _agentForwarding = v),
+                      title: const Text(
+                        'Agent forwarding',
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                      ),
+                      subtitle: const Text(
+                        'Forward your local SSH agent to this host (like ssh -A)',
                         style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
                       ),
                       dense: true,
