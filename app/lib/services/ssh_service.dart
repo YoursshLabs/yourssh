@@ -5,6 +5,7 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
 import '../providers/shell_integration_provider.dart';
+import '../models/agent_forwarding_state.dart';
 import '../models/host.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
@@ -52,6 +53,14 @@ class SshService {
   /// agent is available. Set from main.dart (KeyProvider + stored
   /// passphrases); null means the fallback serves an empty identity list.
   Future<List<SSHKeyPair>> Function()? keychainIdentitiesLoader;
+
+  /// Live agent-forwarding events for the session UI (key icon on the tab,
+  /// refusal notification). Host-scoped events (sessionId == null) come from
+  /// the per-client handler shared by every shell on that host; ready/refused
+  /// are per-shell. Wired in main.dart to
+  /// SessionProvider.handleAgentForwardingEvent.
+  void Function(String hostId, String? sessionId, AgentForwardingState state)?
+      onAgentForwardingEvent;
 
   /// Prompts the user for a sudo password (elevated SFTP). Set from
   /// main.dart; returning null cancels the elevated SFTP attempt. The
@@ -186,6 +195,13 @@ class SshService {
             ? AgentForwardingHandler(
                 loadKeychainIdentities:
                     keychainIdentitiesLoader ?? () async => const <SSHKeyPair>[],
+                onRequestServed: (usedFallback) =>
+                    onAgentForwardingEvent?.call(
+                        host.id,
+                        null,
+                        usedFallback
+                            ? AgentForwardingState.fallback
+                            : AgentForwardingState.active),
               )
             : null,
         onVerifyHostKey: (type, fp) async {
@@ -392,9 +408,17 @@ class SshService {
 
     // The user opted into agent forwarding for this host, but the server
     // refused it (AllowAgentForwarding no). Match OpenSSH: warn, don't fail.
-    if (shell.agentForwardingRefused) {
-      session.terminal
-          .write('\r\n\x1b[33m[Agent forwarding refused by server]\x1b[0m\r\n');
+    if (session.host.agentForwarding) {
+      if (shell.agentForwardingRefused) {
+        session.terminal
+            .write('\r\n\x1b[33m[Agent forwarding refused by server]\x1b[0m\r\n');
+        onAgentForwardingEvent?.call(
+            session.host.id, session.id, AgentForwardingState.refused);
+      } else {
+        // Also resets a stale `refused` from a previous shell on reconnect.
+        onAgentForwardingEvent?.call(
+            session.host.id, session.id, AgentForwardingState.ready);
+      }
     }
 
     // Shell integration (OSC 7/133): route private OSC into the provider before
