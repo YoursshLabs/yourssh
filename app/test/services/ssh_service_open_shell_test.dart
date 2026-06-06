@@ -323,6 +323,136 @@ void main() {
       await shell.close();
       await shellDone;
     });
+
+    test('startup snippet typed exactly once after DONE', () async {
+      final svc = SshService(StorageService(),
+          shellIntegration: ShellIntegrationProvider());
+      final host = Host(
+          label: 'f',
+          host: 'e.com',
+          username: 'u',
+          shellIntegration: false,
+          startupSnippet: 'htop');
+      final session = SshSession(host: host);
+      session.terminal.resize(80, 24);
+      final shell = _FakeShell();
+      svc.debugSetClient(host.id, _FakeClient(shell));
+
+      final shellDone = svc.openShell(session);
+      await pumpEventQueue();
+      shell.emitStdout('\x1b[?2004h\$ ');
+      await settle();
+      shell.emitStdout('__YS_RDY__');
+      await pumpEventQueue();
+      expect(shell.writes, isNot(contains('htop\n')),
+          reason: 'snippet must wait for DONE');
+
+      shell.emitStdout('__YS_DONE__\n');
+      await pumpEventQueue();
+      expect(shell.writes.where((w) => w == 'htop\n').length, 1);
+
+      shell.emitStdout('regular output after handshake');
+      await pumpEventQueue();
+      expect(shell.writes.where((w) => w == 'htop\n').length, 1,
+          reason: 'never re-sent');
+
+      await shell.close();
+      await shellDone;
+    });
+
+    test('non-bash fallback (DONE without RDY) still types the snippet',
+        () async {
+      final svc = SshService(StorageService(),
+          shellIntegration: ShellIntegrationProvider());
+      final host = Host(
+          label: 'f',
+          host: 'e.com',
+          username: 'u',
+          shellIntegration: false,
+          startupSnippet: 'htop');
+      final session = SshSession(host: host);
+      session.terminal.resize(80, 24);
+      final shell = _FakeShell();
+      svc.debugSetClient(host.id, _FakeClient(shell));
+
+      final shellDone = svc.openShell(session);
+      await pumpEventQueue();
+      shell.emitStdout('\x1b[?2004h\$ ');
+      await settle();
+      final writesAfterBootstrap = shell.writes.length;
+
+      // fish/other POSIX shells: bootstrap's `|| printf DONE` branch.
+      shell.emitStdout('__YS_DONE__\n');
+      await pumpEventQueue();
+
+      expect(shell.writes.where((w) => w == 'htop\n').length, 1);
+      // No RDY → payload was never sent: bootstrap + snippet only.
+      expect(shell.writes.length, writesAfterBootstrap + 1);
+
+      await shell.close();
+      await shellDone;
+    });
+
+    test('tmux on → hidden setup runs, snippet skipped', () async {
+      final svc = SshService(StorageService(),
+          shellIntegration: ShellIntegrationProvider());
+      final host = Host(
+          label: 'f',
+          host: 'e.com',
+          username: 'u',
+          shellIntegration: false,
+          workingDir: '/srv/app',
+          startupSnippet: 'htop');
+      final session = SshSession(host: host);
+      session.terminal.resize(80, 24);
+      final shell = _FakeShell();
+      svc.debugSetClient(host.id, _FakeClient(shell));
+
+      final shellDone = svc.openShell(session, useTmux: true);
+      await pumpEventQueue();
+      shell.emitStdout('\x1b[?2004h\$ ');
+      await settle();
+      shell.emitStdout('__YS_RDY__');
+      await pumpEventQueue();
+      expect(shell.writtenText, contains("cd -- '/srv/app'"));
+
+      shell.emitStdout('__YS_DONE__\n');
+      await pumpEventQueue();
+      expect(shell.writes, isNot(contains('htop\n')),
+          reason: 'a tmux re-attach would replay the snippet — skip it');
+
+      await shell.close();
+      await shellDone;
+    });
+
+    test('user keystroke before handshake aborts setup AND snippet',
+        () async {
+      final svc = SshService(StorageService(),
+          shellIntegration: ShellIntegrationProvider());
+      final host = Host(
+          label: 'f',
+          host: 'e.com',
+          username: 'u',
+          shellIntegration: false,
+          startupSnippet: 'htop');
+      final session = SshSession(host: host);
+      session.terminal.resize(80, 24);
+      final shell = _FakeShell();
+      svc.debugSetClient(host.id, _FakeClient(shell));
+
+      final shellDone = svc.openShell(session);
+      await pumpEventQueue();
+
+      session.terminal.onOutput?.call('x'); // user typed first
+      shell.emitStdout('\x1b[?2004h\$ ');
+      await settle();
+
+      expect(shell.writes, ['x'],
+          reason: 'no bootstrap, no snippet — the user owns the session');
+
+      await shell.close();
+      await shellDone;
+    });
   });
 
   test('openShell fires no event when the host has forwarding off', () async {

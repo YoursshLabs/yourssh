@@ -449,6 +449,18 @@ class SshService {
     final injectOn =
         shellIntegration != null && (siOn || session.host.hasTemplateSetup);
 
+    var snippetSent = false;
+    void maybeSendStartupSnippet() {
+      if (snippetSent) return;
+      snippetSent = true;
+      final snippet = session.host.startupSnippet;
+      // tmux `new -A` re-attach would replay the snippet into a live
+      // session — cd/export are idempotent, the snippet is not. Skip it.
+      if (snippet == null || snippet.trim().isEmpty || useTmux) return;
+      shell.write(Uint8List.fromList(const Utf8Encoder()
+          .convert(snippet.endsWith('\n') ? snippet : '$snippet\n')));
+    }
+
     hookBus?.fireObserve('session.connect', ObserveEvent(
       sessionId: session.id,
       payload: {
@@ -609,7 +621,14 @@ class SshService {
             ))));
           }
           if (r.emit == null) return; // withheld until DONE / timeout
-          if (wasHolding && !g.isHolding) doneTimer?.cancel();
+          if (wasHolding && !g.isHolding) {
+            doneTimer?.cancel();
+            // DONE seen: handshake completed cleanly — type the startup
+            // snippet exactly as if the user had, visible and recorded.
+            // The doneTimer flush path (degraded handshake) never lands
+            // here, so an unconfirmed handshake never types the snippet.
+            maybeSendStartupSnippet();
+          }
           text = r.emit!;
           if (text.isEmpty) return; // echo head discarded, nothing to show
         }
