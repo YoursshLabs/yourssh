@@ -17,7 +17,16 @@ class ShellIntegrationProvider extends ChangeNotifier {
   int revisionFor(String id) => _revisions[id] ?? 0;
 
   String buildBootstrapLine() => _service.buildBootstrapLine();
-  String buildPayloadLine() => _service.buildPayloadLine();
+  String buildPayloadLine({
+    bool includeInstaller = true,
+    String? workingDir,
+    Map<String, String> envVars = const {},
+  }) =>
+      _service.buildPayloadLine(
+        includeInstaller: includeInstaller,
+        workingDir: workingDir,
+        envVars: envVars,
+      );
 
   /// [absoluteCursorY] is `terminal.buffer.absoluteCursorY` captured by the
   /// caller at marker time (kept out of this class so it stays testable).

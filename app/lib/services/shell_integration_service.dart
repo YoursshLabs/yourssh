@@ -80,15 +80,58 @@ class ShellIntegrationService {
       r"|| printf '__YS_%s__\n' DONE"
       '\n';
 
-  /// Second-phase line: the hook installer plus the DONE sentinel. Sent only
-  /// after RDY is seen, while `read -rs` is consuming stdin — never echoed.
-  /// DONE carries a trailing newline so both the remote shell and the app
-  /// land on a fresh line (col 0) once the client discards everything up to
-  /// and including the sentinel — the next prompt then renders in sync.
-  String buildPayloadLine() {
-    final body = buildInjectionScript(); // ends with '\n'
-    return '${body.substring(0, body.length - 1)}; '
-        "printf '__YS_%s__\\n' DONE\n";
+  /// Quote [s] for a POSIX single-quoted context (`'` → `'\''`). Control
+  /// characters are stripped first: the payload must stay a single line
+  /// (`read -rs` consumes exactly one) and no legitimate working dir or
+  /// env value needs them.
+  static String shQuote(String s) {
+    final clean = s.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '');
+    return "'${clean.replaceAll("'", "'\\''")}'";
+  }
+
+  static final _envKeyRe = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
+
+  /// POSIX env-var name check. The host panel validates on edit; the
+  /// payload builder re-checks as defense in depth (sync can deliver
+  /// hosts edited elsewhere).
+  static bool isValidEnvKey(String key) => _envKeyRe.hasMatch(key);
+
+  /// Second-phase line: optional hook installer, optional session-template
+  /// setup (cd + exports), then the DONE sentinel. Sent only after RDY is
+  /// seen, while `read -rs` is consuming stdin — never echoed. DONE carries
+  /// a trailing newline so both the remote shell and the app land on a
+  /// fresh line (col 0) once the client discards everything up to and
+  /// including the sentinel — the next prompt then renders in sync. A
+  /// failing `cd` raises a flag whose warning prints *after* DONE:
+  /// everything before the sentinel is discarded by the gate, the tail is
+  /// shown.
+  String buildPayloadLine({
+    bool includeInstaller = true,
+    String? workingDir,
+    Map<String, String> envVars = const {},
+  }) {
+    final dir = (workingDir != null && workingDir.trim().isNotEmpty)
+        ? workingDir
+        : null;
+    final parts = <String>[];
+    if (includeInstaller) {
+      final body = buildInjectionScript(); // ends with '\n'
+      parts.add(body.substring(0, body.length - 1));
+    }
+    if (dir != null) {
+      parts.add('cd -- ${shQuote(dir)} 2>/dev/null || __ys_td=1');
+    }
+    for (final e in envVars.entries) {
+      if (!isValidEnvKey(e.key)) continue;
+      parts.add('export ${e.key}=${shQuote(e.value)}');
+    }
+    parts.add("printf '__YS_%s__\\n' DONE");
+    if (dir != null) {
+      parts.add('[ -n "\$__ys_td" ] && '
+          "printf 'yourssh: working dir not found: %s\\r\\n' ${shQuote(dir)}; "
+          'unset __ys_td');
+    }
+    return '${parts.join('; ')}\n';
   }
 
   /// Single-line bash/zsh setup written to the shell on connect. Guarded
