@@ -17,6 +17,15 @@ class SettingsProvider extends ChangeNotifier {
   String terminalFont = 'MesloLGS NF';
   String terminalType = 'xterm-256color';
   String recordingPath = '';
+
+  /// Hosts dashboard layout: 'grid' (cards) or 'list' (compact rows).
+  /// Anything else is treated as 'grid' at the point of use.
+  String dashboardViewMode = 'grid';
+
+  /// Hosts dashboard ordering; a HostSortMode key. Unknown values fall
+  /// back to name_asc via HostSortMode.fromKey.
+  String dashboardSort = 'name_asc';
+
   Map<String, String> hotkeys = {
     'new_session': 'ctrl+t',
     'close_session': 'ctrl+w',
@@ -51,6 +60,8 @@ class SettingsProvider extends ChangeNotifier {
         ? p.join(home, 'Documents', 'YourSSH', 'Recordings')
         : p.join(Directory.current.path, 'YourSSH', 'Recordings');
     recordingPath = prefs.getString('recordingPath') ?? defaultPath;
+    dashboardViewMode = prefs.getString('dashboardViewMode') ?? 'grid';
+    dashboardSort = prefs.getString('dashboardSort') ?? 'name_asc';
     final hotkeysJson = prefs.getString('hotkeys');
     if (hotkeysJson != null) {
       try {
@@ -92,6 +103,8 @@ class SettingsProvider extends ChangeNotifier {
     bool? commandNotificationsEnabled,
     bool? shellIntegrationEnabled,
     String? recordingPath,
+    String? dashboardViewMode,
+    String? dashboardSort,
   }) async {
     if (autoReconnect != null) this.autoReconnect = autoReconnect;
     if (reconnectAttempts != null) this.reconnectAttempts = reconnectAttempts;
@@ -106,6 +119,8 @@ class SettingsProvider extends ChangeNotifier {
     if (commandNotificationsEnabled != null) this.commandNotificationsEnabled = commandNotificationsEnabled;
     if (shellIntegrationEnabled != null) this.shellIntegrationEnabled = shellIntegrationEnabled;
     if (recordingPath != null) this.recordingPath = recordingPath;
+    if (dashboardViewMode != null) this.dashboardViewMode = dashboardViewMode;
+    if (dashboardSort != null) this.dashboardSort = dashboardSort;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('autoReconnect', this.autoReconnect);
     await prefs.setInt('reconnectAttempts', this.reconnectAttempts);
@@ -120,6 +135,8 @@ class SettingsProvider extends ChangeNotifier {
     await prefs.setBool('commandNotificationsEnabled', this.commandNotificationsEnabled);
     await prefs.setBool('shellIntegrationEnabled', this.shellIntegrationEnabled);
     await prefs.setString('recordingPath', this.recordingPath);
+    await prefs.setString('dashboardViewMode', this.dashboardViewMode);
+    await prefs.setString('dashboardSort', this.dashboardSort);
     notifyListeners();
   }
 }

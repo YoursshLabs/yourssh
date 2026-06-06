@@ -125,4 +125,33 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(provider.terminalType, 'linux');
   });
+
+  test('dashboard prefs default to grid and name_asc', () async {
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.dashboardViewMode, 'grid');
+    expect(provider.dashboardSort, 'name_asc');
+  });
+
+  test('save persists dashboardViewMode and dashboardSort', () async {
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    await provider.save(dashboardViewMode: 'list', dashboardSort: 'created_desc');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('dashboardViewMode'), 'list');
+    expect(prefs.getString('dashboardSort'), 'created_desc');
+    expect(provider.dashboardViewMode, 'list');
+    expect(provider.dashboardSort, 'created_desc');
+  });
+
+  test('loads persisted dashboard prefs on init', () async {
+    SharedPreferences.setMockInitialValues({
+      'dashboardViewMode': 'list',
+      'dashboardSort': 'host_asc',
+    });
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.dashboardViewMode, 'list');
+    expect(provider.dashboardSort, 'host_asc');
+  });
 }
