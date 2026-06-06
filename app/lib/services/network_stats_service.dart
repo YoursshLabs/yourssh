@@ -27,7 +27,10 @@ class NetworkStatsService {
 
   Future<void> _poll() async {
     try {
-      final result = await sshService.exec(host, 'cat /proc/net/dev 2>/dev/null || netstat -ib 2>/dev/null');
+      final result = await sshService.exec(host,
+          'cat /proc/net/dev 2>/dev/null || netstat -ib 2>/dev/null',
+          // periodic poll — auditing would flood the log
+          auditSource: null);
       final output = result.stdout;
       if (output.isEmpty) return;
       final iface = detectPrimaryInterface(output);

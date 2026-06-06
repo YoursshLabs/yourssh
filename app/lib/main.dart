@@ -71,7 +71,7 @@ class _SshBridgeAdapter implements SshBridgeDelegate {
     final session = _getSessionProvider()
         .sshSessions
         .firstWhere((s) => s.id == sessionId);
-    final result = await _getSshService().exec(session.host, command);
+    final result = await _getSshService().exec(session.host, command, auditSource: 'plugin:js');
     return {
       'stdout': result.stdout,
       'stderr': result.stderr,

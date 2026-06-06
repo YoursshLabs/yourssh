@@ -34,8 +34,10 @@ class _BulkRunDialogState extends State<BulkRunDialog> {
   @override
   void initState() {
     super.initState();
+    final svc = context.read<SshService>();
     final service = widget.serviceOverride ??
-        BulkActionService(exec: context.read<SshService>().exec);
+        BulkActionService(
+            exec: (host, cmd) => svc.exec(host, cmd, auditSource: 'bulk'));
     _controller = BulkRunController(service: service, hosts: widget.hosts)
       ..addListener(_onChanged);
   }

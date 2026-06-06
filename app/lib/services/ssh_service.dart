@@ -11,6 +11,8 @@ import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
 import 'certificate_key_pair.dart';
 import 'injection_gate.dart';
+import '../models/audit_event.dart';
+import 'audit_service.dart';
 import 'notification_service.dart';
 import 'shell_integration_service.dart';
 import 'recording_service.dart';
@@ -24,6 +26,9 @@ class SshService {
   final StorageService _storage;
   final HookBus? hookBus;
   final ShellIntegrationProvider? shellIntegration;
+
+  /// Audit trail sink; null disables auditing (tests, early startup).
+  AuditService? audit;
 
   /// Global on/off for shell integration, read from SettingsProvider in
   /// main.dart. null => treat as enabled.
@@ -753,10 +758,14 @@ class SshService {
 
   // ── Exec ───────────────────────────────────────────────
 
+  /// [auditSource] tags the audit event ('app', 'bulk', 'devops',
+  /// 'plugin:…'); pass null for internal polling probes that would flood
+  /// the log (network stats).
   Future<({String stdout, String stderr, int exitCode})> exec(
     Host host,
-    String command,
-  ) async {
+    String command, {
+    String? auditSource = 'app',
+  }) async {
     var cmd = command;
 
     if (hookBus != null) {
@@ -771,13 +780,37 @@ class SshService {
     }
 
     final originalCommand = cmd;
-    final client = await _ensureClient(host);
-    final result = await client.runWithResult(cmd);
+    final SSHClient client;
+    final SSHRunResult result;
+    try {
+      client = await _ensureClient(host);
+      result = await client.runWithResult(cmd);
+    } catch (e) {
+      if (auditSource != null) {
+        audit?.record(AuditEvent.now(
+          type: AuditEventType.exec,
+          host: host,
+          command: originalCommand,
+          meta: {'source': auditSource, 'error': '$e'},
+        ));
+      }
+      rethrow;
+    }
     final execResult = (
       stdout: String.fromCharCodes(result.stdout),
       stderr: String.fromCharCodes(result.stderr),
       exitCode: result.exitCode ?? -1,
     );
+
+    if (auditSource != null) {
+      audit?.record(AuditEvent.now(
+        type: AuditEventType.exec,
+        host: host,
+        command: originalCommand,
+        exitCode: execResult.exitCode,
+        meta: {'source': auditSource},
+      ));
+    }
 
     hookBus?.fireObserve(
       'command.after',

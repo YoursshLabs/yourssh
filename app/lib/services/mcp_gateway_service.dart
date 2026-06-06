@@ -32,7 +32,7 @@ class McpGatewayService {
     try {
       final remotePort = 9000 + endpoint.localPort;
       final cmd = '${endpoint.mcpCommand} --port $remotePort &';
-      await _sshService.exec(endpoint.host, cmd);
+      await _sshService.exec(endpoint.host, cmd, auditSource: 'devops');
       endpoint.isRunning = true;
       _endpoints[endpoint.host.id] = endpoint;
       return const McpStartResult.success();
@@ -45,7 +45,7 @@ class McpGatewayService {
     final endpoint = _endpoints[host.id];
     if (endpoint == null) return;
     final binary = endpoint.mcpCommand.split(' ').first.replaceAll("'", '');
-    await _sshService.exec(host, "pkill -f '$binary'");
+    await _sshService.exec(host, "pkill -f '$binary'", auditSource: 'devops');
     endpoint.isRunning = false;
     _endpoints.remove(host.id);
   }

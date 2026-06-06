@@ -58,7 +58,7 @@ class PluginContextImpl implements YourSSHPluginContext {
     if (host == null) {
       throw PluginSSHException('Unknown session: $sessionId');
     }
-    final result = await _ssh.exec(host, command);
+    final result = await _ssh.exec(host, command, auditSource: 'plugin');
     if (result.exitCode != 0) {
       throw PluginSSHException(
         'Command exited ${result.exitCode}: ${result.stderr.trim()}',
