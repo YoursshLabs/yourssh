@@ -415,7 +415,8 @@ class SshService {
         onAgentForwardingEvent?.call(
             session.host.id, session.id, AgentForwardingState.refused);
       } else {
-        // Also resets a stale `refused` from a previous shell on reconnect.
+        // Signals (or resets) the ready state — covers both the initial shell
+        // open and reconnects that follow a previous `refused` on this session.
         onAgentForwardingEvent?.call(
             session.host.id, session.id, AgentForwardingState.ready);
       }
