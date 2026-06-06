@@ -156,8 +156,8 @@ class SessionProvider extends ChangeNotifier {
 
       await _ssh.openShell(
         session,
-        useTmux: tmuxEnabled?.call() ?? false,
-        termType: terminalType?.call() ?? 'xterm-256color',
+        useTmux: host.tmuxOverride ?? tmuxEnabled?.call() ?? false,
+        termType: host.termType ?? terminalType?.call() ?? 'xterm-256color',
       );
       _safeNotify();
 
