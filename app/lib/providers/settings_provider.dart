@@ -12,7 +12,7 @@ class SettingsProvider extends ChangeNotifier {
   String terminalTheme = 'Dracula';
   bool networkStatsEnabled = false;
   bool tmuxEnabled = false;
-  bool commandNotificationsEnabled = true;
+  bool commandNotificationsEnabled = false;
   bool shellIntegrationEnabled = true;
   String terminalFont = 'MesloLGS NF';
   String terminalType = 'xterm-256color';
@@ -51,7 +51,7 @@ class SettingsProvider extends ChangeNotifier {
     terminalTheme = prefs.getString('terminalTheme') ?? 'Dracula';
     networkStatsEnabled = prefs.getBool('networkStatsEnabled') ?? false;
     tmuxEnabled = prefs.getBool('tmuxEnabled') ?? false;
-    commandNotificationsEnabled = prefs.getBool('commandNotificationsEnabled') ?? true;
+    commandNotificationsEnabled = prefs.getBool('commandNotificationsEnabled') ?? false;
     shellIntegrationEnabled = prefs.getBool('shellIntegrationEnabled') ?? true;
     terminalFont = prefs.getString('terminalFont') ?? 'MesloLGS NF';
     terminalType = prefs.getString('terminalType') ?? 'xterm-256color';

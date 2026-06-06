@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refuses forwarding.
 
 ### Changed
+- Command-finish notifications are now **off by default** (re-enable via
+  Settings → Monitoring); existing installs keep their saved choice
 - `SftpTransferService.uploadFile` reports byte progress;
   `uploadDirectory` gained an `overwrite` flag (bulk push uses it — the
   SFTP panel's skip-existing behavior is unchanged)

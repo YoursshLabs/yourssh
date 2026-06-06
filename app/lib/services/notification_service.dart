@@ -23,7 +23,7 @@ class NotificationService {
   final Duration _cooldown;
   final void Function(String title, String body)? _onSystemNotify;
 
-  bool enabled = true;
+  bool enabled = false;
   bool _isWindowFocused = true;
   void Function(String sessionLabel)? onToast;
 
