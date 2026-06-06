@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/agent_forwarding_state.dart';
+import '../models/audit_event.dart';
 import '../models/host.dart';
 import '../models/local_session.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
 import '../models/terminal_session.dart';
+import '../services/audit_service.dart';
 import '../services/local_shell_service.dart';
 import '../services/ssh_service.dart';
 import '../services/tab_metadata_service.dart';
@@ -27,6 +29,9 @@ class SessionProvider extends ChangeNotifier {
   Future<bool> Function(String host, int port, String keyType, Uint8List fp)? hostKeyVerifier;
   Future<void> Function(String hostId, String os)? onOsDetected;
   Future<void> Function(SshSession session)? recordingStart;
+
+  /// Audit trail sink; null disables auditing.
+  AuditService? audit;
 
   /// Fired when a session drops without a pending auto-reconnect: shell
   /// closed (a graceful `exit` is indistinguishable here — see spec caveat)
@@ -139,6 +144,8 @@ class SessionProvider extends ChangeNotifier {
             : null,
       );
       session.status = SessionStatus.connected;
+      audit?.record(AuditEvent.now(
+          type: AuditEventType.connect, host: host, sessionId: session.id));
       // Fire-and-forget: detect when OS is unknown, or known only as generic
       // 'linux' (pre-distro-detection hosts upgrade to a distro id on the
       // next connect; genuinely unknown distros re-probe — one cheap exec).
@@ -166,6 +173,11 @@ class SessionProvider extends ChangeNotifier {
         _scheduleReconnect(session, host, attempt: 1);
       } else if (_sessions.contains(session)) {
         session.status = SessionStatus.disconnected;
+        audit?.record(AuditEvent.now(
+            type: AuditEventType.disconnect,
+            host: host,
+            sessionId: session.id,
+            meta: const {'reason': 'dropped'}));
         onSessionDropped?.call(session, null);
         _safeNotify();
       }
@@ -182,6 +194,14 @@ class SessionProvider extends ChangeNotifier {
         session.errorMessage = attempt > 1
             ? 'Failed after $attempt attempts: $e'
             : e.toString();
+        // Final failure only — an unlimited-retry outage must not write
+        // one audit row per attempt tick.
+        audit?.record(AuditEvent.now(
+          type: AuditEventType.connect,
+          host: host,
+          sessionId: session.id,
+          meta: {'error': '$e', 'attempts': attempt},
+        ));
         onSessionDropped?.call(session, session.errorMessage);
         _safeNotify();
       }
@@ -263,8 +283,15 @@ class SessionProvider extends ChangeNotifier {
 
     _reconnectTimers.remove(sessionId)?.cancel();
     _countdownTimers.remove(sessionId)?.cancel();
-    final hostId =
-        sshSessions.where((s) => s.id == sessionId).firstOrNull?.host.id;
+    final ssh = sshSessions.where((s) => s.id == sessionId).firstOrNull;
+    final hostId = ssh?.host.id;
+    if (ssh != null) {
+      audit?.record(AuditEvent.now(
+          type: AuditEventType.disconnect,
+          host: ssh.host,
+          sessionId: sessionId,
+          meta: const {'reason': 'user-closed'}));
+    }
 
     _ssh.disconnectSession(sessionId);
     _sessions.removeWhere((s) => s.id == sessionId);
