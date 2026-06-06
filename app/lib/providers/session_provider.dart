@@ -4,6 +4,7 @@ import '../models/agent_forwarding_state.dart';
 import '../models/audit_event.dart';
 import '../models/host.dart';
 import '../models/local_session.dart';
+import '../models/shell_profile.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
 import '../models/terminal_session.dart';
@@ -38,6 +39,11 @@ class SessionProvider extends ChangeNotifier {
   /// or reconnect attempts exhausted. Wired in main.dart to the
   /// notification center.
   void Function(SshSession session, String? reason)? onSessionDropped;
+
+  /// Resolves the Settings default shell for new local terminals; wired by
+  /// main.dart to SettingsProvider.resolveDefaultShell. Null (tests, early
+  /// boot) behaves as platform default.
+  ShellResolution Function()? defaultShellResolver;
 
   /// Set by main.dart; required for newLocalSession/restartLocalSession.
   /// The setter wires the service's out-of-band state changes (PTY exit,
@@ -260,10 +266,25 @@ class SessionProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> newLocalSession() async {
+  Future<void> newLocalSession({
+    ShellProfile? profile,
+    bool platformDefault = false,
+  }) async {
     final shell = localShell;
     if (shell == null) return;
-    final session = await shell.openShell();
+    var chosen = profile;
+    var dangling = false;
+    if (chosen == null && !platformDefault) {
+      final res = defaultShellResolver?.call();
+      chosen = res?.profile;
+      dangling = res?.dangling ?? false;
+    }
+    final session = await shell.openShell(profile: chosen);
+    if (dangling) {
+      session.terminal.write(
+          '\x1b[33m[Default shell not found — using platform default. '
+          'Check Settings → Terminal.]\x1b[0m\r\n');
+    }
     _sessions.add(session);
     _activeSessionId = session.id;
     _safeNotify();
