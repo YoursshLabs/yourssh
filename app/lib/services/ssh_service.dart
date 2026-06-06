@@ -49,6 +49,12 @@ class SshService {
   /// (exec, tunnels) — mirrors SessionProvider.keyLookup for shells.
   SshKeyEntry? Function(String keyId)? defaultKeyLookup;
 
+  /// Resolves a [Host.jumpHostId] to its saved [Host] on auto-connect paths
+  /// (`ensureClient`: SFTP, exec, port forwarding). Wired in main.dart to
+  /// HostProvider. Without it a host behind a bastion dials direct and times
+  /// out — only interactive sessions (SessionProvider) resolved the jump.
+  Host? Function(String jumpHostId)? defaultJumpHostLookup;
+
   /// Loads app-Keychain keys served through a forwarded agent when no system
   /// agent is available. Set from main.dart (KeyProvider + stored
   /// passphrases); null means the fallback serves an empty identity list.
@@ -696,9 +702,19 @@ class SshService {
     }
     final keyId = host.keyId;
     final keyEntry = keyId == null ? null : defaultKeyLookup?.call(keyId);
+    Host? jumpHost;
+    SshKeyEntry? jumpKeyEntry;
+    final jumpId = host.jumpHostId;
+    if (jumpId != null) {
+      jumpHost = defaultJumpHostLookup?.call(jumpId);
+      final jumpKeyId = jumpHost?.keyId;
+      if (jumpKeyId != null) jumpKeyEntry = defaultKeyLookup?.call(jumpKeyId);
+    }
     return connect(
       host,
       keyEntry: keyEntry,
+      jumpHost: jumpHost,
+      jumpKeyEntry: jumpKeyEntry,
       verifyHostKey: (keyType, fp) => verifier(host.host, host.port, keyType, fp),
     );
   }

@@ -183,6 +183,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _sessionProvider.hostKeyVerifier = _knownHostsProvider.verifyHostKey;
     _ssh.defaultHostKeyVerifier = _knownHostsProvider.verifyHostKey;
     _ssh.defaultKeyLookup = (id) => _keyProvider.findById(id);
+    _ssh.defaultJumpHostLookup = (id) =>
+        _hostProvider.allHosts.where((h) => h.id == id).firstOrNull;
     _ssh.keychainIdentitiesLoader = () =>
         loadKeychainKeyPairs(_keyProvider.keys, _storage.loadPassphrase);
     _portForwardProvider = PortForwardProvider();
