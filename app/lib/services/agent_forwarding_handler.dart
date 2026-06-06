@@ -26,15 +26,27 @@ class AgentForwardingHandler implements SSHAgentHandler {
   AgentForwardingHandler({
     this._connectSystemAgent = SystemAgentProxy.connect,
     required this._loadKeychainIdentities,
+    this.onRequestServed,
   });
 
   final Future<SystemAgentProxy> Function() _connectSystemAgent;
   final Future<List<SSHKeyPair>> Function() _loadKeychainIdentities;
 
+  /// Fired after each successfully served request — `usedFallback` is true
+  /// when the reply came from app-Keychain keys instead of the system agent.
+  /// Exceptions are swallowed: observability must never fail the round trip.
+  final void Function(bool usedFallback)? onRequestServed;
+
   // Memoizes the FUTURE (created synchronously, no await between the null
   // check and the assignment) so concurrent first-use requests share one
   // Keychain load instead of racing `??=` across an await.
   Future<SSHKeyPairAgent>? _fallback;
+
+  void _notifyServed(bool usedFallback) {
+    try {
+      onRequestServed?.call(usedFallback);
+    } catch (_) {}
+  }
 
   @override
   Future<Uint8List> handleRequest(Uint8List request) async {
@@ -44,10 +56,14 @@ class AgentForwardingHandler implements SSHAgentHandler {
     } on SSHAgentUnavailableException {
       final fallback = await (_fallback ??=
           _loadKeychainIdentities().then(SSHKeyPairAgent.new));
-      return fallback.handleRequest(request);
+      final response = await fallback.handleRequest(request);
+      _notifyServed(true);
+      return response;
     }
     try {
-      return await proxy.roundtrip(request);
+      final response = await proxy.roundtrip(request);
+      _notifyServed(false);
+      return response;
     } on SSHAgentUnavailableException {
       rethrow;
     } catch (e) {
