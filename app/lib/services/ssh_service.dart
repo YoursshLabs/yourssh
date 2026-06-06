@@ -442,6 +442,13 @@ class SshService {
           );
     }
 
+    // Session-template setup (cd/export, and the snippet's DONE trigger)
+    // rides the same invisible handshake as shell integration — one
+    // bootstrap, one payload, one DONE sentinel. See
+    // docs/superpowers/specs/2026-06-06-session-template-design.md.
+    final injectOn =
+        shellIntegration != null && (siOn || session.host.hasTemplateSetup);
+
     hookBus?.fireObserve('session.connect', ObserveEvent(
       sessionId: session.id,
       payload: {
@@ -487,7 +494,7 @@ class SshService {
     }
 
     void launchInjection() {
-      if (!siOn || gate != null || injectionAborted) return;
+      if (!injectOn || gate != null || injectionAborted) return;
       cancelReadinessTimers();
       awaitingProbe = false;
       final bootstrap = shellIntegration!.buildBootstrapLine();
@@ -512,7 +519,7 @@ class SshService {
     // bare "\n". A real prompt answers it; MOTD-in-progress only produces a
     // kernel echo. Out of probes → give up cleanly.
     void armQuietProbe() {
-      if (!siOn ||
+      if (!injectOn ||
           gate != null ||
           injectionAborted ||
           awaitingProbe ||
@@ -544,7 +551,7 @@ class SshService {
       });
     }
 
-    if (siOn) armQuietProbe();
+    if (injectOn) armQuietProbe();
 
     final done = Completer<void>();
     const utf8 = Utf8Decoder(allowMalformed: true);
@@ -560,7 +567,7 @@ class SshService {
               'terminal.output', TransformEvent(sessionId: session.id, data: text));
         }
 
-        if (siOn && gate == null && !injectionAborted) {
+        if (injectOn && gate == null && !injectionAborted) {
           firstOutputAt ??= DateTime.now();
           final sig = readiness.onChunk(text);
           if (sig == ReadinessSignal.altScreen) {
@@ -592,8 +599,14 @@ class SshService {
           final wasHolding = g.isHolding;
           final r = g.feed(text);
           if (r.sendPayload) {
-            shell.write(Uint8List.fromList(
-                shellIntegration!.buildPayloadLine().codeUnits));
+            // Utf8Encoder (not codeUnits): workingDir/env values may be
+            // non-ASCII. The local `utf8` decoder shadows dart:convert's.
+            shell.write(Uint8List.fromList(const Utf8Encoder().convert(
+                shellIntegration!.buildPayloadLine(
+              includeInstaller: siOn,
+              workingDir: session.host.workingDir,
+              envVars: session.host.envVars,
+            ))));
           }
           if (r.emit == null) return; // withheld until DONE / timeout
           if (wasHolding && !g.isHolding) doneTimer?.cancel();
@@ -638,7 +651,7 @@ class SshService {
       // A user keystroke before the handshake starts cancels the injection:
       // a queued probe "\n" would execute their half-typed command, and the
       // bootstrap would be appended to whatever they are typing.
-      if (siOn && gate == null && !injectionAborted) {
+      if (injectOn && gate == null && !injectionAborted) {
         injectionAborted = true;
         cancelReadinessTimers();
       }
