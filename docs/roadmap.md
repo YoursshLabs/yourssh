@@ -1,7 +1,7 @@
 # YourSSH — Roadmap
 
 > Direction: **infra workstation for DevOps/SRE managing 10–100+ hosts**, not just an SSH client.
-> Current version: 0.1.30 · updated: 2026-06-06 (release 0.1.30: bulk action panel, dashboard grid/list view + sorting, agent forwarding observability, connection chain editor, jump-host fix on auto-connect paths)
+> Current version: 0.1.31 · updated: 2026-06-06 (release 0.1.31: packaging-only — Windows portable ZIP + bundled VC++ runtime, Linux glibc 2.35 baseline so 22.04/Debian 12 work again)
 
 This document lists proposed features ordered by priority. Each item can be broken out into its own spec (`docs/superpowers/specs/`) when ready for implementation.
 

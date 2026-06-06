@@ -24,6 +24,8 @@ xattr -dr com.apple.quarantine /Applications/YourSSH.app
 2. Run the installer and follow the setup wizard. YourSSH is added to the Start menu.
 3. **Windows SmartScreen** may warn on first run. Click **More info → Run anyway**.
 
+Prefer no installer? Download `YourSSH-x.x.x-Windows-<arch>-portable.zip`, extract it anywhere, and run `yourssh.exe`.
+
 ### Linux (Debian / Ubuntu)
 
 ```bash
@@ -33,6 +35,8 @@ sudo dpkg -i yourssh_x.x.x_amd64.deb
 # ARM64 (Raspberry Pi 4/5, Apple Silicon Linux)
 sudo dpkg -i yourssh_x.x.x_arm64.deb
 ```
+
+> Requires Ubuntu 22.04+ / Debian 12+ (glibc ≥ 2.35).
 
 Requires GTK3 (pre-installed on Ubuntu 20.04+, Debian 11+). After install, run `yourssh` or launch from the application menu.
 

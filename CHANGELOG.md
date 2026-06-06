@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.31] — 2026-06-06
+
+Packaging-only release — no app code changes. Fixes install failures
+reported on ARM64 that actually affected all architectures.
+
+### Fixed
+- **Windows portable build was unusable** — the previous
+  `YourSSH-<ver>-Windows-<arch>.exe` asset was the bare `yourssh.exe`
+  without `flutter_windows.dll`, the plugin DLLs, or `data/`, so it always
+  failed at launch with a missing-DLL error. Replaced by
+  `YourSSH-<ver>-Windows-<arch>-portable.zip` containing the full Release
+  folder — extract and run.
+- **Windows builds now bundle the VC++ runtime** (`msvcp140.dll`,
+  `vcruntime140*.dll`) so the installer and portable ZIP work on fresh
+  machines/VMs without the Visual C++ Redistributable — common on
+  Windows-on-ARM.
+- **Linux builds run on Ubuntu 22.04 / Debian 12 again** — release builds
+  moved from Ubuntu 24.04 to 22.04 runners, lowering the glibc requirement
+  from 2.38 to 2.35. Previously the app aborted at launch on anything older
+  than Ubuntu 24.04 (including Raspberry Pi OS bookworm).
+
+---
+
 ## [0.1.30] — 2026-06-06
 
 ### Added
