@@ -44,10 +44,12 @@ class BulkActionBar extends StatelessWidget {
           _BarBtn(label: 'SELECT ALL', onTap: onSelectAll),
           const SizedBox(width: 8),
           _BarBtn(label: 'CLEAR', onTap: onClear, enabled: hasSelection),
-          const Spacer(),
-          Flexible(
+          Expanded(
+            // reverse anchors the action cluster to the right edge; when the
+            // bar is too narrow it scrolls with DONE still visible.
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
+              reverse: true,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
