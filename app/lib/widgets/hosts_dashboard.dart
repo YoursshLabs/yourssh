@@ -13,6 +13,7 @@ import '../util/host_sort.dart';
 import '../providers/host_provider.dart';
 import '../providers/key_provider.dart';
 import '../providers/session_provider.dart';
+import '../providers/settings_provider.dart';
 import '../services/os_detection.dart';
 import '../services/ssh_service.dart';
 import '../services/storage_service.dart';
@@ -171,6 +172,10 @@ class _HostsDashboardState extends State<HostsDashboard> {
     final query = HostQuery.parse(_search);
     final filtered =
         query.isEmpty ? hosts : hosts.where(query.matches).toList();
+    final settings = context.watch<SettingsProvider>();
+    final sortMode = HostSortMode.fromKey(settings.dashboardSort);
+    final sorted = sortHosts(filtered, sortMode);
+    final listView = settings.dashboardViewMode == 'list';
     final facets = HostQuery.availableFacets(hosts);
 
     final pinnedGroupsUpper =
@@ -210,6 +215,13 @@ class _HostsDashboardState extends State<HostsDashboard> {
                   onNewGroup: widget.onNewGroup,
                   onImport: widget.onImport,
                   onSelect: _enterSelectionMode,
+                  sortMode: sortMode,
+                  onSortChanged: (m) =>
+                      context.read<SettingsProvider>().save(dashboardSort: m.key),
+                  viewMode: settings.dashboardViewMode,
+                  onViewChanged: (v) => context
+                      .read<SettingsProvider>()
+                      .save(dashboardViewMode: v),
                 ),
           Expanded(
             child: SingleChildScrollView(
@@ -257,9 +269,17 @@ class _HostsDashboardState extends State<HostsDashboard> {
                   const SizedBox(height: 12),
                   if (filtered.isEmpty && _search.isEmpty)
                     _EmptyState(onAdd: widget.onAddHost ?? () {})
+                  else if (listView)
+                    _HostList(
+                      hosts: sorted,
+                      onEditHost: widget.onEditHost,
+                      selectionMode: _selectionMode,
+                      selectedIds: _selectedHostIds,
+                      onToggleSelect: _toggleSelected,
+                    )
                   else
                     _HostGrid(
-                      hosts: filtered,
+                      hosts: sorted,
                       onEditHost: widget.onEditHost,
                       selectionMode: _selectionMode,
                       selectedIds: _selectedHostIds,
@@ -287,8 +307,26 @@ class _TopBar extends StatelessWidget {
   final VoidCallback? onNewGroup;
   final VoidCallback? onImport;
   final VoidCallback? onSelect;
+  final HostSortMode sortMode;
+  final ValueChanged<HostSortMode> onSortChanged;
+  final String viewMode;
+  final ValueChanged<String> onViewChanged;
 
-  const _TopBar({required this.controller, required this.onSearch, required this.totalHosts, required this.filteredCount, this.onAddHost, this.onLocalTerminal, this.onNewGroup, this.onImport, this.onSelect});
+  const _TopBar({
+    required this.controller,
+    required this.onSearch,
+    required this.totalHosts,
+    required this.filteredCount,
+    this.onAddHost,
+    this.onLocalTerminal,
+    this.onNewGroup,
+    this.onImport,
+    this.onSelect,
+    required this.sortMode,
+    required this.onSortChanged,
+    required this.viewMode,
+    required this.onViewChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -328,6 +366,10 @@ class _TopBar extends StatelessWidget {
           Text('$filteredCount of $totalHosts hosts',
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
           const SizedBox(width: 16),
+          _SortBtn(mode: sortMode, onChanged: onSortChanged),
+          const SizedBox(width: 8),
+          _ViewToggle(viewMode: viewMode, onChanged: onViewChanged),
+          const SizedBox(width: 8),
           _OutlinedBtn(
             icon: Icons.check_box_outlined,
             label: 'SELECT',
@@ -747,6 +789,43 @@ class _HostGrid extends StatelessWidget {
               .toList(),
         );
       },
+    );
+  }
+}
+
+// ── Host List ─────────────────────────────────────────────
+
+class _HostList extends StatelessWidget {
+  final List<Host> hosts;
+  final void Function(Host)? onEditHost;
+  final bool selectionMode;
+  final Set<String> selectedIds;
+  final void Function(Host)? onToggleSelect;
+  const _HostList({
+    required this.hosts,
+    this.onEditHost,
+    this.selectionMode = false,
+    this.selectedIds = const {},
+    this.onToggleSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (final h in hosts)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _HostCard(
+              host: h,
+              compact: true,
+              onEditHost: onEditHost,
+              selectionMode: selectionMode,
+              selected: selectedIds.contains(h.id),
+              onToggleSelect: () => onToggleSelect?.call(h),
+            ),
+          ),
+      ],
     );
   }
 }
