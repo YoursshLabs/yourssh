@@ -24,9 +24,14 @@ Click **+** on the Hosts screen (or **Cmd/Ctrl+N** from anywhere). Required fiel
 | **Certificate** | CA-signed key + certificate file (`.pub` format) |
 | **SSH Agent** | Delegates to `SSH_AUTH_SOCK` (macOS/Linux) or `\\.\pipe\openssh-ssh-agent` (Windows 10+) |
 
-### Jump Host / Bastion
+### Connection Chain (Jump Host / Bastion)
 
-In the host detail panel, expand **Jump Host** and select any other saved host as the bastion. YourSSH tunnels through the bastion transparently.
+In the host detail panel, the **Connection Chain** section shows the route to
+your host as connected cards. Click **Add a Host** and pick any saved host as
+the bastion — the chain then reads bastion → destination, with a key icon on
+the bastion card when agent forwarding is enabled. Click the bastion card to
+swap it, or **Clear** to connect directly. Terminal sessions, SFTP, exec, and
+port forwarding all tunnel through the bastion transparently.
 
 ### Agent Forwarding
 

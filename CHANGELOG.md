@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.31] — 2026-06-06
+
+### Added
+- **Connection Chain editor** — the Jump Host dropdown in the host panel is
+  now a visual chain (Termius-style): host cards connected by an arrow
+  showing bastion → destination, a searchable **Add a Host** picker, a key
+  icon on the bastion card when agent forwarding is enabled, and a **Clear**
+  button for direct connections. Click the bastion card to swap hosts.
+- `tool/jump_probe.dart` — layer-by-layer jump-host diagnostic CLI
+  (TCP → bastion auth → direct-tcpip channel → target auth → exec) for
+  debugging "can't reach host behind bastion" reports.
+
+### Fixed
+- **Jump host on auto-connect paths** — SFTP, exec, and port forwarding
+  auto-connect (`ensureClient`) never resolved the host's jump host, so
+  hosts behind a bastion dialed direct and timed out. They now tunnel
+  through the bastion exactly like interactive sessions.
+
+---
+
 ## [0.1.30] — 2026-06-06
 
 ### Added
@@ -472,7 +492,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.30...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.31...HEAD
+[0.1.31]: https://github.com/YoursshLabs/yourssh/compare/v0.1.30...v0.1.31
 [0.1.30]: https://github.com/YoursshLabs/yourssh/compare/v0.1.29...v0.1.30
 [0.1.29]: https://github.com/YoursshLabs/yourssh/compare/v0.1.28...v0.1.29
 [0.1.28]: https://github.com/YoursshLabs/yourssh/compare/v0.1.27...v0.1.28
