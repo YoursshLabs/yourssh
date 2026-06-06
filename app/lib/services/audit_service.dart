@@ -53,6 +53,7 @@ class AuditFilter {
 /// swallowed. See docs/superpowers/specs/2026-06-06-internal-audit-log-design.md.
 class AuditService {
   Database? _db;
+  PreparedStatement? _insertStmt;
   String? initError;
   bool get isAvailable => _db != null;
 
@@ -92,43 +93,66 @@ CREATE TABLE IF NOT EXISTS audit_events (
     db.execute('CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_events(ts)');
     db.execute(
         'CREATE INDEX IF NOT EXISTS idx_audit_host ON audit_events(host_id)');
+    // Cached prepared statement: inserts run on every exec/input submit, so
+    // skip per-insert prepare/finalize churn.
+    _insertStmt = db.prepare(
+        'INSERT INTO audit_events '
+        '(ts, type, host_id, host_label, username, session_id, command, '
+        'exit_code, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     _db = db;
   }
 
+  /// Redact every string value: secrets reach meta too (e.g. an auth
+  /// exception whose message embeds a credentialed URL).
+  static Map<String, dynamic> _redactMeta(Map<String, dynamic> meta) =>
+      meta.map((k, v) =>
+          MapEntry(k, v is String ? AuditRedactor.redact(v) : v));
+
   void record(AuditEvent e) {
-    final db = _db;
-    if (db == null) return;
+    final stmt = _insertStmt;
+    if (_db == null || stmt == null) return;
     try {
-      db.execute(
-        'INSERT INTO audit_events '
-        '(ts, type, host_id, host_label, username, session_id, command, '
-        'exit_code, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          e.ts.millisecondsSinceEpoch,
-          e.type.name,
-          e.hostId,
-          e.hostLabel,
-          e.username,
-          e.sessionId,
-          e.command == null ? null : AuditRedactor.redact(e.command!),
-          e.exitCode,
-          e.meta.isEmpty ? null : jsonEncode(e.meta),
-        ],
-      );
+      stmt.execute([
+        e.ts.millisecondsSinceEpoch,
+        e.type.name,
+        e.hostId,
+        e.hostLabel,
+        e.username,
+        e.sessionId,
+        e.command == null ? null : AuditRedactor.redact(e.command!),
+        e.exitCode,
+        e.meta.isEmpty ? null : jsonEncode(_redactMeta(e.meta)),
+      ]);
     } catch (err) {
       debugPrint('[AuditService] record failed: $err'); // never rethrow
     }
   }
 
-  List<AuditEvent> query(AuditFilter f, {int limit = 200, int offset = 0}) {
+  /// [limit] of `-1` means unbounded (SQLite semantics). [beforeTs] +
+  /// [beforeId] are a keyset anchor: only rows strictly older than the
+  /// anchor are returned, so paging stays stable while new rows arrive.
+  List<AuditEvent> query(
+    AuditFilter f, {
+    int limit = 200,
+    int offset = 0,
+    int? beforeTs,
+    int? beforeId,
+  }) {
     final db = _db;
     if (db == null) return const [];
     try {
       final (where, args) = f.toWhere();
+      var sql = where;
+      final allArgs = [...args];
+      if (beforeTs != null) {
+        final anchor = '(ts < ? OR (ts = ? AND id < ?))';
+        sql = sql.isEmpty ? 'WHERE $anchor' : '$sql AND $anchor';
+        allArgs.addAll([beforeTs, beforeTs, beforeId ?? 0]);
+      }
       final rows = db.select(
-        'SELECT * FROM audit_events $where '
+        'SELECT * FROM audit_events $sql '
         'ORDER BY ts DESC, id DESC LIMIT ? OFFSET ?',
-        [...args, limit, offset],
+        [...allArgs, limit, offset],
       );
       return rows.map(AuditEvent.fromRow).toList();
     } catch (err) {
@@ -159,34 +183,28 @@ CREATE TABLE IF NOT EXISTS audit_events (
     }
   }
 
-  List<AuditEvent> _allMatching(AuditFilter f) {
-    final db = _db;
-    if (db == null) return const [];
-    final (where, args) = f.toWhere();
-    final rows = db.select(
-        'SELECT * FROM audit_events $where ORDER BY ts DESC, id DESC', args);
-    return rows.map(AuditEvent.fromRow).toList();
-  }
-
-  static String _csvField(String v) =>
-      (v.contains(',') || v.contains('"') || v.contains('\n'))
-          ? '"${v.replaceAll('"', '""')}"'
-          : v;
+  static String _csvField(String v) => (v.contains(',') ||
+          v.contains('"') ||
+          v.contains('\n') ||
+          v.contains('\r'))
+      ? '"${v.replaceAll('"', '""')}"'
+      : v;
 
   String exportCsv(AuditFilter f) {
-    const header = 'ts,type,host_label,username,session_id,command,'
-        'exit_code,meta';
     final lines = [
-      header,
-      for (final e in _allMatching(f)) e.toCsvRow().map(_csvField).join(','),
+      AuditEvent.kCsvColumns.join(','),
+      for (final e in query(f, limit: -1))
+        e.toCsvRow().map(_csvField).join(','),
     ];
     return lines.join('\n');
   }
 
   String exportJson(AuditFilter f) =>
-      jsonEncode([for (final e in _allMatching(f)) e.toJson()]);
+      jsonEncode([for (final e in query(f, limit: -1)) e.toJson()]);
 
   void dispose() {
+    _insertStmt?.dispose();
+    _insertStmt = null;
     _db?.dispose();
     _db = null;
   }

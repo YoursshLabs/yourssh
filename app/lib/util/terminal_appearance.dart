@@ -14,9 +14,16 @@ class TerminalAppearance {
   });
 }
 
+/// Valid per-host font-size range — mirrors the host panel's validator.
+/// Re-checked here because sync can deliver values the panel never saw.
+const kMinHostFontSize = 6.0;
+const kMaxHostFontSize = 40.0;
+
 /// Per-host appearance overrides beat the globals; null host or null field
 /// = global. An unknown per-host theme name (catalog drift across versions
-/// via sync) falls back to the global theme rather than catalog[0].
+/// via sync) falls back to the global theme rather than catalog[0], and an
+/// out-of-range font size (sync bypasses the panel validator) falls back
+/// to the global size rather than zeroing the line height.
 TerminalAppearance resolveTerminalAppearance({
   required Host? host,
   required String globalTheme,
@@ -26,9 +33,13 @@ TerminalAppearance resolveTerminalAppearance({
   final hostTheme = host?.terminalThemeId;
   final themeKnown =
       hostTheme != null && kTerminalThemeNames.contains(hostTheme);
+  final hostSize = host?.fontSize;
+  final sizeValid = hostSize != null &&
+      hostSize >= kMinHostFontSize &&
+      hostSize <= kMaxHostFontSize;
   return TerminalAppearance(
     themeName: themeKnown ? hostTheme : globalTheme,
     fontFamily: host?.fontFamily ?? globalFont,
-    fontSize: host?.fontSize ?? globalFontSize,
+    fontSize: sizeValid ? hostSize : globalFontSize,
   );
 }

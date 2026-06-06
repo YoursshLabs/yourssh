@@ -74,7 +74,13 @@ class _SshBridgeAdapter implements SshBridgeDelegate {
       String sessionId, String command) async {
     final session = _getSessionProvider()
         .sshSessions
-        .firstWhere((s) => s.id == sessionId);
+        .where((s) => s.id == sessionId)
+        .firstOrNull;
+    if (session == null) {
+      // Clean message instead of firstWhere's opaque StateError — matches
+      // the Dart plugin context's error surface.
+      throw Exception('Unknown session: $sessionId');
+    }
     final result = await _getSshService().exec(session.host, command, auditSource: 'plugin:js');
     return {
       'stdout': result.stdout,
@@ -194,10 +200,13 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _ssh.audit = _audit;
     _sessionProvider.audit = _audit;
     // Fail-soft init + retention prune; settings may still be loading, so
-    // read the persisted value directly.
+    // read the persisted value directly. The refresh() recovers an Audit
+    // screen opened during the brief init window.
     unawaited(_audit.init().then((_) async {
       final prefs = await SharedPreferences.getInstance();
-      _audit.prune(prefs.getInt('auditRetentionDays') ?? 90);
+      _audit.prune(
+          prefs.getInt('auditRetentionDays') ?? kDefaultAuditRetentionDays);
+      _auditProvider.refresh();
     }));
     _healthMonitor = HealthMonitorService(
       measure: _ssh.measureLatency,

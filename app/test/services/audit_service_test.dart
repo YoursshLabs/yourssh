@@ -103,4 +103,43 @@ void main() {
         () => svc.record(ev(AuditEventType.exec, cmd: 'x')), returnsNormally);
     expect(svc.query(const AuditFilter()), isEmpty);
   });
+
+  test('string meta values are redacted before insert', () {
+    svc.record(AuditEvent(
+        ts: DateTime.now(),
+        type: AuditEventType.exec,
+        command: 'ls',
+        meta: const {
+          'source': 'app',
+          'error': 'auth failed for https://user:hunter2@db.example.com',
+        }));
+    final row = svc.query(const AuditFilter()).single;
+    expect(row.meta['error'], isNot(contains('hunter2')));
+    expect(row.meta['error'], contains('[REDACTED]'));
+    expect(row.meta['source'], 'app');
+  });
+
+  test('CSV quotes carriage returns', () {
+    svc.record(ev(AuditEventType.exec, cmd: 'printf a\rb'));
+    final dataLine = svc.exportCsv(const AuditFilter());
+    // The \r field must be quoted so it cannot split the record.
+    expect(dataLine, contains('"printf a\rb"'));
+  });
+
+  test('keyset pagination (before anchor) never duplicates across new rows',
+      () {
+    for (var i = 0; i < 5; i++) {
+      svc.record(ev(AuditEventType.exec,
+          cmd: 'c$i', ts: DateTime(2026, 1, 1 + i)));
+    }
+    final page1 = svc.query(const AuditFilter(), limit: 2);
+    expect(page1.map((e) => e.command), ['c4', 'c3']);
+    // A new row lands AFTER page 1 was fetched (highest ts).
+    svc.record(ev(AuditEventType.exec, cmd: 'c9', ts: DateTime(2026, 2, 1)));
+    final last = page1.last;
+    final page2 = svc.query(const AuditFilter(),
+        limit: 2, beforeTs: last.ts.millisecondsSinceEpoch, beforeId: last.id);
+    expect(page2.map((e) => e.command), ['c2', 'c1'],
+        reason: 'anchor paging must not re-serve or skip rows');
+  });
 }

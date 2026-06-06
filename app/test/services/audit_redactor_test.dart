@@ -41,4 +41,28 @@ void main() {
     expect(r('ls -la /srv'), 'ls -la /srv');
     expect(r('echo token bucket'), 'echo token bucket');
   });
+
+  test('quoted multi-word secret values are fully masked', () {
+    expect(r('docker run -e MYSQL_ROOT_PASSWORD="a b c" mysql'),
+        'docker run -e MYSQL_ROOT_PASSWORD=[REDACTED] mysql');
+    expect(r("export PGPASSWORD='s p a c e'"),
+        'export PGPASSWORD=[REDACTED]');
+    expect(r('curl -d \'password=Sup3r Secret Pass\' https://x'),
+        "curl -d 'password=[REDACTED]' https://x");
+  });
+
+  test('mysqldump / mysqladmin attached -p is masked', () {
+    expect(r('mysqldump -u root -psecret db'),
+        'mysqldump -u root -p[REDACTED] db');
+    expect(r('mysqladmin -pfoo status'), 'mysqladmin -p[REDACTED] status');
+  });
+
+  test('password-only URL userinfo (empty username) is masked', () {
+    expect(r('redis-cli -u redis://:s3cret@db:6379'),
+        'redis-cli -u redis://:[REDACTED]@db:6379');
+  });
+
+  test('redis-cli -a auth is masked', () {
+    expect(r('redis-cli -a hunter2 ping'), 'redis-cli -a [REDACTED] ping');
+  });
 }

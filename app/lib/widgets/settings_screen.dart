@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 import '../models/ai_provider_config.dart';
 import '../providers/ai_chat_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/audit_provider.dart';
 import '../providers/sync_provider.dart';
-import '../services/audit_service.dart';
 import '../services/sync_service.dart';
 import '../services/sync_code.dart';
 import '../providers/host_provider.dart';
@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import 'hotkey_settings_screen.dart';
 import 'terminal_appearance_controls.dart';
+import 'confirm_dialog.dart';
 import 'qr_export_dialog.dart';
 import 'qr_import_dialog.dart';
 import 'package:file_picker/file_picker.dart';
@@ -106,7 +107,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: 'TERM reported to the server — applies to new SSH connections',
                     trailing: _DropDown<String>(
                       value: settings.terminalType,
-                      items: const ['xterm-256color', 'xterm', 'linux', 'vt100'],
+                      items: kTermTypes,
                       labelOf: (t) => t,
                       onChanged: (v) => context.read<SettingsProvider>().save(terminalType: v),
                     ),
@@ -312,27 +313,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _confirmClearAudit(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        title: const Text('Clear audit log?',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 15)),
-        content: const Text('All recorded events will be deleted.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Clear', style: TextStyle(color: Colors.red))),
-        ],
-      ),
+    final ok = await showConfirmDialog(
+      context,
+      title: 'Clear audit log?',
+      message: 'All recorded events will be deleted.',
+      confirmLabel: 'Clear',
+      destructive: true,
     );
-    if (ok != true || !context.mounted) return;
+    if (!ok || !context.mounted) return;
     try {
-      context.read<AuditService>().clearAll();
+      // Through the provider (not AuditService directly) so an open Audit
+      // Log screen refreshes instead of showing stale deleted rows.
+      context.read<AuditProvider>().clearAll();
     } on ProviderNotFoundException {
       // Settings pumped without audit wiring (tests).
     }

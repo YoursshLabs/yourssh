@@ -43,4 +43,18 @@ void main() {
         label: 'h', host: 'h.com', username: 'u', terminalThemeId: 'Nope'));
     expect(a.themeName, 'Dracula');
   });
+
+  test('out-of-range host fontSize (e.g. from sync) falls back to global',
+      () {
+    // The 6–40 validator only runs on local edits; a sync payload bypasses
+    // it, and fontSize 0 would zero the line height and break rendering.
+    for (final bad in [0.0, -3.0, 500.0]) {
+      final a = resolve(
+          Host(label: 'h', host: 'h.com', username: 'u', fontSize: bad));
+      expect(a.fontSize, 13, reason: 'fontSize $bad must be rejected');
+    }
+    final ok = resolve(
+        Host(label: 'h', host: 'h.com', username: 'u', fontSize: 18));
+    expect(ok.fontSize, 18);
+  });
 }

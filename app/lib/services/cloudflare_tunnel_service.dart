@@ -47,6 +47,7 @@ class CloudflareTunnelService {
     await _sshService.exec(
       host,
       "pkill -f 'cloudflared.*$port' 2>/dev/null; rm -f /tmp/cf_tunnel_$port.log",
+      auditSource: 'devops',
     );
   }
 

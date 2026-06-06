@@ -27,6 +27,15 @@ class HostProvider extends ChangeNotifier {
 
   List<Host> get allHosts => List.unmodifiable(_hosts);
 
+  /// Lookup by id without allocating a list copy — the common "fresh host"
+  /// pattern (session snapshots go stale after copyWith).
+  Host? byId(String id) {
+    for (final h in _hosts) {
+      if (h.id == id) return h;
+    }
+    return null;
+  }
+
   List<String> get pinnedGroups => List.unmodifiable(_pinnedGroups);
 
   Future<void> addGroup(String name) async {

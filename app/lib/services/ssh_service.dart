@@ -1059,12 +1059,16 @@ class SshService {
 
   Future<String?> detectOs(Host host) async {
     try {
-      final result = await exec(host, 'uname -s 2>/dev/null || ver');
+      // auditSource: null — internal OS probe on (almost) every connect;
+      // auditing it would pollute the trail with rows the user never ran.
+      final result =
+          await exec(host, 'uname -s 2>/dev/null || ver', auditSource: null);
       final os = parseOsFromUname(result.stdout);
       if (os != 'linux') return os;
       // Linux: best-effort distro probe — generic 'linux' on any failure.
       try {
-        final release = await exec(host, 'cat /etc/os-release 2>/dev/null');
+        final release = await exec(host, 'cat /etc/os-release 2>/dev/null',
+            auditSource: null);
         final id = parseOsReleaseId(release.stdout);
         if (id != null) return normalizeDistroId(id);
       } catch (_) {}

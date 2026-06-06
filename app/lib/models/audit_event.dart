@@ -44,6 +44,18 @@ class AuditEvent {
         hostLabel = host?.label,
         username = host?.username;
 
+  /// Tolerant meta parse: one corrupt row (partial WAL write, external DB
+  /// edit) must not blank the whole query page or export.
+  static Map<String, dynamic> _parseMeta(Object? raw) {
+    if (raw is! String || raw.isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is Map<String, dynamic> ? decoded : const {};
+    } catch (_) {
+      return const {};
+    }
+  }
+
   factory AuditEvent.fromRow(Map<String, dynamic> r) => AuditEvent(
         id: r['id'] as int?,
         ts: DateTime.fromMillisecondsSinceEpoch(r['ts'] as int),
@@ -54,9 +66,7 @@ class AuditEvent {
         sessionId: r['session_id'] as String?,
         command: r['command'] as String?,
         exitCode: r['exit_code'] as int?,
-        meta: r['meta'] == null
-            ? const {}
-            : (jsonDecode(r['meta'] as String) as Map<String, dynamic>),
+        meta: _parseMeta(r['meta']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -70,6 +80,13 @@ class AuditEvent {
         'exitCode': exitCode,
         'meta': meta,
       };
+
+  /// CSV column names — must stay aligned with [toCsvRow]'s order; the
+  /// exporter derives its header from this list.
+  static const kCsvColumns = [
+    'ts', 'type', 'host_label', 'username', 'session_id', 'command',
+    'exit_code', 'meta',
+  ];
 
   List<String> toCsvRow() => [
         ts.toIso8601String(),

@@ -170,6 +170,13 @@ class SessionProvider extends ChangeNotifier {
 
       // Shell closed — try auto-reconnect
       if (_sessions.contains(session) && (autoReconnectEnabled?.call() ?? false)) {
+        // Paired logging: a flapping host must show its disconnects, not an
+        // unexplained run of connect rows.
+        audit?.record(AuditEvent.now(
+            type: AuditEventType.disconnect,
+            host: host,
+            sessionId: session.id,
+            meta: const {'reason': 'dropped', 'reconnecting': true}));
         _scheduleReconnect(session, host, attempt: 1);
       } else if (_sessions.contains(session)) {
         session.status = SessionStatus.disconnected;
@@ -285,7 +292,9 @@ class SessionProvider extends ChangeNotifier {
     _countdownTimers.remove(sessionId)?.cancel();
     final ssh = sshSessions.where((s) => s.id == sessionId).firstOrNull;
     final hostId = ssh?.host.id;
-    if (ssh != null) {
+    // Only a LIVE session gets a user-closed row — a dead tab already had
+    // its disconnect recorded on the drop/error path (no double-counting).
+    if (ssh != null && ssh.status == SessionStatus.connected) {
       audit?.record(AuditEvent.now(
           type: AuditEventType.disconnect,
           host: ssh.host,

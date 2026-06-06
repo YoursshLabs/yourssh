@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 import '../models/audit_event.dart';
 import '../providers/audit_provider.dart';
 import '../theme/app_theme.dart';
+import '../util/time_format.dart';
+import 'confirm_dialog.dart';
 
 /// Audit-log viewer: newest-first event table with type/time/search
 /// filters, CSV/JSON export of the filtered view, and clear-all.
@@ -23,6 +25,9 @@ class _AuditScreenState extends State<AuditScreen> {
   @override
   void initState() {
     super.initState();
+    // Keep the search box in sync with the provider's persisted filter —
+    // re-entering the screen must not show filtered rows with an empty box.
+    _searchCtrl.text = context.read<AuditProvider>().search;
     WidgetsBinding.instance
         .addPostFrameCallback((_) => context.read<AuditProvider>().refresh());
   }
@@ -35,41 +40,30 @@ class _AuditScreenState extends State<AuditScreen> {
 
   Future<void> _export(BuildContext context, {required bool csv}) async {
     final provider = context.read<AuditProvider>();
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final location = await getSaveLocation(
           suggestedName: csv ? 'audit-export.csv' : 'audit-export.json');
       if (location == null) return;
       final content = csv ? provider.exportCsv() : provider.exportJson();
       await File(location.path).writeAsString(content);
-      messenger.showSnackBar(
-          SnackBar(content: Text('Exported to ${location.path}')));
+      if (context.mounted) {
+        AppSnack.success(context, 'Exported to ${location.path}');
+      }
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      if (context.mounted) AppSnack.error(context, 'Export failed: $e');
     }
   }
 
   Future<void> _confirmClear(BuildContext context) async {
     final provider = context.read<AuditProvider>();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        title: const Text('Clear audit log?',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 15)),
-        content: const Text('All recorded events will be deleted.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Clear', style: TextStyle(color: Colors.red))),
-        ],
-      ),
+    final ok = await showConfirmDialog(
+      context,
+      title: 'Clear audit log?',
+      message: 'All recorded events will be deleted.',
+      confirmLabel: 'Clear',
+      destructive: true,
     );
-    if (ok == true) provider.clearAll();
+    if (ok) provider.clearAll();
   }
 
   @override
@@ -119,9 +113,8 @@ class _AuditScreenState extends State<AuditScreen> {
           child: Row(children: [
             DropdownButton<String?>(
               value: provider.type,
-              hint: const Text('All types',
-                  style:
-                      TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+              // No hint: the value:null item ('All types') always renders,
+              // so a hint would be dead code suggesting fallback behavior.
               dropdownColor: AppColors.card,
               style:
                   const TextStyle(color: AppColors.textPrimary, fontSize: 12),
@@ -202,13 +195,9 @@ class _AuditRow extends StatelessWidget {
         AuditEventType.input => Colors.purple,
       };
 
-  static String _two(int v) => v.toString().padLeft(2, '0');
-
   @override
   Widget build(BuildContext context) {
-    final ts = event.ts.toLocal();
-    final time = '${ts.year}-${_two(ts.month)}-${_two(ts.day)} '
-        '${_two(ts.hour)}:${_two(ts.minute)}:${_two(ts.second)}';
+    final time = formatLocalTimestamp(event.ts);
     final source = event.meta['source'];
     final error = event.meta['error'];
     return Container(

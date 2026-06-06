@@ -39,8 +39,18 @@ void main() {
 
   test('toCsvRow shape and toJson keys', () {
     final e = AuditEvent.now(type: AuditEventType.input, command: 'htop');
-    expect(e.toCsvRow().length, 8);
+    expect(e.toCsvRow().length, AuditEvent.kCsvColumns.length);
     expect(e.toJson().keys,
         containsAll(['ts', 'type', 'command', 'meta', 'hostLabel']));
+  });
+
+  test('fromRow degrades malformed meta to empty instead of throwing', () {
+    final e = AuditEvent.fromRow({
+      'id': 1,
+      'ts': 0,
+      'type': 'exec',
+      'meta': '{not json',
+    });
+    expect(e.meta, isEmpty);
   });
 }

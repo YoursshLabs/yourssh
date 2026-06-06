@@ -183,14 +183,16 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
         : context.read<SettingsProvider>();
     Host? fresh;
     try {
-      final hosts =
-          watch ? context.watch<HostProvider>() : context.read<HostProvider>();
-      for (final h in hosts.allHosts) {
-        if (h.id == widget.session.host.id) {
-          fresh = h;
-          break;
-        }
+      if (watch) {
+        // select, not watch: rebuild only when THIS host's appearance
+        // fields change — a plain watch would rebuild every open terminal
+        // on any host-list mutation (e.g. each dashboard-search keystroke).
+        context.select<HostProvider, (String?, String?, double?)>((p) {
+          final h = p.byId(widget.session.host.id);
+          return (h?.terminalThemeId, h?.fontFamily, h?.fontSize);
+        });
       }
+      fresh = context.read<HostProvider>().byId(widget.session.host.id);
     } on ProviderNotFoundException {
       // Tests pump this widget without a HostProvider.
     }

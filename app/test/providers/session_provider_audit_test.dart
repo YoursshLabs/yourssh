@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
@@ -21,6 +22,10 @@ class _FakeSsh extends SshService {
   _FakeSsh({this.failConnect = false}) : super(StorageService());
   final bool failConnect;
 
+  /// When set, openShell blocks until completed — keeps the session in
+  /// `connected` state so user-close paths can be exercised.
+  Completer<void>? shellGate;
+
   @override
   Future<SSHClient> connect(
     Host host, {
@@ -35,7 +40,10 @@ class _FakeSsh extends SshService {
 
   @override
   Future<void> openShell(SshSession session,
-      {bool useTmux = false, String termType = 'xterm-256color'}) async {}
+      {bool useTmux = false, String termType = 'xterm-256color'}) async {
+    final gate = shellGate;
+    if (gate != null) await gate.future;
+  }
 
   @override
   void disconnectSession(String sessionId) {}
@@ -93,18 +101,57 @@ void main() {
     audit.dispose();
   });
 
-  test('closeSession records a user-closed disconnect', () async {
+  test('drop with auto-reconnect ON still records a disconnect (paired log)',
+      () async {
     final audit = AuditService()..initInMemory();
     final p = SessionProvider(_FakeSsh(), TabMetadataService())..audit = audit;
-    final host = _host();
-    await p.connect(host);
-    audit.clearAll(); // ignore the connect/drop rows from setup
-    await p.connect(host);
-    final id = p.sessions.last.id;
-    p.closeSession(id);
+    p.autoReconnectEnabled = () => true;
+    p.reconnectAttempts = () => 0; // unlimited
+    await p.connect(_host()); // openShell returns → drop → reconnect scheduled
+
+    final dis = audit.query(const AuditFilter(type: 'disconnect'));
+    expect(dis.length, 1,
+        reason: 'a flapping host must log disconnects, not just connects');
+    expect(dis.single.meta['reason'], 'dropped');
+    expect(dis.single.meta['reconnecting'], isTrue);
+    p.dispose();
+    audit.dispose();
+  });
+
+  test('closing an already-dropped tab does NOT write a second disconnect',
+      () async {
+    final audit = AuditService()..initInMemory();
+    final p = SessionProvider(_FakeSsh(), TabMetadataService())..audit = audit;
+    await p.connect(_host()); // drop path already wrote disconnect{dropped}
+    expect(
+        audit.query(const AuditFilter(type: 'disconnect')).length, 1);
+
+    p.closeSession(p.sessions.single.id); // tab is dead (disconnected)
+
+    final dis = audit.query(const AuditFilter(type: 'disconnect'));
+    expect(dis.length, 1,
+        reason: 'user-closing a dead tab must not double-count disconnects');
+    p.dispose();
+    audit.dispose();
+  });
+
+  test('closeSession on a LIVE session records a user-closed disconnect',
+      () async {
+    final audit = AuditService()..initInMemory();
+    final ssh = _FakeSsh()..shellGate = Completer<void>();
+    final p = SessionProvider(ssh, TabMetadataService())..audit = audit;
+
+    unawaited(p.connect(_host())); // shell stays open behind the gate
+    await pumpEventQueue();
+    expect(p.sshSessions.single.status, SessionStatus.connected);
+
+    p.closeSession(p.sessions.single.id);
 
     final dis = audit.query(const AuditFilter(type: 'disconnect'));
     expect(dis.map((e) => e.meta['reason']), contains('user-closed'));
+
+    ssh.shellGate!.complete(); // release the blocked openShell
+    await pumpEventQueue();
     p.dispose();
     audit.dispose();
   });

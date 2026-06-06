@@ -52,8 +52,17 @@ class AuditProvider extends ChangeNotifier {
   }
 
   void loadMore() {
-    final page =
-        _service.query(_filter, limit: _pageSize, offset: events.length);
+    if (events.isEmpty) {
+      refresh();
+      return;
+    }
+    // Keyset anchor (not OFFSET): rows recorded between refresh and
+    // loadMore would shift an offset page → duplicates/skips.
+    final last = events.last;
+    final page = _service.query(_filter,
+        limit: _pageSize,
+        beforeTs: last.ts.millisecondsSinceEpoch,
+        beforeId: last.id);
     events.addAll(page);
     hasMore = page.length == _pageSize;
     notifyListeners();

@@ -4,6 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Default audit-log retention — single source for the provider, its
+/// loader, and the launch-time prune in main.dart.
+const kDefaultAuditRetentionDays = 90;
+
+/// TERM presets offered by Settings → Terminal and the per-host override.
+const kTermTypes = ['xterm-256color', 'xterm', 'linux', 'vt100'];
+
 class SettingsProvider extends ChangeNotifier {
   bool autoReconnect = true;
   int reconnectAttempts = 0;
@@ -19,7 +26,7 @@ class SettingsProvider extends ChangeNotifier {
   String recordingPath = '';
 
   /// Audit log retention in days; 0 = keep forever.
-  int auditRetentionDays = 90;
+  int auditRetentionDays = kDefaultAuditRetentionDays;
 
   /// Hosts dashboard layout: 'grid' (cards) or 'list' (compact rows).
   /// Anything else is treated as 'grid' at the point of use.
@@ -58,7 +65,8 @@ class SettingsProvider extends ChangeNotifier {
     shellIntegrationEnabled = prefs.getBool('shellIntegrationEnabled') ?? true;
     terminalFont = prefs.getString('terminalFont') ?? 'MesloLGS NF';
     terminalType = prefs.getString('terminalType') ?? 'xterm-256color';
-    auditRetentionDays = prefs.getInt('auditRetentionDays') ?? 90;
+    auditRetentionDays =
+        prefs.getInt('auditRetentionDays') ?? kDefaultAuditRetentionDays;
     final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
     final defaultPath = home != null
         ? p.join(home, 'Documents', 'YourSSH', 'Recordings')

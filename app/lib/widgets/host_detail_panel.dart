@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../providers/host_provider.dart';
 import '../providers/key_provider.dart';
+import '../providers/settings_provider.dart' show kTermTypes;
 import '../services/agent_probe.dart';
 import '../services/shell_integration_service.dart';
 import '../services/ssh_service.dart';
@@ -12,9 +13,6 @@ import '../theme/terminal_themes.dart';
 import 'agent_status_line.dart';
 import 'host_chain_editor.dart';
 import 'terminal_appearance_controls.dart' show kBundledTerminalFonts;
-
-/// Mirrors the TERM presets in Settings → Terminal.
-const _kTermTypes = ['xterm-256color', 'xterm', 'linux', 'vt100'];
 
 class HostDetailPanel extends StatefulWidget {
   final Host? existing;
@@ -604,12 +602,20 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                                 isDense: true,
                                 contentPadding: EdgeInsets.zero,
                               ),
-                              validator: (v) => (v == null ||
-                                      v.trim().isEmpty ||
-                                      ShellIntegrationService.isValidEnvKey(
-                                          v.trim()))
-                                  ? null
-                                  : 'A–Z, 0–9, _ only',
+                              validator: (v) {
+                                final k = v?.trim() ?? '';
+                                if (k.isEmpty) return null;
+                                if (!ShellIntegrationService.isValidEnvKey(
+                                    k)) {
+                                  return 'A–Z, 0–9, _ only';
+                                }
+                                // A map literal would silently keep only the
+                                // last duplicate — surface it instead.
+                                final dups = _envRows
+                                    .where((r) => r.key.text.trim() == k)
+                                    .length;
+                                return dups > 1 ? 'Duplicate name' : null;
+                              },
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -700,119 +706,81 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                       ),
                     ),
                     _divider(),
-                    _DropdownRow(
+                    _TemplateDropdown<String>(
                       icon: Icons.palette_outlined,
-                      child: DropdownButton<String?>(
-                        value: _templateTheme,
-                        isExpanded: true,
-                        style: const TextStyle(
-                            color: AppColors.textPrimary, fontSize: 13),
-                        dropdownColor: AppColors.card,
-                        underline: const SizedBox(),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                              value: null,
-                              child: Text('Theme: follow global')),
-                          for (final name in kTerminalThemeNames)
-                            DropdownMenuItem<String?>(
-                                value: name, child: Text(name)),
-                        ],
-                        onChanged: (v) => setState(() => _templateTheme = v),
-                      ),
+                      value: _templateTheme,
+                      items: [
+                        const DropdownMenuItem<String?>(
+                            value: null, child: Text('Theme: follow global')),
+                        for (final name in kTerminalThemeNames)
+                          DropdownMenuItem<String?>(
+                              value: name, child: Text(name)),
+                      ],
+                      onChanged: (v) => setState(() => _templateTheme = v),
                     ),
                     _divider(),
-                    _DropdownRow(
+                    _TemplateDropdown<String>(
                       icon: Icons.text_fields,
-                      child: Row(children: [
-                        Expanded(
-                          child: DropdownButton<String?>(
-                            value: _templateFont,
-                            isExpanded: true,
-                            style: const TextStyle(
-                                color: AppColors.textPrimary, fontSize: 13),
-                            dropdownColor: AppColors.card,
-                            underline: const SizedBox(),
-                            items: [
-                              const DropdownMenuItem<String?>(
-                                  value: null,
-                                  child: Text('Font: follow global')),
-                              for (final f in kBundledTerminalFonts)
-                                DropdownMenuItem<String?>(
-                                    value: f, child: Text(f)),
-                            ],
-                            onChanged: (v) =>
-                                setState(() => _templateFont = v),
+                      value: _templateFont,
+                      items: [
+                        const DropdownMenuItem<String?>(
+                            value: null, child: Text('Font: follow global')),
+                        for (final f in kBundledTerminalFonts)
+                          DropdownMenuItem<String?>(value: f, child: Text(f)),
+                      ],
+                      onChanged: (v) => setState(() => _templateFont = v),
+                      trailing: SizedBox(
+                        width: 56,
+                        child: TextFormField(
+                          controller: _fontSizeCtrl,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(
+                              color: AppColors.textPrimary, fontSize: 13),
+                          decoration: const InputDecoration(
+                            hintText: 'size',
+                            hintStyle: TextStyle(
+                                color: AppColors.textTertiary, fontSize: 13),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
                           ),
+                          validator: (v) {
+                            final t = v?.trim() ?? '';
+                            if (t.isEmpty) return null;
+                            final d = double.tryParse(t);
+                            return (d == null || d < 6 || d > 40)
+                                ? '6–40'
+                                : null;
+                          },
                         ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 56,
-                          child: TextFormField(
-                            controller: _fontSizeCtrl,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(
-                                color: AppColors.textPrimary, fontSize: 13),
-                            decoration: const InputDecoration(
-                              hintText: 'size',
-                              hintStyle: TextStyle(
-                                  color: AppColors.textTertiary, fontSize: 13),
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            validator: (v) {
-                              final t = v?.trim() ?? '';
-                              if (t.isEmpty) return null;
-                              final d = double.tryParse(t);
-                              return (d == null || d < 6 || d > 40)
-                                  ? '6–40'
-                                  : null;
-                            },
-                          ),
-                        ),
-                      ]),
+                      ),
                     ),
                     _divider(),
-                    _DropdownRow(
+                    _TemplateDropdown<String>(
                       icon: Icons.terminal_outlined,
-                      child: DropdownButton<String?>(
-                        value: _templateTermType,
-                        isExpanded: true,
-                        style: const TextStyle(
-                            color: AppColors.textPrimary, fontSize: 13),
-                        dropdownColor: AppColors.card,
-                        underline: const SizedBox(),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                              value: null, child: Text('TERM: follow global')),
-                          for (final t in _kTermTypes)
-                            DropdownMenuItem<String?>(
-                                value: t, child: Text(t)),
-                        ],
-                        onChanged: (v) =>
-                            setState(() => _templateTermType = v),
-                      ),
+                      value: _templateTermType,
+                      items: [
+                        const DropdownMenuItem<String?>(
+                            value: null, child: Text('TERM: follow global')),
+                        for (final t in kTermTypes)
+                          DropdownMenuItem<String?>(value: t, child: Text(t)),
+                      ],
+                      onChanged: (v) =>
+                          setState(() => _templateTermType = v),
                     ),
                     _divider(),
-                    _DropdownRow(
+                    _TemplateDropdown<bool>(
                       icon: Icons.grid_view_outlined,
-                      child: DropdownButton<bool?>(
-                        value: _tmuxOverride,
-                        isExpanded: true,
-                        style: const TextStyle(
-                            color: AppColors.textPrimary, fontSize: 13),
-                        dropdownColor: AppColors.card,
-                        underline: const SizedBox(),
-                        items: const [
-                          DropdownMenuItem<bool?>(
-                              value: null, child: Text('tmux: follow global')),
-                          DropdownMenuItem<bool?>(
-                              value: true, child: Text('tmux: always on')),
-                          DropdownMenuItem<bool?>(
-                              value: false, child: Text('tmux: always off')),
-                        ],
-                        onChanged: (v) => setState(() => _tmuxOverride = v),
-                      ),
+                      value: _tmuxOverride,
+                      items: const [
+                        DropdownMenuItem<bool?>(
+                            value: null, child: Text('tmux: follow global')),
+                        DropdownMenuItem<bool?>(
+                            value: true, child: Text('tmux: always on')),
+                        DropdownMenuItem<bool?>(
+                            value: false, child: Text('tmux: always off')),
+                      ],
+                      onChanged: (v) => setState(() => _tmuxOverride = v),
                     ),
                   ]),
 
@@ -1100,6 +1068,46 @@ class _PasswordField extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// One SESSION TEMPLATE override row: nullable dropdown (null = follow
+/// global) with the shared panel styling, plus an optional trailing field.
+class _TemplateDropdown<T> extends StatelessWidget {
+  final IconData icon;
+  final T? value;
+  final List<DropdownMenuItem<T?>> items;
+  final ValueChanged<T?> onChanged;
+  final Widget? trailing;
+  const _TemplateDropdown({
+    required this.icon,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dropdown = DropdownButton<T?>(
+      value: value,
+      isExpanded: true,
+      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+      dropdownColor: AppColors.card,
+      underline: const SizedBox(),
+      items: items,
+      onChanged: onChanged,
+    );
+    return _DropdownRow(
+      icon: icon,
+      child: trailing == null
+          ? dropdown
+          : Row(children: [
+              Expanded(child: dropdown),
+              const SizedBox(width: 8),
+              trailing!,
+            ]),
     );
   }
 }
