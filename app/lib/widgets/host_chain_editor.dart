@@ -68,33 +68,41 @@ class HostChainEditor extends StatelessWidget {
             TextSpan(
               text: 'Adding a host will route the connection to ',
               style: const TextStyle(
-                  color: AppColors.textSecondary, fontSize: 12, height: 1.4),
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                height: 1.4,
+              ),
               children: [
                 TextSpan(
                   text: currentHostLabel,
                   style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600),
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 10),
-          GestureDetector(
-            onTap: () => _pick(context),
-            child: Container(
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.cardHover,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              alignment: Alignment.center,
-              child: const Text(
-                'Add a Host',
-                style: TextStyle(
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () => _pick(context),
+              child: Container(
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.cardHover,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: const Text(
+                  'Add a Host',
+                  style: TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 12,
-                    fontWeight: FontWeight.w600),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ),
@@ -123,26 +131,33 @@ class HostChainEditor extends StatelessWidget {
         ),
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 6),
-          child: Icon(Icons.arrow_downward,
-              size: 16, color: AppColors.textTertiary),
+          child: Icon(
+            Icons.arrow_downward,
+            size: 16,
+            color: AppColors.textTertiary,
+          ),
         ),
         _HostCard(label: currentHostLabel, detectedOs: currentHostOs),
         const SizedBox(height: 10),
-        GestureDetector(
-          onTap: () => onSelect(null),
-          child: Container(
-            height: 32,
-            decoration: BoxDecoration(
-              color: AppColors.red.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            alignment: Alignment.center,
-            child: const Text(
-              'Clear',
-              style: TextStyle(
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: () => onSelect(null),
+            child: Container(
+              height: 32,
+              decoration: BoxDecoration(
+                color: AppColors.red.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              alignment: Alignment.center,
+              child: const Text(
+                'Clear',
+                style: TextStyle(
                   color: AppColors.red,
                   fontSize: 12,
-                  fontWeight: FontWeight.w600),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ),
@@ -168,50 +183,59 @@ class _HostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final asset = osIconAsset(detectedOs);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(
-                color: AppColors.cardHover,
-                borderRadius: BorderRadius.circular(6),
+    return MouseRegion(
+      cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: AppColors.cardHover,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                alignment: Alignment.center,
+                child: asset != null
+                    ? SvgPicture.asset(
+                        asset,
+                        width: 16,
+                        height: 16,
+                        colorFilter: const ColorFilter.mode(
+                          AppColors.textPrimary,
+                          BlendMode.srcIn,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.dns_outlined,
+                        size: 15,
+                        color: AppColors.textSecondary,
+                      ),
               ),
-              alignment: Alignment.center,
-              child: asset != null
-                  ? SvgPicture.asset(
-                      asset,
-                      width: 16,
-                      height: 16,
-                      colorFilter: const ColorFilter.mode(
-                          AppColors.textPrimary, BlendMode.srcIn),
-                    )
-                  : const Icon(Icons.dns_outlined,
-                      size: 15, color: AppColors.textSecondary),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 13,
-                    fontWeight: FontWeight.w500),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
-            ),
-            ?trailing,
-          ],
+              ?trailing,
+            ],
+          ),
         ),
       ),
     );
@@ -236,10 +260,12 @@ class _HostPickerDialogState extends State<_HostPickerDialog> {
     final filtered = q.isEmpty
         ? widget.candidates
         : widget.candidates
-            .where((h) =>
-                h.label.toLowerCase().contains(q) ||
-                '${h.username}@${h.host}'.toLowerCase().contains(q))
-            .toList();
+              .where(
+                (h) =>
+                    h.label.toLowerCase().contains(q) ||
+                    '${h.username}@${h.host}'.toLowerCase().contains(q),
+              )
+              .toList();
     return Dialog(
       backgroundColor: AppColors.sidebar,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -255,13 +281,20 @@ class _HostPickerDialogState extends State<_HostPickerDialog> {
                 autofocus: true,
                 onChanged: (v) => setState(() => _query = v),
                 style: const TextStyle(
-                    color: AppColors.textPrimary, fontSize: 13),
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Search hosts…',
                   hintStyle: const TextStyle(
-                      color: AppColors.textTertiary, fontSize: 13),
-                  prefixIcon: const Icon(Icons.search,
-                      size: 16, color: AppColors.textTertiary),
+                    color: AppColors.textTertiary,
+                    fontSize: 13,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    size: 16,
+                    color: AppColors.textTertiary,
+                  ),
                   isDense: true,
                   filled: true,
                   fillColor: AppColors.card,
@@ -275,9 +308,10 @@ class _HostPickerDialogState extends State<_HostPickerDialog> {
             if (filtered.isEmpty)
               const Padding(
                 padding: EdgeInsets.fromLTRB(12, 0, 12, 16),
-                child: Text('No hosts found',
-                    style: TextStyle(
-                        color: AppColors.textTertiary, fontSize: 12)),
+                child: Text(
+                  'No hosts found',
+                  style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
+                ),
               )
             else
               Flexible(
@@ -290,7 +324,9 @@ class _HostPickerDialogState extends State<_HostPickerDialog> {
                       onTap: () => Navigator.of(context).pop(h),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -300,15 +336,17 @@ class _HostPickerDialogState extends State<_HostPickerDialog> {
                                   : '${h.username}@${h.host}',
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontSize: 13),
+                                color: AppColors.textPrimary,
+                                fontSize: 13,
+                              ),
                             ),
                             Text(
                               '${h.username}@${h.host}',
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  color: AppColors.textTertiary,
-                                  fontSize: 11),
+                                color: AppColors.textTertiary,
+                                fontSize: 11,
+                              ),
                             ),
                           ],
                         ),
