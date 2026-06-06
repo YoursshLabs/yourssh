@@ -26,7 +26,7 @@ class _FakeKeyPair implements SSHKeyPair {
   Future<SSHSignature> signAsync(Uint8List data) async => sign(data);
 
   @override
-  String toPem() => throw UnimplementedError();
+  String toPem({String? passphrase}) => throw UnimplementedError();
 }
 
 class _FakeSignature implements SSHSignature {

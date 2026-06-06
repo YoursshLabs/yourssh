@@ -183,6 +183,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _ssh.recordingService = _recordingService;
     _hostProvider = HostProvider(_storage);
     _keyProvider = KeyProvider();
+    _keyProvider.savePassphrase = _storage.savePassphrase;
     _settingsProvider = SettingsProvider();
     _ssh.isShellIntegrationEnabled =
         () => _settingsProvider.shellIntegrationEnabled;

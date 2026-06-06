@@ -502,7 +502,7 @@ class _AgentKeyPair implements SSHKeyPair {
   }
 
   @override
-  String toPem() =>
+  String toPem({String? passphrase}) =>
       throw UnsupportedError('Agent keys cannot be serialized to PEM');
 }
 
