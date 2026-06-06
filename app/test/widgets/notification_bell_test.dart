@@ -165,6 +165,29 @@ void main() {
     expect(center.notifications, isEmpty);
   });
 
+  testWidgets('agent forwarding item: key_off icon, tap jumps to the session',
+      (tester) async {
+    final center = NotificationCenterProvider();
+    center.add(AppNotification(
+      type: AppNotificationType.agentForwarding,
+      title: 'Agent forwarding refused: u@h',
+      dedupeKey: 'agent-refused:s1',
+      sessionId: 's1',
+    ));
+    String? opened;
+    await pump(tester, center, onOpenSession: (id) => opened = id);
+
+    await tester.tap(find.byIcon(Icons.notifications_none),
+        warnIfMissed: false);
+    await tester.pump();
+    expect(find.byIcon(Icons.key_off), findsOneWidget);
+
+    await tester.tap(find.text('Agent forwarding refused: u@h'));
+    await tester.pump();
+    expect(opened, 's1');
+    expect(find.text('Notifications'), findsNothing);
+  });
+
   group('relativeTime', () {
     test('formats each bucket', () {
       final now = DateTime.now();

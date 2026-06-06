@@ -39,6 +39,7 @@ import 'providers/recording_provider.dart';
 import 'providers/share_provider.dart';
 import 'services/update_service.dart';
 import 'providers/update_provider.dart';
+import 'models/agent_forwarding_state.dart';
 import 'models/app_notification.dart';
 import 'models/app_release.dart';
 import 'providers/notification_center_provider.dart';
@@ -281,6 +282,22 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         dedupeKey: 'disconnect:${session.id}',
         sessionId: session.id,
       ));
+    };
+    _ssh.onAgentForwardingEvent = (hostId, sessionId, state) {
+      _sessionProvider.handleAgentForwardingEvent(hostId, sessionId, state);
+      if (state == AgentForwardingState.refused && sessionId != null) {
+        final session = _sessionProvider.sshSessions
+            .where((s) => s.id == sessionId)
+            .firstOrNull;
+        _notificationCenter.add(AppNotification(
+          type: AppNotificationType.agentForwarding,
+          title: 'Agent forwarding refused: ${session?.title ?? hostId}',
+          body: 'The server refused the agent (AllowAgentForwarding no). '
+              'Your local keys are not available on this host.',
+          dedupeKey: 'agent-refused:$sessionId',
+          sessionId: sessionId,
+        ));
+      }
     };
     _shareProvider.wireDependencies(_sessionProvider, _hookBus);
     _shareProvider.onGuestInput = (data) {

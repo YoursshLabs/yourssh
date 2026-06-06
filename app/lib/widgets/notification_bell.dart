@@ -246,10 +246,20 @@ class _NotificationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDisconnect = item.type == AppNotificationType.sessionDisconnect;
+    final icon = switch (item.type) {
+      AppNotificationType.sessionDisconnect => Icons.link_off,
+      AppNotificationType.agentForwarding => Icons.key_off,
+      AppNotificationType.update => Icons.system_update_alt,
+    };
+    final iconColor = switch (item.type) {
+      AppNotificationType.sessionDisconnect ||
+      AppNotificationType.agentForwarding =>
+        AppColors.orange,
+      AppNotificationType.update => AppColors.accent,
+    };
 
     return InkWell(
-      onTap: isDisconnect && item.sessionId != null
+      onTap: item.sessionId != null
           ? () {
               onClose();
               onOpenSession?.call(item.sessionId!);
@@ -260,11 +270,7 @@ class _NotificationTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              isDisconnect ? Icons.link_off : Icons.system_update_alt,
-              size: 15,
-              color: isDisconnect ? AppColors.orange : AppColors.accent,
-            ),
+            Icon(icon, size: 15, color: iconColor),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
