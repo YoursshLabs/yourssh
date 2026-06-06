@@ -70,7 +70,9 @@ class _TerminalAppearanceControlsState
     final showCustom =
         _pendingCustom || !kBundledTerminalFonts.contains(settings.terminalFont);
 
-    final entries = <(String, Widget)>[
+    // `inline` — compact control: in vertical layout it shares a row with the
+    // label (right-aligned) instead of stacking below it.
+    final entries = <(String, Widget, {bool inline})>[
       (
         'Color theme',
         ThemePickerButton(
@@ -78,6 +80,7 @@ class _TerminalAppearanceControlsState
           onChanged: (v) =>
               context.read<SettingsProvider>().save(terminalTheme: v),
         ),
+        inline: true,
       ),
       (
         'Font size: ${settings.fontSize.round()}pt',
@@ -97,9 +100,11 @@ class _TerminalAppearanceControlsState
                 context.read<SettingsProvider>().save(fontSize: v),
           ),
         ),
+        inline: false,
       ),
-      ('Terminal font', _buildFontDropdown(context, settings)),
-      if (showCustom) ('Custom font name', _buildCustomFontField(context)),
+      ('Terminal font', _buildFontDropdown(context, settings), inline: false),
+      if (showCustom)
+        ('Custom font name', _buildCustomFontField(context), inline: false),
     ];
 
     return Column(
@@ -111,8 +116,9 @@ class _TerminalAppearanceControlsState
     );
   }
 
-  List<Widget> _buildEntry(int index, (String, Widget) entry) {
-    final (label, control) = entry;
+  List<Widget> _buildEntry(int index, (String, Widget, {bool inline}) entry) {
+    final (label, control, inline: inline) = entry;
+    const labelStyle = TextStyle(color: AppColors.textPrimary, fontSize: 13);
     if (_isRows) {
       return [
         if (index > 0)
@@ -121,21 +127,27 @@ class _TerminalAppearanceControlsState
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              Expanded(
-                child: Text(label,
-                    style: const TextStyle(
-                        color: AppColors.textPrimary, fontSize: 13)),
-              ),
+              Expanded(child: Text(label, style: labelStyle)),
               control,
             ],
           ),
         ),
       ];
     }
+    if (inline) {
+      return [
+        if (index > 0) const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: Text(label, style: labelStyle)),
+            control,
+          ],
+        ),
+      ];
+    }
     return [
       if (index > 0) const SizedBox(height: 16),
-      Text(label,
-          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+      Text(label, style: labelStyle),
       const SizedBox(height: 6),
       control,
     ];
@@ -154,8 +166,9 @@ class _TerminalAppearanceControlsState
       items: [
         ...kBundledTerminalFonts.map((f) => DropdownMenuItem(
               value: f,
+              // Render each option in its own typeface as a live preview.
               child: Text(f == 'monospace' ? 'System Default' : f,
-                  style: const TextStyle(fontSize: 12)),
+                  style: TextStyle(fontSize: 12, fontFamily: f)),
             )),
         const DropdownMenuItem(
           value: _kCustom,

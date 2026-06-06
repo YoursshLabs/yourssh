@@ -24,8 +24,8 @@ class FakeTransferService extends SftpTransferService {
   }
 
   @override
-  Future<void> uploadFile(
-      Host host, String localPath, String remotePath) async {
+  Future<void> uploadFile(Host host, String localPath, String remotePath,
+      {void Function(int sent, int total)? onProgress}) async {
     final err = uploadError;
     if (err != null) throw err;
     uploads.add((localPath, remotePath));

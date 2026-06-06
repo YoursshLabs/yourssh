@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:yourssh/models/agent_forwarding_state.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/ssh_session.dart';
 import 'package:yourssh/services/ssh_service.dart';
@@ -38,12 +39,15 @@ class _FakeClient implements SSHClient {
 }
 
 class _FakeShell implements SSHSession {
+  _FakeShell({this.refused = false});
+
+  final bool refused;
   final _stdout = StreamController<Uint8List>();
   final _stderr = StreamController<Uint8List>();
   final resizes = <(int, int)>[];
 
   @override
-  bool get agentForwardingRefused => false;
+  bool get agentForwardingRefused => refused;
 
   @override
   Stream<Uint8List> get stdout => _stdout.stream;
@@ -104,6 +108,7 @@ void main() {
 
     expect(client.capturedPty?.width, 187);
     expect(client.capturedPty?.height, 43);
+    expect(client.capturedPty?.type, 'xterm-256color');
 
     await shell.close();
     await shellDone;
@@ -130,6 +135,108 @@ void main() {
     await pumpEventQueue();
 
     expect(shell.resizes, contains((120, 30)));
+
+    await shell.close();
+    await shellDone;
+  });
+
+  test('openShell passes custom termType to SSHPtyConfig', () async {
+    final svc = SshService(StorageService());
+    final host =
+        Host(label: 'fake', host: 'example.com', port: 22, username: 'u');
+    final session = SshSession(host: host);
+    session.terminal.resize(80, 24);
+
+    final shell = _FakeShell();
+    final client = _FakeClient(shell);
+    svc.debugSetClient(host.id, client);
+
+    final shellDone = svc.openShell(session, termType: 'vt100');
+    await pumpEventQueue();
+
+    expect(client.capturedPty?.type, 'vt100');
+
+    await shell.close();
+    await shellDone;
+  });
+
+  test('openShell fires a refused event when the server refuses forwarding',
+      () async {
+    final svc = SshService(StorageService());
+    final host = Host(
+        label: 'fake',
+        host: 'example.com',
+        port: 22,
+        username: 'u',
+        agentForwarding: true);
+    final session = SshSession(host: host);
+    session.terminal.resize(80, 24);
+
+    final events = <(String, String?, AgentForwardingState)>[];
+    svc.onAgentForwardingEvent =
+        (hostId, sessionId, state) => events.add((hostId, sessionId, state));
+
+    final shell = _FakeShell(refused: true);
+    final client = _FakeClient(shell);
+    svc.debugSetClient(host.id, client);
+
+    final shellDone = svc.openShell(session);
+    await pumpEventQueue();
+
+    expect(events, [(host.id, session.id, AgentForwardingState.refused)]);
+
+    await shell.close();
+    await shellDone;
+  });
+
+  test('openShell fires ready when forwarding is enabled and not refused '
+      '(resets a stale refused on reconnect)', () async {
+    final svc = SshService(StorageService());
+    final host = Host(
+        label: 'fake',
+        host: 'example.com',
+        port: 22,
+        username: 'u',
+        agentForwarding: true);
+    final session = SshSession(host: host);
+    session.terminal.resize(80, 24);
+
+    final events = <(String, String?, AgentForwardingState)>[];
+    svc.onAgentForwardingEvent =
+        (hostId, sessionId, state) => events.add((hostId, sessionId, state));
+
+    final shell = _FakeShell();
+    final client = _FakeClient(shell);
+    svc.debugSetClient(host.id, client);
+
+    final shellDone = svc.openShell(session);
+    await pumpEventQueue();
+
+    expect(events, [(host.id, session.id, AgentForwardingState.ready)]);
+
+    await shell.close();
+    await shellDone;
+  });
+
+  test('openShell fires no event when the host has forwarding off', () async {
+    final svc = SshService(StorageService());
+    final host =
+        Host(label: 'fake', host: 'example.com', port: 22, username: 'u');
+    final session = SshSession(host: host);
+    session.terminal.resize(80, 24);
+
+    final events = <(String, String?, AgentForwardingState)>[];
+    svc.onAgentForwardingEvent =
+        (hostId, sessionId, state) => events.add((hostId, sessionId, state));
+
+    final shell = _FakeShell();
+    final client = _FakeClient(shell);
+    svc.debugSetClient(host.id, client);
+
+    final shellDone = svc.openShell(session);
+    await pumpEventQueue();
+
+    expect(events, isEmpty);
 
     await shell.close();
     await shellDone;

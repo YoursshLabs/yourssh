@@ -103,4 +103,55 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(provider.hotkeys['split_vertical'], 'ctrl+shift+d');
   });
+
+  test('terminalType defaults to xterm-256color', () async {
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.terminalType, 'xterm-256color');
+  });
+
+  test('save persists terminalType', () async {
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    await provider.save(terminalType: 'vt100');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('terminalType'), 'vt100');
+    expect(provider.terminalType, 'vt100');
+  });
+
+  test('loads persisted terminalType on init', () async {
+    SharedPreferences.setMockInitialValues({'terminalType': 'linux'});
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.terminalType, 'linux');
+  });
+
+  test('dashboard prefs default to grid and name_asc', () async {
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.dashboardViewMode, 'grid');
+    expect(provider.dashboardSort, 'name_asc');
+  });
+
+  test('save persists dashboardViewMode and dashboardSort', () async {
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    await provider.save(dashboardViewMode: 'list', dashboardSort: 'created_desc');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('dashboardViewMode'), 'list');
+    expect(prefs.getString('dashboardSort'), 'created_desc');
+    expect(provider.dashboardViewMode, 'list');
+    expect(provider.dashboardSort, 'created_desc');
+  });
+
+  test('loads persisted dashboard prefs on init', () async {
+    SharedPreferences.setMockInitialValues({
+      'dashboardViewMode': 'list',
+      'dashboardSort': 'host_asc',
+    });
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.dashboardViewMode, 'list');
+    expect(provider.dashboardSort, 'host_asc');
+  });
 }

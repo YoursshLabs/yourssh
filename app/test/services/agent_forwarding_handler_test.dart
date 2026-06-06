@@ -129,6 +129,68 @@ void main() {
       // Post-connect failure must NOT switch key sources mid-request.
       expect(loaderCalls, 0);
     });
+
+    test('onRequestServed fires with usedFallback=false on the system-agent '
+        'path; a throwing callback does not fail the request', () async {
+      final events = <bool>[];
+      final handler = AgentForwardingHandler(
+        connectSystemAgent: () => SystemAgentProxy.connectTo(socketPath),
+        loadKeychainIdentities: () async => const <SSHKeyPair>[],
+        onRequestServed: (usedFallback) {
+          events.add(usedFallback);
+          throw StateError('UI listener blew up');
+        },
+      );
+
+      final response = await handler.handleRequest(Uint8List.fromList([11]));
+      expect(response, equals([12, 0, 0, 0, 0]));
+      expect(events, [false]);
+    });
+
+    test('onRequestServed fires with usedFallback=true on the Keychain path',
+        () async {
+      final events = <bool>[];
+      final handler = AgentForwardingHandler(
+        connectSystemAgent: () async =>
+            throw const SSHAgentUnavailableException('none'),
+        loadKeychainIdentities: () async => const <SSHKeyPair>[],
+        onRequestServed: events.add,
+      );
+
+      await handler.handleRequest(Uint8List.fromList([11]));
+      expect(events, [true]);
+    });
+
+    test('onRequestServed does not fire when the request fails', () async {
+      // Agent accepts the connection then dies before replying (same setup as
+      // the 'propagates failures' test).
+      await server.close();
+      server = await ServerSocket.bind(
+        InternetAddress('$socketPath.dead2', type: InternetAddressType.unix),
+        0,
+      );
+      addTearDown(() async {
+        final f = File('$socketPath.dead2');
+        if (await f.exists()) await f.delete();
+      });
+      server.listen((client) {
+        client.destroy();
+      });
+
+      final events = <bool>[];
+      final handler = AgentForwardingHandler(
+        connectSystemAgent: () =>
+            SystemAgentProxy.connectTo('$socketPath.dead2'),
+        loadKeychainIdentities: () async => const <SSHKeyPair>[],
+        onRequestServed: events.add,
+      );
+
+      await expectLater(
+        handler.handleRequest(Uint8List.fromList([11])),
+        throwsA(isA<SSHAgentUnavailableException>()),
+      );
+      expect(events, isEmpty);
+    });
   },
       // Fake agent binds a Unix domain socket — unavailable on Windows CI.
       skip: Platform.isWindows

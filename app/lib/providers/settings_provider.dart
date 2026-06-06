@@ -12,10 +12,20 @@ class SettingsProvider extends ChangeNotifier {
   String terminalTheme = 'Dracula';
   bool networkStatsEnabled = false;
   bool tmuxEnabled = false;
-  bool commandNotificationsEnabled = true;
+  bool commandNotificationsEnabled = false;
   bool shellIntegrationEnabled = true;
   String terminalFont = 'MesloLGS NF';
+  String terminalType = 'xterm-256color';
   String recordingPath = '';
+
+  /// Hosts dashboard layout: 'grid' (cards) or 'list' (compact rows).
+  /// Anything else is treated as 'grid' at the point of use.
+  String dashboardViewMode = 'grid';
+
+  /// Hosts dashboard ordering; a HostSortMode key. Unknown values fall
+  /// back to name_asc via HostSortMode.fromKey.
+  String dashboardSort = 'name_asc';
+
   Map<String, String> hotkeys = {
     'new_session': 'ctrl+t',
     'close_session': 'ctrl+w',
@@ -41,14 +51,17 @@ class SettingsProvider extends ChangeNotifier {
     terminalTheme = prefs.getString('terminalTheme') ?? 'Dracula';
     networkStatsEnabled = prefs.getBool('networkStatsEnabled') ?? false;
     tmuxEnabled = prefs.getBool('tmuxEnabled') ?? false;
-    commandNotificationsEnabled = prefs.getBool('commandNotificationsEnabled') ?? true;
+    commandNotificationsEnabled = prefs.getBool('commandNotificationsEnabled') ?? false;
     shellIntegrationEnabled = prefs.getBool('shellIntegrationEnabled') ?? true;
     terminalFont = prefs.getString('terminalFont') ?? 'MesloLGS NF';
+    terminalType = prefs.getString('terminalType') ?? 'xterm-256color';
     final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
     final defaultPath = home != null
         ? p.join(home, 'Documents', 'YourSSH', 'Recordings')
         : p.join(Directory.current.path, 'YourSSH', 'Recordings');
     recordingPath = prefs.getString('recordingPath') ?? defaultPath;
+    dashboardViewMode = prefs.getString('dashboardViewMode') ?? 'grid';
+    dashboardSort = prefs.getString('dashboardSort') ?? 'name_asc';
     final hotkeysJson = prefs.getString('hotkeys');
     if (hotkeysJson != null) {
       try {
@@ -86,9 +99,12 @@ class SettingsProvider extends ChangeNotifier {
     bool? networkStatsEnabled,
     bool? tmuxEnabled,
     String? terminalFont,
+    String? terminalType,
     bool? commandNotificationsEnabled,
     bool? shellIntegrationEnabled,
     String? recordingPath,
+    String? dashboardViewMode,
+    String? dashboardSort,
   }) async {
     if (autoReconnect != null) this.autoReconnect = autoReconnect;
     if (reconnectAttempts != null) this.reconnectAttempts = reconnectAttempts;
@@ -99,9 +115,12 @@ class SettingsProvider extends ChangeNotifier {
     if (networkStatsEnabled != null) this.networkStatsEnabled = networkStatsEnabled;
     if (tmuxEnabled != null) this.tmuxEnabled = tmuxEnabled;
     if (terminalFont != null) this.terminalFont = terminalFont;
+    if (terminalType != null) this.terminalType = terminalType;
     if (commandNotificationsEnabled != null) this.commandNotificationsEnabled = commandNotificationsEnabled;
     if (shellIntegrationEnabled != null) this.shellIntegrationEnabled = shellIntegrationEnabled;
     if (recordingPath != null) this.recordingPath = recordingPath;
+    if (dashboardViewMode != null) this.dashboardViewMode = dashboardViewMode;
+    if (dashboardSort != null) this.dashboardSort = dashboardSort;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('autoReconnect', this.autoReconnect);
     await prefs.setInt('reconnectAttempts', this.reconnectAttempts);
@@ -112,9 +131,12 @@ class SettingsProvider extends ChangeNotifier {
     await prefs.setBool('networkStatsEnabled', this.networkStatsEnabled);
     await prefs.setBool('tmuxEnabled', this.tmuxEnabled);
     await prefs.setString('terminalFont', this.terminalFont);
+    await prefs.setString('terminalType', this.terminalType);
     await prefs.setBool('commandNotificationsEnabled', this.commandNotificationsEnabled);
     await prefs.setBool('shellIntegrationEnabled', this.shellIntegrationEnabled);
     await prefs.setString('recordingPath', this.recordingPath);
+    await prefs.setString('dashboardViewMode', this.dashboardViewMode);
+    await prefs.setString('dashboardSort', this.dashboardSort);
     notifyListeners();
   }
 }

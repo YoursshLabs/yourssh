@@ -147,11 +147,12 @@ class SftpTransferService {
     return localPath;
   }
 
-  Future<void> uploadFile(
-      Host host, String localPath, String remotePath) async {
+  Future<void> uploadFile(Host host, String localPath, String remotePath,
+      {void Function(int sent, int total)? onProgress}) async {
     final sftp = await _sshService.openSftp(host);
     SftpFile? remoteFile;
     try {
+      final total = await File(localPath).length();
       remoteFile = await sftp.open(
         remotePath,
         mode: SftpFileOpenMode.create |
@@ -163,6 +164,7 @@ class SftpTransferService {
         final bytes = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
         await remoteFile.writeBytes(bytes, offset: offset);
         offset += bytes.length;
+        onProgress?.call(offset, total);
       }
     } finally {
       await remoteFile?.close();
@@ -205,6 +207,7 @@ class SftpTransferService {
     required void Function(String filePath, int bytes, int total) onProgress,
     required void Function(String filePath) onFileSkipped,
     required bool Function() isCancelled,
+    bool overwrite = false,
   }) async {
     final sftp = await _sshService.openSftp(remoteHost);
     try {
@@ -215,6 +218,7 @@ class SftpTransferService {
         onProgress: onProgress,
         onFileSkipped: onFileSkipped,
         isCancelled: isCancelled,
+        overwrite: overwrite,
       );
     } finally {
       sftp.close();
@@ -228,6 +232,7 @@ class SftpTransferService {
     required void Function(String, int, int) onProgress,
     required void Function(String) onFileSkipped,
     required bool Function() isCancelled,
+    required bool overwrite,
   }) async {
     // mkdir often fails because the dir already exists — that's fine. Anything
     // else (e.g., SSH_FX_PERMISSION_DENIED) we want to surface so the user
@@ -247,25 +252,28 @@ class SftpTransferService {
       if (entity is Directory) {
         await _uploadDirRecursive(
           sftp: sftp, localDir: entity.path, remoteDir: remotePath,
-          onProgress: onProgress, onFileSkipped: onFileSkipped, isCancelled: isCancelled,
+          onProgress: onProgress, onFileSkipped: onFileSkipped,
+          isCancelled: isCancelled, overwrite: overwrite,
         );
       } else {
-        // stat: only treat "no such file" as "needs upload". Permission / I/O
-        // errors are surfaced so we don't silently overwrite or silently skip.
-        bool fileExists;
-        try {
-          await sftp.stat(remotePath);
-          fileExists = true;
-        } on SftpStatusError catch (e) {
-          if (e.code == SftpStatusCode.noSuchFile) {
-            fileExists = false;
-          } else {
-            rethrow;
+        if (!overwrite) {
+          // stat: only treat "no such file" as "needs upload". Permission / I/O
+          // errors are surfaced so we don't silently overwrite or silently skip.
+          bool fileExists;
+          try {
+            await sftp.stat(remotePath);
+            fileExists = true;
+          } on SftpStatusError catch (e) {
+            if (e.code == SftpStatusCode.noSuchFile) {
+              fileExists = false;
+            } else {
+              rethrow;
+            }
           }
-        }
-        if (fileExists) {
-          onFileSkipped(entity.path);
-          continue;
+          if (fileExists) {
+            onFileSkipped(entity.path);
+            continue;
+          }
         }
         await _uploadFileWithProgress(sftp, entity.path, remotePath, onProgress);
       }

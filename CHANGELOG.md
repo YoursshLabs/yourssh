@@ -9,6 +9,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.30] — 2026-06-06
+
+### Added
+- **Connection Chain editor** — the Jump Host dropdown in the host panel is
+  now a visual chain (Termius-style): host cards connected by an arrow
+  showing bastion → destination, a searchable **Add a Host** picker, a key
+  icon on the bastion card when agent forwarding is enabled, and a **Clear**
+  button for direct connections. Click the bastion card to swap hosts.
+- `tool/jump_probe.dart` — layer-by-layer jump-host diagnostic CLI
+  (TCP → bastion auth → direct-tcpip channel → target auth → exec) for
+  debugging "can't reach host behind bastion" reports.
+- **Bulk action panel** — select N hosts on the dashboard (SELECT mode with
+  per-card checkboxes, filter-aware Select all, Esc to exit) and act on all
+  of them at once:
+  - **Connect all** — opens a tab per host, skips already-connected hosts,
+    confirms before opening more than 5 tabs
+  - **Run command** — one command (free text or snippet) executed in
+    parallel (bounded concurrency, 30 s per-host timeout, per-host failure
+    isolation); per-host results with exit code, duration, and expandable
+    stdout/stderr; a **Diff** tab groups identical outputs against a
+    baseline (any group can be promoted) and side-by-side compares any two
+    hosts
+  - **Push files** — upload files/folders to one remote path on every host
+    (destination created if missing, existing files overwritten) with
+    per-host byte progress and cancel
+- Closing a bulk dialog mid-run asks for confirmation; queued hosts are
+  cancelled while in-flight operations finish and record their real result
+- **Grid & List view for the hosts dashboard** — toggle between the card
+  grid and a compact single-line list; pick a sort order (name, creation
+  date, or hostname, ascending/descending) from the new toolbar dropdown.
+  Both choices persist across restarts. Default order is now Name A–Z
+  (previously insertion order).
+- **Agent forwarding observability** — live SSH agent status in the host
+  panel (system agent / Keychain fallback / nothing detected), a
+  per-session key icon on the session tab (ready / active / fallback /
+  refused), and a notification-bell item with tap-to-jump when the server
+  refuses forwarding.
+
+### Fixed
+- **Jump host on auto-connect paths** — SFTP, exec, and port forwarding
+  auto-connect (`ensureClient`) never resolved the host's jump host, so
+  hosts behind a bastion dialed direct and timed out. They now tunnel
+  through the bastion exactly like interactive sessions.
+
+### Changed
+- Command-finish notifications are now **off by default** (re-enable via
+  Settings → Monitoring); existing installs keep their saved choice
+- `SftpTransferService.uploadFile` reports byte progress;
+  `uploadDirectory` gained an `overwrite` flag (bulk push uses it — the
+  SFTP panel's skip-existing behavior is unchanged)
+
+---
+
 ## [0.1.29] — 2026-06-05
 
 ### Added
@@ -433,7 +486,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.29...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.30...HEAD
+[0.1.30]: https://github.com/YoursshLabs/yourssh/compare/v0.1.29...v0.1.30
 [0.1.29]: https://github.com/YoursshLabs/yourssh/compare/v0.1.28...v0.1.29
 [0.1.28]: https://github.com/YoursshLabs/yourssh/compare/v0.1.27...v0.1.28
 [0.1.27]: https://github.com/YoursshLabs/yourssh/compare/v0.1.26...v0.1.27

@@ -2,7 +2,7 @@
 
 A professional, open-source SSH client for **macOS**, **Windows**, and **Linux** — built for developers and sysadmins who manage multiple servers.
 
-> **Current version:** 0.1.29 · [Download](https://github.com/YoursshLabs/yourssh/releases) · [Report an issue](https://github.com/YoursshLabs/yourssh/issues)
+> **Current version:** 0.1.30 · [Download](https://github.com/YoursshLabs/yourssh/releases) · [Report an issue](https://github.com/YoursshLabs/yourssh/issues)
 
 ---
 
@@ -12,6 +12,7 @@ A professional, open-source SSH client for **macOS**, **Windows**, and **Linux**
 |---|---|
 | [Getting Started](User-Guide-Getting-Started) | Install the app and make your first connection |
 | [SSH Connections](User-Guide-SSH-Connections) | Manage hosts, auth methods, agent forwarding, groups, and tags |
+| [Bulk Actions](User-Guide-Bulk-Actions) | Select multiple hosts — connect all, run a command in parallel, push files |
 | [Terminal](User-Guide-Terminal) | Tabs, health badges, shell integration, split view, broadcast, search, hotkeys, command palette |
 | [Terminal Sharing](User-Guide-Terminal-Sharing) | Share a live SSH session with teammates in real time |
 | [SFTP](User-Guide-SFTP) | Dual-panel file manager, uploads, downloads |

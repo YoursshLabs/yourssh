@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/providers/settings_provider.dart';
 import 'package:yourssh/widgets/terminal_appearance_controls.dart';
+import 'package:yourssh/widgets/theme_picker.dart';
 
 void main() {
   setUp(() {
@@ -46,6 +47,38 @@ void main() {
     await tester.drag(find.byType(Slider), const Offset(100, 0));
     await tester.pump();
     expect(settings.fontSize, greaterThan(13));
+  });
+
+  testWidgets(
+      'vertical layout: color theme value sits inline, right-aligned with label',
+      (tester) async {
+    await tester.pumpWidget(wrap(SettingsProvider()));
+    await tester.pumpAndSettle();
+
+    final labelRect = tester.getRect(find.text('Color theme'));
+    final buttonRect = tester.getRect(find.byType(ThemePickerButton));
+    final panelRect = tester.getRect(find.byType(TerminalAppearanceControls));
+
+    // Same row: vertical centers line up.
+    expect(buttonRect.center.dy, moreOrLessEquals(labelRect.center.dy, epsilon: 1));
+    // Right-aligned within the panel.
+    expect(buttonRect.right, moreOrLessEquals(panelRect.right, epsilon: 1));
+  });
+
+  testWidgets('font options render in their own typeface', (tester) async {
+    await tester.pumpWidget(wrap(SettingsProvider()));
+    await tester.tap(find.byType(DropdownButton<String>));
+    await tester.pumpAndSettle();
+
+    for (final font in kBundledTerminalFonts.where((f) => f != 'monospace')) {
+      final text = tester.widgetList<Text>(find.text(font)).first;
+      expect(text.style?.fontFamily, font,
+          reason: '"$font" option should preview its own font');
+    }
+    // 'System Default' previews the generic monospace family.
+    final systemDefault =
+        tester.widgetList<Text>(find.text('System Default')).first;
+    expect(systemDefault.style?.fontFamily, 'monospace');
   });
 
   testWidgets('selecting Custom… shows the custom font field', (tester) async {

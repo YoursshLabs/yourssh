@@ -81,7 +81,7 @@ sudo dpkg -r yourssh
 - **Shell integration (bash/zsh)** — injected OSC 7/133 prompt hooks surface the working directory on the session tab, a per-command status gutter (green = ok, red = failed), jump-to-prompt (Cmd/Ctrl+↑/↓), and cwd-aware path completion in the input bar; auto-on with per-host / global opt-out; the setup script is delivered invisibly (never echoed into your terminal or recordings)
 - **Port forwarding** — local, remote, and dynamic SOCKS5 tunnels with start/stop per rule, auto-start on launch, live connection counters, auto-reconnect with backoff when the SSH link drops (no terminal tab required — tunnels dial the host with stored credentials), and a right-click menu to duplicate rules
 - **Jump host / bastion proxy** — connect to internal servers via a bastion host; select any saved host as the jump hop in the host detail panel
-- **SSH agent forwarding** — per-host toggle (like `ssh -A`) to hop between servers with the keys on your local machine; serves your system agent, falling back to app-Keychain keys when no agent is running — private keys never leave your machine
+- **SSH agent forwarding** — per-host toggle (like `ssh -A`) to hop between servers with the keys on your local machine; serves your system agent, falling back to app-Keychain keys when no agent is running — private keys never leave your machine; a status line in the host panel and a per-session key icon show whether forwarding is ready, active, on Keychain fallback, or refused by the server
 - **Local shell** — spawn native macOS/Windows/Linux shell alongside SSH sessions
 - **xterm-256color** terminal emulation with full PTY support
 
@@ -108,6 +108,8 @@ sudo dpkg -r yourssh
 - **Command history** — searchable history per session
 - **Hotkeys** — customizable global keyboard shortcuts
 - **Host groups** — organize connection profiles into logical folders
+- **Bulk actions** — select multiple hosts on the dashboard and connect to all, run one command on every host in parallel (per-host results plus a diff view that groups identical outputs), or push files to the same path everywhere
+- **Dashboard grid & list view** — switch between host cards and a compact list, with persistent sorting (name, creation date, or hostname)
 - **Broadcast mode** — send the same input to multiple sessions at once
 - **Code editor** — edit remote files inline with a Monaco-powered editor
 - **Session recording** — record terminal output to Asciinema v2 (`.cast`) files; per-host auto-record setting; manual start/stop from the toolbar; Recording Library with in-app playback (play/pause, speed control 0.5×–5×)

@@ -99,8 +99,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ]),
                 const SizedBox(height: 24),
-                _Section(title: 'Terminal', children: const [
-                  TerminalAppearanceControls(layout: AppearanceControlsLayout.rows),
+                _Section(title: 'Terminal', children: [
+                  _Row(
+                    label: 'Terminal emulation type',
+                    subtitle: 'TERM reported to the server — applies to new SSH connections',
+                    trailing: _DropDown<String>(
+                      value: settings.terminalType,
+                      items: const ['xterm-256color', 'xterm', 'linux', 'vt100'],
+                      labelOf: (t) => t,
+                      onChanged: (v) => context.read<SettingsProvider>().save(terminalType: v),
+                    ),
+                  ),
+                  const TerminalAppearanceControls(layout: AppearanceControlsLayout.rows),
                 ]),
                 const SizedBox(height: 24),
                 _Section(title: 'Recording', children: [

@@ -39,6 +39,7 @@ import 'providers/recording_provider.dart';
 import 'providers/share_provider.dart';
 import 'services/update_service.dart';
 import 'providers/update_provider.dart';
+import 'models/agent_forwarding_state.dart';
 import 'models/app_notification.dart';
 import 'models/app_release.dart';
 import 'providers/notification_center_provider.dart';
@@ -170,6 +171,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _sessionProvider.autoReconnectEnabled = () => _settingsProvider.autoReconnect;
     _sessionProvider.reconnectAttempts = () => _settingsProvider.reconnectAttempts;
     _sessionProvider.tmuxEnabled = () => _settingsProvider.tmuxEnabled;
+    _sessionProvider.terminalType = () => _settingsProvider.terminalType;
     _sessionProvider.recordingStart = (s) => _recordingProvider.startRecording(s);
     _healthMonitor = HealthMonitorService(
       measure: _ssh.measureLatency,
@@ -181,6 +183,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _sessionProvider.hostKeyVerifier = _knownHostsProvider.verifyHostKey;
     _ssh.defaultHostKeyVerifier = _knownHostsProvider.verifyHostKey;
     _ssh.defaultKeyLookup = (id) => _keyProvider.findById(id);
+    _ssh.defaultJumpHostLookup = (id) =>
+        _hostProvider.allHosts.where((h) => h.id == id).firstOrNull;
     _ssh.keychainIdentitiesLoader = () =>
         loadKeychainKeyPairs(_keyProvider.keys, _storage.loadPassphrase);
     _portForwardProvider = PortForwardProvider();
@@ -281,6 +285,22 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         sessionId: session.id,
       ));
     };
+    _ssh.onAgentForwardingEvent = (hostId, sessionId, state) {
+      _sessionProvider.handleAgentForwardingEvent(hostId, sessionId, state);
+      if (state == AgentForwardingState.refused && sessionId != null) {
+        final session = _sessionProvider.sshSessions
+            .where((s) => s.id == sessionId)
+            .firstOrNull;
+        _notificationCenter.add(AppNotification(
+          type: AppNotificationType.agentForwarding,
+          title: 'Agent forwarding refused: ${session?.title ?? hostId}',
+          body: 'The server refused the agent (AllowAgentForwarding no). '
+              'Your local keys are not available on this host.',
+          dedupeKey: 'agent-refused:$sessionId',
+          sessionId: sessionId,
+        ));
+      }
+    };
     _shareProvider.wireDependencies(_sessionProvider, _hookBus);
     _shareProvider.onGuestInput = (data) {
       final sessionId = _shareProvider.sharingSessionId;
@@ -355,6 +375,9 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     // A queued reconnect timer may still fire onSessionDropped during
     // teardown — detach it before disposing the notification center.
     _sessionProvider.onSessionDropped = null;
+    // Same risk for agent-forwarding events: a live SSHClient handler may
+    // still serve a request mid-teardown — detach before disposing providers.
+    _ssh.onAgentForwardingEvent = null;
     // Dispose the provider only after stopAll's final status callbacks fire.
     unawaited(_portForwardService
         .stopAll()

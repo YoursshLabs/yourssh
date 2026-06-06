@@ -15,6 +15,7 @@ void main() {
         cooldown: const Duration(seconds: 5),
         onSystemNotify: (title, body) => systemNotifications.add((title: title, body: body)),
       );
+      svc.enabled = true; // default is off; tests exercise the enabled path
       svc.onToast = (label) => toasts.add(label);
     });
 

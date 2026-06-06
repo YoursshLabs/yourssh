@@ -74,5 +74,18 @@ void main() {
           'item ${NotificationCenterProvider.maxItems + 4}');
       expect(p.notifications.last.title, 'item 5');
     });
+
+    test('agent-refused notifications dedupe per session id', () {
+      p.add(AppNotification(
+          type: AppNotificationType.agentForwarding,
+          title: 'first',
+          dedupeKey: 'agent-refused:s1'));
+      p.add(AppNotification(
+          type: AppNotificationType.agentForwarding,
+          title: 'second',
+          dedupeKey: 'agent-refused:s1'));
+      expect(p.notifications, hasLength(1));
+      expect(p.notifications.single.title, 'second');
+    });
   });
 }

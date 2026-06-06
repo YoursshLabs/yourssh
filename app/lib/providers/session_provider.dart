@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../models/agent_forwarding_state.dart';
 import '../models/host.dart';
 import '../models/local_session.dart';
 import '../models/ssh_key.dart';
@@ -22,6 +23,7 @@ class SessionProvider extends ChangeNotifier {
   bool Function()? autoReconnectEnabled;
   int Function()? reconnectAttempts;
   bool Function()? tmuxEnabled;
+  String Function()? terminalType;
   Future<bool> Function(String host, int port, String keyType, Uint8List fp)? hostKeyVerifier;
   Future<void> Function(String hostId, String os)? onOsDetected;
   Future<void> Function(SshSession session)? recordingStart;
@@ -152,7 +154,11 @@ class SessionProvider extends ChangeNotifier {
         unawaited(recordingStart?.call(session) ?? Future.value());
       }
 
-      await _ssh.openShell(session, useTmux: tmuxEnabled?.call() ?? false);
+      await _ssh.openShell(
+        session,
+        useTmux: tmuxEnabled?.call() ?? false,
+        termType: terminalType?.call() ?? 'xterm-256color',
+      );
       _safeNotify();
 
       // Shell closed — try auto-reconnect
@@ -345,6 +351,33 @@ class SessionProvider extends ChangeNotifier {
     session.colorTag = colorHex;
     if (session is SshSession) _persistTabMetadata(session);
     _safeNotify();
+  }
+
+  /// Routes agent-forwarding events from SshService into session state.
+  /// [sessionId] == null targets every session on [hostId] (served requests
+  /// go through the client-wide handler); host-scoped events never overwrite
+  /// a per-shell [AgentForwardingState.refused] — only a session-scoped event
+  /// (e.g. a reconnect firing [AgentForwardingState.ready]) can reset it.
+  void handleAgentForwardingEvent(
+      String hostId, String? sessionId, AgentForwardingState state) {
+    var changed = false;
+    for (final s in sshSessions) {
+      // Watch sessions carry a synthetic host id that never matches a real
+      // one; skip them explicitly so that invariant isn't load-bearing here.
+      if (s.isWatch) continue;
+      final match =
+          sessionId != null ? s.id == sessionId : s.host.id == hostId;
+      if (!match) continue;
+      if (sessionId == null &&
+          s.agentForwardingState == AgentForwardingState.refused) {
+        continue;
+      }
+      if (s.agentForwardingState != state) {
+        s.agentForwardingState = state;
+        changed = true;
+      }
+    }
+    if (changed) _safeNotify();
   }
 
   void togglePin(String sessionId) {

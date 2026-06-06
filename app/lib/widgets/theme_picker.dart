@@ -261,6 +261,9 @@ class _MiniSwatch extends StatelessWidget {
         width: size * 1.6,
         height: size,
         child: Row(
+          // Stretch: a child-less ColoredBox sizes to constraints.smallest,
+          // so without tight height it lays out 0px tall and paints nothing.
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(child: ColoredBox(color: t.background)),
             Expanded(child: ColoredBox(color: t.red)),

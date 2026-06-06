@@ -24,9 +24,14 @@ Click **+** on the Hosts screen (or **Cmd/Ctrl+N** from anywhere). Required fiel
 | **Certificate** | CA-signed key + certificate file (`.pub` format) |
 | **SSH Agent** | Delegates to `SSH_AUTH_SOCK` (macOS/Linux) or `\\.\pipe\openssh-ssh-agent` (Windows 10+) |
 
-### Jump Host / Bastion
+### Connection Chain (Jump Host / Bastion)
 
-In the host detail panel, expand **Jump Host** and select any other saved host as the bastion. YourSSH tunnels through the bastion transparently.
+In the host detail panel, the **Connection Chain** section shows the route to
+your host as connected cards. Click **Add a Host** and pick any saved host as
+the bastion — the chain then reads bastion → destination, with a key icon on
+the bastion card when agent forwarding is enabled. Click the bastion card to
+swap it, or **Clear** to connect directly. Terminal sessions, SFTP, exec, and
+port forwarding all tunnel through the bastion transparently.
 
 ### Agent Forwarding
 
@@ -44,6 +49,22 @@ copying private keys to the intermediate server.
   warning appears in the terminal and the session continues normally.
 - Only enable it for hosts you trust: root on the remote can use (not read)
   your keys while the session is open.
+
+**How to tell it's working**
+
+- When you switch the toggle on, a status line appears and checks your local
+  agent automatically: ✓ "System agent connected — N identities" means
+  forwarding will serve your `ssh-agent` keys; ⚠ "No system agent — N app
+  Keychain keys will be offered instead" means the app falls back to keys
+  stored in its Keychain; ✗ "No agent and no usable Keychain keys" means
+  forwarding would offer nothing — run `ssh-add <key>` or add a key in
+  Keychain.
+- While connected, the session tab shows a small key icon: grey = enabled but
+  no key requests yet, green = a request was just served by your system
+  agent, orange = served from app Keychain keys, red = the server refused
+  forwarding (`AllowAgentForwarding no`). Hover the icon for details.
+- If the server refuses forwarding you also get a notification in the bell;
+  clicking it jumps to that session.
 
 ## Groups
 
@@ -63,6 +84,12 @@ env:staging port:2222
 ```
 
 Combine with `AND` / `OR`, or toggle the chip buttons for common filters.
+
+## Dashboard Views & Sorting
+
+The hosts dashboard can show hosts as a card grid or a compact one-line list — toggle with the grid/list button in the toolbar. A sort dropdown orders hosts by name, creation date, or hostname, ascending or descending. Both choices persist across restarts; the default is Name A–Z.
+
+To act on several hosts at once (connect all, run a command in parallel, push files), see [Bulk Actions](User-Guide-Bulk-Actions).
 
 ## Importing Hosts
 
