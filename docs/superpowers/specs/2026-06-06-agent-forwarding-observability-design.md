@@ -30,12 +30,14 @@ Out of scope (YAGNI, explicitly deferred):
 
 ## Design
 
+**UX principle: zero-click.** All feedback is passive — the status line probes itself, the explainer shows on hover, the tab icon updates live, and the refusal notification jumps straight to the session on tap. Configuration stays a single toggle; the user never has to press anything to find out whether forwarding works.
+
 ### 1. Concept clarity (host detail panel)
 
 In `host_detail_panel.dart` (toggle at ~line 450):
 
 - New subtitle: *"Let this host use your local SSH keys for onward connections — git, ssh to other servers (like `ssh -A`). Applies on next connect."*
-- Info icon (ⓘ) next to the "Agent forwarding" title opens a small popover/dialog (3–4 lines):
+- Info icon (ⓘ) next to the "Agent forwarding" title shows a hover tooltip (no click needed, 3–4 lines):
   - **SSH Agent auth** = your agent's keys log you in to *this* host.
   - **Agent forwarding** = this host can borrow your local keys to reach *other* places (git pull, next ssh hop). Private keys never leave your machine.
   - Security note: *"Only enable for trusted hosts — anyone with root on the host can use your keys while you're connected."*
@@ -48,7 +50,7 @@ New widget `AgentStatusLine`, rendered:
 
 When both conditions hold, only the auth-section instance is shown (one probe, no duplicate line).
 
-Probes on first appearance; manual refresh button re-probes. States:
+Probes automatically on appearance (panel open with toggle on, toggle flipped on, auth switched to SSH Agent) — no user action required. A small refresh icon re-probes for the rare case where the user just started/fed their agent. States:
 
 | Probe result | Display |
 |---|---|
@@ -90,7 +92,7 @@ Wiring (follows the existing callback pattern in `main.dart`):
 
 ### 4. Error surfacing
 
-- On refusal: keep the existing yellow terminal line, **and** push an `AppNotification` to `NotificationCenterProvider` with `dedupeKey: 'agent-refused:<sessionId>'` (dedupe prevents spam across reconnects of the same session).
+- On refusal: keep the existing yellow terminal line, **and** push an `AppNotification` to `NotificationCenterProvider` with `dedupeKey: 'agent-refused:<sessionId>'` (dedupe prevents spam across reconnects of the same session). The notification carries `sessionId`, and tapping it jumps straight to that session tab (extend `notification_bell.dart`'s tap gate from `type == sessionDisconnect` to "any item with a sessionId"). New `AppNotificationType.agentForwarding` enum value.
 - Audit existing agent error messages for actionable hints (most already good: `ssh-add` hint, Windows service hint); normalize where missing.
 
 ## Error handling
