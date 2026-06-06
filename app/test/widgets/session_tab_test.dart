@@ -212,4 +212,33 @@ void main() {
 
     expect(tester.widget<Icon>(find.byIcon(Icons.key)).color, AppColors.accent);
   });
+
+  testWidgets('key icon colors for ready and fallback states', (tester) async {
+    final fwdHost = Host(
+        id: 'h11',
+        label: 'fwd3',
+        host: '9.9.9.11',
+        port: 22,
+        username: 'u',
+        agentForwarding: true);
+    final (sessions, hosts) = makeProviders();
+    final session = seedSession(sessions, fwdHost); // starts ready
+
+    await tester.pumpWidget(wrap(
+        SessionTab(
+            session: session, isActive: true, provider: sessions, onTap: () {}),
+        sessions,
+        hosts));
+    expect(tester.widget<Icon>(find.byIcon(Icons.key)).color,
+        AppColors.textSecondary);
+
+    session.agentForwardingState = AgentForwardingState.fallback;
+    await tester.pumpWidget(wrap(
+        SessionTab(
+            session: session, isActive: true, provider: sessions, onTap: () {}),
+        sessions,
+        hosts));
+    expect(
+        tester.widget<Icon>(find.byIcon(Icons.key)).color, AppColors.orange);
+  });
 }
