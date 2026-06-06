@@ -49,7 +49,7 @@ Run the `.exe` installer and follow the setup wizard. The installer adds YourSSH
 
 > **Windows SmartScreen** may warn on first run because the app is not yet code-signed. Click **More info → Run anyway** to proceed.
 
-If you prefer a portable version (no installation required), download `YourSSH-x.x.x-Windows-arm64.exe` (ARM64) or extract the x64 build manually from the installer.
+If you prefer a portable version (no installation required), download `YourSSH-x.x.x-Windows-x64-portable.zip` (or `-arm64-portable.zip` for ARM64), extract it anywhere, and run `yourssh.exe` from the extracted folder.
 
 ### Linux — Installation
 
@@ -60,6 +60,8 @@ sudo dpkg -i yourssh_x.x.x_arm64.deb   # ARM64 (Raspberry Pi 4/5, Apple M1 Linux
 ```
 
 After install, launch from your application menu or run `yourssh` in a terminal.
+
+> Requires Ubuntu 22.04+ / Debian 12+ (glibc ≥ 2.35) on both x86_64 and ARM64.
 
 **Uninstall:**
 ```bash

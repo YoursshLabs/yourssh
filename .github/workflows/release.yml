@@ -129,13 +129,31 @@ jobs:
           $version = (Get-Content app/pubspec.yaml | Select-String '^version:').ToString().Split(':')[1].Trim().Split('+')[0]
           echo "version=$version" >> $env:GITHUB_OUTPUT
 
-      - name: Copy portable exe
+      # flutter build does not copy the VC++ CRT (msvcp140.dll, vcruntime140*.dll)
+      # into Release; most x64 machines have the redistributable installed, but
+      # fresh ARM64 machines/VMs do not — bundle it so Setup and the portable
+      # ZIP run everywhere.
+      - name: Bundle VC++ CRT runtime
+        shell: pwsh
+        run: |
+          $arch = "${{ matrix.arch }}"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -property installationPath
+          $crt = Get-Item "$vs\VC\Redist\MSVC\*\$arch\Microsoft.VC14*.CRT" |
+            Sort-Object FullName | Select-Object -Last 1
+          if (-not $crt) { throw "VC++ CRT redist for $arch not found under $vs" }
+          Copy-Item "$($crt.FullName)\*.dll" "app\build\windows\$arch\runner\Release\"
+          Get-ChildItem "app\build\windows\$arch\runner\Release\*.dll" | Select-Object Name
+
+      # The whole Release folder, not just yourssh.exe — the bare exe cannot run
+      # without flutter_windows.dll, the plugin DLLs, and data/.
+      - name: Create portable ZIP
         shell: pwsh
         run: |
           $ver  = "${{ steps.version.outputs.version }}"
           $arch = "${{ matrix.arch }}"
-          Copy-Item "app\build\windows\$arch\runner\Release\yourssh.exe" `
-            "YourSSH-${ver}-Windows-${arch}.exe"
+          Compress-Archive -Path "app\build\windows\$arch\runner\Release\*" `
+            -DestinationPath "YourSSH-${ver}-Windows-${arch}-portable.zip"
 
       - name: Install Inno Setup (ARM64 runner only)
         if: matrix.arch == 'arm64'
@@ -172,21 +190,24 @@ jobs:
         with:
           name: windows-${{ matrix.arch }}
           path: |
-            YourSSH-${{ steps.version.outputs.version }}-Windows-${{ matrix.arch }}.exe
+            YourSSH-${{ steps.version.outputs.version }}-Windows-${{ matrix.arch }}-portable.zip
             YourSSH.Setup.${{ steps.version.outputs.version }}-Windows-${{ matrix.arch }}.exe
 
   # ── Linux ──────────────────────────────────────────────────────────────────
   # Produces a .deb package and a portable tar.gz for both x86_64 and arm64.
+  # Pinned to 22.04 runners: the bundle inherits the build machine's glibc
+  # baseline, and 24.04 runners produce binaries requiring GLIBC_2.38 that
+  # refuse to start on Ubuntu 22.04 / Debian 12 (glibc 2.35/2.36).
   build-linux:
     needs: test
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
+          - runner: ubuntu-22.04
             arch: x86_64
             deb_arch: amd64
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-22.04-arm
             arch: arm64
             deb_arch: arm64
     runs-on: ${{ matrix.runner }}
@@ -323,9 +344,9 @@ jobs:
           files: |
             YourSSH-${{ steps.version.outputs.version }}-macOS-arm64.zip
             YourSSH-${{ steps.version.outputs.version }}-macOS-arm64.dmg
-            YourSSH-${{ steps.version.outputs.version }}-Windows-x64.exe
+            YourSSH-${{ steps.version.outputs.version }}-Windows-x64-portable.zip
             YourSSH.Setup.${{ steps.version.outputs.version }}-Windows-x64.exe
-            YourSSH-${{ steps.version.outputs.version }}-Windows-arm64.exe
+            YourSSH-${{ steps.version.outputs.version }}-Windows-arm64-portable.zip
             YourSSH.Setup.${{ steps.version.outputs.version }}-Windows-arm64.exe
             yourssh_${{ steps.version.outputs.version }}_amd64.deb
             YourSSH-${{ steps.version.outputs.version }}-Linux-x86_64.tar.gz
