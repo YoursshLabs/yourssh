@@ -2,6 +2,7 @@
 import 'package:xterm/xterm.dart';
 import 'package:uuid/uuid.dart';
 import '../services/pty_runner.dart';
+import 'shell_profile.dart';
 import 'terminal_session.dart';
 
 enum LocalSessionStatus { running, exited, error }
@@ -25,8 +26,13 @@ class LocalSession implements TerminalSession {
   final int _labelIndex;
   PtyRunner? _pty;
 
+  /// Shell this session was opened with; null = platform default. Kept so
+  /// "Restart shell" relaunches the same shell.
+  final ShellProfile? profile;
+
   LocalSession({
     required this.terminal,
+    this.profile,
     this.status = LocalSessionStatus.running,
     this.customLabel,
     this.colorTag,
@@ -35,7 +41,8 @@ class LocalSession implements TerminalSession {
         _labelIndex = ++_labelCounter;
 
   @override
-  String get tabLabel => customLabel ?? 'Local $_labelIndex';
+  String get tabLabel =>
+      customLabel ?? '${profile?.name ?? 'Local'} $_labelIndex';
 
   @override
   bool get isLocal => true;

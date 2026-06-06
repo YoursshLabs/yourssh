@@ -49,7 +49,7 @@ void main() {
         .setMockMethodCallHandler(secureChannel, (_) async => null);
     p = SessionProvider(SshService(StorageService()), TabMetadataService());
     p.localShell =
-        LocalShellService(ptyFactory: (shell, c, r, env) => _FakePty());
+        LocalShellService(ptyFactory: (shell, args, c, r, env) => _FakePty());
   });
 
   tearDown(() {
@@ -62,7 +62,7 @@ void main() {
     test('assigning localShell wires shell-exit notifications to listeners',
         () async {
       final pty = _FakePty();
-      final shell = LocalShellService(ptyFactory: (s, c, r, env) => pty);
+      final shell = LocalShellService(ptyFactory: (s, a, c, r, env) => pty);
       p.localShell = shell;
       await p.newLocalSession();
 

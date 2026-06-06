@@ -5,12 +5,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';
 import '../models/local_session.dart';
+import '../models/shell_profile.dart';
 import 'notification_service.dart';
 import 'pty_runner.dart';
 import 'recording_service.dart';
 
 typedef PtyFactory = PtyRunner Function(
   String shell,
+  List<String> args,
   int columns,
   int rows,
   Map<String, String> environment,
@@ -36,12 +38,17 @@ class LocalShellService {
 
   static PtyRunner _defaultFactory(
     String shell,
+    List<String> args,
     int columns,
     int rows,
     Map<String, String> environment,
   ) =>
       FlutterPtyRunner(
-        Pty.start(shell, columns: columns, rows: rows, environment: environment),
+        Pty.start(shell,
+            arguments: args,
+            columns: columns,
+            rows: rows,
+            environment: environment),
       );
 
   /// Picks the shell executable for the current platform. On Windows `SHELL`
@@ -54,9 +61,9 @@ class LocalShellService {
     return env['SHELL'] ?? '/bin/zsh';
   }
 
-  Future<LocalSession> openShell() async {
+  Future<LocalSession> openShell({ShellProfile? profile}) async {
     final terminal = Terminal(maxLines: 10000);
-    final session = LocalSession(terminal: terminal);
+    final session = LocalSession(terminal: terminal, profile: profile);
     _sessions[session.id] = session;
     _spawnPty(session);
     return session;
@@ -73,12 +80,15 @@ class LocalShellService {
 
   void _spawnPty(LocalSession session) {
     final terminal = session.terminal;
-    final shell =
+    final profile = session.profile;
+    final shell = profile?.executable ??
         resolveShell(Platform.environment, isWindows: Platform.isWindows);
+    final args = profile?.args ?? const <String>[];
 
     try {
       final pty = _ptyFactory(
         shell,
+        args,
         terminal.viewWidth,
         terminal.viewHeight,
         {...Platform.environment, 'TERM': 'xterm-256color'},
