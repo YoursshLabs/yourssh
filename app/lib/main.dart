@@ -24,6 +24,7 @@ import 'plugins/plugin_registry.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 import 'services/health_monitor_service.dart';
 import 'services/local_shell_service.dart';
+import 'services/shell_detection.dart';
 import 'services/notification_service.dart';
 import 'services/port_forward_service.dart';
 import 'services/agent_forwarding_handler.dart';
@@ -187,6 +188,11 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         () => _settingsProvider.shellIntegrationEnabled;
     _sessionProvider = SessionProvider(_ssh, TabMetadataService());
     _sessionProvider.localShell = _localShell;
+    _sessionProvider.defaultShellResolver =
+        _settingsProvider.resolveDefaultShell;
+    // Fire-and-forget: the picker shows whatever has loaded; custom profiles
+    // and the platform default are available immediately.
+    unawaited(detectShells().then(_settingsProvider.setDetectedShells));
     _sessionProvider.keyLookup = (id) => _keyProvider.findById(id);
     _sessionProvider.jumpHostLookup = (id) =>
         _hostProvider.allHosts.where((h) => h.id == id).firstOrNull;
