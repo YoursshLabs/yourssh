@@ -41,6 +41,7 @@ import 'services/update_service.dart';
 import 'providers/update_provider.dart';
 import 'models/agent_forwarding_state.dart';
 import 'models/app_notification.dart';
+import 'models/audit_event.dart';
 import 'models/app_release.dart';
 import 'providers/notification_center_provider.dart';
 
@@ -80,8 +81,18 @@ class _SshBridgeAdapter implements SshBridgeDelegate {
   }
 
   @override
-  void sendInput(String sessionId, String text) =>
-      _getSshService().sendInput(sessionId, text);
+  void sendInput(String sessionId, String text) {
+    final ssh = _getSshService();
+    if (!ssh.sendInput(sessionId, text)) return;
+    final host = _getSessionProvider().hostForSession(sessionId);
+    ssh.audit?.record(AuditEvent.now(
+      type: AuditEventType.input,
+      host: host,
+      sessionId: sessionId,
+      command: text,
+      meta: const {'source': 'plugin:js'},
+    ));
+  }
 }
 
 void main() async {

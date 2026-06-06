@@ -3,7 +3,10 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../models/audit_event.dart';
 import '../providers/command_history_provider.dart';
+import '../providers/session_provider.dart';
+import '../services/audit_service.dart';
 import '../services/path_completion.dart';
 import 'suggestion_popup.dart';
 
@@ -78,6 +81,20 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
   void _submit(String command) {
     if (command.trim().isEmpty) return;
     context.read<CommandHistoryProvider>().recordCommand(widget.sessionId, command);
+    try {
+      final audit = context.read<AuditService>();
+      final host =
+          context.read<SessionProvider>().hostForSession(widget.sessionId);
+      audit.record(AuditEvent.now(
+        type: AuditEventType.input,
+        host: host,
+        sessionId: widget.sessionId,
+        command: command,
+        meta: const {'source': 'input-bar'},
+      ));
+    } on ProviderNotFoundException {
+      // Panes pumped without audit wiring (tests).
+    }
     widget.onSubmit('$command\n');
     _controller.clear();
     setState(() {
