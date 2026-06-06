@@ -210,7 +210,7 @@ class _HostCard extends StatelessWidget {
                     fontWeight: FontWeight.w500),
               ),
             ),
-            if (trailing != null) trailing!,
+            ?trailing,
           ],
         ),
       ),
@@ -218,11 +218,109 @@ class _HostCard extends StatelessWidget {
   }
 }
 
-// Picker dialog added in Task 3.
-class _HostPickerDialog extends StatelessWidget {
+/// Searchable list of candidate jump hosts. Pops with the picked [Host].
+class _HostPickerDialog extends StatefulWidget {
   final List<Host> candidates;
   const _HostPickerDialog({required this.candidates});
 
   @override
-  Widget build(BuildContext context) => const Dialog();
+  State<_HostPickerDialog> createState() => _HostPickerDialogState();
+}
+
+class _HostPickerDialogState extends State<_HostPickerDialog> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _query.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? widget.candidates
+        : widget.candidates
+            .where((h) =>
+                h.label.toLowerCase().contains(q) ||
+                '${h.username}@${h.host}'.toLowerCase().contains(q))
+            .toList();
+    return Dialog(
+      backgroundColor: AppColors.sidebar,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360, maxHeight: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: TextField(
+                autofocus: true,
+                onChanged: (v) => setState(() => _query = v),
+                style: const TextStyle(
+                    color: AppColors.textPrimary, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'Search hosts…',
+                  hintStyle: const TextStyle(
+                      color: AppColors.textTertiary, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search,
+                      size: 16, color: AppColors.textTertiary),
+                  isDense: true,
+                  filled: true,
+                  fillColor: AppColors.card,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+            if (filtered.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(12, 0, 12, 16),
+                child: Text('No hosts found',
+                    style: TextStyle(
+                        color: AppColors.textTertiary, fontSize: 12)),
+              )
+            else
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: filtered.length,
+                  itemBuilder: (context, i) {
+                    final h = filtered[i];
+                    return InkWell(
+                      onTap: () => Navigator.of(context).pop(h),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              h.label.isNotEmpty
+                                  ? h.label
+                                  : '${h.username}@${h.host}',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 13),
+                            ),
+                            Text(
+                              '${h.username}@${h.host}',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: AppColors.textTertiary,
+                                  fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
 }

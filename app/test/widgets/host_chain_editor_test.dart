@@ -84,4 +84,33 @@ void main() {
     expect(fired, isTrue);
     expect(selected, isNull);
   });
+
+  testWidgets('picker filters by search and returns picked host',
+      (tester) async {
+    Host? selected;
+    await tester.pumpWidget(wrap(HostChainEditor(
+      currentHostLabel: 'prod-db',
+      candidates: [
+        makeHost('h1', 'bastion', addr: '10.0.0.1'),
+        makeHost('h2', 'staging', addr: '10.0.0.2'),
+      ],
+      onSelect: (h) => selected = h,
+    )));
+
+    await tester.tap(find.text('Add a Host'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('bastion'), findsOneWidget);
+    expect(find.text('staging'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'stag');
+    await tester.pumpAndSettle();
+    expect(find.text('bastion'), findsNothing);
+    expect(find.text('staging'), findsOneWidget);
+
+    await tester.tap(find.text('staging'));
+    await tester.pumpAndSettle();
+    expect(selected?.id, 'h2');
+    expect(find.byType(Dialog), findsNothing);
+  });
 }
