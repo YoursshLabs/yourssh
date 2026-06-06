@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
+import '../models/agent_forwarding_state.dart';
 import '../models/session_health.dart';
 import '../models/ssh_session.dart';
 import '../models/terminal_session.dart';
@@ -288,6 +289,20 @@ class _SessionTabState extends State<SessionTab> {
                       )
                     : const SizedBox.shrink(),
               ),
+              // Agent-forwarding key icon — only for sessions whose host
+              // opted in (state != off), colored by live state.
+              if (widget.session case final SshSession ssh
+                  when ssh.agentForwardingState != AgentForwardingState.off)
+                Padding(
+                  padding: const EdgeInsets.only(right: 5),
+                  child: Tooltip(
+                    message: agentForwardingTooltip(ssh.agentForwardingState),
+                    child: Icon(Icons.key,
+                        size: 12,
+                        color:
+                            agentForwardingColor(ssh.agentForwardingState)),
+                  ),
+                ),
               // Color dot (shown when colorTag is set)
               if (widget.session.colorTag != null)
                 Container(
@@ -394,3 +409,24 @@ String _fmtDuration(Duration d) {
   if (d.inMinutes > 0) return '${d.inMinutes}m';
   return '${d.inSeconds}s';
 }
+
+/// Tab key-icon color per live forwarding state (off renders no icon).
+Color agentForwardingColor(AgentForwardingState state) => switch (state) {
+      AgentForwardingState.ready => const Color(0xFF888888),
+      AgentForwardingState.active => AppColors.accent,
+      AgentForwardingState.fallback => AppColors.orange,
+      AgentForwardingState.refused => AppColors.red,
+      AgentForwardingState.off => Colors.transparent,
+    };
+
+String agentForwardingTooltip(AgentForwardingState state) => switch (state) {
+      AgentForwardingState.ready =>
+        'Agent forwarding ready — no key requests from this host yet',
+      AgentForwardingState.active =>
+        'Agent forwarding active — serving keys from your system agent',
+      AgentForwardingState.fallback =>
+        'Agent forwarding active — serving app Keychain keys (no system agent found)',
+      AgentForwardingState.refused =>
+        'Agent forwarding refused by server (AllowAgentForwarding no)',
+      AgentForwardingState.off => '',
+    };
