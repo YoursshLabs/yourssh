@@ -1,15 +1,20 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../models/ssh_key.dart';
 import '../providers/key_provider.dart';
+import '../services/key_gen_service.dart';
 import '../theme/app_theme.dart';
+import 'deploy_key_dialog.dart';
 
 class KeychainScreen extends StatefulWidget {
-  const KeychainScreen({super.key});
+  /// Test seam: a fake overrides the ssh-keygen probe and generation.
+  final KeyGenService? keyGen;
+  const KeychainScreen({super.key, this.keyGen});
 
   @override
   State<KeychainScreen> createState() => _KeychainScreenState();
@@ -17,6 +22,7 @@ class KeychainScreen extends StatefulWidget {
 
 class _KeychainScreenState extends State<KeychainScreen> {
   bool _showPanel = false;
+  late final KeyGenService _keyGen = widget.keyGen ?? KeyGenService();
 
   Future<void> _addKeyFromFile() async {
     final result = await FilePicker.platform.pickFiles(
@@ -68,6 +74,7 @@ class _KeychainScreenState extends State<KeychainScreen> {
         ),
         if (_showPanel)
           _GenerateKeyPanel(
+            keyGen: _keyGen,
             onClose: () => setState(() => _showPanel = false),
           ),
       ],
@@ -263,23 +270,59 @@ class _KeyTileState extends State<_KeyTile> {
                 ],
               ),
             ),
-            if (_hovered)
-              GestureDetector(
-                onTap: () => _confirmDelete(context),
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: AppColors.bg,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: const Icon(Icons.delete_outlined,
-                      size: 14, color: AppColors.red),
+            if (_hovered && e.publicKey.isNotEmpty) ...[
+              Tooltip(
+                message: 'Copy public key',
+                child: _tileAction(
+                  icon: Icons.copy_outlined,
+                  color: AppColors.textSecondary,
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: e.publicKey));
+                    AppSnack.success(context, 'Public key copied');
+                  },
                 ),
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: 'Deploy to host…',
+                child: _tileAction(
+                  icon: Icons.cloud_upload_outlined,
+                  color: AppColors.textSecondary,
+                  onTap: () => showDialog(
+                      context: context,
+                      builder: (_) => DeployKeyDialog(entry: e)),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            if (_hovered)
+              _tileAction(
+                icon: Icons.delete_outlined,
+                color: AppColors.red,
+                onTap: () => _confirmDelete(context),
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _tileAction({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Icon(icon, size: 14, color: color),
       ),
     );
   }
@@ -460,7 +503,8 @@ class _EmptyState extends StatelessWidget {
 
 class _GenerateKeyPanel extends StatefulWidget {
   final VoidCallback onClose;
-  const _GenerateKeyPanel({required this.onClose});
+  final KeyGenService keyGen;
+  const _GenerateKeyPanel({required this.onClose, required this.keyGen});
 
   @override
   State<_GenerateKeyPanel> createState() => _GenerateKeyPanelState();
@@ -472,6 +516,20 @@ class _GenerateKeyPanelState extends State<_GenerateKeyPanel> {
   final _passphrase = TextEditingController();
   String _type = 'ed25519';
   bool _saving = false;
+
+  /// null while the probe runs; rsa/ecdsa options are gated on it.
+  bool? _sshKeygenAvailable;
+
+  /// Non-null switches the panel to the success state (copy + done).
+  String? _generatedPublicKey;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.keyGen.probeSshKeygen().then((ok) {
+      if (mounted) setState(() => _sshKeygenAvailable = ok);
+    });
+  }
 
   @override
   void dispose() {
@@ -486,50 +544,32 @@ class _GenerateKeyPanelState extends State<_GenerateKeyPanel> {
 
     try {
       final docsDir = await getApplicationDocumentsDirectory();
-      final sshDir =
-          Directory(p.join(docsDir.path, 'YourSSH', 'keys'));
+      final sshDir = Directory(p.join(docsDir.path, 'YourSSH', 'keys'));
       await sshDir.create(recursive: true);
 
-      final safeName =
-          _label.text.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
-      final keyPath = p.join(sshDir.path, safeName);
-
-      final proc = await Process.run('ssh-keygen', [
-        '-t', _type,
-        '-f', keyPath,
-        '-C', _label.text.trim(),
-        '-N', _passphrase.text,
-      ]);
+      final name = _label.text.trim();
+      final result = _type == 'ed25519'
+          ? await widget.keyGen.generateEd25519(
+              name: name, passphrase: _passphrase.text, dir: sshDir.path)
+          : await widget.keyGen.generateWithSshKeygen(
+              type: _type,
+              name: name,
+              passphrase: _passphrase.text,
+              dir: sshDir.path);
 
       if (!mounted) return;
-
-      if (proc.exitCode == 0) {
-        await context
-            .read<KeyProvider>()
-            .addKeyFromFile(keyPath, _label.text.trim());
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Key generated: $keyPath'),
-                backgroundColor: AppColors.accent),
-          );
-          widget.onClose();
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Error: ${proc.stderr}'),
-              backgroundColor: AppColors.red),
-        );
+      final provider = context.read<KeyProvider>();
+      final entry =
+          await provider.addKeyFromFile(result.privateKeyPath, name);
+      if (_passphrase.text.isNotEmpty) {
+        // Saved as pp_<keyId> so the key works without re-prompting.
+        await provider.savePassphrase?.call(entry.id, _passphrase.text);
+      }
+      if (mounted) {
+        setState(() => _generatedPublicKey = result.publicKeyLine);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Error: $e'),
-              backgroundColor: AppColors.red),
-        );
-      }
+      if (mounted) AppSnack.error(context, 'Key generation failed: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -547,68 +587,135 @@ class _GenerateKeyPanelState extends State<_GenerateKeyPanel> {
         children: [
           _buildHeader(),
           Expanded(
-            child: Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                children: [
-                  _field(_label, 'Key name',
-                      autofocus: true,
-                      validator: (v) =>
-                          v?.isEmpty == true ? 'Required' : null),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: _type,
-                    decoration: _inputDecoration('Algorithm'),
-                    dropdownColor: AppColors.card,
-                    style: const TextStyle(
-                        color: AppColors.textPrimary, fontSize: 13),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'ed25519',
-                          child: Text('Ed25519 (recommended)')),
-                      DropdownMenuItem(
-                          value: 'rsa', child: Text('RSA 4096')),
-                      DropdownMenuItem(
-                          value: 'ecdsa', child: Text('ECDSA')),
-                    ],
-                    onChanged: (v) => setState(() => _type = v!),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _passphrase,
-                    obscureText: true,
-                    style: const TextStyle(
-                        color: AppColors.textPrimary, fontSize: 13),
-                    decoration: _inputDecoration(
-                            'Passphrase (optional)')
-                        .copyWith(
-                            helperText: 'Leave empty for no passphrase',
-                            helperStyle: const TextStyle(
-                                color: AppColors.textTertiary,
-                                fontSize: 11)),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _saving ? null : _submit,
-                      style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          foregroundColor: Colors.black),
-                      child: _saving
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.black))
-                          : const Text('Generate Key',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-                ],
-              ),
+            child: _generatedPublicKey != null
+                ? _buildSuccess()
+                : _buildForm(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSuccess() {
+    final pub = _generatedPublicKey!;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      children: [
+        const Text('Key generated. Public key:',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: SelectableText(pub,
+              style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 12,
+                  fontFamily: 'monospace')),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: pub));
+              AppSnack.success(context, 'Public key copied');
+            },
+            style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.black),
+            icon: const Icon(Icons.copy, size: 14),
+            label: const Text('Copy public key',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: TextButton(
+            onPressed: widget.onClose,
+            child: const Text('Done'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildForm() {
+    final keygenOk = _sshKeygenAvailable ?? true;
+    return Form(
+      key: _formKey,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          _field(_label, 'Key name',
+              autofocus: true,
+              validator: (v) => v?.isEmpty == true ? 'Required' : null),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _type,
+            isExpanded: true,
+            decoration: _inputDecoration('Algorithm').copyWith(
+              helperText: _sshKeygenAvailable == false
+                  ? 'RSA/ECDSA require OpenSSH client (ssh-keygen)'
+                  : null,
+              helperStyle: const TextStyle(
+                  color: AppColors.textTertiary, fontSize: 11),
+            ),
+            dropdownColor: AppColors.card,
+            style:
+                const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+            items: [
+              const DropdownMenuItem(
+                  value: 'ed25519', child: Text('Ed25519 (recommended)')),
+              DropdownMenuItem(
+                  value: 'rsa',
+                  enabled: keygenOk,
+                  child: Text('RSA 4096',
+                      style: keygenOk
+                          ? null
+                          : const TextStyle(color: AppColors.textTertiary))),
+              DropdownMenuItem(
+                  value: 'ecdsa',
+                  enabled: keygenOk,
+                  child: Text('ECDSA P-256',
+                      style: keygenOk
+                          ? null
+                          : const TextStyle(color: AppColors.textTertiary))),
+            ],
+            onChanged: (v) => setState(() => _type = v!),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _passphrase,
+            obscureText: true,
+            style:
+                const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+            decoration: _inputDecoration('Passphrase (optional)').copyWith(
+                helperText: 'Leave empty for no passphrase',
+                helperStyle: const TextStyle(
+                    color: AppColors.textTertiary, fontSize: 11)),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _saving ? null : _submit,
+              style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: Colors.black),
+              child: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.black))
+                  : const Text('Generate Key',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
             ),
           ),
         ],
