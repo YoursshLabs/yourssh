@@ -652,12 +652,16 @@ class _HostCard extends StatefulWidget {
   final bool selectionMode;
   final bool selected;
   final VoidCallback? onToggleSelect;
+
+  /// false → grid card; true → single-line list row.
+  final bool compact;
   const _HostCard({
     required this.host,
     this.onEditHost,
     this.selectionMode = false,
     this.selected = false,
     this.onToggleSelect,
+    this.compact = false,
   });
 
   @override
@@ -676,20 +680,20 @@ class _HostCardState extends State<_HostCard> {
     super.dispose();
   }
 
-  Widget _osIcon(Host host) {
+  Widget _osIcon(Host host, {double pad = 8, double svg = 20, double fallback = 18}) {
     final asset = osIconAsset(host.detectedOs);
     if (asset != null) {
       return Padding(
-        padding: const EdgeInsets.all(8),
+        padding: EdgeInsets.all(pad),
         child: SvgPicture.asset(
           asset,
-          width: 20,
-          height: 20,
+          width: svg,
+          height: svg,
           colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
         ),
       );
     }
-    return const Icon(Icons.dns, color: Colors.white, size: 18);
+    return Icon(Icons.dns, color: Colors.white, size: fallback);
   }
 
   Future<void> _test() async {
@@ -736,110 +740,185 @@ class _HostCardState extends State<_HostCard> {
             ? null
             : () => context.read<SessionProvider>().connect(widget.host),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: EdgeInsets.symmetric(
+              horizontal: 14, vertical: widget.compact ? 8 : 12),
           decoration: BoxDecoration(
             color: _hovered ? AppColors.cardHover : AppColors.card,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: widget.selected ? AppColors.accent : _hovered ? AppColors.border.withValues(alpha: 0.8) : AppColors.border),
           ),
-          child: Row(
-            children: [
-              if (widget.selectionMode) ...[
-                SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: Checkbox(
-                    value: widget.selected,
-                    onChanged: (_) => widget.onToggleSelect?.call(),
-                    activeColor: AppColors.accent,
-                    side: const BorderSide(color: AppColors.border),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-                const SizedBox(width: 10),
-              ],
-              // Host icon
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: _osIcon(widget.host),
-              ),
-              const SizedBox(width: 10),
+          child: widget.compact ? _compactRow(context, color) : _cardRow(context, color),
+        ),
+      ),
+    );
+  }
 
-              // Host info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        // Status dot
-                        Container(
-                          width: 6, height: 6,
-                          margin: const EdgeInsets.only(right: 6),
-                          decoration: const BoxDecoration(
-                            color: AppColors.red, // offline by default
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            widget.host.label,
-                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+  Widget _selectionCheckbox() => SizedBox(
+        width: 18,
+        height: 18,
+        child: Checkbox(
+          value: widget.selected,
+          onChanged: (_) => widget.onToggleSelect?.call(),
+          activeColor: AppColors.accent,
+          side: const BorderSide(color: AppColors.border),
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      );
+
+  /// Hover actions / spinner / test result — shared by both layouts.
+  /// [maxResultWidth] bounds the error text so a long message can't
+  /// overflow the single-line list row.
+  List<Widget> _trailing(BuildContext context, {double? maxResultWidth}) {
+    Widget resultText = Text(
+      _testResult == null
+          ? ''
+          : _testResult!.success
+              ? '${_testResult!.latencyMs}ms'
+              : (_testResult!.error ?? 'Failed'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: (_testResult?.success ?? false) ? AppColors.accent : AppColors.red,
+        fontSize: 11,
+      ),
+    );
+    if (maxResultWidth != null) {
+      resultText = ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxResultWidth),
+        child: resultText,
+      );
+    }
+    return [
+      if (!widget.selectionMode && _hovered && !_testing && _testResult == null) ...[
+        _iconBtn(Icons.network_check, 'Test Connection', onTap: _test),
+        const SizedBox(width: 2),
+        _iconBtn(Icons.folder_outlined, 'SFTP', onTap: () => _openSftp(context)),
+        const SizedBox(width: 2),
+        _iconBtn(Icons.more_horiz, 'More', onTapDown: (d) => _showMenu(context, d.globalPosition)),
+      ],
+      if (_testing)
+        const SizedBox(
+          width: 14, height: 14,
+          child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.textSecondary),
+        ),
+      if (_testResult != null) ...[
+        Icon(
+          _testResult!.success ? Icons.check_circle_outline : Icons.error_outline,
+          size: 14,
+          color: _testResult!.success ? AppColors.accent : AppColors.red,
+        ),
+        const SizedBox(width: 4),
+        resultText,
+      ],
+    ];
+  }
+
+  Widget _cardRow(BuildContext context, Color color) {
+    return Row(
+      children: [
+        if (widget.selectionMode) ...[
+          _selectionCheckbox(),
+          const SizedBox(width: 10),
+        ],
+        // Host icon
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: _osIcon(widget.host),
+        ),
+        const SizedBox(width: 10),
+
+        // Host info
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  // Status dot
+                  Container(
+                    width: 6, height: 6,
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: const BoxDecoration(
+                      color: AppColors.red, // offline by default
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${widget.host.username}@${widget.host.host}',
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                  ),
+                  Expanded(
+                    child: Text(
+                      widget.host.label,
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ],
-                ),
-              ),
-
-              // Action buttons (show on hover)
-              if (!widget.selectionMode && _hovered && !_testing && _testResult == null) ...[
-                _iconBtn(Icons.network_check, 'Test Connection', onTap: _test),
-                const SizedBox(width: 2),
-                _iconBtn(Icons.folder_outlined, 'SFTP', onTap: () => _openSftp(context)),
-                const SizedBox(width: 2),
-                _iconBtn(Icons.more_horiz, 'More', onTapDown: (d) => _showMenu(context, d.globalPosition)),
-              ],
-              if (_testing)
-                const SizedBox(
-                  width: 14, height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.textSecondary),
-                ),
-              if (_testResult != null) ...[
-                Icon(
-                  _testResult!.success ? Icons.check_circle_outline : Icons.error_outline,
-                  size: 14,
-                  color: _testResult!.success ? AppColors.accent : AppColors.red,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _testResult!.success
-                      ? '${_testResult!.latencyMs}ms'
-                      : (_testResult!.error ?? 'Failed'),
-                  style: TextStyle(
-                    color: _testResult!.success ? AppColors.accent : AppColors.red,
-                    fontSize: 11,
                   ),
-                ),
-              ],
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${widget.host.username}@${widget.host.host}',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ),
-      ),
+        ..._trailing(context),
+      ],
+    );
+  }
+
+  /// Single-line list row: dot/checkbox · small OS icon · label ·
+  /// user@host[:port] · test result · hover actions.
+  Widget _compactRow(BuildContext context, Color color) {
+    final port = widget.host.port == 22 ? '' : ':${widget.host.port}';
+    return Row(
+      children: [
+        if (widget.selectionMode)
+          _selectionCheckbox()
+        else
+          Container(
+            width: 6, height: 6,
+            decoration: const BoxDecoration(
+              color: AppColors.red, // offline by default
+              shape: BoxShape.circle,
+            ),
+          ),
+        const SizedBox(width: 10),
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: _osIcon(widget.host, pad: 5, svg: 14, fallback: 13),
+        ),
+        const SizedBox(width: 10),
+        // Fixed label column so rows align vertically.
+        SizedBox(
+          width: 220,
+          child: Text(
+            widget.host.label,
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            '${widget.host.username}@${widget.host.host}$port',
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 8),
+        ..._trailing(context, maxResultWidth: 260),
+      ],
     );
   }
 
@@ -1235,3 +1314,19 @@ Widget facetChipBarForTest({
   required void Function(String) onToggle,
 }) =>
     _FacetChipBar(facets: facets, query: query, onToggle: onToggle);
+
+/// Test-only entry point to the private compact host row.
+@visibleForTesting
+Widget hostListRowForTest({
+  required Host host,
+  bool selectionMode = false,
+  bool selected = false,
+  VoidCallback? onToggleSelect,
+}) =>
+    _HostCard(
+      host: host,
+      compact: true,
+      selectionMode: selectionMode,
+      selected: selected,
+      onToggleSelect: onToggleSelect,
+    );
