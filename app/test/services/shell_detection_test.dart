@@ -60,7 +60,7 @@ void main() {
         isWindows: true,
         env: {'PATH': r'C:\tools;C:\pwsh'},
         fileExists: (path) => path == r'C:\pwsh\pwsh.exe',
-        runRaw: (_, __) async => null,
+        runRaw: (_, _) async => null,
       );
       expect(profiles.map((s) => s.id), contains('pwsh'));
       expect(profiles.firstWhere((s) => s.id == 'pwsh').executable,
@@ -72,7 +72,7 @@ void main() {
         isWindows: true,
         env: {},
         fileExists: (_) => false,
-        runRaw: (_, __) async => null,
+        runRaw: (_, _) async => null,
       );
       expect(profiles.map((s) => s.id).toList(), ['powershell', 'cmd']);
     });
