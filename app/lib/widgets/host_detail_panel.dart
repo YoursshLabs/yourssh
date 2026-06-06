@@ -5,10 +5,16 @@ import '../models/host.dart';
 import '../providers/host_provider.dart';
 import '../providers/key_provider.dart';
 import '../services/agent_probe.dart';
+import '../services/shell_integration_service.dart';
 import '../services/ssh_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/terminal_themes.dart';
 import 'agent_status_line.dart';
 import 'host_chain_editor.dart';
+import 'terminal_appearance_controls.dart' show kBundledTerminalFonts;
+
+/// Mirrors the TERM presets in Settings → Terminal.
+const _kTermTypes = ['xterm-256color', 'xterm', 'linux', 'vt100'];
 
 class HostDetailPanel extends StatefulWidget {
   final Host? existing;
@@ -53,6 +59,15 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   bool _autoRecord = false;
   bool _shellIntegration = true;
   bool _agentForwarding = false;
+  late final TextEditingController _workingDirCtrl;
+  late final TextEditingController _startupSnippetCtrl;
+  late final TextEditingController _fontSizeCtrl;
+  final List<({TextEditingController key, TextEditingController value})>
+      _envRows = [];
+  String? _templateTheme;
+  String? _templateFont;
+  String? _templateTermType;
+  bool? _tmuxOverride;
   String? _selectedJumpHostId;
   late SftpMode _sftpMode;
   late final TextEditingController _sftpCommand;
@@ -75,6 +90,19 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     _autoRecord = h?.autoRecord ?? false;
     _shellIntegration = h?.shellIntegration ?? true;
     _agentForwarding = h?.agentForwarding ?? false;
+    _workingDirCtrl = TextEditingController(text: h?.workingDir ?? '');
+    _startupSnippetCtrl = TextEditingController(text: h?.startupSnippet ?? '');
+    _fontSizeCtrl = TextEditingController(text: _fmtFontSize(h?.fontSize));
+    for (final e in (h?.envVars ?? const <String, String>{}).entries) {
+      _envRows.add((
+        key: TextEditingController(text: e.key),
+        value: TextEditingController(text: e.value),
+      ));
+    }
+    _templateTheme = h?.terminalThemeId;
+    _templateFont = h?.fontFamily;
+    _templateTermType = h?.termType;
+    _tmuxOverride = h?.tmuxOverride;
     _selectedJumpHostId = h?.jumpHostId;
     _sftpMode = h?.sftpMode ?? SftpMode.normal;
     _sftpCommand = TextEditingController(text: h?.sftpServerCommand ?? '');
@@ -109,10 +137,22 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
         loadKeychainIdentities: loader ?? () async => const []);
   }
 
+  static String _fmtFontSize(double? v) => v == null
+      ? ''
+      : (v == v.roundToDouble() ? v.toInt().toString() : v.toString());
+
   @override
   void dispose() {
-    for (final c in [_hostCtrl, _labelCtrl, _groupCtrl, _tagsCtrl, _portCtrl, _usernameCtrl, _passwordCtrl, _sftpCommand]) {
+    for (final c in [
+      _hostCtrl, _labelCtrl, _groupCtrl, _tagsCtrl, _portCtrl, _usernameCtrl,
+      _passwordCtrl, _sftpCommand, _workingDirCtrl, _startupSnippetCtrl,
+      _fontSizeCtrl,
+    ]) {
       c.dispose();
+    }
+    for (final r in _envRows) {
+      r.key.dispose();
+      r.value.dispose();
     }
     super.dispose();
   }
@@ -138,6 +178,21 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       sftpMode: _sftpMode,
       sftpServerCommand:
           _sftpMode == SftpMode.custom ? _sftpCommand.text.trim() : null,
+      workingDir: _workingDirCtrl.text.trim().isEmpty
+          ? null
+          : _workingDirCtrl.text.trim(),
+      envVars: {
+        for (final r in _envRows)
+          if (r.key.text.trim().isNotEmpty) r.key.text.trim(): r.value.text,
+      },
+      startupSnippet: _startupSnippetCtrl.text.trim().isEmpty
+          ? null
+          : _startupSnippetCtrl.text,
+      terminalThemeId: _templateTheme,
+      fontFamily: _templateFont,
+      fontSize: double.tryParse(_fontSizeCtrl.text.trim()),
+      termType: _templateTermType,
+      tmuxOverride: _tmuxOverride,
     );
     try {
       await widget.onSave(host, _passwordCtrl.text);
@@ -515,6 +570,250 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                       AgentStatusLine(
                           key: const ValueKey('forwarding-status'),
                           probe: _probeAgent),
+                  ]),
+
+                  const SizedBox(height: 16),
+                  _sectionLabel('SESSION TEMPLATE'),
+                  const SizedBox(height: 6),
+                  _Card(children: [
+                    _PanelField(
+                        controller: _workingDirCtrl,
+                        hint: 'Working directory (bash/zsh only)',
+                        icon: Icons.folder_open),
+                    _divider(),
+                    for (var i = 0; i < _envRows.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        child: Row(children: [
+                          const Icon(Icons.data_object,
+                              size: 16, color: AppColors.textTertiary),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 2,
+                            child: TextFormField(
+                              controller: _envRows[i].key,
+                              style: const TextStyle(
+                                  color: AppColors.textPrimary, fontSize: 13),
+                              decoration: const InputDecoration(
+                                hintText: 'NAME',
+                                hintStyle: TextStyle(
+                                    color: AppColors.textTertiary,
+                                    fontSize: 13),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                              validator: (v) => (v == null ||
+                                      v.trim().isEmpty ||
+                                      ShellIntegrationService.isValidEnvKey(
+                                          v.trim()))
+                                  ? null
+                                  : 'A–Z, 0–9, _ only',
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 3,
+                            child: TextFormField(
+                              controller: _envRows[i].value,
+                              style: const TextStyle(
+                                  color: AppColors.textPrimary, fontSize: 13),
+                              decoration: const InputDecoration(
+                                hintText: 'value',
+                                hintStyle: TextStyle(
+                                    color: AppColors.textTertiary,
+                                    fontSize: 13),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.close,
+                                size: 14, color: AppColors.textTertiary),
+                            onPressed: () => setState(() {
+                              final row = _envRows.removeAt(i);
+                              // Dispose after the frame: the row's fields
+                              // are still mounted during this build.
+                              WidgetsBinding.instance
+                                  .addPostFrameCallback((_) {
+                                row.key.dispose();
+                                row.value.dispose();
+                              });
+                            }),
+                          ),
+                        ]),
+                      ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => setState(() => _envRows.add((
+                              key: TextEditingController(),
+                              value: TextEditingController(),
+                            ))),
+                        icon: const Icon(Icons.add,
+                            size: 14, color: AppColors.accent),
+                        label: const Text('Add env variable',
+                            style: TextStyle(
+                                color: AppColors.accent, fontSize: 12)),
+                      ),
+                    ),
+                    _divider(),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(top: 2),
+                            child: Icon(Icons.play_arrow_outlined,
+                                size: 16, color: AppColors.textTertiary),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _startupSnippetCtrl,
+                              minLines: 2,
+                              maxLines: 4,
+                              style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 13,
+                                  fontFamily: 'monospace'),
+                              decoration: const InputDecoration(
+                                hintText:
+                                    'Startup snippet — typed into the shell '
+                                    'after connect. Skipped when tmux is on.',
+                                hintStyle: TextStyle(
+                                    color: AppColors.textTertiary,
+                                    fontSize: 12),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _divider(),
+                    _DropdownRow(
+                      icon: Icons.palette_outlined,
+                      child: DropdownButton<String?>(
+                        value: _templateTheme,
+                        isExpanded: true,
+                        style: const TextStyle(
+                            color: AppColors.textPrimary, fontSize: 13),
+                        dropdownColor: AppColors.card,
+                        underline: const SizedBox(),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('Theme: follow global')),
+                          for (final name in kTerminalThemeNames)
+                            DropdownMenuItem<String?>(
+                                value: name, child: Text(name)),
+                        ],
+                        onChanged: (v) => setState(() => _templateTheme = v),
+                      ),
+                    ),
+                    _divider(),
+                    _DropdownRow(
+                      icon: Icons.text_fields,
+                      child: Row(children: [
+                        Expanded(
+                          child: DropdownButton<String?>(
+                            value: _templateFont,
+                            isExpanded: true,
+                            style: const TextStyle(
+                                color: AppColors.textPrimary, fontSize: 13),
+                            dropdownColor: AppColors.card,
+                            underline: const SizedBox(),
+                            items: [
+                              const DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Text('Font: follow global')),
+                              for (final f in kBundledTerminalFonts)
+                                DropdownMenuItem<String?>(
+                                    value: f, child: Text(f)),
+                            ],
+                            onChanged: (v) =>
+                                setState(() => _templateFont = v),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 56,
+                          child: TextFormField(
+                            controller: _fontSizeCtrl,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(
+                                color: AppColors.textPrimary, fontSize: 13),
+                            decoration: const InputDecoration(
+                              hintText: 'size',
+                              hintStyle: TextStyle(
+                                  color: AppColors.textTertiary, fontSize: 13),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            validator: (v) {
+                              final t = v?.trim() ?? '';
+                              if (t.isEmpty) return null;
+                              final d = double.tryParse(t);
+                              return (d == null || d < 6 || d > 40)
+                                  ? '6–40'
+                                  : null;
+                            },
+                          ),
+                        ),
+                      ]),
+                    ),
+                    _divider(),
+                    _DropdownRow(
+                      icon: Icons.terminal_outlined,
+                      child: DropdownButton<String?>(
+                        value: _templateTermType,
+                        isExpanded: true,
+                        style: const TextStyle(
+                            color: AppColors.textPrimary, fontSize: 13),
+                        dropdownColor: AppColors.card,
+                        underline: const SizedBox(),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                              value: null, child: Text('TERM: follow global')),
+                          for (final t in _kTermTypes)
+                            DropdownMenuItem<String?>(
+                                value: t, child: Text(t)),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _templateTermType = v),
+                      ),
+                    ),
+                    _divider(),
+                    _DropdownRow(
+                      icon: Icons.grid_view_outlined,
+                      child: DropdownButton<bool?>(
+                        value: _tmuxOverride,
+                        isExpanded: true,
+                        style: const TextStyle(
+                            color: AppColors.textPrimary, fontSize: 13),
+                        dropdownColor: AppColors.card,
+                        underline: const SizedBox(),
+                        items: const [
+                          DropdownMenuItem<bool?>(
+                              value: null, child: Text('tmux: follow global')),
+                          DropdownMenuItem<bool?>(
+                              value: true, child: Text('tmux: always on')),
+                          DropdownMenuItem<bool?>(
+                              value: false, child: Text('tmux: always off')),
+                        ],
+                        onChanged: (v) => setState(() => _tmuxOverride = v),
+                      ),
+                    ),
                   ]),
 
                   const SizedBox(height: 24),
