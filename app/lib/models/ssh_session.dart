@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 import 'package:xterm/xterm.dart';
+import 'agent_forwarding_state.dart';
 import 'host.dart';
 import 'terminal_session.dart';
 
@@ -28,6 +29,10 @@ class SshSession implements TerminalSession {
   /// Shown in the tab health tooltip.
   int reconnectCount = 0;
 
+  /// Live forwarding status shown on the session tab; updated by
+  /// SessionProvider.handleAgentForwardingEvent.
+  AgentForwardingState agentForwardingState = AgentForwardingState.off;
+
   SshSession({
     String? id,
     required this.host,
@@ -42,7 +47,11 @@ class SshSession implements TerminalSession {
     this.isPinned = false,
   })  : id = id ?? const Uuid().v4(),
         terminal = Terminal(maxLines: 10000),
-        connectedAt = connectedAt ?? DateTime.now();
+        connectedAt = connectedAt ?? DateTime.now() {
+    if (host.agentForwarding) {
+      agentForwardingState = AgentForwardingState.ready;
+    }
+  }
 
   factory SshSession.watch({required String watchedTitle}) {
     return SshSession(
