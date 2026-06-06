@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:path/path.dart' as path_util;
+import 'package:uuid/uuid.dart';
 import '../models/ai_provider_config.dart';
+import '../models/shell_profile.dart';
 import '../providers/ai_chat_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/audit_provider.dart';
@@ -112,6 +115,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onChanged: (v) => context.read<SettingsProvider>().save(terminalType: v),
                     ),
                   ),
+                  Consumer<SettingsProvider>(
+                    builder: (context, settings, _) {
+                      const platformDefault = '__platform_default__';
+                      final profiles = settings.allShellProfiles;
+                      final ids = {for (final s in profiles) s.id};
+                      final value = settings.defaultShellId != null &&
+                              ids.contains(settings.defaultShellId)
+                          ? settings.defaultShellId!
+                          : platformDefault;
+                      return _Row(
+                        label: 'Default local shell',
+                        subtitle: 'Shell used by new local terminals',
+                        trailing: _DropDown<String>(
+                          value: value,
+                          items: [
+                            platformDefault,
+                            for (final s in profiles) s.id,
+                          ],
+                          labelOf: (id) => id == platformDefault
+                              ? 'Platform default'
+                              : profiles.firstWhere((s) => s.id == id).name,
+                          onChanged: (id) => context
+                              .read<SettingsProvider>()
+                              .setDefaultShellId(
+                                  id == platformDefault ? null : id),
+                        ),
+                      );
+                    },
+                  ),
+                  const _CustomShellsRows(),
                   const TerminalAppearanceControls(layout: AppearanceControlsLayout.rows),
                 ]),
                 const SizedBox(height: 24),
@@ -1139,6 +1172,118 @@ class _AiProvidersSectionState extends State<_AiProvidersSection> {
       ),
     );
   }
+}
+
+// ── Custom local shells (Settings → Terminal) ─────────────
+
+class _CustomShellsRows extends StatelessWidget {
+  const _CustomShellsRows();
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final shell in settings.customShellProfiles)
+          _Row(
+            label: shell.name,
+            subtitle: [shell.executable, ...shell.args].join(' '),
+            trailing: IconButton(
+              icon: const Icon(Icons.delete_outline,
+                  size: 16, color: AppColors.textSecondary),
+              tooltip: 'Remove custom shell',
+              onPressed: () => context
+                  .read<SettingsProvider>()
+                  .removeCustomShellProfile(shell.id),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(left: 8, top: 2, bottom: 6),
+          child: TextButton.icon(
+            icon: const Icon(Icons.add, size: 14),
+            label: const Text('Add custom shell…',
+                style: TextStyle(fontSize: 12)),
+            onPressed: () => _showAddCustomShellDialog(context),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+Future<void> _showAddCustomShellDialog(BuildContext context) async {
+  final settings = context.read<SettingsProvider>();
+  final nameCtrl = TextEditingController();
+  final exeCtrl = TextEditingController();
+  final argsCtrl = TextEditingController();
+  final added = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AppColors.card,
+      title: const Text('Add custom shell', style: TextStyle(fontSize: 15)),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Display name'),
+            ),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: exeCtrl,
+                  decoration:
+                      const InputDecoration(labelText: 'Executable path'),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.folder_open, size: 16),
+                tooltip: 'Browse…',
+                onPressed: () async {
+                  final result = await FilePicker.platform.pickFiles();
+                  final path = result?.files.single.path;
+                  if (path != null) exeCtrl.text = path;
+                },
+              ),
+            ]),
+            TextField(
+              controller: argsCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Arguments',
+                helperText: 'Space-separated; quoting not supported',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Add')),
+      ],
+    ),
+  );
+  final exe = exeCtrl.text.trim();
+  if (added == true && exe.isNotEmpty) {
+    final name = nameCtrl.text.trim();
+    final argsText = argsCtrl.text.trim();
+    await settings.addCustomShellProfile(ShellProfile(
+      id: 'custom-${const Uuid().v4()}',
+      name: name.isEmpty ? path_util.basename(exe) : name,
+      executable: exe,
+      args: argsText.isEmpty ? const [] : argsText.split(RegExp(r'\s+')),
+      isCustom: true,
+    ));
+  }
+  nameCtrl.dispose();
+  exeCtrl.dispose();
+  argsCtrl.dispose();
 }
 
 class _Section extends StatelessWidget {
