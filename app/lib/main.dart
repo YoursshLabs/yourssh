@@ -28,6 +28,9 @@ import 'services/notification_service.dart';
 import 'services/port_forward_service.dart';
 import 'services/agent_forwarding_handler.dart';
 import 'services/ssh_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'providers/audit_provider.dart';
+import 'services/audit_service.dart';
 import 'services/storage_service.dart';
 import 'services/sync_service.dart';
 import 'services/recording_service.dart';
@@ -146,6 +149,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final NotificationCenterProvider _notificationCenter;
   late final PortForwardProvider _portForwardProvider;
   late final PortForwardService _portForwardService;
+  late final AuditService _audit;
+  late final AuditProvider _auditProvider;
   String? _lastUpdateNotifVersion;
 
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -184,6 +189,16 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _sessionProvider.tmuxEnabled = () => _settingsProvider.tmuxEnabled;
     _sessionProvider.terminalType = () => _settingsProvider.terminalType;
     _sessionProvider.recordingStart = (s) => _recordingProvider.startRecording(s);
+    _audit = AuditService();
+    _auditProvider = AuditProvider(_audit);
+    _ssh.audit = _audit;
+    _sessionProvider.audit = _audit;
+    // Fail-soft init + retention prune; settings may still be loading, so
+    // read the persisted value directly.
+    unawaited(_audit.init().then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      _audit.prune(prefs.getInt('auditRetentionDays') ?? 90);
+    }));
     _healthMonitor = HealthMonitorService(
       measure: _ssh.measureLatency,
       connectedHostIds: () => _ssh.connectedHostIds,
@@ -446,6 +461,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         ChangeNotifierProvider.value(value: _pluginEngineProvider),
         ChangeNotifierProvider.value(value: _updateProvider),
         ChangeNotifierProvider.value(value: _notificationCenter),
+        Provider<AuditService>.value(value: _audit),
+        ChangeNotifierProvider<AuditProvider>.value(value: _auditProvider),
       ],
       child: MaterialApp(
         title: 'YourSSH',
