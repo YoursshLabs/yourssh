@@ -39,14 +39,19 @@ the public key** or **deploy it to a host** straight from the panel — the
 deploy dialog appends it to `~/.ssh/authorized_keys` over an existing
 connection (idempotent: deploying twice never duplicates the line).
 
-### Connection Chain (Jump Host / Bastion)
+### Connection Chain (Jump Hosts / Bastions)
 
 In the host detail panel, the **Connection Chain** section shows the route to
 your host as connected cards. Click **Add a Host** and pick any saved host as
-the bastion — the chain then reads bastion → destination, with a key icon on
-the bastion card when agent forwarding is enabled. Click the bastion card to
-swap it, or **Clear** to connect directly. Terminal sessions, SFTP, exec, and
-port forwarding all tunnel through the bastion transparently.
+a bastion — and keep adding: the chain supports multiple hops
+(bastion → bastion → … → destination) for layered networks. **Add a Host**
+stays visible to append another hop, each hop card has a remove (×) button,
+and **Clear** drops the whole chain to connect directly. A key icon appears
+on the last hop when agent forwarding is enabled. Hosts already in the chain
+are excluded from the picker, so you can't build a loop. Terminal sessions,
+SFTP, exec, and port forwarding all tunnel through the full chain
+transparently — each hop's host key is verified just like a direct
+connection.
 
 ### Agent Forwarding
 
