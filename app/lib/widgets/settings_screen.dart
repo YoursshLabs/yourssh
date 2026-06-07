@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import 'hotkey_settings_screen.dart';
 import 'terminal_appearance_controls.dart';
+import 'keyword_highlight_settings.dart';
 import 'confirm_dialog.dart';
 import 'qr_export_dialog.dart';
 import 'qr_import_dialog.dart';
@@ -146,6 +147,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const _CustomShellsRows(),
                   const TerminalAppearanceControls(layout: AppearanceControlsLayout.rows),
+                ]),
+                const SizedBox(height: 24),
+                _Section(title: 'Keyword Highlighting', children: [
+                  const KeywordHighlightSection(),
                 ]),
                 const SizedBox(height: 24),
                 _Section(title: 'Recording', children: [
