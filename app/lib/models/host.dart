@@ -8,6 +8,13 @@ enum AuthType { password, privateKey, certificate, agent }
 /// [Host.sftpServerCommand] verbatim on an exec channel.
 enum SftpMode { normal, sudo, custom }
 
+/// Transport protocol. Legacy hosts without the field parse as [ssh].
+enum HostProtocol { ssh, rdp }
+
+/// RDP security mode. [auto] lets the server negotiate; [nla] forces
+/// CredSSP/NLA; [tls] disables NLA and uses TLS-only.
+enum RdpSecurityMode { auto, nla, tls }
+
 class Host {
   final String id;
   String label;
@@ -32,6 +39,11 @@ class Host {
   bool agentForwarding;
   SftpMode sftpMode;
   String? sftpServerCommand;
+
+  // ── RDP-specific fields ──────────────────────────────────────────────
+  HostProtocol protocol;
+  String? domain;
+  RdpSecurityMode rdpSecurity;
 
   // ── Session template (per-host preset) ──────────────────────────────
   // All null/empty = no override; see
@@ -64,6 +76,9 @@ class Host {
     this.agentForwarding = false,
     this.sftpMode = SftpMode.normal,
     this.sftpServerCommand,
+    this.protocol = HostProtocol.ssh,
+    this.domain,
+    this.rdpSecurity = RdpSecurityMode.auto,
     this.workingDir,
     Map<String, String> envVars = const {},
     this.startupSnippet,
@@ -111,6 +126,9 @@ class Host {
         'agentForwarding': agentForwarding,
         'sftpMode': sftpMode.name,
         'sftpServerCommand': sftpServerCommand,
+        'protocol': protocol.name,
+        'domain': domain,
+        'rdpSecurity': rdpSecurity.name,
         'workingDir': workingDir,
         'envVars': envVars,
         'startupSnippet': startupSnippet,
@@ -152,6 +170,14 @@ class Host {
       // carrying a future mode must not abort loading the whole list.
       return SftpMode.values.asNameMap()[name] ?? SftpMode.normal;
     }
+    HostProtocol parseProtocol() {
+      final name = json['protocol'] as String?;
+      return HostProtocol.values.asNameMap()[name] ?? HostProtocol.ssh;
+    }
+    RdpSecurityMode parseRdpSecurity() {
+      final name = json['rdpSecurity'] as String?;
+      return RdpSecurityMode.values.asNameMap()[name] ?? RdpSecurityMode.auto;
+    }
     Map<String, String> parseEnvVars() {
       final raw = json['envVars'];
       // Malformed/forward-compat values degrade to empty rather than
@@ -190,6 +216,9 @@ class Host {
       agentForwarding: (json['agentForwarding'] as bool?) ?? false,
       sftpMode: parseSftpMode(),
       sftpServerCommand: json['sftpServerCommand'] as String?,
+      protocol: parseProtocol(),
+      domain: json['domain'] as String?,
+      rdpSecurity: parseRdpSecurity(),
       workingDir: json['workingDir'] as String?,
       envVars: parseEnvVars(),
       startupSnippet: json['startupSnippet'] as String?,
@@ -217,6 +246,9 @@ class Host {
     bool? agentForwarding,
     SftpMode? sftpMode,
     Object? sftpServerCommand = const _Unset(),
+    HostProtocol? protocol,
+    Object? domain = const _Unset(),
+    RdpSecurityMode? rdpSecurity,
     Object? workingDir = const _Unset(),
     Map<String, String>? envVars,
     Object? startupSnippet = const _Unset(),
@@ -247,6 +279,9 @@ class Host {
         sftpServerCommand: sftpServerCommand is _Unset
             ? this.sftpServerCommand
             : sftpServerCommand as String?,
+        protocol: protocol ?? this.protocol,
+        domain: domain is _Unset ? this.domain : domain as String?,
+        rdpSecurity: rdpSecurity ?? this.rdpSecurity,
         workingDir:
             workingDir is _Unset ? this.workingDir : workingDir as String?,
         envVars: envVars ?? this.envVars,
