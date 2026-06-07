@@ -22,6 +22,9 @@ import 'storage_service.dart';
 import 'sudo_sftp.dart';
 import 'system_agent_proxy.dart';
 
+/// One hop in a jump chain: the bastion host plus its resolved key.
+typedef JumpHop = ({Host host, SshKeyEntry? keyEntry});
+
 class SshService {
   final StorageService _storage;
   final HookBus? hookBus;
@@ -37,9 +40,13 @@ class SshService {
   final Map<String, SSHSession> _shells = {};
   final Map<String, String> _shellToHost = {}; // sessionId → hostId
   final Map<String, SystemAgentProxy> _agentProxies = {};
+  // Keyed by chain-prefix ('a' for hop0, 'a>b' for hop1 through a, …): a
+  // client to B *through A* is distinct from a direct client to B.
   final Map<String, SSHClient> _jumpClients = {};
+  // Agent proxies parked by hop id (the prefix's last segment).
   final Map<String, SystemAgentProxy> _jumpAgentProxies = {};
-  final Map<String, String> _hostToJump = {}; // target hostId → jump hostId
+  // target hostId → its chain-prefix keys (deepest last), for teardown.
+  final Map<String, List<String>> _hostToJump = {};
   RecordingService? _recording;
   set recordingService(RecordingService? service) => _recording = service;
 
@@ -160,8 +167,7 @@ class SshService {
   Future<SSHClient> connect(
     Host host, {
     SshKeyEntry? keyEntry,
-    Host? jumpHost,
-    SshKeyEntry? jumpKeyEntry,
+    List<JumpHop> jumpChain = const [],
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
   }) async {
     if (hookBus != null) {
@@ -183,14 +189,10 @@ class SshService {
     final SSHClient client;
     try {
       final SSHSocket socket;
-      if (jumpHost != null) {
-        final jc = await _ensureJumpClient(
-          jumpHost,
-          keyEntry: jumpKeyEntry,
-          verifyHostKey: verifyHostKey,
-        );
-        socket = await jc.forwardLocal(host.host, host.port);
-        _hostToJump[host.id] = jumpHost.id;
+      if (jumpChain.isNotEmpty) {
+        final lastHop = await debugDialChain(
+            target: host, chain: jumpChain, verifyHostKey: verifyHostKey);
+        socket = await lastHop.forwardLocal(host.host, host.port);
       } else {
         socket = await SSHSocket.connect(host.host, host.port);
       }
@@ -230,62 +232,108 @@ class SshService {
         unawaited(_agentProxies[host.id]?.close() ?? Future.value());
         _agentProxies.remove(host.id);
       }
-      final jumpId = _hostToJump.remove(host.id);
-      if (jumpId != null && !_hostToJump.values.contains(jumpId)) {
-        _jumpClients[jumpId]?.close();
-        _jumpClients.remove(jumpId);
-        unawaited(_jumpAgentProxies[jumpId]?.close() ?? Future.value());
-        _jumpAgentProxies.remove(jumpId);
-      }
+      _teardownJumpChain(host.id);
       rethrow;
     }
     _clients[host.id] = client;
     return client;
   }
 
-  // ── Jump host helper ───────────────────────────────────
+  // ── Jump chain ─────────────────────────────────────────
 
-  Future<SSHClient> _ensureJumpClient(
-    Host jumpHost, {
+  /// Opens one hop. [over] null = direct TCP (hop0); otherwise the socket is
+  /// the previous client's forwardLocal channel. Test seam — the production
+  /// chain dial calls it.
+  @visibleForTesting
+  Future<SSHClient> debugDialHop(
+    Host hop,
+    SSHSocket? over, {
     SshKeyEntry? keyEntry,
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
   }) async {
-    if (_jumpClients.containsKey(jumpHost.id)) {
-      return _jumpClients[jumpHost.id]!;
-    }
-    final password = await _storage.loadPassword(jumpHost.id);
-    final resolution = await _resolveIdentities(
-      jumpHost,
-      keyEntry,
-      jumpHostLabel: jumpHost.label,
-    );
+    final password = await _storage.loadPassword(hop.id);
+    final resolution =
+        await _resolveIdentities(hop, keyEntry, jumpHostLabel: hop.label);
     if (resolution.agentProxy != null) {
-      _jumpAgentProxies[jumpHost.id] = resolution.agentProxy!;
+      _jumpAgentProxies[hop.id] = resolution.agentProxy!;
     }
-
-    final jumpClient = SSHClient(
-      await SSHSocket.connect(jumpHost.host, jumpHost.port),
-      username: jumpHost.username,
+    final client = SSHClient(
+      over ?? await SSHSocket.connect(hop.host, hop.port),
+      username: hop.username,
       onPasswordRequest: () => password ?? '',
-      identities: resolution.identities.isNotEmpty ? resolution.identities : null,
+      identities:
+          resolution.identities.isNotEmpty ? resolution.identities : null,
       onVerifyHostKey: (type, fp) async {
         if (verifyHostKey != null) return verifyHostKey(type.toString(), fp);
         return true;
       },
     );
-    // Eagerly insert before awaiting auth so that a concurrent caller returns
-    // this in-progress client rather than opening a duplicate connection.
-    _jumpClients[jumpHost.id] = jumpClient;
     try {
-      await jumpClient.authenticated;
+      await client.authenticated;
     } catch (e) {
-      _jumpClients.remove(jumpHost.id);
-      unawaited(_jumpAgentProxies[jumpHost.id]?.close() ?? Future.value());
-      _jumpAgentProxies.remove(jumpHost.id);
-      jumpClient.close();
+      unawaited(_jumpAgentProxies.remove(hop.id)?.close() ?? Future.value());
+      client.close();
       rethrow;
     }
-    return jumpClient;
+    return client;
+  }
+
+  /// Dials [chain] sequentially and returns the LAST hop's client, ready to
+  /// forwardLocal to [target]. Caches each hop by its chain-prefix key so a
+  /// reconnect (or a second target through the same bastions) reuses live
+  /// clients. Test seam — production connect() uses it.
+  @visibleForTesting
+  Future<SSHClient> debugDialChain({
+    required Host target,
+    required List<JumpHop> chain,
+    Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
+  }) async {
+    // Cycle guard — the picker prevents this, but sync/import payloads may not.
+    final seen = <String>{};
+    for (final hop in chain) {
+      if (hop.host.id == target.id) {
+        throw ArgumentError(
+            'Jump chain contains the target host: ${hop.host.id}');
+      }
+      if (!seen.add(hop.host.id)) {
+        throw ArgumentError('Jump chain has a duplicate hop: ${hop.host.id}');
+      }
+    }
+
+    final keys = <String>[];
+    SSHClient? prev;
+    for (var i = 0; i < chain.length; i++) {
+      final hop = chain[i];
+      final prefix = chain.take(i + 1).map((h) => h.host.id).join('>');
+      keys.add(prefix);
+      final cached = _jumpClients[prefix];
+      if (cached != null) {
+        prev = cached;
+        continue;
+      }
+      final socket =
+          prev == null ? null : await prev.forwardLocal(hop.host.host, hop.host.port);
+      final client = await debugDialHop(hop.host, socket,
+          keyEntry: hop.keyEntry, verifyHostKey: verifyHostKey);
+      _jumpClients[prefix] = client;
+      prev = client;
+    }
+    _hostToJump[target.id] = keys;
+    return prev!;
+  }
+
+  /// Releases a host's jump-chain prefix clients, deepest-first, closing a
+  /// prefix only when no other host still references it.
+  void _teardownJumpChain(String hostId) {
+    final keys = _hostToJump.remove(hostId);
+    if (keys == null) return;
+    for (final prefix in keys.reversed) {
+      final stillUsed = _hostToJump.values.any((ks) => ks.contains(prefix));
+      if (stillUsed) continue;
+      _jumpClients.remove(prefix)?.close();
+      final hopId = prefix.split('>').last;
+      unawaited(_jumpAgentProxies.remove(hopId)?.close() ?? Future.value());
+    }
   }
 
   // ── Test connection (TCP + auth, no shell) ────────────
@@ -739,19 +787,19 @@ class SshService {
     }
     final keyId = host.keyId;
     final keyEntry = keyId == null ? null : defaultKeyLookup?.call(keyId);
-    Host? jumpHost;
-    SshKeyEntry? jumpKeyEntry;
-    final jumpId = host.jumpHostId;
-    if (jumpId != null) {
-      jumpHost = defaultJumpHostLookup?.call(jumpId);
-      final jumpKeyId = jumpHost?.keyId;
-      if (jumpKeyId != null) jumpKeyEntry = defaultKeyLookup?.call(jumpKeyId);
+    final chain = <JumpHop>[];
+    for (final jid in host.jumpHostIds) {
+      final jh = defaultJumpHostLookup?.call(jid);
+      if (jh == null) {
+        throw StateError('Jump host not found: $jid');
+      }
+      final jk = jh.keyId == null ? null : defaultKeyLookup?.call(jh.keyId!);
+      chain.add((host: jh, keyEntry: jk));
     }
     return connect(
       host,
       keyEntry: keyEntry,
-      jumpHost: jumpHost,
-      jumpKeyEntry: jumpKeyEntry,
+      jumpChain: chain,
       verifyHostKey: (keyType, fp) => verifier(host.host, host.port, keyType, fp),
     );
   }
@@ -1008,8 +1056,6 @@ class SshService {
   // ── Disconnect ─────────────────────────────────────────
 
   void disconnect(String hostId) {
-    final jumpHostId = _hostToJump.remove(hostId);
-
     final sessionIds = _shellToHost.entries
         .where((e) => e.value == hostId)
         .map((e) => e.key)
@@ -1029,12 +1075,7 @@ class SshService {
     unawaited(_agentProxies[hostId]?.close() ?? Future.value());
     _agentProxies.remove(hostId);
 
-    if (jumpHostId != null && !_hostToJump.values.contains(jumpHostId)) {
-      _jumpClients[jumpHostId]?.close();
-      _jumpClients.remove(jumpHostId);
-      unawaited(_jumpAgentProxies[jumpHostId]?.close() ?? Future.value());
-      _jumpAgentProxies.remove(jumpHostId);
-    }
+    _teardownJumpChain(hostId);
   }
 
   void disconnectSession(String sessionId) {
