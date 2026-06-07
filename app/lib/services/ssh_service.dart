@@ -889,6 +889,25 @@ class SshService {
     _recording?.onShellClosed(session.id);
   }
 
+  /// Opens a forwarded TCP socket to [targetHost]:[targetPort] through the SSH
+  /// host identified by [jumpHostId]. Reuses `_ensureClient` (which resolves
+  /// the full jump chain for the bastion), then calls `forwardLocal`.
+  /// [forHostId] is the consuming host id used for teardown bookkeeping.
+  Future<SSHSocket> openTunnelSocket(
+      String jumpHostId, String targetHost, int targetPort, String forHostId) async {
+    final jumpHost = defaultJumpHostLookup?.call(jumpHostId);
+    if (jumpHost == null) throw StateError('Jump host $jumpHostId not found');
+    final client = await _ensureClient(jumpHost);
+    // Register the consuming host so teardown walks the chain correctly.
+    _retargetJumpChain(forHostId, [jumpHostId]);
+    return client.forwardLocal(targetHost, targetPort);
+  }
+
+  /// Loads the stored password for [hostId] (used by RDP connect path which
+  /// needs the password before opening a Rust session, unlike SSH which reads
+  /// it internally during authentication).
+  Future<String?> loadPassword(String hostId) => _storage.loadPassword(hostId);
+
   /// Returns the open client for [host], reconnecting with stored
   /// credentials when there is none or the cached one is already dead.
   Future<SSHClient> ensureClient(Host host) => _ensureClient(host);

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../models/host.dart';
+import '../models/rdp_session.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
 import '../util/bulk_connect.dart';
@@ -18,6 +19,7 @@ import '../services/os_detection.dart';
 import '../services/ssh_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import 'rdp_badge.dart';
 import 'bulk/bulk_action_bar.dart';
 import 'bulk/bulk_push_dialog.dart';
 import 'bulk/bulk_run_dialog.dart';
@@ -100,6 +102,12 @@ class _HostsDashboardState extends State<HostsDashboard> {
         if (s.status == SessionStatus.connecting ||
             s.status == SessionStatus.connected)
           s.host.id,
+      // RDP tabs count as live too — without this an already-open RDP host
+      // gets a duplicate tab on every CONNECT ALL.
+      for (final s in sessionProvider.sessions.whereType<RdpSession>())
+        if (s.status == RdpSessionStatus.connecting ||
+            s.status == RdpSessionStatus.connected)
+          s.host.id,
     };
     final plan =
         planConnectAll(selected: _selectedHosts(), liveHostIds: live);
@@ -125,7 +133,7 @@ class _HostsDashboardState extends State<HostsDashboard> {
       if (ok != true || !mounted) return;
     }
     for (final h in plan.toConnect) {
-      unawaited(sessionProvider.connect(h));
+      unawaited(sessionProvider.connectAny(h));
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -136,8 +144,22 @@ class _HostsDashboardState extends State<HostsDashboard> {
     _exitSelectionMode();
   }
 
-  void _openBulkRun() {
+  /// Bulk run/push are SSH operations — RDP hosts can never accept them and
+  /// would only pollute the results with guaranteed failures.
+  List<Host> _selectedSshHosts(String action) {
     final hosts = _selectedHosts();
+    final ssh = hosts.where((h) => h.protocol == HostProtocol.ssh).toList();
+    final skipped = hosts.length - ssh.length;
+    if (skipped > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$skipped RDP host(s) skipped — $action is SSH-only'),
+      ));
+    }
+    return ssh;
+  }
+
+  void _openBulkRun() {
+    final hosts = _selectedSshHosts('Run command');
     if (hosts.isEmpty) return;
     showDialog(
       context: context,
@@ -147,7 +169,7 @@ class _HostsDashboardState extends State<HostsDashboard> {
   }
 
   void _openBulkPush() {
-    final hosts = _selectedHosts();
+    final hosts = _selectedSshHosts('Push files');
     if (hosts.isEmpty) return;
     showDialog(
       context: context,
@@ -337,58 +359,79 @@ class _TopBar extends StatelessWidget {
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              height: 34,
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: TextField(
-                controller: controller,
-                onChanged: onSearch,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-                decoration: const InputDecoration(
-                  hintText: 'Search hosts, IPs, or tags...',
-                  hintStyle: TextStyle(color: AppColors.textTertiary, fontSize: 13),
-                  prefixIcon: Icon(Icons.search, color: AppColors.textTertiary, size: 16),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 8),
-                  isDense: true,
+      child: LayoutBuilder(builder: (context, constraints) {
+        // The action cluster keeps its natural width and the search field
+        // absorbs the rest; once the window narrows past a minimum search
+        // width (e.g. host panel open) the cluster scrolls instead of
+        // overflowing — same pattern as BulkActionBar.
+        const minSearchWidth = 180.0;
+        final clusterMax =
+            (constraints.maxWidth - minSearchWidth - 12).clamp(0.0, double.infinity);
+        return Row(
+          children: [
+            Expanded(
+              child: Container(
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: TextField(
+                  controller: controller,
+                  onChanged: onSearch,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                  decoration: const InputDecoration(
+                    hintText: 'Search hosts, IPs, or tags...',
+                    hintStyle: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                    prefixIcon: Icon(Icons.search, color: AppColors.textTertiary, size: 16),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 8),
+                    isDense: true,
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Text('$filteredCount of $totalHosts hosts',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          const SizedBox(width: 16),
-          _SortBtn(mode: sortMode, onChanged: onSortChanged),
-          const SizedBox(width: 8),
-          _ViewToggle(viewMode: viewMode, onChanged: onViewChanged),
-          const SizedBox(width: 8),
-          _OutlinedBtn(
-            icon: Icons.check_box_outlined,
-            label: 'SELECT',
-            onTap: onSelect ?? () {},
-          ),
-          const SizedBox(width: 8),
-          _OutlinedBtn(
-            icon: Icons.terminal,
-            label: 'LOCAL TERMINAL',
-            onTap: onLocalTerminal ?? () {},
-          ),
-          const SizedBox(width: 8),
-          _SplitNewBtn(
-            onNewHost: onAddHost ?? () {},
-            onNewGroup: onNewGroup,
-            onImport: onImport,
-          ),
-        ],
-      ),
+            const SizedBox(width: 12),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: clusterMax),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('$filteredCount of $totalHosts hosts',
+                        style: const TextStyle(
+                            color: AppColors.textSecondary, fontSize: 12)),
+                    const SizedBox(width: 16),
+                    _SortBtn(mode: sortMode, onChanged: onSortChanged),
+                    const SizedBox(width: 8),
+                    _ViewToggle(viewMode: viewMode, onChanged: onViewChanged),
+                    const SizedBox(width: 8),
+                    _OutlinedBtn(
+                      icon: Icons.check_box_outlined,
+                      label: 'SELECT',
+                      onTap: onSelect ?? () {},
+                    ),
+                    const SizedBox(width: 8),
+                    _OutlinedBtn(
+                      icon: Icons.terminal,
+                      label: 'LOCAL TERMINAL',
+                      onTap: onLocalTerminal ?? () {},
+                    ),
+                    const SizedBox(width: 8),
+                    _SplitNewBtn(
+                      onNewHost: onAddHost ?? () {},
+                      onNewGroup: onNewGroup,
+                      onImport: onImport,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      }),
     );
   }
 }
@@ -948,7 +991,7 @@ class _HostCardState extends State<_HostCard> {
         onTap: widget.selectionMode ? widget.onToggleSelect : null,
         onDoubleTap: widget.selectionMode
             ? null
-            : () => context.read<SessionProvider>().connect(widget.host),
+            : () => context.read<SessionProvider>().connectAny(widget.host),
         child: Container(
           padding: EdgeInsets.symmetric(
               horizontal: 14, vertical: widget.compact ? 8 : 12),
@@ -999,12 +1042,16 @@ class _HostCardState extends State<_HostCard> {
         child: resultText,
       );
     }
+    final isSsh = widget.host.protocol == HostProtocol.ssh;
     return [
       if (!widget.selectionMode && _hovered && !_testing && _testResult == null) ...[
-        _iconBtn(Icons.network_check, 'Test Connection', onTap: _test),
-        const SizedBox(width: 2),
-        _iconBtn(Icons.folder_outlined, 'SFTP', onTap: () => _openSftp(context)),
-        const SizedBox(width: 2),
+        // Test/SFTP drive an SSH handshake — meaningless against an RDP port.
+        if (isSsh) ...[
+          _iconBtn(Icons.network_check, 'Test Connection', onTap: _test),
+          const SizedBox(width: 2),
+          _iconBtn(Icons.folder_outlined, 'SFTP', onTap: () => _openSftp(context)),
+          const SizedBox(width: 2),
+        ],
         _iconBtn(Icons.more_horiz, 'More', onTapDown: (d) => _showMenu(context, d.globalPosition)),
       ],
       if (_testing)
@@ -1066,6 +1113,10 @@ class _HostCardState extends State<_HostCard> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (widget.host.protocol == HostProtocol.rdp) ...[
+                    const SizedBox(width: 6),
+                    const RdpBadge(),
+                  ],
                 ],
               ),
               const SizedBox(height: 2),
@@ -1118,6 +1169,10 @@ class _HostCardState extends State<_HostCard> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
+        if (widget.host.protocol == HostProtocol.rdp) ...[
+          const SizedBox(width: 6),
+          const RdpBadge(),
+        ],
         const SizedBox(width: 12),
         Expanded(
           child: Text(
@@ -1131,6 +1186,7 @@ class _HostCardState extends State<_HostCard> {
       ],
     );
   }
+
 
   Widget _iconBtn(IconData icon, String tooltip, {VoidCallback? onTap, void Function(TapDownDetails)? onTapDown}) {
     return Tooltip(
@@ -1154,6 +1210,7 @@ class _HostCardState extends State<_HostCard> {
   void _showMenu(BuildContext context, Offset tapPosition) {
     final hostProvider = context.read<HostProvider>();
     final sessionProvider = context.read<SessionProvider>();
+    final isSsh = widget.host.protocol == HostProtocol.ssh;
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     showMenu(
       context: context,
@@ -1163,12 +1220,13 @@ class _HostCardState extends State<_HostCard> {
         Offset.zero & overlay.size,
       ),
       items: <PopupMenuEntry<String>>[
-        _menuItem('terminal', Icons.terminal, 'Connect', () => sessionProvider.connect(widget.host)),
-        _menuItem('sftp', Icons.folder_outlined, 'SFTP', () => _openSftp(context)),
+        _menuItem('terminal', Icons.terminal, 'Connect', () => sessionProvider.connectAny(widget.host)),
+        if (isSsh)
+          _menuItem('sftp', Icons.folder_outlined, 'SFTP', () => _openSftp(context)),
         _menuItem('edit', Icons.edit_outlined, 'Edit', () => widget.onEditHost?.call(widget.host)),
         const PopupMenuDivider(),
         _menuItem('duplicate', Icons.copy_outlined, 'Duplicate', () => _duplicate(context, hostProvider)),
-        _menuItem('copy_url', Icons.link_outlined, 'Copy SSH URL', () => _copySshUrl(context)),
+        _menuItem('copy_url', Icons.link_outlined, isSsh ? 'Copy SSH URL' : 'Copy RDP URL', () => _copyHostUrl(context)),
         _menuItem('move_group', Icons.drive_file_move_outlined, 'Move to Group', () => _moveToGroup(context, hostProvider)),
         _menuItem('export', Icons.upload_outlined, 'Export', () => _export(context)),
         const PopupMenuDivider(),
@@ -1192,12 +1250,13 @@ class _HostCardState extends State<_HostCard> {
     );
   }
 
-  Future<void> _copySshUrl(BuildContext context) async {
-    final url = 'ssh://${widget.host.username}@${widget.host.host}:${widget.host.port}';
+  Future<void> _copyHostUrl(BuildContext context) async {
+    final scheme = widget.host.protocol == HostProtocol.rdp ? 'rdp' : 'ssh';
+    final url = '$scheme://${widget.host.username}@${widget.host.host}:${widget.host.port}';
     await Clipboard.setData(ClipboardData(text: url));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('SSH URL copied'), duration: Duration(seconds: 2)),
+      SnackBar(content: Text('${scheme.toUpperCase()} URL copied'), duration: const Duration(seconds: 2)),
     );
   }
 
@@ -1207,10 +1266,14 @@ class _HostCardState extends State<_HostCard> {
       host: widget.host.host,
       port: widget.host.port,
       username: widget.host.username,
+      protocol: widget.host.protocol,
+      domain: widget.host.domain,
+      rdpSecurity: widget.host.rdpSecurity,
       authType: widget.host.authType,
       keyId: widget.host.keyId,
       group: widget.host.group,
       tags: List<String>.from(widget.host.tags),
+      jumpHostIds: List<String>.from(widget.host.jumpHostIds),
       sftpMode: widget.host.sftpMode,
       sftpServerCommand: widget.host.sftpServerCommand,
     );

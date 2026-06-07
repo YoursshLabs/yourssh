@@ -9,7 +9,16 @@ enum AuthType { password, privateKey, certificate, agent }
 enum SftpMode { normal, sudo, custom }
 
 /// Transport protocol. Legacy hosts without the field parse as [ssh].
-enum HostProtocol { ssh, rdp }
+enum HostProtocol {
+  ssh(defaultPort: 22),
+  rdp(defaultPort: 3389);
+
+  const HostProtocol({required this.defaultPort});
+
+  /// Canonical port for the protocol — the single source for the host form's
+  /// default value and its auto-flip when the protocol changes.
+  final int defaultPort;
+}
 
 /// RDP security mode. [auto] lets the server negotiate; [nla] forces
 /// CredSSP/NLA; [tls] disables NLA and uses TLS-only.

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:yourssh/models/app_session.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/ssh_session.dart';
 import 'package:yourssh/providers/session_provider.dart';
@@ -128,7 +129,7 @@ void main() {
         port: 1,
         username: 'x',
       );
-      SshSession? dropped;
+      AppSession? dropped;
       String? reason;
       provider.onSessionDropped = (s, r) {
         dropped = s;

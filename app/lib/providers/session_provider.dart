@@ -1,22 +1,27 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:yourssh_rdp/yourssh_rdp.dart';
 import '../models/agent_forwarding_state.dart';
 import '../models/audit_event.dart';
 import '../models/host.dart';
 import '../models/local_session.dart';
+import '../models/rdp_session.dart';
 import '../models/shell_profile.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
+import '../models/app_session.dart';
 import '../models/terminal_session.dart';
 import '../services/audit_service.dart';
 import '../services/local_shell_service.dart';
+import '../services/rdp_tunnel_proxy.dart';
 import '../services/ssh_service.dart';
 import '../services/tab_metadata_service.dart';
 
 class SessionProvider extends ChangeNotifier {
   final SshService _ssh;
   final TabMetadataService _tabMetadata;
-  final List<TerminalSession> _sessions = [];
+  final List<AppSession> _sessions = [];
   final Map<String, Timer> _reconnectTimers = {};
   final Map<String, Timer> _countdownTimers = {};
   String? _activeSessionId;
@@ -34,11 +39,33 @@ class SessionProvider extends ChangeNotifier {
   /// Audit trail sink; null disables auditing.
   AuditService? audit;
 
+  /// Returns the current RDP workspace size (logical pixels); wired in
+  /// main.dart once the workspace widget has a measured size. Null falls back
+  /// to 1280×800.
+  Size Function()? rdpDesktopSize;
+
+  /// RDP server certificate verifier; called with the SHA-256 fingerprint when
+  /// a Connected event arrives. Returns true to proceed, false to reject and
+  /// disconnect. Wired in main.dart to [KnownHostsProvider.challengeRdpCert].
+  /// Null auto-trusts (dev/test fallback).
+  Future<bool> Function(String host, int port, String fingerprint)? rdpCertVerifier;
+
+  /// Returns the pinned RDP cert fingerprint for host:port, or null when not
+  /// pinned. Passed to the Rust engine so a pin mismatch aborts the
+  /// connection BEFORE any credentials are sent.
+  String? Function(String host, int port)? rdpPinLookup;
+
+  /// Fired when the server cert no longer matches the pin (connection was
+  /// aborted pre-auth). Returns true when the user re-trusts the new cert —
+  /// the session then reconnects automatically.
+  Future<bool> Function(String host, int port, String fingerprint)?
+      rdpCertMismatchHandler;
+
   /// Fired when a session drops without a pending auto-reconnect: shell
   /// closed (a graceful `exit` is indistinguishable here — see spec caveat)
   /// or reconnect attempts exhausted. Wired in main.dart to the
-  /// notification center.
-  void Function(SshSession session, String? reason)? onSessionDropped;
+  /// notification center. Receives SSH and RDP sessions alike.
+  void Function(AppSession session, String? reason)? onSessionDropped;
 
   /// Resolves the Settings default shell for new local terminals; wired by
   /// main.dart to SettingsProvider.resolveDefaultShell. Null (tests, early
@@ -78,16 +105,22 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<TerminalSession> get sessions => _sessions;
+  List<AppSession> get sessions => _sessions;
 
   /// SSH-only consumers (plugin context, devops tools, sync, workspace save).
   List<SshSession> get sshSessions =>
       _sessions.whereType<SshSession>().toList();
 
-  Host? hostForSession(String sessionId) =>
-      sshSessions.where((s) => s.id == sessionId).firstOrNull?.host;
+  Host? hostForSession(String sessionId) {
+    final session = _sessionById(sessionId);
+    return switch (session) {
+      SshSession s => s.host,
+      RdpSession s => s.host,
+      _ => null,
+    };
+  }
 
-  TerminalSession? get activeSession => _sessions.isEmpty
+  AppSession? get activeSession => _sessions.isEmpty
       ? null
       : _sessions.firstWhere(
           (s) => s.id == _activeSessionId,
@@ -114,19 +147,185 @@ class SessionProvider extends ChangeNotifier {
     _safeNotify();
 
     // Load persisted tab metadata (label, color, pin) for this host.
-    final meta = await _tabMetadata.loadMetadata(host.id);
     // The user may have closed the tab during the async load — don't mutate,
     // sort, or connect a session that's no longer tracked.
+    final applied = await _applyTabMetadata(session, host.id);
     if (!_sessions.contains(session)) return;
-    if (meta != null) {
-      session.customLabel = meta['label'] as String?;
-      session.colorTag = meta['color'] as String?;
-      session.isPinned = (meta['pinned'] as bool?) ?? false;
+    if (applied) {
       if (session.isPinned) _sortSessions();
       _safeNotify();
     }
 
     await _doConnect(session, host, attempt: 1);
+  }
+
+  /// Loads persisted tab metadata (label, color, pin) for [hostId] onto
+  /// [session]. Returns true when a record existed. Shared by the SSH and
+  /// RDP connect paths so the load logic can't drift between them.
+  Future<bool> _applyTabMetadata(AppSession session, String hostId) async {
+    final meta = await _tabMetadata.loadMetadata(hostId);
+    if (meta == null) return false;
+    session.customLabel = meta['label'] as String?;
+    session.colorTag = meta['color'] as String?;
+    session.isPinned = (meta['pinned'] as bool?) ?? false;
+    return true;
+  }
+
+  /// Routes to [connectRdp] or [connect] based on [host.protocol].
+  Future<AppSession?> connectAny(Host host, {String? initialCommand}) {
+    if (host.protocol == HostProtocol.rdp) return connectRdp(host);
+    return connect(host, initialCommand: initialCommand).then((_) => null);
+  }
+
+  Future<RdpSession?> connectRdp(Host host) async {
+    final password = await _ssh.loadPassword(host.id) ?? '';
+    final size = rdpDesktopSize?.call() ?? const Size(1280, 800);
+
+    var targetHost = host.host;
+    var targetPort = host.port;
+    RdpTunnelProxy? proxy;
+    RdpSession? session;
+    String? setupError;
+
+    try {
+      // Lazy bridge init: loads the native library on the first RDP connect.
+      // A failure (missing/corrupt dylib) surfaces as an error tab instead of
+      // an uncatchable LateInitializationError inside the generated bindings.
+      await RdpClient.ensureInitialized();
+
+      if (host.jumpHostId != null) {
+        proxy = RdpTunnelProxy(onClosed: () => session?.markTunnelClosed());
+        final port = await proxy.start(() async {
+          final sshSocket = await _ssh.openTunnelSocket(
+              host.jumpHostId!, host.host, host.port, host.id);
+          return TunnelEnd(
+              stream: sshSocket.stream,
+              sink: sshSocket.sink,
+              close: sshSocket.destroy);
+        });
+        targetHost = '127.0.0.1';
+        targetPort = port;
+      }
+    } catch (e) {
+      setupError = '$e';
+    }
+
+    final config = RdpConfig(
+      targetHost: targetHost,
+      targetPort: targetPort,
+      username: host.username,
+      password: password,
+      domain: host.domain,
+      width: size.width.round().clamp(800, 7680),
+      height: size.height.round().clamp(600, 4320),
+      security: host.rdpSecurity.name,
+      // With a pinned cert the Rust engine verifies it post-TLS, pre-CredSSP:
+      // a mismatch aborts before any credentials are transmitted.
+      expectedFingerprint: rdpPinLookup?.call(host.host, host.port),
+    );
+    final client = RdpClient(config);
+    session = RdpSession(
+        host: host,
+        client: client,
+        width: config.width,
+        height: config.height,
+        tunnelProxy: proxy);
+    session.onRemoteClipboardText =
+        (t) => Clipboard.setData(ClipboardData(text: t));
+    final verifier = rdpCertVerifier;
+    if (verifier != null) {
+      session.certCheckCallback =
+          (fp) => verifier(host.host, host.port, fp);
+    }
+    final mismatchHandler = rdpCertMismatchHandler;
+    if (mismatchHandler != null) {
+      final s = session;
+      session.onCertMismatch = (fp) {
+        unawaited(mismatchHandler(host.host, host.port, fp).then((trusted) {
+          if (trusted && _sessions.contains(s)) {
+            unawaited(reconnectRdp(s));
+          }
+        }));
+      };
+    }
+
+    await _applyTabMetadata(session, host.id);
+
+    if (setupError != null) {
+      session.status = RdpSessionStatus.error;
+      session.lastMessage = setupError;
+    } else {
+      session.attach(client.events);
+      // Failures surface through the event stream (status/lastMessage);
+      // swallow the future's mirror error so it can't hit the root zone.
+      unawaited(client.connect().then((_) {}, onError: (_) {}));
+    }
+
+    _watchRdpStatus(session);
+    session.addListener(_safeNotify);
+    _sessions.add(session);
+    _activeSessionId = session.id;
+    if (session.isPinned) _sortSessions();
+    _safeNotify();
+    return session;
+  }
+
+  /// Audits RDP connect/disconnect transitions and feeds the notification
+  /// bell — parity with the SSH paths in [_doConnect]/[closeSession].
+  void _watchRdpStatus(RdpSession session) {
+    var last = session.status;
+    session.addListener(() {
+      final now = session.status;
+      if (now == last) return;
+      final was = last;
+      last = now;
+      final host = session.host;
+      if (was == RdpSessionStatus.connecting &&
+          now == RdpSessionStatus.connected) {
+        audit?.record(AuditEvent.now(
+            type: AuditEventType.connect,
+            host: host,
+            sessionId: session.id,
+            meta: const {'source': 'rdp'}));
+      } else if (was == RdpSessionStatus.connecting &&
+          (now == RdpSessionStatus.error ||
+              now == RdpSessionStatus.disconnected)) {
+        audit?.record(AuditEvent.now(
+            type: AuditEventType.connect,
+            host: host,
+            sessionId: session.id,
+            meta: {
+              'source': 'rdp',
+              'error': session.lastMessage ?? 'connection failed',
+            }));
+        // Cert flows (mismatch abort, user rejection) have their own dialogs;
+        // a bell entry on top would be noise.
+        final msg = (session.lastMessage ?? '').toLowerCase();
+        if (!msg.contains('certificate')) {
+          onSessionDropped?.call(session, session.lastMessage);
+        }
+      } else if (was == RdpSessionStatus.connected) {
+        final userClosed = session.lastMessage == 'disconnected by user';
+        audit?.record(AuditEvent.now(
+            type: AuditEventType.disconnect,
+            host: host,
+            sessionId: session.id,
+            meta: {
+              'source': 'rdp',
+              'reason': userClosed ? 'user-closed' : 'dropped',
+            }));
+        if (!userClosed) {
+          onSessionDropped?.call(session, session.lastMessage);
+        }
+      }
+    });
+  }
+
+  Future<void> reconnectRdp(RdpSession old) async {
+    // Label/color/pin are persisted on every edit and reloaded by connectRdp's
+    // tab-metadata pass — no manual carry-over needed.
+    closeSession(old.id);
+    await connectRdp(old.host);
   }
 
   Future<void> _doConnect(SshSession session, Host host, {required int attempt}) async {
@@ -303,6 +502,32 @@ class SessionProvider extends ChangeNotifier {
 
   void closeSession(String sessionId) {
     final session = _sessions.where((s) => s.id == sessionId).firstOrNull;
+    if (session is RdpSession) {
+      final hostId = session.host.id;
+      // Mirror the SSH path: a live tab the user closes gets its own row
+      // (a dead tab was already audited on the drop/error transition).
+      if (session.status == RdpSessionStatus.connected) {
+        audit?.record(AuditEvent.now(
+            type: AuditEventType.disconnect,
+            host: session.host,
+            sessionId: sessionId,
+            meta: const {'source': 'rdp', 'reason': 'user-closed'}));
+      }
+      session.removeListener(_safeNotify);
+      unawaited(session.close());
+      _sessions.remove(session);
+      if (_activeSessionId == sessionId) {
+        _activeSessionId = _sessions.isNotEmpty ? _sessions.last.id : null;
+      }
+      // Last session for this host gone — release the SSH tunnel client
+      // (jump-chain refcount) that openTunnelSocket registered. No-op for
+      // direct (untunneled) RDP hosts.
+      if (!_sessions.any((s) => s is RdpSession && s.host.id == hostId)) {
+        _ssh.disconnect(hostId);
+      }
+      _safeNotify();
+      return;
+    }
     if (session is LocalSession) {
       localShell?.closeSession(sessionId);
       _sessions.remove(session);
@@ -377,20 +602,30 @@ class SessionProvider extends ChangeNotifier {
     _safeNotify();
   }
 
-  TerminalSession? _sessionById(String id) =>
+  AppSession? _sessionById(String id) =>
       _sessions.where((s) => s.id == id).firstOrNull;
+
+  /// Host id used as the tab-metadata key, or null for sessions whose
+  /// metadata is not persisted (local shells, watch sessions).
+  String? _metadataHostId(AppSession s) => switch (s) {
+        SshSession ssh => ssh.isWatch ? null : ssh.host.id,
+        RdpSession rdp => rdp.host.id,
+        _ => null,
+      };
 
   /// Persists a session's tab metadata and mirrors it onto any other live
   /// tabs of the same host. Tab metadata is keyed per host, so all tabs of a
   /// host share one label/color/pin — keeping the live sessions in sync avoids
   /// them silently diverging and then stomping each other's persisted record.
-  void _persistTabMetadata(SshSession session) {
-    _tabMetadata.saveMetadata(session.host.id,
+  void _persistTabMetadata(AppSession session) {
+    final hostId = _metadataHostId(session);
+    if (hostId == null) return;
+    _tabMetadata.saveMetadata(hostId,
         label: session.customLabel,
         color: session.colorTag,
         pinned: session.isPinned);
-    for (final s in sshSessions) {
-      if (!identical(s, session) && s.host.id == session.host.id) {
+    for (final s in _sessions) {
+      if (!identical(s, session) && _metadataHostId(s) == hostId) {
         s.customLabel = session.customLabel;
         s.colorTag = session.colorTag;
         s.isPinned = session.isPinned;
@@ -402,7 +637,7 @@ class SessionProvider extends ChangeNotifier {
     final session = _sessionById(sessionId);
     if (session == null) return;
     session.customLabel = label;
-    if (session is SshSession) _persistTabMetadata(session);
+    _persistTabMetadata(session);
     _safeNotify();
   }
 
@@ -410,7 +645,7 @@ class SessionProvider extends ChangeNotifier {
     final session = _sessionById(sessionId);
     if (session == null) return;
     session.colorTag = colorHex;
-    if (session is SshSession) _persistTabMetadata(session);
+    _persistTabMetadata(session);
     _safeNotify();
   }
 
@@ -445,7 +680,7 @@ class SessionProvider extends ChangeNotifier {
     final session = _sessionById(sessionId);
     if (session == null) return;
     session.isPinned = !session.isPinned;
-    if (session is SshSession) _persistTabMetadata(session);
+    _persistTabMetadata(session);
     _sortSessions();
     _safeNotify();
   }

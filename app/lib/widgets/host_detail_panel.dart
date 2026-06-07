@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 import '../theme/terminal_themes.dart';
 import 'agent_status_line.dart';
 import 'host_chain_editor.dart';
+import 'rdp_badge.dart';
 import 'terminal_appearance_controls.dart' show kBundledTerminalFonts;
 
 class HostDetailPanel extends StatefulWidget {
@@ -70,18 +71,26 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   List<String> _jumpHostIds = [];
   late SftpMode _sftpMode;
   late final TextEditingController _sftpCommand;
+  late HostProtocol _protocol;
+  late final TextEditingController _domainCtrl;
+  late RdpSecurityMode _rdpSecurity;
 
   bool get _isNew => widget.existing == null;
+  bool get _isRdp => _protocol == HostProtocol.rdp;
 
   @override
   void initState() {
     super.initState();
     final h = widget.existing;
+    _protocol = h?.protocol ?? HostProtocol.ssh;
+    _domainCtrl = TextEditingController(text: h?.domain ?? '');
+    _rdpSecurity = h?.rdpSecurity ?? RdpSecurityMode.auto;
     _hostCtrl = TextEditingController(text: h?.host ?? '');
     _labelCtrl = TextEditingController(text: h?.label ?? '');
     _groupCtrl = TextEditingController(text: h?.group ?? widget.initialGroup ?? '');
     _tagsCtrl = TextEditingController(text: h?.tags.join(', ') ?? '');
-    _portCtrl = TextEditingController(text: (h?.port ?? 22).toString());
+    _portCtrl =
+        TextEditingController(text: (h?.port ?? _protocol.defaultPort).toString());
     _usernameCtrl = TextEditingController(text: h?.username ?? '');
     _passwordCtrl = TextEditingController();
     _authType = h?.authType ?? AuthType.password;
@@ -141,12 +150,31 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       ? ''
       : (v == v.roundToDouble() ? v.toInt().toString() : v.toString());
 
+  /// Switching protocol flips the port only when it still holds the OTHER
+  /// protocol's default — a custom port the user typed is preserved.
+  void _onProtocolChanged(HostProtocol next) {
+    if (next == _protocol) return;
+    setState(() {
+      final old = _protocol;
+      _protocol = next;
+      if (int.tryParse(_portCtrl.text) == old.defaultPort) {
+        _portCtrl.text = next.defaultPort.toString();
+      }
+      if (next == HostProtocol.rdp) {
+        // RDP supports password auth only.
+        _authType = AuthType.password;
+        _selectedKeyId = null;
+      }
+      _testResult = null;
+    });
+  }
+
   @override
   void dispose() {
     for (final c in [
       _hostCtrl, _labelCtrl, _groupCtrl, _tagsCtrl, _portCtrl, _usernameCtrl,
       _passwordCtrl, _sftpCommand, _workingDirCtrl, _startupSnippetCtrl,
-      _fontSizeCtrl,
+      _fontSizeCtrl, _domainCtrl,
     ]) {
       c.dispose();
     }
@@ -163,22 +191,29 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     final tags = _tagsCtrl.text.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
     final host = Host(
       id: widget.existing?.id,
+      createdAt: widget.existing?.createdAt,
       label: _labelCtrl.text.trim().isEmpty ? _hostCtrl.text.trim() : _labelCtrl.text.trim(),
       host: _hostCtrl.text.trim(),
-      port: int.tryParse(_portCtrl.text) ?? 22,
+      port: int.tryParse(_portCtrl.text) ?? _protocol.defaultPort,
       username: _usernameCtrl.text.trim(),
-      authType: _authType,
-      keyId: _authType == AuthType.privateKey ? _selectedKeyId : null,
+      protocol: _protocol,
+      domain: _isRdp && _domainCtrl.text.trim().isNotEmpty
+          ? _domainCtrl.text.trim()
+          : null,
+      rdpSecurity: _rdpSecurity,
+      authType: _isRdp ? AuthType.password : _authType,
+      keyId: !_isRdp && _authType == AuthType.privateKey ? _selectedKeyId : null,
       group: _groupCtrl.text.trim(),
       tags: tags,
-      autoRecord: _autoRecord,
+      autoRecord: !_isRdp && _autoRecord,
       recordingRedaction: _recordingRedaction,
       shellIntegration: _shellIntegration,
-      agentForwarding: _agentForwarding,
+      agentForwarding: !_isRdp && _agentForwarding,
       jumpHostIds: _jumpHostIds,
-      sftpMode: _sftpMode,
-      sftpServerCommand:
-          _sftpMode == SftpMode.custom ? _sftpCommand.text.trim() : null,
+      sftpMode: _isRdp ? SftpMode.normal : _sftpMode,
+      sftpServerCommand: !_isRdp && _sftpMode == SftpMode.custom
+          ? _sftpCommand.text.trim()
+          : null,
       workingDir: _workingDirCtrl.text.trim().isEmpty
           ? null
           : _workingDirCtrl.text.trim(),
@@ -272,6 +307,38 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: [
+                  // Protocol selector
+                  SegmentedButton<HostProtocol>(
+                    segments: const [
+                      ButtonSegment(
+                        value: HostProtocol.ssh,
+                        label: Text('SSH'),
+                        icon: Icon(Icons.terminal, size: 14),
+                      ),
+                      ButtonSegment(
+                        value: HostProtocol.rdp,
+                        label: Text('RDP'),
+                        icon: Icon(Icons.desktop_windows_outlined, size: 14),
+                      ),
+                    ],
+                    selected: {_protocol},
+                    onSelectionChanged: (s) => _onProtocolChanged(s.first),
+                    style: ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      textStyle: WidgetStateProperty.all(const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600)),
+                      // Selected segment renders on the accent fill — use
+                      // black like the CONNECT button (green-on-green text
+                      // would be invisible).
+                      foregroundColor: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.selected)
+                            ? Colors.black
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
                   // Address card
                   _Card(children: [
                     _AddressField(controller: _hostCtrl),
@@ -301,10 +368,10 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                   ]),
 
                   const SizedBox(height: 16),
-                  // SSH Port row
+                  // Port row
                   Row(
                     children: [
-                      const Text('SSH on', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                      Text(_isRdp ? 'RDP on' : 'SSH on', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
                       const SizedBox(width: 10),
                       SizedBox(
                         width: 56,
@@ -351,8 +418,99 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                       obscure: _obscurePassword,
                       onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
                     ),
+                    if (_isRdp) ...[
+                      _divider(),
+                      _PanelField(
+                        controller: _domainCtrl,
+                        hint: 'Domain (optional)',
+                        icon: Icons.domain,
+                      ),
+                    ],
                   ]),
 
+                  if (_isRdp) ...[
+                    const SizedBox(height: 16),
+                    _sectionLabel('RDP SECURITY'),
+                    const SizedBox(height: 6),
+                    _Card(children: [
+                      _DropdownRow(
+                        icon: Icons.security,
+                        child: DropdownButton<RdpSecurityMode>(
+                          value: _rdpSecurity,
+                          isExpanded: true,
+                          style: const TextStyle(
+                              color: AppColors.textPrimary, fontSize: 13),
+                          dropdownColor: AppColors.card,
+                          underline: const SizedBox(),
+                          items: const [
+                            DropdownMenuItem(
+                                value: RdpSecurityMode.auto,
+                                child: Text('Auto (negotiate)')),
+                            DropdownMenuItem(
+                                value: RdpSecurityMode.nla,
+                                child: Text('NLA (CredSSP)')),
+                            DropdownMenuItem(
+                                value: RdpSecurityMode.tls,
+                                child: Text('TLS only')),
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _rdpSecurity = v!),
+                        ),
+                      ),
+                    ]),
+
+                    Builder(builder: (context) {
+                      final sshHosts = context
+                          .watch<HostProvider>()
+                          .allHosts
+                          .where((h) =>
+                              h.protocol == HostProtocol.ssh &&
+                              h.id != widget.existing?.id)
+                          .toList();
+                      if (sshHosts.isEmpty) return const SizedBox.shrink();
+                      // A deleted bastion leaves a stale id — show "direct"
+                      // instead of tripping the dropdown's value assert.
+                      final current = _jumpHostIds.firstOrNull;
+                      final valid =
+                          sshHosts.any((h) => h.id == current) ? current : null;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 16),
+                          _sectionLabel('SSH TUNNEL'),
+                          const SizedBox(height: 6),
+                          _Card(children: [
+                            _DropdownRow(
+                              icon: Icons.alt_route,
+                              child: DropdownButton<String?>(
+                                value: valid,
+                                isExpanded: true,
+                                style: const TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 13),
+                                dropdownColor: AppColors.card,
+                                underline: const SizedBox(),
+                                items: [
+                                  const DropdownMenuItem<String?>(
+                                      value: null,
+                                      child: Text('Direct connection')),
+                                  for (final h in sshHosts)
+                                    DropdownMenuItem<String?>(
+                                        value: h.id,
+                                        child: Text(
+                                            'via ${h.label.isEmpty ? h.host : h.label}')),
+                                ],
+                                onChanged: (v) => setState(() =>
+                                    _jumpHostIds = v == null ? [] : [v]),
+                              ),
+                            ),
+                          ]),
+                        ],
+                      );
+                    }),
+                  ],
+
+                  if (!_isRdp) ...[
                   const SizedBox(height: 16),
                   _sectionLabel('AUTH METHOD'),
                   const SizedBox(height: 6),
@@ -869,6 +1027,8 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                       ),
                     ),
                   ],
+                  ], // end !_isRdp (SSH-only sections)
+                  if (_isRdp) const SizedBox(height: 24),
                   const SizedBox(height: 8),
                   // Connect button
                   GestureDetector(
@@ -919,14 +1079,16 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Row(
               children: [
                 Text(
                   _isNew ? 'New Host' : 'Edit Host',
                   style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
                 ),
+                if (_isRdp) ...[
+                  const SizedBox(width: 8),
+                  const RdpBadge(),
+                ],
               ],
             ),
           ),

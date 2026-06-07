@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 import '../services/workspace_service.dart';
 import '../models/host.dart';
 import '../models/known_host.dart';
@@ -49,6 +50,9 @@ import '../widgets/join_share_dialog.dart';
 import '../widgets/update_banner.dart';
 import '../widgets/notification_bell.dart';
 import '../widgets/session_tab.dart';
+import '../models/rdp_session.dart';
+import '../widgets/rdp_workspace.dart';
+import '../services/storage_service.dart';
 
 enum NavSection { hosts, keychain, portForwarding, sftp, knownHosts, recordings, audit, settings, plugins }
 
@@ -80,7 +84,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   SettingsProvider? _settingsProvider;
   TerminalLayoutProvider? _layoutProvider;
   bool _hostKeyDialogShowing = false;
+  bool _rdpCertDialogShowing = false;
   bool _consentDialogShowing = false;
+  bool _rdpFullscreen = false;
 
   @override
   void initState() {
@@ -147,6 +153,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   void _handleHotkey(String name) {
     if (!mounted) return;
+    // Terminal-only features no-op on RDP tabs: their layout state is global
+    // and persisted, so firing them against a remote-desktop tab would
+    // corrupt the workspace snapshot restored on next launch.
+    final isTerminal =
+        context.read<SessionProvider>().activeSession is TerminalSession;
     switch (name) {
       case 'new_session':
         _openHostPanel();
@@ -157,11 +168,17 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       case 'prev_session':
         context.read<SessionProvider>().activatePrev();
       case 'toggle_input_bar':
-        context.read<TerminalLayoutProvider>().toggleInputBar();
+        if (isTerminal) {
+          context.read<TerminalLayoutProvider>().toggleInputBar();
+        }
       case 'split_horizontal':
-        context.read<TerminalLayoutProvider>().setLayout(SplitLayout.horizontal);
+        if (isTerminal) {
+          context.read<TerminalLayoutProvider>().setLayout(SplitLayout.horizontal);
+        }
       case 'split_vertical':
-        context.read<TerminalLayoutProvider>().setLayout(SplitLayout.vertical);
+        if (isTerminal) {
+          context.read<TerminalLayoutProvider>().setLayout(SplitLayout.vertical);
+        }
       case 'command_palette':
         _openCommandPalette();
     }
@@ -210,8 +227,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   void _onKnownHostsChanged() {
+    // isResolved guard: a settled challenge can linger on the provider until
+    // its awaiting caller resumes — never re-show a dialog for it.
     final challenge = _knownHostsProvider?.pendingChallenge;
-    if (challenge != null && !_hostKeyDialogShowing && mounted) {
+    if (challenge != null &&
+        !challenge.isResolved &&
+        !_hostKeyDialogShowing &&
+        mounted) {
       _hostKeyDialogShowing = true;
       showDialog<bool>(
         context: context,
@@ -220,6 +242,26 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       ).then((trusted) {
         challenge.resolve(trusted ?? false);
         _hostKeyDialogShowing = false;
+        // A challenge raised while this dialog was open was skipped by the
+        // guard above — re-check, or it would silently time out (2 min).
+        scheduleMicrotask(_onKnownHostsChanged);
+      });
+    }
+
+    final rdpChallenge = _knownHostsProvider?.pendingRdpChallenge;
+    if (rdpChallenge != null &&
+        !rdpChallenge.isResolved &&
+        !_rdpCertDialogShowing &&
+        mounted) {
+      _rdpCertDialogShowing = true;
+      showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _RdpCertDialog(challenge: rdpChallenge),
+      ).then((trusted) {
+        rdpChallenge.resolve(trusted ?? false);
+        _rdpCertDialogShowing = false;
+        scheduleMicrotask(_onKnownHostsChanged);
       });
     }
   }
@@ -245,15 +287,26 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// Host id a session restores from, or null for ephemeral tabs (local
+  /// shells, watch sessions).
+  static String? _restorableHostId(AppSession s) => switch (s) {
+        SshSession ssh => ssh.isWatch ? null : ssh.host.id,
+        RdpSession rdp => rdp.host.id,
+        _ => null,
+      };
+
   void _saveWorkspaceNow() {
-    // SSH tabs only — local sessions are ephemeral by design.
-    final sessions = _sessionProvider?.sshSessions;
+    // SSH + RDP tabs — local sessions are ephemeral by design.
+    final provider = _sessionProvider;
     final layout = _layoutProvider;
-    if (sessions == null || layout == null) return;
-    final active = _sessionProvider?.activeSession;
+    if (provider == null || layout == null) return;
+    final active = provider.activeSession;
     final snapshot = WorkspaceSnapshot(
-      hostIds: sessions.map((s) => s.host.id).toList(),
-      activeHostId: active is SshSession ? active.host.id : null,
+      hostIds: provider.sessions
+          .map(_restorableHostId)
+          .whereType<String>()
+          .toList(),
+      activeHostId: active == null ? null : _restorableHostId(active),
       layout: layout.layout,
       inputBarVisible: layout.inputBarVisible,
     );
@@ -350,13 +403,15 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
 
     for (final host in found) {
-      unawaited(sessionProvider.connect(host));
+      unawaited(sessionProvider.connectAny(host));
     }
 
     // Sessions are added synchronously at connect() entry; set active now.
+    // (connectRdp has awaits before adding, so RDP tabs may land later —
+    // the .last fallback in activeSession covers that gracefully.)
     if (snapshot.activeHostId != null) {
-      final targetSession = sessionProvider.sshSessions
-          .where((s) => s.host.id == snapshot.activeHostId)
+      final targetSession = sessionProvider.sessions
+          .where((s) => _restorableHostId(s) == snapshot.activeHostId)
           .firstOrNull;
       if (targetSession != null) {
         sessionProvider.setActive(targetSession.id);
@@ -481,7 +536,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         type: CommandType.host,
         execute: () async {
           setState(() => _viewingTerminal = true);
-          await context.read<SessionProvider>().connect(h);
+          await context.read<SessionProvider>().connectAny(h);
         },
       )),
     ];
@@ -501,11 +556,42 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     ));
   }
 
+  /// Enters/exits RDP fullscreen: OS window fullscreen + the app chrome
+  /// (tab bar, sidebar, panels) collapses to just the RdpWorkspace.
+  Future<void> _setRdpFullscreen(bool on) async {
+    if (_rdpFullscreen == on || !mounted) return;
+    setState(() => _rdpFullscreen = on);
+    try {
+      await windowManager.setFullScreen(on);
+    } catch (_) {
+      // Window manager unavailable (tests/headless) — chrome state already
+      // applied, which is the part that matters for correctness.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final sessionProvider = context.watch<SessionProvider>();
     final sessions = sessionProvider.sessions;
     final activeSession = sessionProvider.activeSession;
+
+    // Fullscreen only makes sense while an RDP tab is front-and-center;
+    // anything that breaks that (tab switched via hotkey, tab closed, nav
+    // changed) drops back to windowed mode instead of trapping the user in
+    // a chrome-less screen.
+    final rdpFullscreenActive =
+        _rdpFullscreen && _viewingTerminal && activeSession is RdpSession;
+    if (_rdpFullscreen && !rdpFullscreenActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_setRdpFullscreen(false));
+      });
+    }
+    if (rdpFullscreenActive) {
+      return Scaffold(
+        backgroundColor: AppColors.bg,
+        body: _buildForeground(activeSession),
+      );
+    }
 
     final engineProvider = context.watch<PluginEngineProvider>();
     if (engineProvider.pendingConsent != null && !_consentDialogShowing) {
@@ -619,7 +705,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                       },
                       onConnect: (host) async {
                         setState(() => _viewingTerminal = true);
-                        await context.read<SessionProvider>().connect(host);
+                        await context.read<SessionProvider>().connectAny(host);
                       },
                     ),
                   if (_sidePanel == _SidePanel.newGroup)
@@ -665,7 +751,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildContent(TerminalSession? active) {
+  Widget _buildContent(AppSession? active) {
     final showSftp = _nav == NavSection.sftp &&
         !(_viewingTerminal && active != null) &&
         _activePluginId == null &&
@@ -688,7 +774,15 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildForeground(TerminalSession? active) {
+  Widget _buildForeground(AppSession? active) {
+    if (_viewingTerminal && active is RdpSession) {
+      return RdpWorkspace(
+        session: active,
+        onReconnect: () => _retryRdp(active),
+        isFullscreen: _rdpFullscreen,
+        onFullscreenChanged: (on) => unawaited(_setRdpFullscreen(on)),
+      );
+    }
     if (_viewingTerminal && active != null) {
       // Hide the AI toggle (and any open chat panel) when no AI provider
       // has an API key configured — it appears once a key is saved.
@@ -794,6 +888,21 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       NavSection.settings => const SettingsScreen(),
       NavSection.plugins => const PluginManagerScreen(),
     };
+  }
+
+  Future<void> _retryRdp(RdpSession old) async {
+    final provider = context.read<SessionProvider>();
+    if (old.status == RdpSessionStatus.error) {
+      final newPassword = await showDialog<String>(
+        context: context,
+        builder: (_) => _RdpPasswordDialog(host: old.host),
+      );
+      if (newPassword == null) return; // cancelled
+      if (!mounted) return;
+      await context.read<StorageService>().savePassword(old.host.id, newPassword);
+    }
+    if (!mounted) return;
+    await provider.reconnectRdp(old);
   }
 }
 
@@ -1064,8 +1173,8 @@ class _NavItemState extends State<_NavItem> {
 // ── Top Tab Bar ───────────────────────────────────────────
 
 class _TopTabBar extends StatelessWidget {
-  final List<TerminalSession> sessions;
-  final TerminalSession? active;
+  final List<AppSession> sessions;
+  final AppSession? active;
   final NavSection nav;
   final bool viewingTerminal;
   final ValueChanged<NavSection> onNavSelect;
@@ -1360,53 +1469,122 @@ class _AiChatToggle extends StatelessWidget {
 
 // ── Host Key Mismatch Dialog ──────────────────────────────
 
-class _HostKeyDialog extends StatelessWidget {
-  final HostKeyChallenge challenge;
-  const _HostKeyDialog({required this.challenge});
+/// Shared chrome for TOFU trust prompts (SSH host key, RDP certificate) —
+/// one dialog skeleton so the two security prompts can't visually diverge.
+class _TofuDialog extends StatelessWidget {
+  final IconData icon;
+  final Color accentColor;
+  final String title;
+  final String endpoint;
+  final List<Widget> fingerprintRows;
+  final String warning;
+  final String cancelLabel;
+  final String acceptLabel;
+
+  const _TofuDialog({
+    required this.icon,
+    required this.accentColor,
+    required this.title,
+    required this.endpoint,
+    required this.fingerprintRows,
+    required this.warning,
+    required this.cancelLabel,
+    required this.acceptLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AppColors.sidebar,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
-          SizedBox(width: 8),
-          Text('Host key changed',
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 15)),
+          Icon(icon, color: accentColor, size: 20),
+          const SizedBox(width: 8),
+          Text(title,
+              style: const TextStyle(
+                  color: AppColors.textPrimary, fontSize: 15)),
         ],
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${challenge.host}:${challenge.port}',
+          Text(endpoint,
               style: const TextStyle(
                   color: AppColors.textSecondary, fontSize: 13)),
           const SizedBox(height: 12),
-          _FpRow(label: 'Old', fp: challenge.oldFingerprint),
-          const SizedBox(height: 4),
-          _FpRow(label: 'New', fp: challenge.newFingerprint),
+          ...fingerprintRows,
           const SizedBox(height: 12),
-          const Text(
-            'This could indicate a man-in-the-middle attack. '
-            'Only trust the new key if you know the server key changed.',
-            style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
-          ),
+          Text(warning,
+              style: const TextStyle(
+                  color: AppColors.textTertiary, fontSize: 11)),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(cancelLabel),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          style: TextButton.styleFrom(foregroundColor: Colors.orange),
-          child: const Text('Trust new key'),
+          style: TextButton.styleFrom(foregroundColor: accentColor),
+          child: Text(acceptLabel),
         ),
       ],
+    );
+  }
+}
+
+class _HostKeyDialog extends StatelessWidget {
+  final HostKeyChallenge challenge;
+  const _HostKeyDialog({required this.challenge});
+
+  @override
+  Widget build(BuildContext context) {
+    return _TofuDialog(
+      icon: Icons.warning_amber_rounded,
+      accentColor: Colors.orange,
+      title: 'Host key changed',
+      endpoint: '${challenge.host}:${challenge.port}',
+      fingerprintRows: [
+        _FpRow(label: 'Old', fp: challenge.oldFingerprint),
+        const SizedBox(height: 4),
+        _FpRow(label: 'New', fp: challenge.newFingerprint),
+      ],
+      warning: 'This could indicate a man-in-the-middle attack. '
+          'Only trust the new key if you know the server key changed.',
+      cancelLabel: 'Cancel',
+      acceptLabel: 'Trust new key',
+    );
+  }
+}
+
+// ── RDP Certificate TOFU Dialog ───────────────────────────
+
+class _RdpCertDialog extends StatelessWidget {
+  final RdpCertChallenge challenge;
+  const _RdpCertDialog({required this.challenge});
+
+  @override
+  Widget build(BuildContext context) {
+    final mismatch = challenge.isMismatch;
+    return _TofuDialog(
+      icon: mismatch ? Icons.warning_amber_rounded : Icons.lock_open,
+      accentColor: mismatch ? AppColors.red : AppColors.accent,
+      title: mismatch ? 'RDP certificate changed' : 'Trust RDP certificate?',
+      endpoint: '${challenge.host}:${challenge.port}',
+      fingerprintRows: [
+        _FpRow(label: 'SHA-256', fp: challenge.fingerprint),
+      ],
+      warning: mismatch
+          ? 'The server certificate has changed since you last connected. '
+              'This could indicate a man-in-the-middle attack. The connection '
+              'was aborted before your credentials were sent.'
+          : 'This server\'s certificate is not yet trusted. '
+              'Verify the fingerprint above before accepting.',
+      cancelLabel: 'Reject',
+      acceptLabel: mismatch ? 'Trust new cert' : 'Accept',
     );
   }
 }
@@ -1495,7 +1673,8 @@ class _FpRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 34,
+          // Wide enough for 'SHA-256:' — 34px wrapped it mid-label.
+          width: 60,
           child: Text('$label:',
               style: const TextStyle(
                   color: AppColors.textSecondary, fontSize: 11)),
@@ -1548,6 +1727,56 @@ class _ShareButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── RDP password re-prompt dialog ─────────────────────────
+
+class _RdpPasswordDialog extends StatefulWidget {
+  final Host host;
+  const _RdpPasswordDialog({required this.host});
+
+  @override
+  State<_RdpPasswordDialog> createState() => _RdpPasswordDialogState();
+}
+
+class _RdpPasswordDialogState extends State<_RdpPasswordDialog> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Password for ${widget.host.label}'),
+      content: TextField(
+        controller: _ctrl,
+        obscureText: true,
+        autofocus: true,
+        decoration: const InputDecoration(labelText: 'Password'),
+        onSubmitted: (_) => Navigator.pop(context, _ctrl.text),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _ctrl.text),
+          child: const Text('Connect'),
+        ),
+      ],
     );
   }
 }

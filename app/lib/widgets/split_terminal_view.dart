@@ -66,10 +66,11 @@ class SplitTerminalView extends StatelessWidget {
         .watch<PluginProvider>()
         .isEnabled(YourSSHSnippetsPlugin.pluginId);
     final sessionProvider = context.watch<SessionProvider>();
-    final sessions = sessionProvider.sessions;
-    final active = sessionProvider.activeSession;
+    final termSessions = sessionProvider.sessions.whereType<TerminalSession>().toList();
+    final activeRaw = sessionProvider.activeSession;
+    final active = activeRaw is TerminalSession ? activeRaw : (termSessions.isNotEmpty ? termSessions[0] : null);
 
-    if (sessions.isEmpty) {
+    if (termSessions.isEmpty) {
       return const Center(
         child: Text('No active sessions', style: TextStyle(color: Color(0xFF555555))),
       );
@@ -81,7 +82,7 @@ class SplitTerminalView extends StatelessWidget {
         Expanded(
           child: Row(
             children: [
-              Expanded(child: _buildPanes(context, layout, sessions, active)),
+              Expanded(child: _buildPanes(context, layout, termSessions, active)),
               // Gated on the plugin too: the panel must vanish if the
               // snippets plugin is disabled while it is open.
               if (snippetsEnabled && layout.snippetsPanelVisible)
@@ -114,9 +115,7 @@ class SplitTerminalView extends StatelessWidget {
 
   void _runSnippetOnActive(BuildContext context, String command) {
     if (!_canRunSnippetTarget(context)) return;
-    context
-        .read<SessionProvider>()
-        .activeSession!
+    (context.read<SessionProvider>().activeSession! as TerminalSession)
         .terminal
         .textInput('$command\n');
   }

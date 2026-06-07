@@ -239,6 +239,40 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _knownHostsProvider.load();
     _sessionProvider.hostKeyVerifier = _knownHostsProvider.verifyHostKey;
     _ssh.defaultHostKeyVerifier = _knownHostsProvider.verifyHostKey;
+    // Pinned fingerprint goes into the Rust engine, which verifies it
+    // post-TLS / pre-CredSSP — a mismatch aborts before credentials are sent.
+    _sessionProvider.rdpPinLookup =
+        (host, port) => _knownHostsProvider.pinnedRdpFingerprint(host, port);
+    _sessionProvider.rdpCertVerifier = (host, port, fp) async {
+      // Already pinned and matching → no dialog (true TOFU, not
+      // trust-on-every-use). A mismatch can't reach here — the Rust engine
+      // aborts pre-auth and fires the mismatch handler below instead.
+      final verdict =
+          _knownHostsProvider.verifyRdpCert(host: host, port: port, fingerprint: fp);
+      if (verdict == RdpCertVerdict.trusted) return true;
+      return _knownHostsProvider.challengeRdpCert(
+        host: host,
+        port: port,
+        fingerprint: fp,
+        isMismatch: verdict == RdpCertVerdict.mismatch,
+      );
+    };
+    _sessionProvider.rdpCertMismatchHandler = (host, port, fp) =>
+        _knownHostsProvider.challengeRdpCert(
+          host: host,
+          port: port,
+          fingerprint: fp,
+          isMismatch: true,
+        );
+    // Requested RDP desktop size from the current window content area
+    // (sidebar + tab bar subtracted). The server may still override; the
+    // negotiated size comes back in the Connected event.
+    _sessionProvider.rdpDesktopSize = () {
+      final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
+      if (view == null) return const Size(1280, 800);
+      final logical = view.physicalSize / view.devicePixelRatio;
+      return Size(logical.width - 220, logical.height - 96);
+    };
     _ssh.defaultKeyLookup = (id) => _keyProvider.findById(id);
     _ssh.defaultJumpHostLookup = (id) =>
         _hostProvider.allHosts.where((h) => h.id == id).firstOrNull;
@@ -333,10 +367,11 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _updateProvider.addListener(_pushUpdateNotification);
     // Informational by design: the disconnect item stays in the bell until
     // the user clears it, even if the session later reconnects (spec v1).
+    // Covers SSH and RDP sessions alike (AppSession).
     _sessionProvider.onSessionDropped = (session, reason) {
       _notificationCenter.add(AppNotification(
         type: AppNotificationType.sessionDisconnect,
-        title: 'Session disconnected: ${session.title}',
+        title: 'Session disconnected: ${session.tabLabel}',
         body: reason,
         dedupeKey: 'disconnect:${session.id}',
         sessionId: session.id,

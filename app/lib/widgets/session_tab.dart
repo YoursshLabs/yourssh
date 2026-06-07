@@ -18,7 +18,7 @@ import '../theme/app_theme.dart';
 import 'health_dot.dart';
 
 class SessionTab extends StatefulWidget {
-  final TerminalSession session;
+  final AppSession session;
   final bool isActive;
   final SessionProvider provider;
   final VoidCallback onTap;
@@ -246,7 +246,7 @@ class _SessionTabState extends State<SessionTab> {
                     ),
                   );
                 })
-              else if (widget.session.isLocal)
+              else if (widget.session case TerminalSession ts when ts.isLocal)
                 const Padding(
                   padding: EdgeInsets.only(right: 5),
                   child: Icon(Icons.laptop_mac,
