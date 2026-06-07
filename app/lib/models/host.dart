@@ -21,7 +21,9 @@ class Host {
   DateTime createdAt;
   String? detectedOs;
   bool autoRecord;
-  String? jumpHostId;
+
+  /// Ordered jump-host chain (bastion → … → target). Empty = direct.
+  List<String> jumpHostIds;
   bool shellIntegration;
   bool agentForwarding;
   SftpMode sftpMode;
@@ -52,7 +54,7 @@ class Host {
     DateTime? createdAt,
     this.detectedOs,
     this.autoRecord = false,
-    this.jumpHostId,
+    Iterable<String> jumpHostIds = const [],
     this.shellIntegration = true,
     this.agentForwarding = false,
     this.sftpMode = SftpMode.normal,
@@ -70,7 +72,11 @@ class Host {
         // without hitting `Unsupported operation` on the shared `const []`.
         tags = List.of(tags),
         envVars = Map.of(envVars),
+        jumpHostIds = List.of(jumpHostIds),
         createdAt = createdAt ?? DateTime.now();
+
+  /// First hop, for "has a bastion?" consumers and cross-version JSON.
+  String? get jumpHostId => jumpHostIds.isEmpty ? null : jumpHostIds.first;
 
   /// Whether connect-time template work exists. Drives the invisible
   /// handshake when shell integration is off — the snippet needs the
@@ -91,6 +97,9 @@ class Host {
         'createdAt': createdAt.toIso8601String(),
         'detectedOs': detectedOs,
         'autoRecord': autoRecord,
+        'jumpHostIds': jumpHostIds,
+        // Dual-write the first hop so an older app reading a synced payload
+        // keeps a working single-hop bastion instead of losing it.
         'jumpHostId': jumpHostId,
         'shellIntegration': shellIntegration,
         'agentForwarding': agentForwarding,
@@ -145,6 +154,13 @@ class Host {
       if (raw is! Map) return const {};
       return raw.map((k, v) => MapEntry(k.toString(), v.toString()));
     }
+    List<String> parseJumpHostIds() {
+      final raw = json['jumpHostIds'];
+      if (raw is List) return raw.map((e) => e.toString()).toList();
+      // Legacy single-hop payload.
+      final legacy = json['jumpHostId'];
+      return legacy is String && legacy.isNotEmpty ? [legacy] : const [];
+    }
     return Host(
       id: json['id'] as String?,
       label: (json['label'] as String?) ?? host,
@@ -158,7 +174,7 @@ class Host {
       createdAt: parseCreatedAt(),
       detectedOs: json['detectedOs'] as String?,
       autoRecord: (json['autoRecord'] as bool?) ?? false,
-      jumpHostId: json['jumpHostId'] as String?,
+      jumpHostIds: parseJumpHostIds(),
       shellIntegration: (json['shellIntegration'] as bool?) ?? true,
       agentForwarding: (json['agentForwarding'] as bool?) ?? false,
       sftpMode: parseSftpMode(),
@@ -184,7 +200,7 @@ class Host {
     String? group,
     String? detectedOs,
     bool? autoRecord,
-    Object? jumpHostId = const _Unset(),
+    List<String>? jumpHostIds,
     bool? shellIntegration,
     bool? agentForwarding,
     SftpMode? sftpMode,
@@ -211,7 +227,7 @@ class Host {
         createdAt: createdAt,
         detectedOs: detectedOs ?? this.detectedOs,
         autoRecord: autoRecord ?? this.autoRecord,
-        jumpHostId: jumpHostId is _Unset ? this.jumpHostId : jumpHostId as String?,
+        jumpHostIds: jumpHostIds ?? this.jumpHostIds,
         shellIntegration: shellIntegration ?? this.shellIntegration,
         agentForwarding: agentForwarding ?? this.agentForwarding,
         sftpMode: sftpMode ?? this.sftpMode,
