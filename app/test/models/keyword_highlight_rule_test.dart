@@ -88,8 +88,8 @@ void main() {
       expect(restored.isRegex, rule.isRegex);
       expect(restored.caseSensitive, rule.caseSensitive);
       expect(restored.enabled, rule.enabled);
-      expect(restored.foreground?.value, rule.foreground?.value);
-      expect(restored.background?.value, rule.background?.value);
+      expect(restored.foreground?.toARGB32(), rule.foreground?.toARGB32());
+      expect(restored.background?.toARGB32(), rule.background?.toARGB32());
     });
 
     test('kDefaultKeywordHighlightRules all compile without error', () {

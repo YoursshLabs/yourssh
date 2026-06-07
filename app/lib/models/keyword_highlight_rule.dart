@@ -44,8 +44,8 @@ class AppKeywordHighlightRule {
         'isRegex': isRegex,
         'caseSensitive': caseSensitive,
         'enabled': enabled,
-        'foreground': foreground?.value,
-        'background': background?.value,
+        'foreground': foreground?.toARGB32(),
+        'background': background?.toARGB32(),
       };
 
   factory AppKeywordHighlightRule.fromJson(Map<String, dynamic> json) {
@@ -104,7 +104,7 @@ final kDefaultKeywordHighlightRules = [
     caseSensitive: false,
     enabled: true,
     foreground: null,
-    background: const Color(0xFFB71C1C),
+    background: const Color(0xCCB71C1C),
   ),
   AppKeywordHighlightRule(
     id: 'default_fail',
@@ -114,7 +114,7 @@ final kDefaultKeywordHighlightRules = [
     caseSensitive: false,
     enabled: true,
     foreground: null,
-    background: const Color(0xFFB71C1C),
+    background: const Color(0xCCB71C1C),
   ),
   AppKeywordHighlightRule(
     id: 'default_warning',
@@ -124,7 +124,7 @@ final kDefaultKeywordHighlightRules = [
     caseSensitive: false,
     enabled: true,
     foreground: null,
-    background: const Color(0xFFE65100),
+    background: const Color(0xCCE65100),
   ),
   AppKeywordHighlightRule(
     id: 'default_warn',
@@ -134,7 +134,7 @@ final kDefaultKeywordHighlightRules = [
     caseSensitive: false,
     enabled: true,
     foreground: null,
-    background: const Color(0xFFE65100),
+    background: const Color(0xCCE65100),
   ),
   AppKeywordHighlightRule(
     id: 'default_success',

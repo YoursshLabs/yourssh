@@ -568,7 +568,7 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     for (var i = firstLine; i <= lastLine; i++) {
       if (i >= lines.length) break;
       final lineText = lines[i].getText();
-      final lineY = i * charHeight + _lineOffset;
+      final lineY = (i * charHeight + _lineOffset).truncateToDouble();
 
       for (final rule in _keywordRules) {
         for (final m in rule.pattern.allMatches(lineText)) {
