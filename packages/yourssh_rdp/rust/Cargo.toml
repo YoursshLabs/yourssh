@@ -6,6 +6,14 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "staticlib"]
 
+[profile.release]
+# Shrink the shipped dylib (12.4 MB → see PR #57): strip symbols, thin LTO,
+# single codegen unit. opt-level stays 3 — frame/bitmap decode is hot-path,
+# "z" would trade decode speed for a little extra size.
+strip = true
+lto = "thin"
+codegen-units = 1
+
 [dependencies]
 flutter_rust_bridge = "=2.12.0"
 ironrdp = { version = "0.15.0", features = ["connector", "session", "input", "graphics", "cliprdr"] }
