@@ -342,36 +342,47 @@ class SshService {
     Host host, {
     String? password,
     SshKeyEntry? keyEntry,
-    Host? jumpHost,
-    SshKeyEntry? jumpKeyEntry,
+    List<JumpHop> jumpChain = const [],
   }) async {
     final stopwatch = Stopwatch()..start();
     SSHClient? client;
-    SSHClient? jumpClient;
+    // Temp (non-cached) hop clients + their agent proxies, all closed in
+    // `finally` — a connectivity check must leave no live connections.
+    final jumpClients = <SSHClient>[];
+    final jumpProxies = <SystemAgentProxy>[];
     SystemAgentProxy? agentProxy;
-    SystemAgentProxy? jumpAgentProxyForTest;
     try {
       SSHSocket socket;
-      if (jumpHost != null) {
-        final jumpPassword = await _storage.loadPassword(jumpHost.id);
-        final jumpResolution = await _resolveIdentities(
-          jumpHost,
-          jumpKeyEntry,
-          jumpHostLabel: jumpHost.label,
-        );
-        // Track for cleanup; closed in `finally` below.
-        jumpAgentProxyForTest = jumpResolution.agentProxy;
-        jumpClient = SSHClient(
-          await SSHSocket.connect(jumpHost.host, jumpHost.port)
-              .timeout(const Duration(seconds: 10)),
-          username: jumpHost.username,
-          onPasswordRequest: () => jumpPassword ?? '',
-          identities:
-              jumpResolution.identities.isNotEmpty ? jumpResolution.identities : null,
-          onVerifyHostKey: (_, _) async => true,
-        );
-        await jumpClient.authenticated.timeout(const Duration(seconds: 10));
-        socket = await jumpClient.forwardLocal(host.host, host.port)
+      if (jumpChain.isNotEmpty) {
+        SSHClient? prev;
+        for (var i = 0; i < jumpChain.length; i++) {
+          final hop = jumpChain[i].host;
+          final hopPassword = await _storage.loadPassword(hop.id);
+          final hopResolution = await _resolveIdentities(
+              hop, jumpChain[i].keyEntry, jumpHostLabel: hop.label);
+          if (hopResolution.agentProxy != null) {
+            jumpProxies.add(hopResolution.agentProxy!);
+          }
+          final hopSocket = prev == null
+              ? await SSHSocket.connect(hop.host, hop.port)
+                  .timeout(const Duration(seconds: 10))
+              : await prev.forwardLocal(hop.host, hop.port)
+                  .timeout(const Duration(seconds: 10));
+          final hopClient = SSHClient(
+            hopSocket,
+            username: hop.username,
+            onPasswordRequest: () => hopPassword ?? '',
+            identities: hopResolution.identities.isNotEmpty
+                ? hopResolution.identities
+                : null,
+            onVerifyHostKey: (_, _) async => true,
+          );
+          jumpClients.add(hopClient);
+          await hopClient.authenticated.timeout(const Duration(seconds: 10));
+          prev = hopClient;
+        }
+        socket = await prev!
+            .forwardLocal(host.host, host.port)
             .timeout(const Duration(seconds: 10));
       } else {
         socket = await SSHSocket.connect(host.host, host.port)
@@ -410,9 +421,13 @@ class SshService {
       );
     } finally {
       client?.close();
-      jumpClient?.close();
+      for (final c in jumpClients) {
+        c.close();
+      }
       await agentProxy?.close();
-      await jumpAgentProxyForTest?.close();
+      for (final pxy in jumpProxies) {
+        await pxy.close();
+      }
     }
   }
 

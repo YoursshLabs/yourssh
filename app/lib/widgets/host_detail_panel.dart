@@ -66,7 +66,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   String? _templateFont;
   String? _templateTermType;
   bool? _tmuxOverride;
-  String? _selectedJumpHostId;
+  List<String> _jumpHostIds = [];
   late SftpMode _sftpMode;
   late final TextEditingController _sftpCommand;
 
@@ -101,7 +101,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     _templateFont = h?.fontFamily;
     _templateTermType = h?.termType;
     _tmuxOverride = h?.tmuxOverride;
-    _selectedJumpHostId = h?.jumpHostId;
+    _jumpHostIds = List.of(h?.jumpHostIds ?? const []);
     _sftpMode = h?.sftpMode ?? SftpMode.normal;
     _sftpCommand = TextEditingController(text: h?.sftpServerCommand ?? '');
     for (final c in [_hostCtrl, _portCtrl, _usernameCtrl, _passwordCtrl]) {
@@ -172,7 +172,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       autoRecord: _autoRecord,
       shellIntegration: _shellIntegration,
       agentForwarding: _agentForwarding,
-      jumpHostId: _selectedJumpHostId,
+      jumpHostIds: _jumpHostIds,
       sftpMode: _sftpMode,
       sftpServerCommand:
           _sftpMode == SftpMode.custom ? _sftpCommand.text.trim() : null,
@@ -215,13 +215,14 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
         : null;
 
     final allHosts = context.read<HostProvider>().allHosts;
-    Host? jumpHost;
-    if (_selectedJumpHostId != null) {
-      jumpHost = allHosts.where((h) => h.id == _selectedJumpHostId).firstOrNull;
+    final keyProvider = context.read<KeyProvider>();
+    final jumpChain = <JumpHop>[];
+    for (final jid in _jumpHostIds) {
+      final jh = allHosts.where((h) => h.id == jid).firstOrNull;
+      if (jh == null) continue; // stale id pruned by the editor below
+      final jk = jh.keyId == null ? null : keyProvider.findById(jh.keyId!);
+      jumpChain.add((host: jh, keyEntry: jk));
     }
-    final jumpKeyEntry = (jumpHost != null && jumpHost.keyId != null)
-        ? context.read<KeyProvider>().findById(jumpHost.keyId!)
-        : null;
 
     final host = Host(
       id: widget.existing?.id,
@@ -233,7 +234,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       keyId: _authType == AuthType.privateKey ? _selectedKeyId : null,
       group: '',
       tags: const [],
-      jumpHostId: _selectedJumpHostId,
+      jumpHostIds: _jumpHostIds,
       sftpMode: _sftpMode,
       sftpServerCommand:
           _sftpMode == SftpMode.custom ? _sftpCommand.text.trim() : null,
@@ -243,8 +244,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       host,
       password: _passwordCtrl.text,
       keyEntry: keyEntry,
-      jumpHost: jumpHost,
-      jumpKeyEntry: jumpKeyEntry,
+      jumpChain: jumpChain,
     );
 
     if (mounted) setState(() { _testing = false; _testResult = result; });
@@ -407,20 +407,21 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                         .where((h) => h.id != existingId)
                         .toList();
                     if (otherHosts.isEmpty) return const SizedBox.shrink();
-                    // Drop a stale jump host selection if that host was deleted
-                    // — otherwise the firstWhere below throws on an id not in the list.
-                    final validJump = _selectedJumpHostId != null &&
-                            otherHosts.any((h) => h.id == _selectedJumpHostId)
-                        ? _selectedJumpHostId
-                        : null;
-                    if (validJump != _selectedJumpHostId) {
+                    // Resolve ids → hosts in order, dropping any that no
+                    // longer exist (host deleted while referenced).
+                    final chainHosts = _jumpHostIds
+                        .map((id) =>
+                            otherHosts.where((h) => h.id == id).firstOrNull)
+                        .whereType<Host>()
+                        .toList();
+                    if (chainHosts.length != _jumpHostIds.length) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) setState(() => _selectedJumpHostId = validJump);
+                        if (mounted) {
+                          setState(() => _jumpHostIds =
+                              chainHosts.map((h) => h.id).toList());
+                        }
                       });
                     }
-                    final jump = validJump == null
-                        ? null
-                        : otherHosts.firstWhere((h) => h.id == validJump);
                     return ListenableBuilder(
                       // Live-update the bottom card while typing label/host.
                       listenable: Listenable.merge(
@@ -428,11 +429,11 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                       builder: (context, _) => HostChainEditor(
                         currentHostLabel: _currentHostLabel(),
                         currentHostOs: widget.existing?.detectedOs,
-                        jumpHost: jump,
+                        chain: chainHosts,
                         agentForwarding: _agentForwarding,
                         candidates: otherHosts,
-                        onSelect: (h) =>
-                            setState(() => _selectedJumpHostId = h?.id),
+                        onChanged: (ids) =>
+                            setState(() => _jumpHostIds = ids),
                       ),
                     );
                   }),
