@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **In-app RDP client** — connect to Windows, xrdp, and any RDP-compatible remote desktop server directly from a YourSSH tab alongside SSH sessions. Powered by [IronRDP](https://github.com/Devolutions/IronRDP) via `flutter_rust_bridge` v2.
+  - NLA, TLS, and auto security modes
+  - Optional SSH tunnel via a saved jump host (picks up the host's existing connection chain)
+  - Server-certificate TOFU with **pre-auth pin enforcement**: first connect shows a trust dialog and pins the certificate; on later connects the pinned fingerprint is verified inside the Rust engine after the TLS handshake but **before CredSSP/NLA runs — a changed certificate aborts the connection without ever transmitting your credentials**, then offers a re-trust + reconnect flow; an already-trusted pin reconnects silently (no re-prompt)
+  - Server-negotiated resolutions handled: the requested size follows the window, and if the server overrides it the framebuffer adapts instead of corrupting
+  - **Fullscreen mode** — toolbar button takes the remote desktop truly fullscreen (OS window fullscreen, all app chrome hidden); an mstsc-style pill revealed by hovering the top screen edge offers Ctrl+Alt+Del / clipboard / exit / disconnect, and the session drops back to windowed automatically if it disconnects or you switch tabs
+  - Full keyboard support: all printable keys, Ctrl+Alt+Del toolbar button, function keys, arrows; app hotkey combos are swallowed so they don't also type into the remote desktop
+  - Mouse: move (deduplicated), left/right/middle click, vertical + horizontal scroll with coordinate scaling on window resize
+  - Bidirectional clipboard (copy from remote desktop, paste into it; focus-gain push skips unchanged content)
+  - Host editor: SSH/RDP protocol selector, port auto-flip (22 ↔ 3389, custom ports preserved), domain field, security mode dropdown, SSH tunnel picker; editing an RDP host never downgrades it to SSH
+  - RDP badge on host cards, list rows, and detail panel header; dashboard actions are protocol-aware (SFTP/Test/bulk-run hidden or filtered for RDP hosts)
+  - Parity with SSH tabs: rename/color/pin persist, tabs restore on relaunch, connects/disconnects audited, unexpected drops reach the notification bell
+  - Server-initiated session end (remote sign-out, another client taking over the session, admin disconnect) is detected from the MCS Disconnect Provider Ultimatum and shown as a clean "server ended the session (…)" disconnect with Retry — not a raw protocol error
+  - Feature exclusions: recording, split view, input bar, and snippets panel are hidden/disabled for RDP tabs; hotkeys for those features no-op when an RDP tab is active
+  - Deferred: audio redirection, drive/printer redirect, dynamic resize — out of scope for this release
+
+### Removed
+- Dead `AddHostDialog`/`HostListPanel` widgets (unreferenced legacy host editor) — `HostDetailPanel` is the single host editor and now owns the SSH/RDP protocol UI
+
 ---
 
 ## [0.1.32] — 2026-06-07

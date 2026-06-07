@@ -75,6 +75,7 @@ sudo dpkg -r yourssh
 ## Features
 
 ### Terminal & Connectivity
+- **In-app RDP client** — connect to Windows, xrdp, and any RDP-compatible server directly from a tab alongside your SSH sessions; supports NLA, TLS, and auto security modes; optional SSH tunnel via a saved jump host; server-certificate TOFU with pre-auth pin enforcement (a changed certificate aborts before your credentials are sent); **fullscreen mode** with an mstsc-style hover bar at the top edge; full keyboard and mouse support (including Ctrl+Alt+Del); bidirectional clipboard; RDP tabs excluded from terminal-only features (recording, split view, input bar, snippets)
 - **Multi-tab SSH sessions** with named tabs, per-tab connection state, distro icons (detected via `/etc/os-release`), and middle-click to close
 - **Terminal sharing (multiplayer)** — share a live SSH session with a session code; guests join via the Command Palette and watch or interact in real time; built on Supabase Realtime
 - **Split terminal view** — horizontal/vertical pane splitting within a session
@@ -171,6 +172,27 @@ sudo dpkg -r yourssh
   <tr>
     <td align="center"><b>Terminal Sharing (Multiplayer)</b><br/><img src="screenshots/12-multiple-player.png"/></td>
     <td align="center"><b>Settings — Terminal Themes</b><br/><img src="screenshots/07-settings-terminal-themes.png"/></td>
+  </tr>
+</table>
+
+### In-App RDP Client
+
+<table>
+  <tr>
+    <td align="center"><b>Dashboard — RDP Host Badges</b><br/><img src="screenshots/01-dashboard-rdp-badge.png"/></td>
+    <td align="center"><b>Host Editor — RDP Form</b><br/><img src="screenshots/02-host-editor-rdp-form.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Server Certificate — TOFU Dialog</b><br/><img src="screenshots/03-tofu-certificate-dialog.png"/></td>
+    <td align="center"><b>RDP Workspace — Connected</b><br/><img src="screenshots/04-rdp-workspace-connected.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Fullscreen with Hover Pill</b><br/><img src="screenshots/05-fullscreen-with-pill.png"/></td>
+    <td align="center"><b>Fullscreen — Clean View</b><br/><img src="screenshots/06-fullscreen-clean.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Hover Reveal — Exit Bar</b><br/><img src="screenshots/07-fullscreen-hover-reveal.png"/></td>
+    <td align="center"><b>Back to Windowed Mode</b><br/><img src="screenshots/08-back-to-windowed.png"/></td>
   </tr>
 </table>
 

@@ -43,6 +43,15 @@ jobs:
         with:
           channel: stable
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/yourssh_rdp/rust
+
+      - name: Build yourssh_rdp native library
+        run: bash packages/yourssh_rdp/build.sh
+
       - name: Install dependencies
         working-directory: app
         run: flutter pub get
@@ -50,6 +59,13 @@ jobs:
       - name: Build macOS
         working-directory: app
         run: flutter build macos --release
+
+      - name: Bundle RDP library into app
+        run: |
+          APP=$(find "app/build/macos/Build/Products/Release" -name "*.app" -maxdepth 1 | head -1)
+          mkdir -p "$APP/Contents/Frameworks"
+          cp packages/yourssh_rdp/assets/native/macos/libyourssh_rdp.dylib \
+             "$APP/Contents/Frameworks/"
 
       - name: Extract version
         id: version
@@ -114,6 +130,16 @@ jobs:
           Add-Content $env:GITHUB_PATH "$env:USERPROFILE\flutter\bin"
           & "$env:USERPROFILE\flutter\bin\flutter.bat" --version
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/yourssh_rdp/rust
+
+      - name: Build yourssh_rdp native library
+        shell: pwsh
+        run: packages/yourssh_rdp/build.ps1
+
       - name: Install dependencies
         working-directory: app
         run: flutter pub get
@@ -121,6 +147,13 @@ jobs:
       - name: Build Windows
         working-directory: app
         run: flutter build windows --release
+
+      - name: Bundle RDP library into release
+        shell: pwsh
+        run: |
+          $arch = "${{ matrix.arch }}"
+          Copy-Item "packages\yourssh_rdp\assets\native\windows\yourssh_rdp.dll" `
+            "app\build\windows\$arch\runner\Release\"
 
       - name: Extract version
         id: version
@@ -226,6 +259,12 @@ jobs:
           echo "$HOME/flutter/bin" >> $GITHUB_PATH
           ~/flutter/bin/flutter --version
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/yourssh_rdp/rust
+
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
@@ -234,6 +273,9 @@ jobs:
             libgtk-3-dev liblzma-dev libstdc++-12-dev \
             libsecret-1-dev libjsoncpp-dev \
             libkeybinder-3.0-dev libnotify-dev
+
+      - name: Build yourssh_rdp native library
+        run: bash packages/yourssh_rdp/build.sh
 
       - name: Install dependencies
         working-directory: app
@@ -257,6 +299,11 @@ jobs:
           DIR="app/build/linux/${ARCH}/release/bundle"
           [ -d "$DIR" ] || DIR="app/build/linux/x64/release/bundle"
           echo "dir=$DIR" >> $GITHUB_OUTPUT
+
+      - name: Bundle RDP library into release
+        run: |
+          cp packages/yourssh_rdp/assets/native/linux/libyourssh_rdp.so \
+             "${{ steps.bundle.outputs.dir }}/lib/"
 
       - name: Create .deb package
         run: |
