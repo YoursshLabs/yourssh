@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/keyword_highlight_rule.dart';
 import '../models/shell_profile.dart';
 
 /// Default audit-log retention — single source for the provider, its
@@ -49,6 +50,9 @@ class SettingsProvider extends ChangeNotifier {
   /// Shells found on this machine; re-detected each launch by main.dart via
   /// setDetectedShells, never persisted (ids are stable across launches).
   List<ShellProfile> detectedShellProfiles = [];
+
+  bool keywordHighlightingEnabled = true;
+  List<AppKeywordHighlightRule> keywordHighlightRules = kDefaultKeywordHighlightRules;
 
   List<ShellProfile> get allShellProfiles =>
       [...detectedShellProfiles, ...customShellProfiles];
@@ -121,6 +125,18 @@ class SettingsProvider extends ChangeNotifier {
         debugPrint('[SettingsProvider] hotkeys JSON malformed, using defaults: $e');
       }
     }
+    keywordHighlightingEnabled =
+        prefs.getBool('keywordHighlightingEnabled') ?? true;
+    final rulesJson = prefs.getString('keywordHighlightRules');
+    if (rulesJson != null) {
+      try {
+        keywordHighlightRules = (jsonDecode(rulesJson) as List<dynamic>)
+            .map((j) => AppKeywordHighlightRule.fromJson(j as Map<String, dynamic>))
+            .toList();
+      } catch (_) {
+        keywordHighlightRules = kDefaultKeywordHighlightRules;
+      }
+    }
     notifyListeners();
   }
 
@@ -150,6 +166,8 @@ class SettingsProvider extends ChangeNotifier {
     String? dashboardViewMode,
     String? dashboardSort,
     int? auditRetentionDays,
+    bool? keywordHighlightingEnabled,
+    List<AppKeywordHighlightRule>? keywordHighlightRules,
   }) async {
     if (autoReconnect != null) this.autoReconnect = autoReconnect;
     if (reconnectAttempts != null) this.reconnectAttempts = reconnectAttempts;
@@ -170,6 +188,8 @@ class SettingsProvider extends ChangeNotifier {
     if (auditRetentionDays != null) {
       this.auditRetentionDays = auditRetentionDays;
     }
+    if (keywordHighlightingEnabled != null) this.keywordHighlightingEnabled = keywordHighlightingEnabled;
+    if (keywordHighlightRules != null) this.keywordHighlightRules = keywordHighlightRules;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('autoReconnect', this.autoReconnect);
     await prefs.setInt('reconnectAttempts', this.reconnectAttempts);
@@ -188,6 +208,8 @@ class SettingsProvider extends ChangeNotifier {
     await prefs.setString('dashboardViewMode', this.dashboardViewMode);
     await prefs.setString('dashboardSort', this.dashboardSort);
     await prefs.setInt('auditRetentionDays', this.auditRetentionDays);
+    await prefs.setBool('keywordHighlightingEnabled', this.keywordHighlightingEnabled);
+    await prefs.setString('keywordHighlightRules', jsonEncode(this.keywordHighlightRules.map((r) => r.toJson()).toList()));
     notifyListeners();
   }
 

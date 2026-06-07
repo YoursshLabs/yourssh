@@ -1,7 +1,9 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:yourssh/models/keyword_highlight_rule.dart';
 import 'package:yourssh/providers/settings_provider.dart';
 
 void main() {
@@ -165,5 +167,72 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(provider.dashboardViewMode, 'list');
     expect(provider.dashboardSort, 'host_asc');
+  });
+
+  group('keyword highlighting', () {
+    test('keywordHighlightingEnabled defaults to true', () async {
+      final provider = SettingsProvider();
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.keywordHighlightingEnabled, isTrue);
+    });
+
+    test('keywordHighlightRules defaults to kDefaultKeywordHighlightRules', () async {
+      final provider = SettingsProvider();
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.keywordHighlightRules.length,
+          kDefaultKeywordHighlightRules.length);
+    });
+
+    test('save persists keywordHighlightingEnabled', () async {
+      final provider = SettingsProvider();
+      await Future<void>.delayed(Duration.zero);
+      await provider.save(keywordHighlightingEnabled: false);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('keywordHighlightingEnabled'), isFalse);
+    });
+
+    test('save persists keywordHighlightRules as JSON', () async {
+      final provider = SettingsProvider();
+      await Future<void>.delayed(Duration.zero);
+      final rule = AppKeywordHighlightRule(
+        id: 'x',
+        label: 'Test',
+        pattern: 'test',
+        isRegex: false,
+        caseSensitive: false,
+        enabled: true,
+        foreground: null,
+        background: const Color(0xFFFF0000),
+      );
+      await provider.save(keywordHighlightRules: [rule]);
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString('keywordHighlightRules');
+      expect(json, isNotNull);
+      final decoded = jsonDecode(json!) as List;
+      expect(decoded.length, 1);
+      expect(decoded[0]['id'], 'x');
+    });
+
+    test('loads persisted keywordHighlightRules on init', () async {
+      final rule = AppKeywordHighlightRule(
+        id: 'y',
+        label: 'Loaded',
+        pattern: 'loaded',
+        isRegex: false,
+        caseSensitive: false,
+        enabled: true,
+        foreground: null,
+        background: null,
+      );
+      SharedPreferences.setMockInitialValues({
+        'keywordHighlightRules': jsonEncode([rule.toJson()]),
+        'keywordHighlightingEnabled': false,
+      });
+      final provider = SettingsProvider();
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.keywordHighlightRules.length, 1);
+      expect(provider.keywordHighlightRules[0].id, 'y');
+      expect(provider.keywordHighlightingEnabled, isFalse);
+    });
   });
 }
