@@ -137,6 +137,37 @@ class TerminalPainter {
     );
   }
 
+  void paintKeywordForeground(
+    Canvas canvas,
+    Offset lineOffset,
+    BufferLine line,
+    int startCol,
+    int endCol,
+    Color fgColor,
+  ) {
+    final cellData = CellData.empty();
+    final cellWidth = _cellSize.width;
+
+    for (var i = startCol; i < endCol && i < line.length; i++) {
+      line.getCellData(i, cellData);
+      final charCode = cellData.content & CellContent.codepointMask;
+      final charWidth = cellData.content >> CellContent.widthShift;
+
+      if (charCode != 0) {
+        final style = _textStyle.toTextStyle(color: fgColor);
+        final builder = ParagraphBuilder(style.getParagraphStyle())
+          ..pushStyle(style.getTextStyle(textScaler: _textScaler))
+          ..addText(String.fromCharCode(charCode));
+        final para = builder.build()
+          ..layout(ParagraphConstraints(width: cellWidth * 2));
+        canvas.drawParagraph(para, lineOffset.translate(i * cellWidth, 0));
+        para.dispose();
+      }
+
+      if (charWidth == 2) i++;
+    }
+  }
+
   /// Paints [line] to [canvas] at [offset]. The x offset of [offset] is usually
   /// 0, and the y offset is the top of the line.
   void paintLine(
