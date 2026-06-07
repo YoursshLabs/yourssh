@@ -2,7 +2,7 @@ export 'src/terminal_view.dart';
 export 'src/ui/clipboard_ops.dart';
 export 'src/ui/controller.dart';
 export 'src/ui/cursor_type.dart';
-export 'src/ui/keyboard_highlight.dart';
+export 'src/ui/keyword_highlight.dart';
 export 'src/ui/keyboard_visibility.dart';
 export 'src/ui/pointer_input.dart';
 export 'src/ui/selection_mode.dart';
