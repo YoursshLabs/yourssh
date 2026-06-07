@@ -16,6 +16,7 @@ import 'package:xterm/src/ui/selection_mode.dart';
 import 'package:xterm/src/ui/terminal_size.dart';
 import 'package:xterm/src/ui/terminal_text_style.dart';
 import 'package:xterm/src/ui/terminal_theme.dart';
+import 'package:xterm/src/ui/keyword_highlight.dart';
 
 typedef EditableRectCallback = void Function(Rect rect, Rect caretRect);
 
@@ -150,6 +151,13 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   TerminalSize? _viewportSize;
 
   final TerminalPainter _painter;
+
+  List<KeywordHighlightRule> _keywordRules = const [];
+  set keywordRules(List<KeywordHighlightRule> value) {
+    if (_keywordRules == value) return;
+    _keywordRules = value;
+    markNeedsPaint();
+  }
 
   var _stickToBottom = true;
 
@@ -421,6 +429,8 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
       );
     }
 
+    _paintKeywordHighlights(canvas, effectFirstLine, effectLastLine);
+
     if (_terminal.buffer.absoluteCursorY >= effectFirstLine &&
         _terminal.buffer.absoluteCursorY <= effectLastLine) {
       if (_isComposingText) {
@@ -548,5 +558,43 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     );
 
     _painter.paintHighlight(canvas, startOffset, end - start, color);
+  }
+
+  void _paintKeywordHighlights(Canvas canvas, int firstLine, int lastLine) {
+    if (_keywordRules.isEmpty) return;
+    final lines = _terminal.buffer.lines;
+    final charHeight = _painter.cellSize.height;
+
+    for (var i = firstLine; i <= lastLine; i++) {
+      if (i >= lines.length) break;
+      final lineText = lines[i].getText();
+      final lineY = i * charHeight + _lineOffset;
+
+      for (final rule in _keywordRules) {
+        for (final m in rule.pattern.allMatches(lineText)) {
+          if (m.start == m.end) continue;
+
+          if (rule.background != null) {
+            _painter.paintHighlight(
+              canvas,
+              Offset(m.start * _painter.cellSize.width, lineY),
+              m.end - m.start,
+              rule.background!,
+            );
+          }
+
+          if (rule.foreground != null) {
+            _painter.paintKeywordForeground(
+              canvas,
+              Offset(0, lineY),
+              lines[i],
+              m.start,
+              m.end,
+              rule.foreground!,
+            );
+          }
+        }
+      }
+    }
   }
 }
