@@ -7,6 +7,7 @@ import 'package:xterm/src/core/buffer/cell_offset.dart';
 import 'package:xterm/src/core/input/keys.dart';
 import 'package:xterm/src/terminal.dart';
 import 'package:xterm/src/ui/clipboard_ops.dart';
+import 'package:xterm/src/ui/keyword_highlight.dart';
 import 'package:xterm/src/ui/controller.dart';
 import 'package:xterm/src/ui/cursor_type.dart';
 import 'package:xterm/src/ui/custom_text_edit.dart';
@@ -50,6 +51,7 @@ class TerminalView extends StatefulWidget {
     this.readOnly = false,
     this.hardwareKeyboardOnly = false,
     this.simulateScroll = true,
+    this.keywordRules = const [],
   });
 
   /// The underlying terminal that this widget renders.
@@ -142,6 +144,9 @@ class TerminalView extends StatefulWidget {
   /// keys to the application. This is standard behavior for most terminal
   /// emulators. True by default.
   final bool simulateScroll;
+
+  /// Keyword highlighting rules to apply to terminal output.
+  final List<KeywordHighlightRule> keywordRules;
 
   @override
   State<TerminalView> createState() => TerminalViewState();
@@ -238,6 +243,7 @@ class TerminalViewState extends State<TerminalView> {
           alwaysShowCursor: widget.alwaysShowCursor,
           onEditableRect: _onEditableRect,
           composingText: _composingText,
+          keywordRules: widget.keywordRules,
         );
       },
     );
@@ -481,6 +487,7 @@ class _TerminalView extends LeafRenderObjectWidget {
     required this.alwaysShowCursor,
     this.onEditableRect,
     this.composingText,
+    required this.keywordRules,
   });
 
   final Terminal terminal;
@@ -509,9 +516,11 @@ class _TerminalView extends LeafRenderObjectWidget {
 
   final String? composingText;
 
+  final List<KeywordHighlightRule> keywordRules;
+
   @override
   RenderTerminal createRenderObject(BuildContext context) {
-    return RenderTerminal(
+    final renderObject = RenderTerminal(
       terminal: terminal,
       controller: controller,
       offset: offset,
@@ -526,6 +535,8 @@ class _TerminalView extends LeafRenderObjectWidget {
       onEditableRect: onEditableRect,
       composingText: composingText,
     );
+    renderObject.keywordRules = keywordRules;
+    return renderObject;
   }
 
   @override
@@ -543,6 +554,7 @@ class _TerminalView extends LeafRenderObjectWidget {
       ..cursorType = cursorType
       ..alwaysShowCursor = alwaysShowCursor
       ..onEditableRect = onEditableRect
-      ..composingText = composingText;
+      ..composingText = composingText
+      ..keywordRules = keywordRules;
   }
 }
