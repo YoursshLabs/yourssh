@@ -14,19 +14,16 @@ class _Sentinel implements Exception {}
 class _RecordingSshService extends SshService {
   _RecordingSshService(super.storage);
 
-  Host? capturedJumpHost;
-  SshKeyEntry? capturedJumpKeyEntry;
+  List<JumpHop> capturedChain = const [];
 
   @override
   Future<SSHClient> connect(
     Host host, {
     SshKeyEntry? keyEntry,
-    Host? jumpHost,
-    SshKeyEntry? jumpKeyEntry,
+    List<JumpHop> jumpChain = const [],
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
   }) async {
-    capturedJumpHost = jumpHost;
-    capturedJumpKeyEntry = jumpKeyEntry;
+    capturedChain = jumpChain;
     throw _Sentinel();
   }
 }
@@ -75,21 +72,19 @@ void main() {
         label: 'behind-bastion',
         host: '10.0.0.2',
         username: 'app',
-        jumpHostId: 'jump-id');
+        jumpHostIds: ['jump-id']);
 
     await expectLater(svc.ensureClient(target), throwsA(isA<_Sentinel>()));
-    expect(svc.capturedJumpHost?.id, 'jump-id');
-    expect(svc.capturedJumpKeyEntry?.id, 'k1');
+    expect(svc.capturedChain.single.host.id, 'jump-id');
+    expect(svc.capturedChain.single.keyEntry?.id, 'k1');
   });
 
-  test('ensureClient passes no jumpHost for a direct host', () async {
+  test('ensureClient passes an empty chain for a direct host', () async {
     final svc = makeService();
-    svc.defaultJumpHostLookup = (_) => fail('must not be called');
 
     final target = Host(label: 'direct', host: '10.0.0.3', username: 'app');
 
     await expectLater(svc.ensureClient(target), throwsA(isA<_Sentinel>()));
-    expect(svc.capturedJumpHost, isNull);
-    expect(svc.capturedJumpKeyEntry, isNull);
+    expect(svc.capturedChain, isEmpty);
   });
 }

@@ -132,19 +132,19 @@ class SessionProvider extends ChangeNotifier {
   Future<void> _doConnect(SshSession session, Host host, {required int attempt}) async {
     try {
       final keyEntry = host.keyId != null ? keyLookup?.call(host.keyId!) : null;
-      Host? jumpHost;
-      SshKeyEntry? jumpKeyEntry;
-      if (host.jumpHostId != null) {
-        jumpHost = jumpHostLookup?.call(host.jumpHostId!);
-        if (jumpHost != null && jumpHost.keyId != null) {
-          jumpKeyEntry = keyLookup?.call(jumpHost.keyId!);
+      final jumpChain = <JumpHop>[];
+      for (final jid in host.jumpHostIds) {
+        final jh = jumpHostLookup?.call(jid);
+        if (jh == null) {
+          throw StateError('Jump host not found: $jid');
         }
+        final jk = jh.keyId == null ? null : keyLookup?.call(jh.keyId!);
+        jumpChain.add((host: jh, keyEntry: jk));
       }
       await _ssh.connect(
         host,
         keyEntry: keyEntry,
-        jumpHost: jumpHost,
-        jumpKeyEntry: jumpKeyEntry,
+        jumpChain: jumpChain,
         verifyHostKey: hostKeyVerifier != null
             ? (keyType, fp) => hostKeyVerifier!(host.host, host.port, keyType, fp)
             : null,
