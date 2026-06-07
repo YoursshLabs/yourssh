@@ -70,7 +70,7 @@ void main() {
       tags: ['eu-west', 'k8s'],
       autoRecord: true,
       shellIntegration: false,
-      jumpHostId: 'jump-1',
+      jumpHostIds: ['jump-1'],
       detectedOs: 'ubuntu',
       agentForwarding: true,
       createdAt: created,

@@ -4,11 +4,15 @@ import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../providers/host_provider.dart';
 import '../providers/key_provider.dart';
+import '../providers/settings_provider.dart' show kTermTypes;
 import '../services/agent_probe.dart';
+import '../services/shell_integration_service.dart';
 import '../services/ssh_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/terminal_themes.dart';
 import 'agent_status_line.dart';
 import 'host_chain_editor.dart';
+import 'terminal_appearance_controls.dart' show kBundledTerminalFonts;
 
 class HostDetailPanel extends StatefulWidget {
   final Host? existing;
@@ -51,9 +55,19 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   bool _testing = false;
   ({bool success, int latencyMs, String? error})? _testResult;
   bool _autoRecord = false;
+  bool _recordingRedaction = true;
   bool _shellIntegration = true;
   bool _agentForwarding = false;
-  String? _selectedJumpHostId;
+  late final TextEditingController _workingDirCtrl;
+  late final TextEditingController _startupSnippetCtrl;
+  late final TextEditingController _fontSizeCtrl;
+  final List<({TextEditingController key, TextEditingController value})>
+      _envRows = [];
+  String? _templateTheme;
+  String? _templateFont;
+  String? _templateTermType;
+  bool? _tmuxOverride;
+  List<String> _jumpHostIds = [];
   late SftpMode _sftpMode;
   late final TextEditingController _sftpCommand;
 
@@ -73,9 +87,23 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     _authType = h?.authType ?? AuthType.password;
     _selectedKeyId = h?.keyId;
     _autoRecord = h?.autoRecord ?? false;
+    _recordingRedaction = h?.recordingRedaction ?? true;
     _shellIntegration = h?.shellIntegration ?? true;
     _agentForwarding = h?.agentForwarding ?? false;
-    _selectedJumpHostId = h?.jumpHostId;
+    _workingDirCtrl = TextEditingController(text: h?.workingDir ?? '');
+    _startupSnippetCtrl = TextEditingController(text: h?.startupSnippet ?? '');
+    _fontSizeCtrl = TextEditingController(text: _fmtFontSize(h?.fontSize));
+    for (final e in (h?.envVars ?? const <String, String>{}).entries) {
+      _envRows.add((
+        key: TextEditingController(text: e.key),
+        value: TextEditingController(text: e.value),
+      ));
+    }
+    _templateTheme = h?.terminalThemeId;
+    _templateFont = h?.fontFamily;
+    _templateTermType = h?.termType;
+    _tmuxOverride = h?.tmuxOverride;
+    _jumpHostIds = List.of(h?.jumpHostIds ?? const []);
     _sftpMode = h?.sftpMode ?? SftpMode.normal;
     _sftpCommand = TextEditingController(text: h?.sftpServerCommand ?? '');
     for (final c in [_hostCtrl, _portCtrl, _usernameCtrl, _passwordCtrl]) {
@@ -109,10 +137,22 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
         loadKeychainIdentities: loader ?? () async => const []);
   }
 
+  static String _fmtFontSize(double? v) => v == null
+      ? ''
+      : (v == v.roundToDouble() ? v.toInt().toString() : v.toString());
+
   @override
   void dispose() {
-    for (final c in [_hostCtrl, _labelCtrl, _groupCtrl, _tagsCtrl, _portCtrl, _usernameCtrl, _passwordCtrl, _sftpCommand]) {
+    for (final c in [
+      _hostCtrl, _labelCtrl, _groupCtrl, _tagsCtrl, _portCtrl, _usernameCtrl,
+      _passwordCtrl, _sftpCommand, _workingDirCtrl, _startupSnippetCtrl,
+      _fontSizeCtrl,
+    ]) {
       c.dispose();
+    }
+    for (final r in _envRows) {
+      r.key.dispose();
+      r.value.dispose();
     }
     super.dispose();
   }
@@ -132,12 +172,28 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       group: _groupCtrl.text.trim(),
       tags: tags,
       autoRecord: _autoRecord,
+      recordingRedaction: _recordingRedaction,
       shellIntegration: _shellIntegration,
       agentForwarding: _agentForwarding,
-      jumpHostId: _selectedJumpHostId,
+      jumpHostIds: _jumpHostIds,
       sftpMode: _sftpMode,
       sftpServerCommand:
           _sftpMode == SftpMode.custom ? _sftpCommand.text.trim() : null,
+      workingDir: _workingDirCtrl.text.trim().isEmpty
+          ? null
+          : _workingDirCtrl.text.trim(),
+      envVars: {
+        for (final r in _envRows)
+          if (r.key.text.trim().isNotEmpty) r.key.text.trim(): r.value.text,
+      },
+      startupSnippet: _startupSnippetCtrl.text.trim().isEmpty
+          ? null
+          : _startupSnippetCtrl.text,
+      terminalThemeId: _templateTheme,
+      fontFamily: _templateFont,
+      fontSize: double.tryParse(_fontSizeCtrl.text.trim()),
+      termType: _templateTermType,
+      tmuxOverride: _tmuxOverride,
     );
     try {
       await widget.onSave(host, _passwordCtrl.text);
@@ -162,13 +218,14 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
         : null;
 
     final allHosts = context.read<HostProvider>().allHosts;
-    Host? jumpHost;
-    if (_selectedJumpHostId != null) {
-      jumpHost = allHosts.where((h) => h.id == _selectedJumpHostId).firstOrNull;
+    final keyProvider = context.read<KeyProvider>();
+    final jumpChain = <JumpHop>[];
+    for (final jid in _jumpHostIds) {
+      final jh = allHosts.where((h) => h.id == jid).firstOrNull;
+      if (jh == null) continue; // stale id pruned by the editor below
+      final jk = jh.keyId == null ? null : keyProvider.findById(jh.keyId!);
+      jumpChain.add((host: jh, keyEntry: jk));
     }
-    final jumpKeyEntry = (jumpHost != null && jumpHost.keyId != null)
-        ? context.read<KeyProvider>().findById(jumpHost.keyId!)
-        : null;
 
     final host = Host(
       id: widget.existing?.id,
@@ -180,7 +237,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       keyId: _authType == AuthType.privateKey ? _selectedKeyId : null,
       group: '',
       tags: const [],
-      jumpHostId: _selectedJumpHostId,
+      jumpHostIds: _jumpHostIds,
       sftpMode: _sftpMode,
       sftpServerCommand:
           _sftpMode == SftpMode.custom ? _sftpCommand.text.trim() : null,
@@ -190,8 +247,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       host,
       password: _passwordCtrl.text,
       keyEntry: keyEntry,
-      jumpHost: jumpHost,
-      jumpKeyEntry: jumpKeyEntry,
+      jumpChain: jumpChain,
     );
 
     if (mounted) setState(() { _testing = false; _testResult = result; });
@@ -354,20 +410,21 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                         .where((h) => h.id != existingId)
                         .toList();
                     if (otherHosts.isEmpty) return const SizedBox.shrink();
-                    // Drop a stale jump host selection if that host was deleted
-                    // — otherwise the firstWhere below throws on an id not in the list.
-                    final validJump = _selectedJumpHostId != null &&
-                            otherHosts.any((h) => h.id == _selectedJumpHostId)
-                        ? _selectedJumpHostId
-                        : null;
-                    if (validJump != _selectedJumpHostId) {
+                    // Resolve ids → hosts in order, dropping any that no
+                    // longer exist (host deleted while referenced).
+                    final chainHosts = _jumpHostIds
+                        .map((id) =>
+                            otherHosts.where((h) => h.id == id).firstOrNull)
+                        .whereType<Host>()
+                        .toList();
+                    if (chainHosts.length != _jumpHostIds.length) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) setState(() => _selectedJumpHostId = validJump);
+                        if (mounted) {
+                          setState(() => _jumpHostIds =
+                              chainHosts.map((h) => h.id).toList());
+                        }
                       });
                     }
-                    final jump = validJump == null
-                        ? null
-                        : otherHosts.firstWhere((h) => h.id == validJump);
                     return ListenableBuilder(
                       // Live-update the bottom card while typing label/host.
                       listenable: Listenable.merge(
@@ -375,11 +432,11 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                       builder: (context, _) => HostChainEditor(
                         currentHostLabel: _currentHostLabel(),
                         currentHostOs: widget.existing?.detectedOs,
-                        jumpHost: jump,
+                        chain: chainHosts,
                         agentForwarding: _agentForwarding,
                         candidates: otherHosts,
-                        onSelect: (h) =>
-                            setState(() => _selectedJumpHostId = h?.id),
+                        onChanged: (ids) =>
+                            setState(() => _jumpHostIds = ids),
                       ),
                     );
                   }),
@@ -455,6 +512,25 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                       activeThumbColor: AppColors.accent,
                     ),
                     SwitchListTile(
+                      value: _recordingRedaction,
+                      onChanged: (v) =>
+                          setState(() => _recordingRedaction = v),
+                      title: const Text(
+                        'Redact secrets in recordings',
+                        style: TextStyle(
+                            color: AppColors.textPrimary, fontSize: 13),
+                      ),
+                      subtitle: const Text(
+                        'Mask passwords/tokens before writing .cast (requires the global setting)',
+                        style: TextStyle(
+                            color: AppColors.textTertiary, fontSize: 11),
+                      ),
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 2),
+                      activeThumbColor: AppColors.accent,
+                    ),
+                    SwitchListTile(
                       value: _shellIntegration,
                       onChanged: (v) => setState(() => _shellIntegration = v),
                       title: const Text(
@@ -515,6 +591,220 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                       AgentStatusLine(
                           key: const ValueKey('forwarding-status'),
                           probe: _probeAgent),
+                  ]),
+
+                  const SizedBox(height: 16),
+                  _sectionLabel('SESSION TEMPLATE'),
+                  const SizedBox(height: 6),
+                  _Card(children: [
+                    _PanelField(
+                        controller: _workingDirCtrl,
+                        hint: 'Working directory (bash/zsh only)',
+                        icon: Icons.folder_open),
+                    _divider(),
+                    for (var i = 0; i < _envRows.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        child: Row(children: [
+                          const Icon(Icons.data_object,
+                              size: 16, color: AppColors.textTertiary),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 2,
+                            child: TextFormField(
+                              controller: _envRows[i].key,
+                              style: const TextStyle(
+                                  color: AppColors.textPrimary, fontSize: 13),
+                              decoration: const InputDecoration(
+                                hintText: 'NAME',
+                                hintStyle: TextStyle(
+                                    color: AppColors.textTertiary,
+                                    fontSize: 13),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                              validator: (v) {
+                                final k = v?.trim() ?? '';
+                                if (k.isEmpty) return null;
+                                if (!ShellIntegrationService.isValidEnvKey(
+                                    k)) {
+                                  return 'A–Z, 0–9, _ only';
+                                }
+                                // A map literal would silently keep only the
+                                // last duplicate — surface it instead.
+                                final dups = _envRows
+                                    .where((r) => r.key.text.trim() == k)
+                                    .length;
+                                return dups > 1 ? 'Duplicate name' : null;
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 3,
+                            child: TextFormField(
+                              controller: _envRows[i].value,
+                              style: const TextStyle(
+                                  color: AppColors.textPrimary, fontSize: 13),
+                              decoration: const InputDecoration(
+                                hintText: 'value',
+                                hintStyle: TextStyle(
+                                    color: AppColors.textTertiary,
+                                    fontSize: 13),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.close,
+                                size: 14, color: AppColors.textTertiary),
+                            onPressed: () => setState(() {
+                              final row = _envRows.removeAt(i);
+                              // Dispose after the frame: the row's fields
+                              // are still mounted during this build.
+                              WidgetsBinding.instance
+                                  .addPostFrameCallback((_) {
+                                row.key.dispose();
+                                row.value.dispose();
+                              });
+                            }),
+                          ),
+                        ]),
+                      ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => setState(() => _envRows.add((
+                              key: TextEditingController(),
+                              value: TextEditingController(),
+                            ))),
+                        icon: const Icon(Icons.add,
+                            size: 14, color: AppColors.accent),
+                        label: const Text('Add env variable',
+                            style: TextStyle(
+                                color: AppColors.accent, fontSize: 12)),
+                      ),
+                    ),
+                    _divider(),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(top: 2),
+                            child: Icon(Icons.play_arrow_outlined,
+                                size: 16, color: AppColors.textTertiary),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _startupSnippetCtrl,
+                              minLines: 2,
+                              maxLines: 4,
+                              style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 13,
+                                  fontFamily: 'monospace'),
+                              decoration: const InputDecoration(
+                                hintText:
+                                    'Startup snippet — typed into the shell '
+                                    'after connect. Skipped when tmux is on.',
+                                hintStyle: TextStyle(
+                                    color: AppColors.textTertiary,
+                                    fontSize: 12),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _divider(),
+                    _TemplateDropdown<String>(
+                      icon: Icons.palette_outlined,
+                      value: _templateTheme,
+                      items: [
+                        const DropdownMenuItem<String?>(
+                            value: null, child: Text('Theme: follow global')),
+                        for (final name in kTerminalThemeNames)
+                          DropdownMenuItem<String?>(
+                              value: name, child: Text(name)),
+                      ],
+                      onChanged: (v) => setState(() => _templateTheme = v),
+                    ),
+                    _divider(),
+                    _TemplateDropdown<String>(
+                      icon: Icons.text_fields,
+                      value: _templateFont,
+                      items: [
+                        const DropdownMenuItem<String?>(
+                            value: null, child: Text('Font: follow global')),
+                        for (final f in kBundledTerminalFonts)
+                          DropdownMenuItem<String?>(value: f, child: Text(f)),
+                      ],
+                      onChanged: (v) => setState(() => _templateFont = v),
+                      trailing: SizedBox(
+                        width: 56,
+                        child: TextFormField(
+                          controller: _fontSizeCtrl,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(
+                              color: AppColors.textPrimary, fontSize: 13),
+                          decoration: const InputDecoration(
+                            hintText: 'size',
+                            hintStyle: TextStyle(
+                                color: AppColors.textTertiary, fontSize: 13),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          validator: (v) {
+                            final t = v?.trim() ?? '';
+                            if (t.isEmpty) return null;
+                            final d = double.tryParse(t);
+                            return (d == null || d < 6 || d > 40)
+                                ? '6–40'
+                                : null;
+                          },
+                        ),
+                      ),
+                    ),
+                    _divider(),
+                    _TemplateDropdown<String>(
+                      icon: Icons.terminal_outlined,
+                      value: _templateTermType,
+                      items: [
+                        const DropdownMenuItem<String?>(
+                            value: null, child: Text('TERM: follow global')),
+                        for (final t in kTermTypes)
+                          DropdownMenuItem<String?>(value: t, child: Text(t)),
+                      ],
+                      onChanged: (v) =>
+                          setState(() => _templateTermType = v),
+                    ),
+                    _divider(),
+                    _TemplateDropdown<bool>(
+                      icon: Icons.grid_view_outlined,
+                      value: _tmuxOverride,
+                      items: const [
+                        DropdownMenuItem<bool?>(
+                            value: null, child: Text('tmux: follow global')),
+                        DropdownMenuItem<bool?>(
+                            value: true, child: Text('tmux: always on')),
+                        DropdownMenuItem<bool?>(
+                            value: false, child: Text('tmux: always off')),
+                      ],
+                      onChanged: (v) => setState(() => _tmuxOverride = v),
+                    ),
                   ]),
 
                   const SizedBox(height: 24),
@@ -801,6 +1091,46 @@ class _PasswordField extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// One SESSION TEMPLATE override row: nullable dropdown (null = follow
+/// global) with the shared panel styling, plus an optional trailing field.
+class _TemplateDropdown<T> extends StatelessWidget {
+  final IconData icon;
+  final T? value;
+  final List<DropdownMenuItem<T?>> items;
+  final ValueChanged<T?> onChanged;
+  final Widget? trailing;
+  const _TemplateDropdown({
+    required this.icon,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dropdown = DropdownButton<T?>(
+      value: value,
+      isExpanded: true,
+      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+      dropdownColor: AppColors.card,
+      underline: const SizedBox(),
+      items: items,
+      onChanged: onChanged,
+    );
+    return _DropdownRow(
+      icon: icon,
+      child: trailing == null
+          ? dropdown
+          : Row(children: [
+              Expanded(child: dropdown),
+              const SizedBox(width: 8),
+              trailing!,
+            ]),
     );
   }
 }

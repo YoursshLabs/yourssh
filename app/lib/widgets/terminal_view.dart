@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:xterm/xterm.dart';
+import '../models/host.dart';
 import '../models/ssh_session.dart';
 import '../providers/command_history_provider.dart';
+import '../providers/host_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/shell_integration_provider.dart';
 import '../services/hotkey_service.dart';
 import '../theme/terminal_themes.dart';
+import '../util/terminal_appearance.dart';
 import 'command_gutter.dart';
 import 'record_button.dart';
 import 'suggestion_popup.dart';
@@ -141,8 +144,7 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
       }
     }
 
-    final settings = context.read<SettingsProvider>();
-    final termTheme = terminalThemeByName(settings.terminalTheme);
+    final termTheme = terminalThemeByName(_appearance(watch: false).themeName);
 
     for (var mi = 0; mi < newMatches.length; mi++) {
       final match = newMatches[mi];
@@ -171,9 +173,40 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
     _scrollToLine(_matches[matchIdx].lineIdx);
   }
 
+  /// Per-host appearance resolved against globals. The fresh host is looked
+  /// up by id — the session's Host snapshot goes stale after copyWith (same
+  /// pattern as SessionTab). HostProvider can be absent in widget tests →
+  /// fall back to the snapshot.
+  TerminalAppearance _appearance({required bool watch}) {
+    final settings = watch
+        ? context.watch<SettingsProvider>()
+        : context.read<SettingsProvider>();
+    Host? fresh;
+    try {
+      if (watch) {
+        // select, not watch: rebuild only when THIS host's appearance
+        // fields change — a plain watch would rebuild every open terminal
+        // on any host-list mutation (e.g. each dashboard-search keystroke).
+        context.select<HostProvider, (String?, String?, double?)>((p) {
+          final h = p.byId(widget.session.host.id);
+          return (h?.terminalThemeId, h?.fontFamily, h?.fontSize);
+        });
+      }
+      fresh = context.read<HostProvider>().byId(widget.session.host.id);
+    } on ProviderNotFoundException {
+      // Tests pump this widget without a HostProvider.
+    }
+    return resolveTerminalAppearance(
+      host: fresh ?? widget.session.host,
+      globalTheme: settings.terminalTheme,
+      globalFont: settings.terminalFont,
+      globalFontSize: settings.fontSize,
+    );
+  }
+
   /// xterm forces TextStyle.height = 1.2, so each rendered line is
   /// `fontSize * 1.2` pixels tall — the unit the scroll offset is measured in.
-  double get _lineHeightPx => context.read<SettingsProvider>().fontSize * 1.2;
+  double get _lineHeightPx => _appearance(watch: false).fontSize * 1.2;
 
   /// Animate the viewport so [line] (an absolute buffer line) is at the top.
   void _scrollToLine(int line) {
@@ -219,8 +252,8 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
 
   void _goNext() {
     if (_matches.isEmpty) return;
-    final termTheme = terminalThemeByName(
-        context.read<SettingsProvider>().terminalTheme);
+    final termTheme =
+        terminalThemeByName(_appearance(watch: false).themeName);
     final buffer = widget.session.terminal.buffer;
 
     // Demote current match to normal color
@@ -249,8 +282,8 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
 
   void _goPrev() {
     if (_matches.isEmpty) return;
-    final termTheme = terminalThemeByName(
-        context.read<SettingsProvider>().terminalTheme);
+    final termTheme =
+        terminalThemeByName(_appearance(watch: false).themeName);
     final buffer = widget.session.terminal.buffer;
 
     // Demote current match to normal color
@@ -397,7 +430,8 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final theme = terminalThemeByName(settings.terminalTheme);
+    final appearance = _appearance(watch: true);
+    final theme = terminalThemeByName(appearance.themeName);
     final showGutter = settings.shellIntegrationEnabled &&
         widget.session.host.shellIntegration;
 
@@ -409,8 +443,8 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
           scrollController: _scrollController,
           theme: theme,
           textStyle: TerminalStyle(
-            fontSize: settings.fontSize,
-            fontFamily: settings.terminalFont,
+            fontSize: appearance.fontSize,
+            fontFamily: appearance.fontFamily,
           ),
           // Leave room for the gutter so it never occludes column-0 text.
           padding: showGutter ? const EdgeInsets.only(left: 10) : EdgeInsets.zero,
@@ -431,7 +465,7 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
             child: CommandGutter(
               sessionId: widget.session.id,
               scrollController: _scrollController,
-              lineHeight: settings.fontSize * 1.2,
+              lineHeight: appearance.fontSize * 1.2,
               onJumpTo: _scrollToLine,
             ),
           ),

@@ -15,7 +15,7 @@ class WebToolsService {
   Future<ToolResult> run(Host host, String command) async {
     final sw = Stopwatch()..start();
     try {
-      final result = await _sshService.exec(host, command);
+      final result = await _sshService.exec(host, command, auditSource: 'devops');
       sw.stop();
       final output = result.stdout.isNotEmpty ? result.stdout : result.stderr;
       return ToolResult.success(output: output, durationMs: sw.elapsedMilliseconds);

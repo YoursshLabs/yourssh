@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/local_session.dart';
+import 'package:yourssh/models/shell_profile.dart';
 import 'package:yourssh/services/local_shell_service.dart';
 import 'package:yourssh/services/pty_runner.dart';
 import 'package:yourssh/services/recording_service.dart';
@@ -45,7 +46,7 @@ void main() {
   setUp(() {
     fakePty = FakePtyRunner();
     service = LocalShellService(
-      ptyFactory: (shell, cols, rows, env) => fakePty,
+      ptyFactory: (shell, args, cols, rows, env) => fakePty,
     );
   });
 
@@ -111,7 +112,7 @@ void main() {
 
     test('factory error sets session to error state with message', () async {
       final badService = LocalShellService(
-        ptyFactory: (_, _, _, _) => throw Exception('pty unavailable'),
+        ptyFactory: (_, _, _, _, _) => throw Exception('pty unavailable'),
       );
       final session = await badService.openShell();
       expect(session.status, LocalSessionStatus.error);
@@ -143,6 +144,78 @@ void main() {
       expect(path, isNotNull);
       final content = await File(path!).readAsString();
       expect(content, contains('hello-from-pty'));
+    });
+  });
+
+  group('shell profiles', () {
+    test('openShell passes profile executable and args to the factory',
+        () async {
+      String? gotShell;
+      List<String>? gotArgs;
+      final svc = LocalShellService(
+        ptyFactory: (shell, args, c, r, env) {
+          gotShell = shell;
+          gotArgs = args;
+          return fakePty;
+        },
+      );
+      const profile = ShellProfile(
+        id: 'wsl-Ubuntu',
+        name: 'WSL · Ubuntu',
+        executable: 'wsl.exe',
+        args: ['-d', 'Ubuntu'],
+      );
+      final session = await svc.openShell(profile: profile);
+      expect(gotShell, 'wsl.exe');
+      expect(gotArgs, ['-d', 'Ubuntu']);
+      expect(session.profile, same(profile));
+    });
+
+    test('restartShell reuses the session profile', () async {
+      final shells = <String>[];
+      final svc = LocalShellService(
+        ptyFactory: (shell, args, c, r, env) {
+          shells.add(shell);
+          return FakePtyRunner();
+        },
+      );
+      const profile = ShellProfile(
+          id: 'git-bash', name: 'Git Bash', executable: r'C:\Git\bin\bash.exe');
+      final session = await svc.openShell(profile: profile);
+      session.status = LocalSessionStatus.exited;
+      await svc.restartShell(session);
+      expect(shells, [r'C:\Git\bin\bash.exe', r'C:\Git\bin\bash.exe']);
+    });
+
+    test('openShell without profile falls back to resolveShell', () async {
+      String? gotShell;
+      List<String>? gotArgs;
+      final svc = LocalShellService(
+        ptyFactory: (shell, args, c, r, env) {
+          gotShell = shell;
+          gotArgs = args;
+          return fakePty;
+        },
+      );
+      await svc.openShell();
+      expect(
+        gotShell,
+        LocalShellService.resolveShell(Platform.environment,
+            isWindows: Platform.isWindows),
+      );
+      expect(gotArgs, isEmpty);
+    });
+
+    test('tabLabel uses the profile name when a profile was chosen', () async {
+      final session = await service.openShell(
+          profile: const ShellProfile(
+              id: 'git-bash', name: 'Git Bash', executable: 'bash.exe'));
+      expect(session.tabLabel, matches(RegExp(r'^Git Bash \d+$')));
+    });
+
+    test('tabLabel stays "Local N" without a profile', () async {
+      final session = await service.openShell();
+      expect(session.tabLabel, matches(RegExp(r'^Local \d+$')));
     });
   });
 

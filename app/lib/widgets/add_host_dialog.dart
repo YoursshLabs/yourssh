@@ -58,7 +58,7 @@ class _AddHostDialogState extends State<AddHostDialog> {
     final existing = widget.existing;
     // Edits go through copyWith so the fields this dialog has no UI for
     // (group, tags, autoRecord, shellIntegration, jumpHostId, detectedOs,
-    // createdAt, agentForwarding) survive the edit (#51).
+    // createdAt, agentForwarding, recordingRedaction) survive the edit (#51).
     final host = existing != null
         ? existing.copyWith(
             label: _label.text.trim(),

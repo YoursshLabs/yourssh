@@ -7,6 +7,22 @@ import 'package:yourssh/models/ssh_session.dart';
 import 'package:yourssh/providers/recording_provider.dart';
 import 'package:yourssh/services/recording_service.dart';
 
+class _CapturingService extends RecordingService {
+  bool? capturedRedact;
+
+  @override
+  Future<void> startRecording(
+    String sessionId, {
+    required String filePath,
+    required int width,
+    required int height,
+    required String title,
+    bool redact = false,
+  }) async {
+    capturedRedact = redact;
+  }
+}
+
 void main() {
   late Directory tmpDir;
 
@@ -113,5 +129,22 @@ void main() {
 
     expect(provider.isRecording(session.id), isFalse);
     expect(capturedError, isNotNull);
+  });
+
+  test('redactionPolicy result is passed to the service', () async {
+    final service = _CapturingService();
+    final provider = RecordingProvider(service, getPath: () => tmpDir.path);
+    provider.redactionPolicy = (_) => true;
+
+    await provider.startRecording(LocalSession(terminal: Terminal()));
+    expect(service.capturedRedact, isTrue);
+  });
+
+  test('null redactionPolicy records without redaction', () async {
+    final service = _CapturingService();
+    final provider = RecordingProvider(service, getPath: () => tmpDir.path);
+
+    await provider.startRecording(LocalSession(terminal: Terminal()));
+    expect(service.capturedRedact, isFalse);
   });
 }

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:path/path.dart' as path_util;
+import 'package:uuid/uuid.dart';
 import '../models/ai_provider_config.dart';
+import '../models/shell_profile.dart';
 import '../providers/ai_chat_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/audit_provider.dart';
 import '../providers/sync_provider.dart';
 import '../services/sync_service.dart';
 import '../services/sync_code.dart';
@@ -13,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import 'hotkey_settings_screen.dart';
 import 'terminal_appearance_controls.dart';
+import 'confirm_dialog.dart';
 import 'qr_export_dialog.dart';
 import 'qr_import_dialog.dart';
 import 'package:file_picker/file_picker.dart';
@@ -105,11 +110,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: 'TERM reported to the server — applies to new SSH connections',
                     trailing: _DropDown<String>(
                       value: settings.terminalType,
-                      items: const ['xterm-256color', 'xterm', 'linux', 'vt100'],
+                      items: kTermTypes,
                       labelOf: (t) => t,
                       onChanged: (v) => context.read<SettingsProvider>().save(terminalType: v),
                     ),
                   ),
+                  Consumer<SettingsProvider>(
+                    builder: (context, settings, _) {
+                      const platformDefault = kPlatformDefaultShellId;
+                      final profiles = settings.allShellProfiles;
+                      final ids = {for (final s in profiles) s.id};
+                      final value = settings.defaultShellId != null &&
+                              ids.contains(settings.defaultShellId)
+                          ? settings.defaultShellId!
+                          : platformDefault;
+                      return _Row(
+                        label: 'Default local shell',
+                        subtitle: 'Shell used by new local terminals',
+                        trailing: _DropDown<String>(
+                          value: value,
+                          items: [
+                            platformDefault,
+                            for (final s in profiles) s.id,
+                          ],
+                          labelOf: (id) => id == platformDefault
+                              ? 'Platform default'
+                              : profiles.firstWhere((s) => s.id == id).name,
+                          onChanged: (id) => context
+                              .read<SettingsProvider>()
+                              .setDefaultShellId(
+                                  id == platformDefault ? null : id),
+                        ),
+                      );
+                    },
+                  ),
+                  const _CustomShellsRows(),
                   const TerminalAppearanceControls(layout: AppearanceControlsLayout.rows),
                 ]),
                 const SizedBox(height: 24),
@@ -155,6 +190,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ),
+                  SwitchListTile(
+                    title: const Text('Redact secrets in recordings', style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+                    subtitle: const Text('Mask passwords/tokens (AuditRedactor patterns) before writing .cast — replay timing becomes per-line; per-host opt-out in the host panel', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    value: settings.recordingRedactionEnabled,
+                    onChanged: (v) => context
+                        .read<SettingsProvider>()
+                        .save(recordingRedactionEnabled: v),
+                  ),
                 ]),
                 const SizedBox(height: 24),
                 _Section(title: 'Monitoring', children: [
@@ -172,6 +215,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: const Text('Alert when a command completes in an unfocused session', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                     value: settings.commandNotificationsEnabled,
                     onChanged: (v) => context.read<SettingsProvider>().save(commandNotificationsEnabled: v),
+                  ),
+                ]),
+                const SizedBox(height: 24),
+                _Section(title: 'Audit', children: [
+                  _Row(
+                    label: 'Retention',
+                    subtitle: 'Delete audit events older than this on launch',
+                    trailing: _DropDown<int>(
+                      value: const [30, 90, 365, 0]
+                              .contains(settings.auditRetentionDays)
+                          ? settings.auditRetentionDays
+                          : 90,
+                      items: const [30, 90, 365, 0],
+                      labelOf: (d) => d == 0 ? 'Keep forever' : '$d days',
+                      onChanged: (d) =>
+                          settings.save(auditRetentionDays: d),
+                    ),
+                  ),
+                  _Row(
+                    label: 'Clear audit log',
+                    subtitle: 'Delete all recorded events now',
+                    trailing: TextButton.icon(
+                      icon: const Icon(Icons.delete_outline,
+                          size: 14, color: Colors.red),
+                      label: const Text('Clear',
+                          style: TextStyle(fontSize: 12, color: Colors.red)),
+                      onPressed: () => _confirmClearAudit(context),
+                    ),
                   ),
                 ]),
                 const SizedBox(height: 24),
@@ -282,6 +353,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _confirmClearAudit(BuildContext context) async {
+    final ok = await showConfirmDialog(
+      context,
+      title: 'Clear audit log?',
+      message: 'All recorded events will be deleted.',
+      confirmLabel: 'Clear',
+      destructive: true,
+    );
+    if (!ok || !context.mounted) return;
+    try {
+      // Through the provider (not AuditService directly) so an open Audit
+      // Log screen refreshes instead of showing stale deleted rows.
+      context.read<AuditProvider>().clearAll();
+    } on ProviderNotFoundException {
+      // Settings pumped without audit wiring (tests).
+    }
+  }
 }
 
 class _SyncSection extends StatefulWidget {
@@ -1090,6 +1178,145 @@ class _AiProvidersSectionState extends State<_AiProvidersSection> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Custom local shells (Settings → Terminal) ─────────────
+
+class _CustomShellsRows extends StatelessWidget {
+  const _CustomShellsRows();
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final shell in settings.customShellProfiles)
+          _Row(
+            label: shell.name,
+            subtitle: [shell.executable, ...shell.args].join(' '),
+            trailing: IconButton(
+              icon: const Icon(Icons.delete_outline,
+                  size: 16, color: AppColors.textSecondary),
+              tooltip: 'Remove custom shell',
+              onPressed: () => context
+                  .read<SettingsProvider>()
+                  .removeCustomShellProfile(shell.id),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(left: 8, top: 2, bottom: 6),
+          child: TextButton.icon(
+            icon: const Icon(Icons.add, size: 14),
+            label: const Text('Add custom shell…',
+                style: TextStyle(fontSize: 12)),
+            onPressed: () => _showAddCustomShellDialog(context),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+Future<void> _showAddCustomShellDialog(BuildContext context) async {
+  final settings = context.read<SettingsProvider>();
+  final profile = await showDialog<ShellProfile>(
+    context: context,
+    builder: (_) => const _AddShellDialog(),
+  );
+  if (profile != null) await settings.addCustomShellProfile(profile);
+}
+
+/// Stateful so the TextEditingControllers are disposed by the route teardown
+/// (State.dispose), not while the dialog's exit animation still references
+/// the text fields.
+class _AddShellDialog extends StatefulWidget {
+  const _AddShellDialog();
+
+  @override
+  State<_AddShellDialog> createState() => _AddShellDialogState();
+}
+
+class _AddShellDialogState extends State<_AddShellDialog> {
+  final _nameCtrl = TextEditingController();
+  final _exeCtrl = TextEditingController();
+  final _argsCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _exeCtrl.dispose();
+    _argsCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Null when the executable is empty — Add then behaves like Cancel.
+  ShellProfile? _buildProfile() {
+    final exe = _exeCtrl.text.trim();
+    if (exe.isEmpty) return null;
+    final name = _nameCtrl.text.trim();
+    final argsText = _argsCtrl.text.trim();
+    return ShellProfile(
+      id: 'custom-${const Uuid().v4()}',
+      name: name.isEmpty ? path_util.basename(exe) : name,
+      executable: exe,
+      args: argsText.isEmpty ? const [] : argsText.split(RegExp(r'\s+')),
+      isCustom: true,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.card,
+      title: const Text('Add custom shell', style: TextStyle(fontSize: 15)),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameCtrl,
+              decoration: const InputDecoration(labelText: 'Display name'),
+            ),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: _exeCtrl,
+                  decoration:
+                      const InputDecoration(labelText: 'Executable path'),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.folder_open, size: 16),
+                tooltip: 'Browse…',
+                onPressed: () async {
+                  final result = await FilePicker.platform.pickFiles();
+                  final path = result?.files.single.path;
+                  if (path != null) _exeCtrl.text = path;
+                },
+              ),
+            ]),
+            TextField(
+              controller: _argsCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Arguments',
+                helperText: 'Space-separated; quoting not supported',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.pop(context, _buildProfile()),
+            child: const Text('Add')),
+      ],
     );
   }
 }

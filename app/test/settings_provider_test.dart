@@ -15,6 +15,18 @@ void main() {
     expect(provider.terminalFont, 'MesloLGS NF');
   });
 
+  test('auditRetentionDays defaults to 90 and round-trips', () async {
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.auditRetentionDays, 90);
+    await provider.save(auditRetentionDays: 30);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt('auditRetentionDays'), 30);
+    final reloaded = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(reloaded.auditRetentionDays, 30);
+  });
+
   test('save persists terminalFont', () async {
     final provider = SettingsProvider();
     await Future<void>.delayed(Duration.zero);

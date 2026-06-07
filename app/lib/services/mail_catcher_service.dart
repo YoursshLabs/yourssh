@@ -30,23 +30,23 @@ class MailCatcherService {
       sleep 1
       pgrep -f "smtpd.*$_smtpPort" > /dev/null 2>&1 && echo "started"
     ''';
-    final result = await _sshService.exec(host, cmd);
+    final result = await _sshService.exec(host, cmd, auditSource: 'devops');
     return result.stdout.trim() == 'started';
   }
 
   Future<void> stop(Host host) async {
-    await _sshService.exec(host, "pkill -f 'smtpd.*$_smtpPort' 2>/dev/null");
+    await _sshService.exec(host, "pkill -f 'smtpd.*$_smtpPort' 2>/dev/null", auditSource: 'devops');
   }
 
   Future<List<CaughtEmail>> fetchEmails(Host host) async {
-    final result = await _sshService.exec(host, 'cat /tmp/mailcatcher.log 2>/dev/null');
+    final result = await _sshService.exec(host, 'cat /tmp/mailcatcher.log 2>/dev/null', auditSource: 'devops');
     final output = result.stdout;
     if (output.isEmpty) return [];
     return _parseSmtpdLog(output);
   }
 
   Future<void> clearLog(Host host) async {
-    await _sshService.exec(host, '> /tmp/mailcatcher.log');
+    await _sshService.exec(host, '> /tmp/mailcatcher.log', auditSource: 'devops');
   }
 
   List<CaughtEmail> _parseSmtpdLog(String log) {

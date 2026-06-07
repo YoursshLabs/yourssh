@@ -60,15 +60,15 @@ void main() {
 
   // The host being edited — valid host/username/port so the form validates
   // and onSave fires.
-  Host targetHost({String? jumpHostId}) => Host(
+  Host targetHost({List<String> jumpHostIds = const []}) => Host(
         id: 'target-id',
         label: 'target',
         host: '1.2.3.4',
         username: 'root',
-        jumpHostId: jumpHostId,
+        jumpHostIds: jumpHostIds,
       );
 
-  testWidgets('selecting a jump host saves it onto jumpHostId',
+  testWidgets('selecting a jump host saves it onto jumpHostIds',
       (tester) async {
     seedHosts([bastion]);
     await pumpPanel(tester, existing: targetHost());
@@ -89,16 +89,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(saved, isNotNull);
-    expect(saved!.jumpHostId, 'bastion-id');
+    expect(saved!.jumpHostIds, ['bastion-id']);
   });
 
-  testWidgets('chain renders for an existing jumpHostId', (tester) async {
+  testWidgets('chain renders for an existing jumpHostIds', (tester) async {
     seedHosts([bastion]);
-    await pumpPanel(tester, existing: targetHost(jumpHostId: 'bastion-id'));
+    await pumpPanel(tester,
+        existing: targetHost(jumpHostIds: ['bastion-id']));
 
-    // Jump card shows bastion + a Clear button; no empty-state Add prompt.
+    // Chain shows bastion + a Clear button; Add stays visible (append more).
     expect(find.text('bastion'), findsWidgets);
     expect(find.text('Clear'), findsOneWidget);
-    expect(find.text('Add a Host'), findsNothing);
+    expect(find.text('Add a Host'), findsOneWidget);
   });
 }

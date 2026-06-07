@@ -889,7 +889,12 @@ class _HostCardState extends State<_HostCard> {
 
     final sshService = context.read<SshService>();
     final storage = context.read<StorageService>();
-    final keys = context.read<KeyProvider>().keys;
+    final keyProvider = context.read<KeyProvider>();
+    final keys = keyProvider.keys;
+    // Read all providers before the first await (no BuildContext across gaps).
+    final hostsById = {
+      for (final h in context.read<HostProvider>().allHosts) h.id: h
+    };
 
     final password = widget.host.authType == AuthType.password
         ? await storage.loadPassword(widget.host.id)
@@ -900,10 +905,29 @@ class _HostCardState extends State<_HostCard> {
       keyEntry = keys.where((k) => k.id == widget.host.keyId).firstOrNull;
     }
 
+    // Test through the bastion chain, not a misleading direct dial.
+    List<JumpHop> jumpChain;
+    try {
+      jumpChain = SshService.resolveJumpChain(
+        widget.host,
+        jumpLookup: (id) => hostsById[id],
+        keyLookup: (id) => keyProvider.findById(id),
+      );
+    } on JumpChainException catch (e) {
+      if (mounted) {
+        setState(() {
+          _testing = false;
+          _testResult = (success: false, latencyMs: 0, error: e.message);
+        });
+      }
+      return;
+    }
+
     final result = await sshService.testConnection(
       widget.host,
       password: password,
       keyEntry: keyEntry,
+      jumpChain: jumpChain,
     );
 
     if (!mounted) return;

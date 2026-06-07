@@ -67,7 +67,11 @@ class KeyProvider extends ChangeNotifier {
     return KeyAlgorithm.rsa;
   }
 
-  Future<void> addKeyFromFile(String path, String label) async {
+  /// Persists key passphrases (wired to StorageService.savePassphrase in
+  /// main.dart — StorageService is not in the provider tree).
+  Future<void> Function(String keyId, String passphrase)? savePassphrase;
+
+  Future<SshKeyEntry> addKeyFromFile(String path, String label) async {
     final file = File(path);
     if (!file.existsSync()) throw Exception('Key file not found: $path');
 
@@ -88,6 +92,7 @@ class KeyProvider extends ChangeNotifier {
     }
     await _save();
     notifyListeners();
+    return entry;
   }
 
   Future<void> deleteKey(String id) async {

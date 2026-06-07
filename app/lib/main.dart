@@ -24,13 +24,18 @@ import 'plugins/plugin_registry.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 import 'services/health_monitor_service.dart';
 import 'services/local_shell_service.dart';
+import 'services/shell_detection.dart';
 import 'services/notification_service.dart';
 import 'services/port_forward_service.dart';
 import 'services/agent_forwarding_handler.dart';
 import 'services/ssh_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'providers/audit_provider.dart';
+import 'services/audit_service.dart';
 import 'services/storage_service.dart';
 import 'services/sync_service.dart';
 import 'services/recording_service.dart';
+import 'services/recording_redaction_policy.dart';
 import 'services/tab_metadata_service.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
@@ -41,7 +46,9 @@ import 'services/update_service.dart';
 import 'providers/update_provider.dart';
 import 'models/agent_forwarding_state.dart';
 import 'models/app_notification.dart';
+import 'models/audit_event.dart';
 import 'models/app_release.dart';
+import 'models/ssh_session.dart';
 import 'providers/notification_center_provider.dart';
 
 String kAppVersion = '';
@@ -70,8 +77,14 @@ class _SshBridgeAdapter implements SshBridgeDelegate {
       String sessionId, String command) async {
     final session = _getSessionProvider()
         .sshSessions
-        .firstWhere((s) => s.id == sessionId);
-    final result = await _getSshService().exec(session.host, command);
+        .where((s) => s.id == sessionId)
+        .firstOrNull;
+    if (session == null) {
+      // Clean message instead of firstWhere's opaque StateError — matches
+      // the Dart plugin context's error surface.
+      throw Exception('Unknown session: $sessionId');
+    }
+    final result = await _getSshService().exec(session.host, command, auditSource: 'plugin:js');
     return {
       'stdout': result.stdout,
       'stderr': result.stderr,
@@ -80,8 +93,18 @@ class _SshBridgeAdapter implements SshBridgeDelegate {
   }
 
   @override
-  void sendInput(String sessionId, String text) =>
-      _getSshService().sendInput(sessionId, text);
+  void sendInput(String sessionId, String text) {
+    final ssh = _getSshService();
+    if (!ssh.sendInput(sessionId, text)) return;
+    final host = _getSessionProvider().hostForSession(sessionId);
+    ssh.audit?.record(AuditEvent.now(
+      type: AuditEventType.input,
+      host: host,
+      sessionId: sessionId,
+      command: text,
+      meta: const {'source': 'plugin:js'},
+    ));
+  }
 }
 
 void main() async {
@@ -135,6 +158,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final NotificationCenterProvider _notificationCenter;
   late final PortForwardProvider _portForwardProvider;
   late final PortForwardService _portForwardService;
+  late final AuditService _audit;
+  late final AuditProvider _auditProvider;
   String? _lastUpdateNotifVersion;
 
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -160,11 +185,17 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _ssh.recordingService = _recordingService;
     _hostProvider = HostProvider(_storage);
     _keyProvider = KeyProvider();
+    _keyProvider.savePassphrase = _storage.savePassphrase;
     _settingsProvider = SettingsProvider();
     _ssh.isShellIntegrationEnabled =
         () => _settingsProvider.shellIntegrationEnabled;
     _sessionProvider = SessionProvider(_ssh, TabMetadataService());
     _sessionProvider.localShell = _localShell;
+    _sessionProvider.defaultShellResolver =
+        _settingsProvider.resolveDefaultShell;
+    // Fire-and-forget: the picker shows whatever has loaded; custom profiles
+    // and the platform default are available immediately.
+    unawaited(detectShells().then(_settingsProvider.setDetectedShells));
     _sessionProvider.keyLookup = (id) => _keyProvider.findById(id);
     _sessionProvider.jumpHostLookup = (id) =>
         _hostProvider.allHosts.where((h) => h.id == id).firstOrNull;
@@ -173,6 +204,32 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _sessionProvider.tmuxEnabled = () => _settingsProvider.tmuxEnabled;
     _sessionProvider.terminalType = () => _settingsProvider.terminalType;
     _sessionProvider.recordingStart = (s) => _recordingProvider.startRecording(s);
+    // Effective redaction = global AND per-host; local shells (no Host)
+    // follow the global toggle alone. Sampled once at recording start.
+    // Fresh HostProvider lookup — the session's Host snapshot goes stale
+    // after a panel edit (same pattern as SessionTab's distro glyph).
+    _recordingProvider.redactionPolicy = (s) => effectiveRecordingRedaction(
+          globalEnabled: _settingsProvider.recordingRedactionEnabled,
+          host: s is SshSession
+              ? (_hostProvider.allHosts
+                      .where((h) => h.id == s.host.id)
+                      .firstOrNull ??
+                  s.host)
+              : null,
+        );
+    _audit = AuditService();
+    _auditProvider = AuditProvider(_audit);
+    _ssh.audit = _audit;
+    _sessionProvider.audit = _audit;
+    // Fail-soft init + retention prune; settings may still be loading, so
+    // read the persisted value directly. The refresh() recovers an Audit
+    // screen opened during the brief init window.
+    unawaited(_audit.init().then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      _audit.prune(
+          prefs.getInt('auditRetentionDays') ?? kDefaultAuditRetentionDays);
+      _auditProvider.refresh();
+    }));
     _healthMonitor = HealthMonitorService(
       measure: _ssh.measureLatency,
       connectedHostIds: () => _ssh.connectedHostIds,
@@ -435,6 +492,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         ChangeNotifierProvider.value(value: _pluginEngineProvider),
         ChangeNotifierProvider.value(value: _updateProvider),
         ChangeNotifierProvider.value(value: _notificationCenter),
+        Provider<AuditService>.value(value: _audit),
+        ChangeNotifierProvider<AuditProvider>.value(value: _auditProvider),
       ],
       child: MaterialApp(
         title: 'YourSSH',

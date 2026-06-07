@@ -5,11 +5,11 @@ import '../models/host.dart';
 import '../services/os_detection.dart';
 import '../theme/app_theme.dart';
 
-/// Termius-style visual chain editor for the single-hop jump host.
+/// Termius-style visual chain editor for a multi-hop jump chain.
 ///
 /// Pure presentational: data in via constructor, the only output is
-/// [onSelect] — a picked jump host, or null when the user taps Clear.
-/// Spec: docs/superpowers/specs/2026-06-06-host-chain-editor-design.md
+/// [onChanged] — the full ordered hop-id list after any add/remove/clear.
+/// Spec: docs/superpowers/specs/2026-06-07-multi-hop-jump-chain-design.md
 class HostChainEditor extends StatelessWidget {
   /// Label of the host being edited (bottom card / helper text).
   final String currentHostLabel;
@@ -17,40 +17,48 @@ class HostChainEditor extends StatelessWidget {
   /// detectedOs of the host being edited (null → generic glyph).
   final String? currentHostOs;
 
-  /// The selected jump host, or null for a direct connection.
-  final Host? jumpHost;
+  /// Ordered jump chain (bastion → … ); empty = direct.
+  final List<Host> chain;
 
-  /// Shows the key glyph on the jump card when agent forwarding is on.
+  /// Shows the key glyph on the LAST hop when agent forwarding is on
+  /// (forwarding terminates at the destination, served via the final hop).
   final bool agentForwarding;
 
-  /// Hosts selectable as jump (caller excludes the host being edited).
+  /// Hosts selectable as a hop (caller excludes the edited host).
   final List<Host> candidates;
 
-  final ValueChanged<Host?> onSelect;
+  /// Fires the full ordered id list after any add/remove/clear.
+  final ValueChanged<List<String>> onChanged;
 
   const HostChainEditor({
     super.key,
     required this.currentHostLabel,
     this.currentHostOs,
-    this.jumpHost,
+    this.chain = const [],
     this.agentForwarding = false,
     required this.candidates,
-    required this.onSelect,
+    required this.onChanged,
   });
 
-  Future<void> _pick(BuildContext context) async {
+  Future<void> _addHop(BuildContext context) async {
+    final chosen = chain.map((h) => h.id).toSet();
+    final pickable =
+        candidates.where((h) => !chosen.contains(h.id)).toList();
     final picked = await showDialog<Host>(
       context: context,
-      builder: (_) => _HostPickerDialog(candidates: candidates),
+      builder: (_) => _HostPickerDialog(candidates: pickable),
     );
-    if (picked != null) onSelect(picked);
+    if (picked != null) onChanged([...chain.map((h) => h.id), picked.id]);
+  }
+
+  void _removeAt(int i) {
+    final ids = chain.map((h) => h.id).toList()..removeAt(i);
+    onChanged(ids);
   }
 
   @override
   Widget build(BuildContext context) {
-    final jump = jumpHost;
-    if (jump == null) return _emptyState(context);
-    return _chain(context, jump);
+    return chain.isEmpty ? _emptyState(context) : _chainView(context);
   }
 
   Widget _emptyState(BuildContext context) {
@@ -84,84 +92,101 @@ class HostChainEditor extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: () => _pick(context),
-              child: Container(
-                height: 32,
-                decoration: BoxDecoration(
-                  color: AppColors.cardHover,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                alignment: Alignment.center,
-                child: const Text(
-                  'Add a Host',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
+          _actionButton(
+            label: 'Add a Host',
+            color: AppColors.textPrimary,
+            bg: AppColors.cardHover,
+            onTap: () => _addHop(context),
           ),
         ],
       ),
     );
   }
 
-  Widget _chain(BuildContext context, Host jump) {
+  Widget _chainView(BuildContext context) {
+    final rows = <Widget>[];
+    for (var i = 0; i < chain.length; i++) {
+      final hop = chain[i];
+      if (i > 0) rows.add(_arrow());
+      final isLast = i == chain.length - 1;
+      rows.add(_HostCard(
+        label: hop.label.isNotEmpty ? hop.label : '${hop.username}@${hop.host}',
+        detectedOs: hop.detectedOs,
+        trailing: (agentForwarding && isLast)
+            ? const Tooltip(
+                message:
+                    'Agent forwarding on — the destination uses your local keys',
+                child: Icon(Icons.key, size: 14, color: AppColors.accent),
+              )
+            : _RemoveButton(onTap: () => _removeAt(i)),
+      ));
+    }
+    rows.add(_arrow());
+    rows.add(_HostCard(label: currentHostLabel, detectedOs: currentHostOs));
+    rows.add(const SizedBox(height: 10));
+    rows.add(_actionButton(
+      label: 'Add a Host',
+      color: AppColors.textPrimary,
+      bg: AppColors.cardHover,
+      onTap: () => _addHop(context),
+    ));
+    rows.add(const SizedBox(height: 6));
+    rows.add(_actionButton(
+      label: 'Clear',
+      color: AppColors.red,
+      bg: AppColors.red.withValues(alpha: 0.12),
+      onTap: () => onChanged(const []),
+    ));
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _HostCard(
-          label: jump.label.isNotEmpty
-              ? jump.label
-              : '${jump.username}@${jump.host}',
-          detectedOs: jump.detectedOs,
-          trailing: agentForwarding
-              ? const Tooltip(
-                  message:
-                      'Agent forwarding on — this hop can use your local keys',
-                  child: Icon(Icons.key, size: 14, color: AppColors.accent),
-                )
-              : null,
-          onTap: () => _pick(context),
+        crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
+  }
+
+  Widget _arrow() => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 6),
+        child: Icon(Icons.arrow_downward,
+            size: 16, color: AppColors.textTertiary),
+      );
+
+  Widget _actionButton({
+    required String label,
+    required Color color,
+    required Color bg,
+    required VoidCallback onTap,
+  }) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: 32,
+          decoration:
+              BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+          alignment: Alignment.center,
+          child: Text(label,
+              style: TextStyle(
+                  color: color, fontSize: 12, fontWeight: FontWeight.w600)),
         ),
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 6),
-          child: Icon(
-            Icons.arrow_downward,
-            size: 16,
-            color: AppColors.textTertiary,
-          ),
+      ),
+    );
+  }
+}
+
+/// Hover/tap × to drop one hop from the chain.
+class _RemoveButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _RemoveButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: const Tooltip(
+          message: 'Remove hop',
+          child: Icon(Icons.close, size: 14, color: AppColors.textTertiary),
         ),
-        _HostCard(label: currentHostLabel, detectedOs: currentHostOs),
-        const SizedBox(height: 10),
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            onTap: () => onSelect(null),
-            child: Container(
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.red.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              alignment: Alignment.center,
-              child: const Text(
-                'Clear',
-                style: TextStyle(
-                  color: AppColors.red,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -171,23 +196,18 @@ class _HostCard extends StatelessWidget {
   final String label;
   final String? detectedOs;
   final Widget? trailing;
-  final VoidCallback? onTap;
 
   const _HostCard({
     required this.label,
     this.detectedOs,
     this.trailing,
-    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final asset = osIconAsset(detectedOs);
-    return MouseRegion(
-      cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
+    return RepaintBoundary(
+      child: Container(
           height: 44,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
@@ -237,7 +257,6 @@ class _HostCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 }

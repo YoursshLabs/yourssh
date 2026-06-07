@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
+import '../models/audit_event.dart';
 import '../models/local_session.dart';
 import '../models/ssh_session.dart';
 import '../models/terminal_session.dart';
@@ -8,6 +9,7 @@ import '../providers/plugin_provider.dart';
 import '../providers/terminal_layout_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/shell_integration_provider.dart';
+import '../services/audit_service.dart';
 import '../services/ssh_service.dart';
 import '../providers/share_provider.dart';
 import 'local_terminal_pane.dart';
@@ -25,13 +27,35 @@ class SplitTerminalView extends StatelessWidget {
   }
 
   void _broadcastCommand(
+    BuildContext context,
     List<TerminalSession> sessions,
     String command,
-    TerminalLayoutProvider layout,
-  ) {
+    TerminalLayoutProvider layout, {
+    required String sourceSessionId,
+  }) {
     if (!layout.broadcastEnabled) return;
     for (final s in sessions) {
       s.terminal.textInput(command);
+    }
+    // A broadcast to N hosts must show N audit rows, not 1: the focused
+    // pane's input bar audits itself; record every OTHER target here.
+    try {
+      final audit = context.read<AuditService>();
+      final cmd = command.endsWith('\n')
+          ? command.substring(0, command.length - 1)
+          : command;
+      for (final s in sessions) {
+        if (s.id == sourceSessionId) continue;
+        audit.record(AuditEvent.now(
+          type: AuditEventType.input,
+          host: s is SshSession ? s.host : null,
+          sessionId: s.id,
+          command: cmd,
+          meta: const {'source': 'input-bar-broadcast'},
+        ));
+      }
+    } on ProviderNotFoundException {
+      // Tests pumped without audit wiring.
     }
   }
 
@@ -198,7 +222,8 @@ class SplitTerminalView extends StatelessWidget {
                 : null,
             onSubmit: (cmd) {
               if (layout.broadcastEnabled) {
-                _broadcastCommand(allSessions, cmd, layout);
+                _broadcastCommand(context, allSessions, cmd, layout,
+                    sourceSessionId: session.id);
               } else {
                 _sendCommand(session, cmd);
               }

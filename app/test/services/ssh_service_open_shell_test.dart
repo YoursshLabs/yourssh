@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
@@ -7,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/agent_forwarding_state.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/ssh_session.dart';
+import 'package:yourssh/providers/shell_integration_provider.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 
@@ -55,8 +57,16 @@ class _FakeShell implements SSHSession {
   @override
   Stream<Uint8List> get stderr => _stderr.stream;
 
+  final writes = <String>[];
+  String get writtenText => writes.join();
+
   @override
-  void write(Uint8List data) {}
+  void write(Uint8List data) {
+    writes.add(const Utf8Decoder().convert(data));
+  }
+
+  void emitStdout(String text) =>
+      _stdout.add(Uint8List.fromList(const Utf8Encoder().convert(text)));
 
   @override
   void resizeTerminal(
@@ -216,6 +226,233 @@ void main() {
 
     await shell.close();
     await shellDone;
+  });
+
+  // > 250 ms bracketed-paste settle timer inside openShell.
+  Future<void> settle() =>
+      Future<void>.delayed(const Duration(milliseconds: 400));
+
+  group('session template injection', () {
+    test('template-only host (SI off) injects cd/export without installer',
+        () async {
+      final svc = SshService(StorageService(),
+          shellIntegration: ShellIntegrationProvider());
+      final host = Host(
+          label: 'f',
+          host: 'e.com',
+          username: 'u',
+          shellIntegration: false,
+          workingDir: '/srv/app',
+          envVars: {'FOO': 'bar baz'});
+      final session = SshSession(host: host);
+      session.terminal.resize(80, 24);
+      final shell = _FakeShell();
+      svc.debugSetClient(host.id, _FakeClient(shell));
+
+      final shellDone = svc.openShell(session);
+      await pumpEventQueue();
+
+      shell.emitStdout('\x1b[?2004h\$ '); // line editor reading
+      await settle();
+      expect(shell.writtenText, contains('IFS= read -rs __ys'),
+          reason: 'bootstrap must be written after readiness');
+
+      shell.emitStdout('__YS_RDY__');
+      await pumpEventQueue();
+      expect(shell.writtenText, contains("cd -- '/srv/app' 2>/dev/null"));
+      expect(shell.writtenText, contains("export FOO='bar baz'"));
+      expect(shell.writtenText, isNot(contains('__yourssh_si')),
+          reason: 'SI off → no installer in the payload');
+
+      shell.emitStdout('echo-head __YS_DONE__\n');
+      await pumpEventQueue();
+
+      await shell.close();
+      await shellDone;
+    });
+
+    test('SI on + template → payload has installer AND cd', () async {
+      final svc = SshService(StorageService(),
+          shellIntegration: ShellIntegrationProvider());
+      final host = Host(
+          label: 'f',
+          host: 'e.com',
+          username: 'u',
+          workingDir: '/srv/app');
+      final session = SshSession(host: host);
+      session.terminal.resize(80, 24);
+      final shell = _FakeShell();
+      svc.debugSetClient(host.id, _FakeClient(shell));
+
+      final shellDone = svc.openShell(session);
+      await pumpEventQueue();
+      shell.emitStdout('\x1b[?2004h\$ ');
+      await settle();
+      shell.emitStdout('__YS_RDY__');
+      await pumpEventQueue();
+
+      expect(shell.writtenText, contains('__yourssh_si'));
+      expect(shell.writtenText, contains("cd -- '/srv/app'"));
+
+      shell.emitStdout('__YS_DONE__\n');
+      await pumpEventQueue();
+      await shell.close();
+      await shellDone;
+    });
+
+    test('no ShellIntegrationProvider wired → template host stays silent',
+        () async {
+      final svc = SshService(StorageService()); // no provider
+      final host = Host(
+          label: 'f',
+          host: 'e.com',
+          username: 'u',
+          workingDir: '/srv/app');
+      final session = SshSession(host: host);
+      session.terminal.resize(80, 24);
+      final shell = _FakeShell();
+      svc.debugSetClient(host.id, _FakeClient(shell));
+
+      final shellDone = svc.openShell(session);
+      await pumpEventQueue();
+      shell.emitStdout('\x1b[?2004h\$ ');
+      await settle();
+
+      expect(shell.writes, isEmpty);
+
+      await shell.close();
+      await shellDone;
+    });
+
+    test('startup snippet typed exactly once after DONE', () async {
+      final svc = SshService(StorageService(),
+          shellIntegration: ShellIntegrationProvider());
+      final host = Host(
+          label: 'f',
+          host: 'e.com',
+          username: 'u',
+          shellIntegration: false,
+          startupSnippet: 'htop');
+      final session = SshSession(host: host);
+      session.terminal.resize(80, 24);
+      final shell = _FakeShell();
+      svc.debugSetClient(host.id, _FakeClient(shell));
+
+      final shellDone = svc.openShell(session);
+      await pumpEventQueue();
+      shell.emitStdout('\x1b[?2004h\$ ');
+      await settle();
+      shell.emitStdout('__YS_RDY__');
+      await pumpEventQueue();
+      expect(shell.writes, isNot(contains('htop\n')),
+          reason: 'snippet must wait for DONE');
+
+      shell.emitStdout('__YS_DONE__\n');
+      await pumpEventQueue();
+      expect(shell.writes.where((w) => w == 'htop\n').length, 1);
+
+      shell.emitStdout('regular output after handshake');
+      await pumpEventQueue();
+      expect(shell.writes.where((w) => w == 'htop\n').length, 1,
+          reason: 'never re-sent');
+
+      await shell.close();
+      await shellDone;
+    });
+
+    test('non-bash fallback (DONE without RDY) still types the snippet',
+        () async {
+      final svc = SshService(StorageService(),
+          shellIntegration: ShellIntegrationProvider());
+      final host = Host(
+          label: 'f',
+          host: 'e.com',
+          username: 'u',
+          shellIntegration: false,
+          startupSnippet: 'htop');
+      final session = SshSession(host: host);
+      session.terminal.resize(80, 24);
+      final shell = _FakeShell();
+      svc.debugSetClient(host.id, _FakeClient(shell));
+
+      final shellDone = svc.openShell(session);
+      await pumpEventQueue();
+      shell.emitStdout('\x1b[?2004h\$ ');
+      await settle();
+      final writesAfterBootstrap = shell.writes.length;
+
+      // fish/other POSIX shells: bootstrap's `|| printf DONE` branch.
+      shell.emitStdout('__YS_DONE__\n');
+      await pumpEventQueue();
+
+      expect(shell.writes.where((w) => w == 'htop\n').length, 1);
+      // No RDY → payload was never sent: bootstrap + snippet only.
+      expect(shell.writes.length, writesAfterBootstrap + 1);
+
+      await shell.close();
+      await shellDone;
+    });
+
+    test('tmux on → hidden setup runs, snippet skipped', () async {
+      final svc = SshService(StorageService(),
+          shellIntegration: ShellIntegrationProvider());
+      final host = Host(
+          label: 'f',
+          host: 'e.com',
+          username: 'u',
+          shellIntegration: false,
+          workingDir: '/srv/app',
+          startupSnippet: 'htop');
+      final session = SshSession(host: host);
+      session.terminal.resize(80, 24);
+      final shell = _FakeShell();
+      svc.debugSetClient(host.id, _FakeClient(shell));
+
+      final shellDone = svc.openShell(session, useTmux: true);
+      await pumpEventQueue();
+      shell.emitStdout('\x1b[?2004h\$ ');
+      await settle();
+      shell.emitStdout('__YS_RDY__');
+      await pumpEventQueue();
+      expect(shell.writtenText, contains("cd -- '/srv/app'"));
+
+      shell.emitStdout('__YS_DONE__\n');
+      await pumpEventQueue();
+      expect(shell.writes, isNot(contains('htop\n')),
+          reason: 'a tmux re-attach would replay the snippet — skip it');
+
+      await shell.close();
+      await shellDone;
+    });
+
+    test('user keystroke before handshake aborts setup AND snippet',
+        () async {
+      final svc = SshService(StorageService(),
+          shellIntegration: ShellIntegrationProvider());
+      final host = Host(
+          label: 'f',
+          host: 'e.com',
+          username: 'u',
+          shellIntegration: false,
+          startupSnippet: 'htop');
+      final session = SshSession(host: host);
+      session.terminal.resize(80, 24);
+      final shell = _FakeShell();
+      svc.debugSetClient(host.id, _FakeClient(shell));
+
+      final shellDone = svc.openShell(session);
+      await pumpEventQueue();
+
+      session.terminal.onOutput?.call('x'); // user typed first
+      shell.emitStdout('\x1b[?2004h\$ ');
+      await settle();
+
+      expect(shell.writes, ['x'],
+          reason: 'no bootstrap, no snippet — the user owns the session');
+
+      await shell.close();
+      await shellDone;
+    });
   });
 
   test('openShell fires no event when the host has forwarding off', () async {

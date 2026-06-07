@@ -49,38 +49,86 @@ void main() {
       expect(() => Host.fromJson(json), throwsArgumentError);
     });
 
-    test('jumpHostId round-trips through JSON', () {
+    test('jumpHostIds round-trips through JSON', () {
       final h = Host(
         label: 'Target',
         host: '10.0.0.5',
         username: 'admin',
-        jumpHostId: 'bastion-id-123',
+        jumpHostIds: ['b1', 'b2'],
       );
       final decoded = Host.fromJson(h.toJson());
-      expect(decoded.jumpHostId, 'bastion-id-123');
+      expect(decoded.jumpHostIds, ['b1', 'b2']);
+      expect(decoded.jumpHostId, 'b1'); // getter = first hop
     });
 
-    test('jumpHostId defaults to null', () {
+    test('toJson dual-writes jumpHostId (first hop) for old apps', () {
+      final json =
+          Host(label: 'x', host: 'y', username: 'z', jumpHostIds: ['b1', 'b2'])
+              .toJson();
+      expect(json['jumpHostIds'], ['b1', 'b2']);
+      expect(json['jumpHostId'], 'b1');
+    });
+
+    test('legacy jumpHostId payload migrates to a one-element list', () {
+      final decoded = Host.fromJson({
+        'host': 'y',
+        'username': 'z',
+        'jumpHostId': 'old-bastion',
+      });
+      expect(decoded.jumpHostIds, ['old-bastion']);
+    });
+
+    test('jumpHostIds defaults to empty; jumpHostId getter null', () {
       final h = Host(label: 'x', host: 'y', username: 'z');
+      expect(h.jumpHostIds, isEmpty);
       expect(h.jumpHostId, isNull);
-      final decoded = Host.fromJson(h.toJson());
-      expect(decoded.jumpHostId, isNull);
+      expect(Host.fromJson(h.toJson()).jumpHostIds, isEmpty);
     });
 
-    test('copyWith preserves jumpHostId when not overridden', () {
-      final h = Host(
-        label: 'x', host: 'y', username: 'z', jumpHostId: 'jid',
-      );
-      final copy = h.copyWith(label: 'new label');
-      expect(copy.jumpHostId, 'jid');
+    test('malformed jumpHostIds degrades to empty', () {
+      final decoded = Host.fromJson(
+          {'host': 'y', 'username': 'z', 'jumpHostIds': 'garbage'});
+      expect(decoded.jumpHostIds, isEmpty);
     });
 
-    test('copyWith can clear jumpHostId', () {
+    test('copyWith preserves jumpHostIds when not overridden', () {
+      final h =
+          Host(label: 'x', host: 'y', username: 'z', jumpHostIds: ['jid']);
+      expect(h.copyWith(label: 'new').jumpHostIds, ['jid']);
+    });
+
+    test('copyWith clears jumpHostIds with an empty list', () {
+      final h =
+          Host(label: 'x', host: 'y', username: 'z', jumpHostIds: ['jid']);
+      expect(h.copyWith(jumpHostIds: const []).jumpHostIds, isEmpty);
+    });
+
+    test('jumpHostIds is an owned growable copy', () {
       final h = Host(
-        label: 'x', host: 'y', username: 'z', jumpHostId: 'jid',
-      );
-      final copy = h.copyWith(jumpHostId: null);
-      expect(copy.jumpHostId, isNull);
+          label: 'x', host: 'y', username: 'z', jumpHostIds: const ['a']);
+      expect(() => h.jumpHostIds.add('b'), returnsNormally);
+    });
+
+    test('recordingRedaction round-trips and defaults to true', () {
+      final h = Host(label: 'x', host: 'y', username: 'z');
+      expect(h.recordingRedaction, isTrue);
+      expect(Host.fromJson(h.toJson()).recordingRedaction, isTrue);
+
+      final off = Host(
+          label: 'x', host: 'y', username: 'z', recordingRedaction: false);
+      expect(Host.fromJson(off.toJson()).recordingRedaction, isFalse);
+    });
+
+    test('recordingRedaction missing in JSON defaults to true', () {
+      final decoded = Host.fromJson({'host': 'y', 'username': 'z'});
+      expect(decoded.recordingRedaction, isTrue);
+    });
+
+    test('copyWith keeps and overrides recordingRedaction', () {
+      final h = Host(
+          label: 'x', host: 'y', username: 'z', recordingRedaction: false);
+      expect(h.copyWith(label: 'new').recordingRedaction, isFalse);
+      expect(h.copyWith(recordingRedaction: true).recordingRedaction, isTrue);
     });
   });
 }

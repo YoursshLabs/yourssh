@@ -14,6 +14,11 @@ class RecordingProvider extends ChangeNotifier {
   /// look like it turned itself off, which is the bug report we keep getting.
   void Function(TerminalSession session, Object error)? onStartFailed;
 
+  /// Decides whether a session's recording is redacted; sampled once at
+  /// start time (mid-session toggle changes apply to the next recording).
+  /// Wired in main.dart from SettingsProvider + Host. Null (tests) = off.
+  bool Function(TerminalSession session)? redactionPolicy;
+
   final List<RecordingEntry> _recordings = [];
   final Set<String> _activeIds = {};
 
@@ -63,6 +68,7 @@ class RecordingProvider extends ChangeNotifier {
         width: session.terminal.viewWidth,
         height: session.terminal.viewHeight,
         title: title,
+        redact: redactionPolicy?.call(session) ?? false,
       );
       notifyListeners();
     } catch (e) {

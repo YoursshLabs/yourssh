@@ -24,14 +24,34 @@ Click **+** on the Hosts screen (or **Cmd/Ctrl+N** from anywhere). Required fiel
 | **Certificate** | CA-signed key + certificate file (`.pub` format) |
 | **SSH Agent** | Delegates to `SSH_AUTH_SOCK` (macOS/Linux) or `\\.\pipe\openssh-ssh-agent` (Windows 10+) |
 
-### Connection Chain (Jump Host / Bastion)
+### Generating SSH Keys
+
+The **Keychain** screen can generate key pairs in-app — no terminal needed:
+
+- **Ed25519** (recommended) — generated in pure Dart, works everywhere
+- **RSA-4096 / ECDSA-P256** — uses the system `ssh-keygen`; these options are
+  hidden if the binary isn't installed
+
+Keys are written to `Documents/YourSSH/keys` with `600` permissions; an
+optional passphrase encrypts the private key (OpenSSH format) and is stored in
+the OS keychain so connections stay one-click. After generating you can **copy
+the public key** or **deploy it to a host** straight from the panel — the
+deploy dialog appends it to `~/.ssh/authorized_keys` over an existing
+connection (idempotent: deploying twice never duplicates the line).
+
+### Connection Chain (Jump Hosts / Bastions)
 
 In the host detail panel, the **Connection Chain** section shows the route to
 your host as connected cards. Click **Add a Host** and pick any saved host as
-the bastion — the chain then reads bastion → destination, with a key icon on
-the bastion card when agent forwarding is enabled. Click the bastion card to
-swap it, or **Clear** to connect directly. Terminal sessions, SFTP, exec, and
-port forwarding all tunnel through the bastion transparently.
+a bastion — and keep adding: the chain supports multiple hops
+(bastion → bastion → … → destination) for layered networks. **Add a Host**
+stays visible to append another hop, each hop card has a remove (×) button,
+and **Clear** drops the whole chain to connect directly. A key icon appears
+on the last hop when agent forwarding is enabled. Hosts already in the chain
+are excluded from the picker, so you can't build a loop. Terminal sessions,
+SFTP, exec, and port forwarding all tunnel through the full chain
+transparently — each hop's host key is verified just like a direct
+connection.
 
 ### Agent Forwarding
 
@@ -65,6 +85,31 @@ copying private keys to the intermediate server.
   forwarding (`AllowAgentForwarding no`). Hover the icon for details.
 - If the server refuses forwarding you also get a notification in the bell;
   clicking it jumps to that session.
+
+### Session Template (per-host preset)
+
+The **SESSION TEMPLATE** section in the host detail panel pre-configures every
+new session on that host. All fields are optional — anything left empty
+follows your global settings.
+
+- **Working directory** — `cd` into this path on connect. Delivered
+  invisibly (no echo in the terminal, nothing in recordings); if the
+  directory doesn't exist you get a one-line warning. bash/zsh only.
+- **Env vars** — `NAME=value` pairs exported on connect, also invisible.
+  Names must be valid POSIX identifiers; duplicates are rejected on save.
+  bash/zsh only.
+- **Startup snippet** — command text typed *visibly* into the shell after
+  the setup completes, exactly as if you typed it (it appears in recordings
+  and the audit log). Skipped when tmux is on — a tmux re-attach would run
+  it again into your existing session.
+- **Terminal theme / font / size** — per-host appearance override. Handy for
+  making production hosts visually unmistakable (e.g. a red theme). Applies
+  live to open sessions when you edit the host.
+- **TERM type** and **tmux** — per-host overrides of the global Settings →
+  Terminal values; applies on the next connect.
+
+If you start typing before the setup is delivered, the app backs off and
+skips the template entirely — you always own the session.
 
 ## Groups
 

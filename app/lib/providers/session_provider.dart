@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/agent_forwarding_state.dart';
+import '../models/audit_event.dart';
 import '../models/host.dart';
 import '../models/local_session.dart';
+import '../models/shell_profile.dart';
 import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
 import '../models/terminal_session.dart';
+import '../services/audit_service.dart';
 import '../services/local_shell_service.dart';
 import '../services/ssh_service.dart';
 import '../services/tab_metadata_service.dart';
@@ -28,11 +31,19 @@ class SessionProvider extends ChangeNotifier {
   Future<void> Function(String hostId, String os)? onOsDetected;
   Future<void> Function(SshSession session)? recordingStart;
 
+  /// Audit trail sink; null disables auditing.
+  AuditService? audit;
+
   /// Fired when a session drops without a pending auto-reconnect: shell
   /// closed (a graceful `exit` is indistinguishable here — see spec caveat)
   /// or reconnect attempts exhausted. Wired in main.dart to the
   /// notification center.
   void Function(SshSession session, String? reason)? onSessionDropped;
+
+  /// Resolves the Settings default shell for new local terminals; wired by
+  /// main.dart to SettingsProvider.resolveDefaultShell. Null (tests, early
+  /// boot) behaves as platform default.
+  ShellResolution Function()? defaultShellResolver;
 
   /// Set by main.dart; required for newLocalSession/restartLocalSession.
   /// The setter wires the service's out-of-band state changes (PTY exit,
@@ -121,24 +132,26 @@ class SessionProvider extends ChangeNotifier {
   Future<void> _doConnect(SshSession session, Host host, {required int attempt}) async {
     try {
       final keyEntry = host.keyId != null ? keyLookup?.call(host.keyId!) : null;
-      Host? jumpHost;
-      SshKeyEntry? jumpKeyEntry;
-      if (host.jumpHostId != null) {
-        jumpHost = jumpHostLookup?.call(host.jumpHostId!);
-        if (jumpHost != null && jumpHost.keyId != null) {
-          jumpKeyEntry = keyLookup?.call(jumpHost.keyId!);
-        }
-      }
+      final jumpChain = SshService.resolveJumpChain(
+        host,
+        jumpLookup: (id) => jumpHostLookup?.call(id),
+        keyLookup: (id) => keyLookup?.call(id),
+      );
       await _ssh.connect(
         host,
         keyEntry: keyEntry,
-        jumpHost: jumpHost,
-        jumpKeyEntry: jumpKeyEntry,
+        jumpChain: jumpChain,
         verifyHostKey: hostKeyVerifier != null
             ? (keyType, fp) => hostKeyVerifier!(host.host, host.port, keyType, fp)
             : null,
+        verifyHopHostKey: hostKeyVerifier != null
+            ? (hop, keyType, fp) =>
+                hostKeyVerifier!(hop.host, hop.port, keyType, fp)
+            : null,
       );
       session.status = SessionStatus.connected;
+      audit?.record(AuditEvent.now(
+          type: AuditEventType.connect, host: host, sessionId: session.id));
       // Fire-and-forget: detect when OS is unknown, or known only as generic
       // 'linux' (pre-distro-detection hosts upgrade to a distro id on the
       // next connect; genuinely unknown distros re-probe — one cheap exec).
@@ -156,16 +169,28 @@ class SessionProvider extends ChangeNotifier {
 
       await _ssh.openShell(
         session,
-        useTmux: tmuxEnabled?.call() ?? false,
-        termType: terminalType?.call() ?? 'xterm-256color',
+        useTmux: host.tmuxOverride ?? tmuxEnabled?.call() ?? false,
+        termType: host.termType ?? terminalType?.call() ?? 'xterm-256color',
       );
       _safeNotify();
 
       // Shell closed — try auto-reconnect
       if (_sessions.contains(session) && (autoReconnectEnabled?.call() ?? false)) {
+        // Paired logging: a flapping host must show its disconnects, not an
+        // unexplained run of connect rows.
+        audit?.record(AuditEvent.now(
+            type: AuditEventType.disconnect,
+            host: host,
+            sessionId: session.id,
+            meta: const {'reason': 'dropped', 'reconnecting': true}));
         _scheduleReconnect(session, host, attempt: 1);
       } else if (_sessions.contains(session)) {
         session.status = SessionStatus.disconnected;
+        audit?.record(AuditEvent.now(
+            type: AuditEventType.disconnect,
+            host: host,
+            sessionId: session.id,
+            meta: const {'reason': 'dropped'}));
         onSessionDropped?.call(session, null);
         _safeNotify();
       }
@@ -173,7 +198,11 @@ class SessionProvider extends ChangeNotifier {
       if (!_sessions.contains(session)) return;
       final maxAttempts = reconnectAttempts?.call() ?? 0;
       final isUnlimited = maxAttempts == 0;
-      final shouldRetry = (autoReconnectEnabled?.call() ?? false) &&
+      // A jump-chain config error (deleted bastion, cycle) can never succeed
+      // on retry — don't loop on it, surface it immediately.
+      final isConfigError = e is JumpChainException;
+      final shouldRetry = !isConfigError &&
+          (autoReconnectEnabled?.call() ?? false) &&
           (isUnlimited || attempt < maxAttempts);
       if (shouldRetry) {
         _scheduleReconnect(session, host, attempt: attempt + 1);
@@ -182,6 +211,14 @@ class SessionProvider extends ChangeNotifier {
         session.errorMessage = attempt > 1
             ? 'Failed after $attempt attempts: $e'
             : e.toString();
+        // Final failure only — an unlimited-retry outage must not write
+        // one audit row per attempt tick.
+        audit?.record(AuditEvent.now(
+          type: AuditEventType.connect,
+          host: host,
+          sessionId: session.id,
+          meta: {'error': '$e', 'attempts': attempt},
+        ));
         onSessionDropped?.call(session, session.errorMessage);
         _safeNotify();
       }
@@ -233,10 +270,25 @@ class SessionProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> newLocalSession() async {
+  Future<void> newLocalSession({
+    ShellProfile? profile,
+    bool platformDefault = false,
+  }) async {
     final shell = localShell;
     if (shell == null) return;
-    final session = await shell.openShell();
+    var chosen = profile;
+    var dangling = false;
+    if (chosen == null && !platformDefault) {
+      final res = defaultShellResolver?.call();
+      chosen = res?.profile;
+      dangling = res?.dangling ?? false;
+    }
+    final session = await shell.openShell(profile: chosen);
+    if (dangling) {
+      session.terminal.write(
+          '\x1b[33m[Default shell not found — using platform default. '
+          'Check Settings → Terminal.]\x1b[0m\r\n');
+    }
     _sessions.add(session);
     _activeSessionId = session.id;
     _safeNotify();
@@ -263,8 +315,17 @@ class SessionProvider extends ChangeNotifier {
 
     _reconnectTimers.remove(sessionId)?.cancel();
     _countdownTimers.remove(sessionId)?.cancel();
-    final hostId =
-        sshSessions.where((s) => s.id == sessionId).firstOrNull?.host.id;
+    final ssh = sshSessions.where((s) => s.id == sessionId).firstOrNull;
+    final hostId = ssh?.host.id;
+    // Only a LIVE session gets a user-closed row — a dead tab already had
+    // its disconnect recorded on the drop/error path (no double-counting).
+    if (ssh != null && ssh.status == SessionStatus.connected) {
+      audit?.record(AuditEvent.now(
+          type: AuditEventType.disconnect,
+          host: ssh.host,
+          sessionId: sessionId,
+          meta: const {'reason': 'user-closed'}));
+    }
 
     _ssh.disconnectSession(sessionId);
     _sessions.removeWhere((s) => s.id == sessionId);

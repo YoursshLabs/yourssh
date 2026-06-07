@@ -127,6 +127,23 @@ The sidebar also has a **Local Terminal** section that opens a native shell (zsh
 
 Since 0.1.24 local shells are **first-class tabs**: they appear in the global top tab bar next to SSH sessions, can be split into panes alongside SSH panes, and can be recorded to asciicast just like SSH sessions. If the shell exits, the pane shows a status overlay with a **Restart shell** button.
 
+### Choosing the shell
+
+You are not locked to the platform default. YourSSH auto-detects the shells
+installed on your machine:
+
+- **Windows** — PowerShell, Command Prompt, PowerShell 7 (`pwsh`), Git Bash,
+  and one entry per WSL distro
+- **macOS / Linux** — your `$SHELL` plus everything listed in `/etc/shells`
+
+Pick a **default** in *Settings → Terminal → Default local shell*, or open a
+one-off session with any shell from the **+** (new tab) menu — each detected
+shell appears below *New local terminal*. You can also add a **custom shell**
+(any executable + arguments) in the same Settings section. *Restart shell*
+always relaunches the shell the tab was opened with; if your default shell is
+uninstalled later, new tabs fall back to the platform default with a warning
+in the terminal.
+
 ## Related Pages
 
 - [Terminal Sharing](User-Guide-Terminal-Sharing) — share a live session with teammates in real time

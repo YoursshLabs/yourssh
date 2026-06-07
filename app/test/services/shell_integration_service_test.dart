@@ -63,7 +63,15 @@ void main() {
       // Echo must be off BEFORE RDY is printed (race: payload can arrive
       // before `read -s` flips the tty), and restored afterwards.
       expect(boot.indexOf('stty -echo'), lessThan(boot.indexOf('RDY')));
-      expect(boot, contains('stty echo 2>/dev/null'));
+      expect(boot, contains('stty echo icanon 2>/dev/null'));
+    });
+    test('canonical mode is off while the payload line is read', () {
+      // The tty line discipline caps a canonical-mode input line at ~4096
+      // bytes; a session-template payload (installer + cd + many env
+      // exports) can exceed that and would be silently truncated mid-eval.
+      // -icanon lifts the cap; restored together with echo afterwards.
+      expect(boot, contains('stty -echo -icanon'));
+      expect(boot, contains('stty echo icanon'));
     });
     test('sentinel literals never appear in the bootstrap source (echo-safe)', () {
       // printf '__YS_%s__' RDY builds the sentinel at runtime, so scanning the

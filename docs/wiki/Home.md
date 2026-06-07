@@ -18,6 +18,7 @@ A professional, open-source SSH client for **macOS**, **Windows**, and **Linux**
 | [SFTP](User-Guide-SFTP) | Dual-panel file manager, uploads, downloads |
 | [Port Forwarding](User-Guide-Port-Forwarding) | Local, remote, and dynamic SOCKS5 tunnels |
 | [Recording](User-Guide-Recording) | Record and replay terminal sessions (Asciinema) |
+| [Audit Log](User-Guide-Audit-Log) | Local, secret-redacted trail of connects and commands with export |
 | [AI Chat](User-Guide-AI-Chat) | AI assistant sidebar with tool calling |
 | [Sync](User-Guide-Sync) | Cloud sync (Supabase) and P2P LAN transfer |
 | [DevOps Plugin](User-Guide-DevOps-Plugin) | Containers, Cloudflare, MCP, network tools, and more |

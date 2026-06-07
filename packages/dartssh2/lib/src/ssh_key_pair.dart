@@ -67,7 +67,9 @@ abstract class SSHKeyPair {
 
   Future<SSHSignature> signAsync(Uint8List data) async => sign(data);
 
-  String toPem();
+  /// Serializes the private key. A non-empty [passphrase] encrypts the
+  /// output (OpenSSH format only; legacy PEM encoders throw).
+  String toPem({String? passphrase});
 }
 
 class OpenSSHKeyPairs {
@@ -107,6 +109,42 @@ class OpenSSHKeyPairs {
   })  : cipherName = 'none',
         kdfName = 'none',
         kdfOptions = null;
+
+  /// Encrypts [privateKeyBlob] with aes256-ctr; key+IV are derived from
+  /// [passphrase] via bcrypt-pbkdf — the exact inverse of
+  /// [_decryptPrivateKeyBlob], so [getPrivateKeys] reads it back.
+  factory OpenSSHKeyPairs.encrypted({
+    required List<Uint8List> publicKeys,
+    required Uint8List privateKeyBlob,
+    required String passphrase,
+    int rounds = 16,
+  }) {
+    final cipher = SSHCipherType.aes256ctr;
+    final random = Random.secure();
+    final salt =
+        Uint8List.fromList(List.generate(16, (_) => random.nextInt(256)));
+    final passphraseBytes = Utf8Encoder().convert(passphrase);
+    final kdfHash = Uint8List(cipher.keySize + cipher.ivSize);
+    bcrypt_pbkdf(
+      passphraseBytes,
+      passphraseBytes.lengthInBytes,
+      salt,
+      salt.lengthInBytes,
+      kdfHash,
+      kdfHash.lengthInBytes,
+      rounds,
+    );
+    final key = Uint8List.view(kdfHash.buffer, 0, cipher.keySize);
+    final iv = Uint8List.view(kdfHash.buffer, cipher.keySize, cipher.ivSize);
+    final encryptCipher = cipher.createCipher(key, iv, forEncryption: true);
+    return OpenSSHKeyPairs(
+      cipherName: cipher.name,
+      kdfName: 'bcrypt',
+      kdfOptions: OpenSSHBcryptKdfOptions(salt, rounds),
+      publicKeys: publicKeys,
+      privateKeyBlob: encryptCipher.processAll(privateKeyBlob),
+    );
+  }
 
   factory OpenSSHKeyPairs.decode(Uint8List keyBlob) {
     final reader = SSHMessageReader(keyBlob);
@@ -289,7 +327,7 @@ abstract class OpenSSHKeyPair implements SSHKeyPair {
   Future<SSHSignature> signAsync(Uint8List data) async => sign(data);
 
   @override
-  String toPem() {
+  String toPem({String? passphrase}) {
     final writer = SSHMessageWriter();
     final checkInt = Random().nextInt(0xFFFFFFFF);
 
@@ -298,15 +336,26 @@ abstract class OpenSSHKeyPair implements SSHKeyPair {
     writer.writeUtf8(name);
     writeTo(writer);
 
+    final encrypt = passphrase != null && passphrase.isNotEmpty;
+    // Encrypted blobs must pad to the cipher block size; unencrypted keeps
+    // the historical 8 so existing output stays byte-identical.
+    final padTo = encrypt ? SSHCipherType.aes256ctr.blockSize : 8;
     // pad with bytes 1, 2, 3, ...
-    for (var i = 0; writer.length % 8 != 0; i++) {
+    for (var i = 0; writer.length % padTo != 0; i++) {
       writer.writeUint8(i + 1);
     }
 
-    return OpenSSHKeyPairs.unencrypted(
-      publicKeys: [toPublicKey().encode()],
-      privateKeyBlob: writer.takeBytes(),
-    ).toPem();
+    final container = encrypt
+        ? OpenSSHKeyPairs.encrypted(
+            publicKeys: [toPublicKey().encode()],
+            privateKeyBlob: writer.takeBytes(),
+            passphrase: passphrase,
+          )
+        : OpenSSHKeyPairs.unencrypted(
+            publicKeys: [toPublicKey().encode()],
+            privateKeyBlob: writer.takeBytes(),
+          );
+    return container.toPem();
   }
 }
 
@@ -398,6 +447,18 @@ class OpenSSHEd25519KeyPair with OpenSSHKeyPair {
   final String comment;
 
   OpenSSHEd25519KeyPair(this.publicKey, this.privateKey, this.comment);
+
+  /// Generates a fresh keypair. pinenacl's [ed25519.SigningKey.generate]
+  /// uses the platform CSPRNG; the OpenSSH private field is the 64-byte
+  /// seed‖publicKey form that [readFrom]/[sign] already expect.
+  factory OpenSSHEd25519KeyPair.generate([String comment = '']) {
+    final signing = ed25519.SigningKey.generate();
+    return OpenSSHEd25519KeyPair(
+      Uint8List.fromList(signing.publicKey),
+      Uint8List.fromList(signing),
+      comment,
+    );
+  }
 
   factory OpenSSHEd25519KeyPair.readFrom(SSHMessageReader reader) {
     final publicKey = reader.readString();
@@ -710,7 +771,11 @@ class RsaPrivateKey implements SSHKeyPair {
   Future<SSHSignature> signAsync(Uint8List data) async => sign(data);
 
   @override
-  String toPem() {
+  String toPem({String? passphrase}) {
+    if (passphrase != null && passphrase.isNotEmpty) {
+      throw UnsupportedError(
+          'Passphrase encoding not supported for legacy PEM');
+    }
     final sequence = ASN1Sequence();
     sequence.add(ASN1Integer(version));
     sequence.add(ASN1Integer(n));

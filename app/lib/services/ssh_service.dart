@@ -11,6 +11,8 @@ import '../models/ssh_key.dart';
 import '../models/ssh_session.dart';
 import 'certificate_key_pair.dart';
 import 'injection_gate.dart';
+import '../models/audit_event.dart';
+import 'audit_service.dart';
 import 'notification_service.dart';
 import 'shell_integration_service.dart';
 import 'recording_service.dart';
@@ -20,10 +22,27 @@ import 'storage_service.dart';
 import 'sudo_sftp.dart';
 import 'system_agent_proxy.dart';
 
+/// One hop in a jump chain: the bastion host plus its resolved key.
+typedef JumpHop = ({Host host, SshKeyEntry? keyEntry});
+
+/// A jump chain that cannot be built or dialed for a **configuration**
+/// reason — a hop id that no longer resolves, a cycle, the target inside
+/// its own chain. Distinct from a transient network failure: callers must
+/// NOT auto-retry it (retrying a deleted bastion loops forever).
+class JumpChainException implements Exception {
+  final String message;
+  JumpChainException(this.message);
+  @override
+  String toString() => 'JumpChainException: $message';
+}
+
 class SshService {
   final StorageService _storage;
   final HookBus? hookBus;
   final ShellIntegrationProvider? shellIntegration;
+
+  /// Audit trail sink; null disables auditing (tests, early startup).
+  AuditService? audit;
 
   /// Global on/off for shell integration, read from SettingsProvider in
   /// main.dart. null => treat as enabled.
@@ -32,9 +51,18 @@ class SshService {
   final Map<String, SSHSession> _shells = {};
   final Map<String, String> _shellToHost = {}; // sessionId → hostId
   final Map<String, SystemAgentProxy> _agentProxies = {};
+  // Keyed by chain-prefix ('a' for hop0, 'a>b' for hop1 through a, …): a
+  // client to B *through A* is distinct from a direct client to B. Proxies
+  // share the same prefix key so teardown of one chain can't close a proxy
+  // another chain still uses.
   final Map<String, SSHClient> _jumpClients = {};
   final Map<String, SystemAgentProxy> _jumpAgentProxies = {};
-  final Map<String, String> _hostToJump = {}; // target hostId → jump hostId
+  // In-flight dials by prefix, so concurrent connects through the same
+  // bastion reuse one dial instead of opening duplicates.
+  final Map<String, Future<({SSHClient client, SystemAgentProxy? proxy})>>
+      _jumpInflight = {};
+  // target hostId → its chain-prefix keys (deepest last), for teardown.
+  final Map<String, List<String>> _hostToJump = {};
   RecordingService? _recording;
   set recordingService(RecordingService? service) => _recording = service;
 
@@ -155,9 +183,12 @@ class SshService {
   Future<SSHClient> connect(
     Host host, {
     SshKeyEntry? keyEntry,
-    Host? jumpHost,
-    SshKeyEntry? jumpKeyEntry,
+    List<JumpHop> jumpChain = const [],
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
+    // Verifies each bastion hop's key under its OWN host:port (the target's
+    // [verifyHostKey] only covers the destination). Null → accept hop keys.
+    Future<bool> Function(Host hop, String keyType, Uint8List fp)?
+        verifyHopHostKey,
   }) async {
     if (hookBus != null) {
       final result = hookBus!.fireInterceptable(
@@ -178,14 +209,12 @@ class SshService {
     final SSHClient client;
     try {
       final SSHSocket socket;
-      if (jumpHost != null) {
-        final jc = await _ensureJumpClient(
-          jumpHost,
-          keyEntry: jumpKeyEntry,
-          verifyHostKey: verifyHostKey,
-        );
-        socket = await jc.forwardLocal(host.host, host.port);
-        _hostToJump[host.id] = jumpHost.id;
+      if (jumpChain.isNotEmpty) {
+        final lastHop = await dialChain(
+            target: host,
+            chain: jumpChain,
+            verifyHopHostKey: verifyHopHostKey);
+        socket = await lastHop.forwardLocal(host.host, host.port);
       } else {
         socket = await SSHSocket.connect(host.host, host.port);
       }
@@ -225,62 +254,201 @@ class SshService {
         unawaited(_agentProxies[host.id]?.close() ?? Future.value());
         _agentProxies.remove(host.id);
       }
-      final jumpId = _hostToJump.remove(host.id);
-      if (jumpId != null && !_hostToJump.values.contains(jumpId)) {
-        _jumpClients[jumpId]?.close();
-        _jumpClients.remove(jumpId);
-        unawaited(_jumpAgentProxies[jumpId]?.close() ?? Future.value());
-        _jumpAgentProxies.remove(jumpId);
-      }
+      _teardownJumpChain(host.id);
       rethrow;
     }
     _clients[host.id] = client;
     return client;
   }
 
-  // ── Jump host helper ───────────────────────────────────
+  // ── Jump chain ─────────────────────────────────────────
 
-  Future<SSHClient> _ensureJumpClient(
-    Host jumpHost, {
+  /// Resolves [host]'s `jumpHostIds` to a dialable chain. Throws
+  /// [JumpChainException] on a hop id that no longer resolves — a config
+  /// error callers must surface, not auto-retry. Shared by every entry
+  /// point (sessions, auto-connect, test-connection) so resolution stays
+  /// consistent.
+  static List<JumpHop> resolveJumpChain(
+    Host host, {
+    required Host? Function(String id) jumpLookup,
+    required SshKeyEntry? Function(String keyId) keyLookup,
+  }) {
+    final chain = <JumpHop>[];
+    for (final jid in host.jumpHostIds) {
+      final jh = jumpLookup(jid);
+      if (jh == null) throw JumpChainException('Jump host not found: $jid');
+      final jk = jh.keyId == null ? null : keyLookup(jh.keyId!);
+      chain.add((host: jh, keyEntry: jk));
+    }
+    return chain;
+  }
+
+  /// Opens one hop and returns its client + agent proxy (the caller owns
+  /// proxy storage/lifetime). [over] null = direct TCP (hop0); otherwise the
+  /// socket is the previous client's forwardLocal channel. `@visibleForTesting`
+  /// only so tests can stub the socket/auth — production dials through it.
+  @visibleForTesting
+  Future<({SSHClient client, SystemAgentProxy? proxy})> dialHop(
+    Host hop,
+    SSHSocket? over, {
     SshKeyEntry? keyEntry,
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
   }) async {
-    if (_jumpClients.containsKey(jumpHost.id)) {
-      return _jumpClients[jumpHost.id]!;
-    }
-    final password = await _storage.loadPassword(jumpHost.id);
-    final resolution = await _resolveIdentities(
-      jumpHost,
-      keyEntry,
-      jumpHostLabel: jumpHost.label,
-    );
-    if (resolution.agentProxy != null) {
-      _jumpAgentProxies[jumpHost.id] = resolution.agentProxy!;
-    }
-
-    final jumpClient = SSHClient(
-      await SSHSocket.connect(jumpHost.host, jumpHost.port),
-      username: jumpHost.username,
+    final password = await _storage.loadPassword(hop.id);
+    final resolution =
+        await _resolveIdentities(hop, keyEntry, jumpHostLabel: hop.label);
+    final client = SSHClient(
+      over ?? await SSHSocket.connect(hop.host, hop.port),
+      username: hop.username,
       onPasswordRequest: () => password ?? '',
-      identities: resolution.identities.isNotEmpty ? resolution.identities : null,
+      identities:
+          resolution.identities.isNotEmpty ? resolution.identities : null,
       onVerifyHostKey: (type, fp) async {
         if (verifyHostKey != null) return verifyHostKey(type.toString(), fp);
         return true;
       },
     );
-    // Eagerly insert before awaiting auth so that a concurrent caller returns
-    // this in-progress client rather than opening a duplicate connection.
-    _jumpClients[jumpHost.id] = jumpClient;
     try {
-      await jumpClient.authenticated;
+      await client.authenticated;
     } catch (e) {
-      _jumpClients.remove(jumpHost.id);
-      unawaited(_jumpAgentProxies[jumpHost.id]?.close() ?? Future.value());
-      _jumpAgentProxies.remove(jumpHost.id);
-      jumpClient.close();
+      unawaited(resolution.agentProxy?.close() ?? Future.value());
+      client.close();
       rethrow;
     }
-    return jumpClient;
+    return (client: client, proxy: resolution.agentProxy);
+  }
+
+  /// Dials [chain] sequentially and returns the LAST hop's client, ready to
+  /// forwardLocal to [target]. Caches each hop by its chain-prefix key
+  /// ('a', 'a>b' — B-through-A ≠ direct B) so a reconnect or a sibling
+  /// target reuses *live* clients; dead cached clients are evicted, in-flight
+  /// dials are deduped. A mid-chain failure closes only the clients THIS call
+  /// opened and that no surviving target references. [verifyHopHostKey]
+  /// verifies each bastion's key under *its own* host:port (not the target's).
+  /// `@visibleForTesting` only to allow stubbing [dialHop] — connect() calls it.
+  @visibleForTesting
+  Future<SSHClient> dialChain({
+    required Host target,
+    required List<JumpHop> chain,
+    Future<bool> Function(Host hop, String keyType, Uint8List fp)?
+        verifyHopHostKey,
+  }) async {
+    // Cycle guard — the picker prevents this, but sync/import payloads may not.
+    final seen = <String>{};
+    for (final hop in chain) {
+      if (hop.host.id == target.id) {
+        throw JumpChainException(
+            'Jump chain contains the target host: ${hop.host.id}');
+      }
+      if (!seen.add(hop.host.id)) {
+        throw JumpChainException(
+            'Jump chain has a duplicate hop: ${hop.host.id}');
+      }
+    }
+
+    final keys = <String>[];
+    final openedHere = <String>[];
+    SSHClient? prev;
+    try {
+      for (var i = 0; i < chain.length; i++) {
+        final hop = chain[i];
+        final prefix = chain.take(i + 1).map((h) => h.host.id).join('>');
+        keys.add(prefix);
+
+        // Reuse a *live* cached client; evict a dead one (link dropped while
+        // it lingered in the cache) so a reconnect re-dials instead of
+        // forwarding over a closed transport.
+        final cached = _jumpClients[prefix];
+        if (cached != null && !cached.isClosed) {
+          prev = cached;
+          continue;
+        }
+        if (cached != null) {
+          _jumpClients.remove(prefix);
+          unawaited(_jumpAgentProxies.remove(prefix)?.close() ?? Future.value());
+        }
+
+        prev = await _ensureHop(prefix, prev, hop, verifyHopHostKey);
+        openedHere.add(prefix);
+      }
+      _retargetJumpChain(target.id, keys);
+      return prev!;
+    } catch (e) {
+      // Close only what this dial created and nobody else still references —
+      // never the leak the old code left when _hostToJump was set only after
+      // the loop completed.
+      for (final prefix in openedHere.reversed) {
+        if (_jumpInflight.containsKey(prefix)) continue;
+        if (_hostToJump.values.any((ks) => ks.contains(prefix))) continue;
+        _jumpClients.remove(prefix)?.close();
+        unawaited(_jumpAgentProxies.remove(prefix)?.close() ?? Future.value());
+      }
+      rethrow;
+    }
+  }
+
+  /// Returns the live client for [prefix], deduping concurrent dials: the
+  /// first caller's dial future is shared (stored in [_jumpInflight]), so two
+  /// sessions through the same bastion don't open duplicate connections.
+  Future<SSHClient> _ensureHop(
+    String prefix,
+    SSHClient? prev,
+    JumpHop hop,
+    Future<bool> Function(Host hop, String keyType, Uint8List fp)?
+        verifyHopHostKey,
+  ) async {
+    final inflight = _jumpInflight[prefix];
+    if (inflight != null) return (await inflight).client;
+
+    final future = () async {
+      final socket = prev == null
+          ? null
+          : await prev.forwardLocal(hop.host.host, hop.host.port);
+      return dialHop(
+        hop.host,
+        socket,
+        keyEntry: hop.keyEntry,
+        verifyHostKey: verifyHopHostKey == null
+            ? null
+            : (kt, fp) => verifyHopHostKey(hop.host, kt, fp),
+      );
+    }();
+    _jumpInflight[prefix] = future;
+    try {
+      final r = await future;
+      _jumpClients[prefix] = r.client;
+      if (r.proxy != null) _jumpAgentProxies[prefix] = r.proxy!;
+      return r.client;
+    } finally {
+      _jumpInflight.remove(prefix);
+    }
+  }
+
+  /// Points [hostId] at [keys], releasing any prefix from its previous chain
+  /// that the new chain (and no other host) no longer needs — so editing a
+  /// host to a shorter chain doesn't strand the dropped hops' clients.
+  void _retargetJumpChain(String hostId, List<String> keys) {
+    final old = _hostToJump[hostId];
+    _hostToJump[hostId] = keys;
+    if (old == null) return;
+    for (final prefix in old.reversed) {
+      if (keys.contains(prefix)) continue;
+      if (_hostToJump.values.any((ks) => ks.contains(prefix))) continue;
+      _jumpClients.remove(prefix)?.close();
+      unawaited(_jumpAgentProxies.remove(prefix)?.close() ?? Future.value());
+    }
+  }
+
+  /// Releases a host's jump-chain prefix clients, deepest-first, closing a
+  /// prefix only when no other host still references it.
+  void _teardownJumpChain(String hostId) {
+    final keys = _hostToJump.remove(hostId);
+    if (keys == null) return;
+    for (final prefix in keys.reversed) {
+      if (_hostToJump.values.any((ks) => ks.contains(prefix))) continue;
+      _jumpClients.remove(prefix)?.close();
+      unawaited(_jumpAgentProxies.remove(prefix)?.close() ?? Future.value());
+    }
   }
 
   // ── Test connection (TCP + auth, no shell) ────────────
@@ -289,36 +457,36 @@ class SshService {
     Host host, {
     String? password,
     SshKeyEntry? keyEntry,
-    Host? jumpHost,
-    SshKeyEntry? jumpKeyEntry,
+    List<JumpHop> jumpChain = const [],
   }) async {
     final stopwatch = Stopwatch()..start();
     SSHClient? client;
-    SSHClient? jumpClient;
+    // Temp (non-cached) hop clients + their agent proxies, all closed in
+    // `finally` — a connectivity check must leave no live connections.
+    final jumpClients = <SSHClient>[];
+    final jumpProxies = <SystemAgentProxy>[];
     SystemAgentProxy? agentProxy;
-    SystemAgentProxy? jumpAgentProxyForTest;
     try {
       SSHSocket socket;
-      if (jumpHost != null) {
-        final jumpPassword = await _storage.loadPassword(jumpHost.id);
-        final jumpResolution = await _resolveIdentities(
-          jumpHost,
-          jumpKeyEntry,
-          jumpHostLabel: jumpHost.label,
-        );
-        // Track for cleanup; closed in `finally` below.
-        jumpAgentProxyForTest = jumpResolution.agentProxy;
-        jumpClient = SSHClient(
-          await SSHSocket.connect(jumpHost.host, jumpHost.port)
-              .timeout(const Duration(seconds: 10)),
-          username: jumpHost.username,
-          onPasswordRequest: () => jumpPassword ?? '',
-          identities:
-              jumpResolution.identities.isNotEmpty ? jumpResolution.identities : null,
-          onVerifyHostKey: (_, _) async => true,
-        );
-        await jumpClient.authenticated.timeout(const Duration(seconds: 10));
-        socket = await jumpClient.forwardLocal(host.host, host.port)
+      if (jumpChain.isNotEmpty) {
+        SSHClient? prev;
+        for (final hop in jumpChain) {
+          final overSocket = prev == null
+              ? null
+              : await prev
+                  .forwardLocal(hop.host.host, hop.host.port)
+                  .timeout(const Duration(seconds: 10));
+          // Shared per-hop dial (same auth/identity path as a real connect);
+          // temp clients/proxies are tracked here and closed in `finally`.
+          final r = await dialHop(hop.host, overSocket,
+                  keyEntry: hop.keyEntry)
+              .timeout(const Duration(seconds: 10));
+          jumpClients.add(r.client);
+          if (r.proxy != null) jumpProxies.add(r.proxy!);
+          prev = r.client;
+        }
+        socket = await prev!
+            .forwardLocal(host.host, host.port)
             .timeout(const Duration(seconds: 10));
       } else {
         socket = await SSHSocket.connect(host.host, host.port)
@@ -357,9 +525,13 @@ class SshService {
       );
     } finally {
       client?.close();
-      jumpClient?.close();
+      for (final c in jumpClients) {
+        c.close();
+      }
       await agentProxy?.close();
-      await jumpAgentProxyForTest?.close();
+      for (final pxy in jumpProxies) {
+        await pxy.close();
+      }
     }
   }
 
@@ -442,6 +614,25 @@ class SshService {
           );
     }
 
+    // Session-template setup (cd/export, and the snippet's DONE trigger)
+    // rides the same invisible handshake as shell integration — one
+    // bootstrap, one payload, one DONE sentinel. See
+    // docs/superpowers/specs/2026-06-06-session-template-design.md.
+    final injectOn =
+        shellIntegration != null && (siOn || session.host.hasTemplateSetup);
+
+    var snippetSent = false;
+    void maybeSendStartupSnippet() {
+      if (snippetSent) return;
+      snippetSent = true;
+      final snippet = session.host.startupSnippet;
+      // tmux `new -A` re-attach would replay the snippet into a live
+      // session — cd/export are idempotent, the snippet is not. Skip it.
+      if (snippet == null || snippet.trim().isEmpty || useTmux) return;
+      shell.write(Uint8List.fromList(const Utf8Encoder()
+          .convert(snippet.endsWith('\n') ? snippet : '$snippet\n')));
+    }
+
     hookBus?.fireObserve('session.connect', ObserveEvent(
       sessionId: session.id,
       payload: {
@@ -487,7 +678,7 @@ class SshService {
     }
 
     void launchInjection() {
-      if (!siOn || gate != null || injectionAborted) return;
+      if (!injectOn || gate != null || injectionAborted) return;
       cancelReadinessTimers();
       awaitingProbe = false;
       final bootstrap = shellIntegration!.buildBootstrapLine();
@@ -512,7 +703,7 @@ class SshService {
     // bare "\n". A real prompt answers it; MOTD-in-progress only produces a
     // kernel echo. Out of probes → give up cleanly.
     void armQuietProbe() {
-      if (!siOn ||
+      if (!injectOn ||
           gate != null ||
           injectionAborted ||
           awaitingProbe ||
@@ -544,7 +735,7 @@ class SshService {
       });
     }
 
-    if (siOn) armQuietProbe();
+    if (injectOn) armQuietProbe();
 
     final done = Completer<void>();
     const utf8 = Utf8Decoder(allowMalformed: true);
@@ -560,7 +751,7 @@ class SshService {
               'terminal.output', TransformEvent(sessionId: session.id, data: text));
         }
 
-        if (siOn && gate == null && !injectionAborted) {
+        if (injectOn && gate == null && !injectionAborted) {
           firstOutputAt ??= DateTime.now();
           final sig = readiness.onChunk(text);
           if (sig == ReadinessSignal.altScreen) {
@@ -592,11 +783,24 @@ class SshService {
           final wasHolding = g.isHolding;
           final r = g.feed(text);
           if (r.sendPayload) {
-            shell.write(Uint8List.fromList(
-                shellIntegration!.buildPayloadLine().codeUnits));
+            // Utf8Encoder (not codeUnits): workingDir/env values may be
+            // non-ASCII. The local `utf8` decoder shadows dart:convert's.
+            shell.write(Uint8List.fromList(const Utf8Encoder().convert(
+                shellIntegration!.buildPayloadLine(
+              includeInstaller: siOn,
+              workingDir: session.host.workingDir,
+              envVars: session.host.envVars,
+            ))));
           }
           if (r.emit == null) return; // withheld until DONE / timeout
-          if (wasHolding && !g.isHolding) doneTimer?.cancel();
+          if (wasHolding && !g.isHolding) {
+            doneTimer?.cancel();
+            // DONE seen: handshake completed cleanly — type the startup
+            // snippet exactly as if the user had, visible and recorded.
+            // The doneTimer flush path (degraded handshake) never lands
+            // here, so an unconfirmed handshake never types the snippet.
+            maybeSendStartupSnippet();
+          }
           text = r.emit!;
           if (text.isEmpty) return; // echo head discarded, nothing to show
         }
@@ -638,7 +842,7 @@ class SshService {
       // A user keystroke before the handshake starts cancels the injection:
       // a queued probe "\n" would execute their half-typed command, and the
       // bootstrap would be appended to whatever they are typing.
-      if (siOn && gate == null && !injectionAborted) {
+      if (injectOn && gate == null && !injectionAborted) {
         injectionAborted = true;
         cancelReadinessTimers();
       }
@@ -702,29 +906,31 @@ class SshService {
     }
     final keyId = host.keyId;
     final keyEntry = keyId == null ? null : defaultKeyLookup?.call(keyId);
-    Host? jumpHost;
-    SshKeyEntry? jumpKeyEntry;
-    final jumpId = host.jumpHostId;
-    if (jumpId != null) {
-      jumpHost = defaultJumpHostLookup?.call(jumpId);
-      final jumpKeyId = jumpHost?.keyId;
-      if (jumpKeyId != null) jumpKeyEntry = defaultKeyLookup?.call(jumpKeyId);
-    }
+    final chain = resolveJumpChain(
+      host,
+      jumpLookup: (id) => defaultJumpHostLookup?.call(id),
+      keyLookup: (id) => defaultKeyLookup?.call(id),
+    );
     return connect(
       host,
       keyEntry: keyEntry,
-      jumpHost: jumpHost,
-      jumpKeyEntry: jumpKeyEntry,
+      jumpChain: chain,
       verifyHostKey: (keyType, fp) => verifier(host.host, host.port, keyType, fp),
+      verifyHopHostKey: (hop, keyType, fp) =>
+          verifier(hop.host, hop.port, keyType, fp),
     );
   }
 
   // ── Exec ───────────────────────────────────────────────
 
+  /// [auditSource] tags the audit event ('app', 'bulk', 'devops',
+  /// 'plugin:…'); pass null for internal polling probes that would flood
+  /// the log (network stats).
   Future<({String stdout, String stderr, int exitCode})> exec(
     Host host,
-    String command,
-  ) async {
+    String command, {
+    String? auditSource = 'app',
+  }) async {
     var cmd = command;
 
     if (hookBus != null) {
@@ -739,13 +945,37 @@ class SshService {
     }
 
     final originalCommand = cmd;
-    final client = await _ensureClient(host);
-    final result = await client.runWithResult(cmd);
+    final SSHClient client;
+    final SSHRunResult result;
+    try {
+      client = await _ensureClient(host);
+      result = await client.runWithResult(cmd);
+    } catch (e) {
+      if (auditSource != null) {
+        audit?.record(AuditEvent.now(
+          type: AuditEventType.exec,
+          host: host,
+          command: originalCommand,
+          meta: {'source': auditSource, 'error': '$e'},
+        ));
+      }
+      rethrow;
+    }
     final execResult = (
       stdout: String.fromCharCodes(result.stdout),
       stderr: String.fromCharCodes(result.stderr),
       exitCode: result.exitCode ?? -1,
     );
+
+    if (auditSource != null) {
+      audit?.record(AuditEvent.now(
+        type: AuditEventType.exec,
+        host: host,
+        command: originalCommand,
+        exitCode: execResult.exitCode,
+        meta: {'source': auditSource},
+      ));
+    }
 
     hookBus?.fireObserve(
       'command.after',
@@ -943,8 +1173,6 @@ class SshService {
   // ── Disconnect ─────────────────────────────────────────
 
   void disconnect(String hostId) {
-    final jumpHostId = _hostToJump.remove(hostId);
-
     final sessionIds = _shellToHost.entries
         .where((e) => e.value == hostId)
         .map((e) => e.key)
@@ -964,12 +1192,7 @@ class SshService {
     unawaited(_agentProxies[hostId]?.close() ?? Future.value());
     _agentProxies.remove(hostId);
 
-    if (jumpHostId != null && !_hostToJump.values.contains(jumpHostId)) {
-      _jumpClients[jumpHostId]?.close();
-      _jumpClients.remove(jumpHostId);
-      unawaited(_jumpAgentProxies[jumpHostId]?.close() ?? Future.value());
-      _jumpAgentProxies.remove(jumpHostId);
-    }
+    _teardownJumpChain(hostId);
   }
 
   void disconnectSession(String sessionId) {
@@ -994,12 +1217,16 @@ class SshService {
 
   Future<String?> detectOs(Host host) async {
     try {
-      final result = await exec(host, 'uname -s 2>/dev/null || ver');
+      // auditSource: null — internal OS probe on (almost) every connect;
+      // auditing it would pollute the trail with rows the user never ran.
+      final result =
+          await exec(host, 'uname -s 2>/dev/null || ver', auditSource: null);
       final os = parseOsFromUname(result.stdout);
       if (os != 'linux') return os;
       // Linux: best-effort distro probe — generic 'linux' on any failure.
       try {
-        final release = await exec(host, 'cat /etc/os-release 2>/dev/null');
+        final release = await exec(host, 'cat /etc/os-release 2>/dev/null',
+            auditSource: null);
         final id = parseOsReleaseId(release.stdout);
         if (id != null) return normalizeDistroId(id);
       } catch (_) {}

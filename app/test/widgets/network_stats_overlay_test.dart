@@ -55,7 +55,7 @@ void main() {
     final sessions = SessionProvider(sshService, TabMetadataService());
     addTearDown(sessions.dispose);
     sessions.localShell =
-        LocalShellService(ptyFactory: (s, c, r, env) => _FakePty());
+        LocalShellService(ptyFactory: (s, a, c, r, env) => _FakePty());
 
     final ssh = SshSession(
       host: Host(

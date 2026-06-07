@@ -13,7 +13,7 @@ class ContainerService {
   static const _dockerFormat = '{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}';
 
   Future<List<ContainerEntry>> listDockerContainers(Host host) async {
-    final r = await ssh.exec(host, "docker ps --format '$_dockerFormat'");
+    final r = await ssh.exec(host, "docker ps --format '$_dockerFormat'", auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(r.stderr.trim().isEmpty ? 'docker ps failed' : r.stderr.trim());
     }
@@ -27,7 +27,7 @@ class ContainerService {
     bool allNamespaces = false,
   }) async {
     final scope = allNamespaces ? '-A' : '-n $namespace';
-    final r = await ssh.exec(host, 'kubectl get pods $scope');
+    final r = await ssh.exec(host, 'kubectl get pods $scope', auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(r.stderr.trim().isEmpty ? 'kubectl failed' : r.stderr.trim());
     }
@@ -36,7 +36,8 @@ class ContainerService {
 
   Future<List<String>> podContainers(Host host, String pod, String namespace) async {
     final r = await ssh.exec(host,
-        "kubectl get pod $pod -n $namespace -o jsonpath='{.spec.containers[*].name}'");
+        "kubectl get pod $pod -n $namespace -o jsonpath='{.spec.containers[*].name}'",
+        auditSource: 'devops');
     if (r.exitCode != 0) return const [];
     return parseContainerNames(r.stdout);
   }
@@ -106,9 +107,9 @@ class ContainerService {
   }
 
   Future<RuntimeAvailability> _detectOne(Host host, String cmd, String probe) async {
-    final exists = await ssh.exec(host, 'command -v $cmd');
+    final exists = await ssh.exec(host, 'command -v $cmd', auditSource: 'devops');
     if (exists.exitCode != 0) return RuntimeAvailability.notInstalled;
-    final p = await ssh.exec(host, probe);
+    final p = await ssh.exec(host, probe, auditSource: 'devops');
     return classifyRuntime(
       commandExists: true,
       psExitCode: p.exitCode,

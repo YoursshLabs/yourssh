@@ -36,6 +36,20 @@ void main() {
       expect(provider.keys.first.certificatePath, isNull);
     });
   });
+
+  test('addKeyFromFile returns the created entry', () async {
+    final dir = await Directory.systemTemp.createTemp('kp_test');
+    addTearDown(() => dir.delete(recursive: true));
+    final keyFile = File('${dir.path}/id_ed25519')..writeAsStringSync('PRIV');
+    File('${dir.path}/id_ed25519.pub').writeAsStringSync('ssh-ed25519 AAA c');
+
+    final provider = KeyProvider();
+    await Future.delayed(Duration.zero);
+    final entry = await provider.addKeyFromFile(keyFile.path, 'my key');
+    expect(entry.label, 'my key');
+    expect(entry.publicKey, 'ssh-ed25519 AAA c');
+    expect(provider.findById(entry.id), isNotNull);
+  });
 }
 
 String _tmpKeyFile() {

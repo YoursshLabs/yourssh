@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
+import '../models/audit_event.dart';
 import '../models/ssh_session.dart';
 import '../providers/session_provider.dart';
 import '../services/ssh_service.dart';
@@ -58,7 +59,8 @@ class PluginContextImpl implements YourSSHPluginContext {
     if (host == null) {
       throw PluginSSHException('Unknown session: $sessionId');
     }
-    final result = await _ssh.exec(host, command);
+    final result =
+        await _ssh.exec(host, command, auditSource: 'plugin:$_pluginId');
     if (result.exitCode != 0) {
       throw PluginSSHException(
         'Command exited ${result.exitCode}: ${result.stderr.trim()}',
@@ -81,6 +83,13 @@ class PluginContextImpl implements YourSSHPluginContext {
     if (!_ssh.sendInput(sessionId, text)) {
       throw PluginSSHException('Session has no open shell: $sessionId');
     }
+    _ssh.audit?.record(AuditEvent.now(
+      type: AuditEventType.input,
+      host: session.host,
+      sessionId: sessionId,
+      command: text,
+      meta: {'source': 'plugin:$_pluginId'},
+    ));
   }
 
   @override

@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.32] — 2026-06-07
+
+### Added
+- **Multi-hop jump chain** — connect through multiple bastions
+  (bastion → bastion → … → target) for layered networks. The Connection
+  Chain editor now appends and removes hops (persistent **Add a Host**,
+  per-hop remove, Clear), hosts already in the chain are excluded from the
+  picker so loops can't be built, and every hop's host key is verified like
+  a direct connection. Terminal, SFTP, exec, and port forwarding all tunnel
+  through the full chain; clients are cached per chain prefix and torn down
+  deepest-first. An existing single jump host migrates automatically and
+  stays compatible with older app versions through sync.
+- **Session template (per-host preset)** — per-host working directory and
+  environment variables applied invisibly on connect via the
+  shell-integration handshake, a startup snippet typed after setup (skipped
+  under tmux and when the handshake aborts), and per-host terminal theme /
+  font / size / TERM / tmux overrides that fall back to the global settings.
+  New SESSION TEMPLATE section in the host panel with env-key validation.
+- **Internal audit log** — local SQLite trail of connect / disconnect /
+  exec / input events with per-caller source tagging (bulk runs, DevOps
+  tools, plugins, input bar), secret redaction before insert, an Audit Log
+  screen with type/time/search filters and keyset pagination, CSV/JSON
+  export, and retention pruning (default 90 days, configurable). Writes are
+  fail-soft and can never break an SSH operation.
+- **In-app SSH key generation** — generate Ed25519 (pure Dart,
+  interop-verified against `ssh-keygen`), RSA-4096, or ECDSA-P256 keys from
+  the Keychain screen, with optional passphrase stored in secure storage.
+  Copy the public key or deploy it to a host with the new ssh-copy-id-style
+  dialog (idempotent — deploying twice never duplicates the line).
+- **Local shell picker** — choose which shell local terminal tabs run:
+  auto-detected per platform (Windows: PowerShell, cmd, PowerShell 7, Git
+  Bash, one profile per WSL distro; macOS/Linux: `$SHELL` + `/etc/shells`)
+  plus custom executables with arguments. Default in Settings → Terminal,
+  per-session choice in the new-tab (+) menu.
+- **Recording redaction** — passwords, tokens, and API keys are masked with
+  `[REDACTED]` before terminal output is written to `.cast` recordings
+  (same patterns as the audit log: `key=value` secrets, Bearer tokens,
+  `sshpass -p`, mysql `-p`, `redis-cli -a`, URL passwords). On by default;
+  global switch in Settings → Recording plus a per-host opt-out. Output is
+  coalesced per line so secrets split across chunks are still caught — this
+  also hides keystroke timing, a side-channel in shared recordings.
+
+---
+
 ## [0.1.31] — 2026-06-06
 
 Packaging-only release — no app code changes. Fixes install failures
@@ -509,7 +553,9 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
-[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.30...HEAD
+[Unreleased]: https://github.com/YoursshLabs/yourssh/compare/v0.1.32...HEAD
+[0.1.32]: https://github.com/YoursshLabs/yourssh/compare/v0.1.31...v0.1.32
+[0.1.31]: https://github.com/YoursshLabs/yourssh/compare/v0.1.30...v0.1.31
 [0.1.30]: https://github.com/YoursshLabs/yourssh/compare/v0.1.29...v0.1.30
 [0.1.29]: https://github.com/YoursshLabs/yourssh/compare/v0.1.28...v0.1.29
 [0.1.28]: https://github.com/YoursshLabs/yourssh/compare/v0.1.27...v0.1.28

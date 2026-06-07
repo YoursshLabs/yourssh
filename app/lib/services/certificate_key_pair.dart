@@ -55,7 +55,8 @@ class CertificateKeyPair implements SSHKeyPair {
   Future<SSHSignature> signAsync(Uint8List data) async => _inner.sign(data);
 
   @override
-  String toPem() => throw UnsupportedError('CertificateKeyPair cannot be serialized to PEM');
+  String toPem({String? passphrase}) =>
+      throw UnsupportedError('CertificateKeyPair cannot be serialized to PEM');
 }
 
 class _RawBlobHostKey implements SSHHostKey {

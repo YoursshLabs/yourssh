@@ -16,101 +16,116 @@ Widget wrap(Widget child) => MaterialApp(
     );
 
 void main() {
-  testWidgets('empty state shows helper text and Add a Host', (tester) async {
+  testWidgets('empty chain shows helper text and Add a Host', (tester) async {
     await tester.pumpWidget(wrap(HostChainEditor(
       currentHostLabel: 'prod-db',
+      chain: const [],
       candidates: [makeHost('h1', 'bastion')],
-      onSelect: (_) {},
+      onChanged: (_) {},
     )));
 
     expect(find.text('Add a Host'), findsOneWidget);
-    expect(
-      find.textContaining('prod-db', findRichText: true),
-      findsOneWidget,
-    );
+    expect(find.textContaining('prod-db', findRichText: true), findsOneWidget);
     expect(find.text('Clear'), findsNothing);
   });
 
-  testWidgets('chain state shows both cards, arrow and Clear', (tester) async {
+  testWidgets('chain shows hops + destination, Add stays, Clear present',
+      (tester) async {
     await tester.pumpWidget(wrap(HostChainEditor(
       currentHostLabel: 'prod-db',
-      jumpHost: makeHost('h1', 'bastion'),
-      candidates: [makeHost('h1', 'bastion')],
-      onSelect: (_) {},
+      chain: [makeHost('h1', 'bastion')],
+      candidates: [makeHost('h1', 'bastion'), makeHost('h2', 'b2')],
+      onChanged: (_) {},
     )));
 
     expect(find.text('bastion'), findsOneWidget);
     expect(find.text('prod-db'), findsOneWidget);
     expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+    expect(find.text('Add a Host'), findsOneWidget); // append more
     expect(find.text('Clear'), findsOneWidget);
-    expect(find.text('Add a Host'), findsNothing);
   });
 
-  testWidgets('key icon shows iff agentForwarding', (tester) async {
+  testWidgets('key icon on the last hop iff agentForwarding', (tester) async {
     final jump = makeHost('h1', 'bastion');
     await tester.pumpWidget(wrap(HostChainEditor(
       currentHostLabel: 'prod-db',
-      jumpHost: jump,
+      chain: [jump],
       agentForwarding: true,
       candidates: [jump],
-      onSelect: (_) {},
+      onChanged: (_) {},
     )));
     expect(find.byIcon(Icons.key), findsOneWidget);
 
     await tester.pumpWidget(wrap(HostChainEditor(
       currentHostLabel: 'prod-db',
-      jumpHost: jump,
+      chain: [jump],
       agentForwarding: false,
       candidates: [jump],
-      onSelect: (_) {},
+      onChanged: (_) {},
     )));
     expect(find.byIcon(Icons.key), findsNothing);
   });
 
-  testWidgets('Clear tap fires onSelect(null)', (tester) async {
-    Host? selected = makeHost('sentinel', 's');
-    var fired = false;
+  testWidgets('appending a hop calls onChanged with both ids', (tester) async {
+    List<String>? got;
     await tester.pumpWidget(wrap(HostChainEditor(
       currentHostLabel: 'prod-db',
-      jumpHost: makeHost('h1', 'bastion'),
-      candidates: const [],
-      onSelect: (h) {
-        fired = true;
-        selected = h;
-      },
-    )));
-
-    await tester.tap(find.text('Clear'));
-    expect(fired, isTrue);
-    expect(selected, isNull);
-  });
-
-  testWidgets('picker filters by search and returns picked host',
-      (tester) async {
-    Host? selected;
-    await tester.pumpWidget(wrap(HostChainEditor(
-      currentHostLabel: 'prod-db',
-      candidates: [
-        makeHost('h1', 'bastion', addr: '10.0.0.1'),
-        makeHost('h2', 'staging', addr: '10.0.0.2'),
-      ],
-      onSelect: (h) => selected = h,
+      chain: [makeHost('h1', 'bastion')],
+      candidates: [makeHost('h1', 'bastion'), makeHost('h2', 'b2')],
+      onChanged: (ids) => got = ids,
     )));
 
     await tester.tap(find.text('Add a Host'));
     await tester.pumpAndSettle();
-
-    expect(find.text('bastion'), findsOneWidget);
-    expect(find.text('staging'), findsOneWidget);
-
-    await tester.enterText(find.byType(TextField), 'stag');
+    await tester.tap(find.text('b2'));
     await tester.pumpAndSettle();
-    expect(find.text('bastion'), findsNothing);
-    expect(find.text('staging'), findsOneWidget);
+    expect(got, ['h1', 'h2']);
+  });
 
-    await tester.tap(find.text('staging'));
+  testWidgets('picker excludes hosts already in the chain', (tester) async {
+    await tester.pumpWidget(wrap(HostChainEditor(
+      currentHostLabel: 'prod-db',
+      chain: [makeHost('h1', 'bastion')],
+      candidates: [makeHost('h1', 'bastion'), makeHost('h2', 'b2')],
+      onChanged: (_) {},
+    )));
+
+    await tester.tap(find.text('Add a Host'));
     await tester.pumpAndSettle();
-    expect(selected?.id, 'h2');
-    expect(find.byType(Dialog), findsNothing);
+    // h1 already a hop → only h2 (b2) offered.
+    expect(find.text('b2'), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byType(Dialog), matching: find.text('bastion')),
+        findsNothing);
+  });
+
+  testWidgets('removing a hop fires onChanged without it', (tester) async {
+    List<String>? got;
+    await tester.pumpWidget(wrap(HostChainEditor(
+      currentHostLabel: 'prod-db',
+      chain: [makeHost('h1', 'bastion'), makeHost('h2', 'b2')],
+      candidates: [makeHost('h1', 'bastion'), makeHost('h2', 'b2')],
+      onChanged: (ids) => got = ids,
+    )));
+
+    // Two remove buttons (one per hop); tap the first.
+    await tester.tap(find.byIcon(Icons.close).first);
+    await tester.pumpAndSettle();
+    expect(got, ['h2']);
+  });
+
+  testWidgets('Clear empties the chain', (tester) async {
+    List<String>? got;
+    await tester.pumpWidget(wrap(HostChainEditor(
+      currentHostLabel: 'prod-db',
+      chain: [makeHost('h1', 'bastion')],
+      candidates: [makeHost('h1', 'bastion')],
+      onChanged: (ids) => got = ids,
+    )));
+
+    await tester.tap(find.text('Clear'));
+    await tester.pumpAndSettle();
+    expect(got, isEmpty);
   });
 }

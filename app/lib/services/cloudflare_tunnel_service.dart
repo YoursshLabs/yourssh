@@ -29,7 +29,7 @@ class CloudflareTunnelService {
         sleep 3
         grep -o 'https://[^[:space:]]*trycloudflare.com' /tmp/cf_tunnel_$port.log | head -1
       ''';
-      final result = await _sshService.exec(host, cmd);
+      final result = await _sshService.exec(host, cmd, auditSource: 'devops');
       final url = result.stdout.trim();
       if (url.startsWith('https://')) return TunnelStartResult.success(url);
       // No URL emitted yet — either cloudflared crashed or took longer than 3s.
@@ -47,11 +47,12 @@ class CloudflareTunnelService {
     await _sshService.exec(
       host,
       "pkill -f 'cloudflared.*$port' 2>/dev/null; rm -f /tmp/cf_tunnel_$port.log",
+      auditSource: 'devops',
     );
   }
 
   Future<bool> isCloudflaredInstalled(Host host) async {
-    final result = await _sshService.exec(host, 'which cloudflared 2>/dev/null');
+    final result = await _sshService.exec(host, 'which cloudflared 2>/dev/null', auditSource: 'devops');
     return result.stdout.trim().isNotEmpty;
   }
 }

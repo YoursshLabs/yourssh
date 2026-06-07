@@ -21,11 +21,29 @@ class Host {
   DateTime createdAt;
   String? detectedOs;
   bool autoRecord;
-  String? jumpHostId;
+
+  /// Mask secrets (AuditRedactor patterns) in this host's recordings.
+  /// Effective only while the global Settings toggle is also on.
+  bool recordingRedaction;
+
+  /// Ordered jump-host chain (bastion → … → target). Empty = direct.
+  List<String> jumpHostIds;
   bool shellIntegration;
   bool agentForwarding;
   SftpMode sftpMode;
   String? sftpServerCommand;
+
+  // ── Session template (per-host preset) ──────────────────────────────
+  // All null/empty = no override; see
+  // docs/superpowers/specs/2026-06-06-session-template-design.md.
+  String? workingDir;
+  Map<String, String> envVars;
+  String? startupSnippet;
+  String? terminalThemeId;
+  String? fontFamily;
+  double? fontSize;
+  String? termType;
+  bool? tmuxOverride;
 
   Host({
     String? id,
@@ -40,16 +58,36 @@ class Host {
     DateTime? createdAt,
     this.detectedOs,
     this.autoRecord = false,
-    this.jumpHostId,
+    this.recordingRedaction = true,
+    Iterable<String> jumpHostIds = const [],
     this.shellIntegration = true,
     this.agentForwarding = false,
     this.sftpMode = SftpMode.normal,
     this.sftpServerCommand,
+    this.workingDir,
+    Map<String, String> envVars = const {},
+    this.startupSnippet,
+    this.terminalThemeId,
+    this.fontFamily,
+    this.fontSize,
+    this.termType,
+    this.tmuxOverride,
   })  : id = id ?? const Uuid().v4(),
         // Always own a growable copy so callers can `tags.add(...)`
         // without hitting `Unsupported operation` on the shared `const []`.
         tags = List.of(tags),
+        envVars = Map.of(envVars),
+        jumpHostIds = List.of(jumpHostIds),
         createdAt = createdAt ?? DateTime.now();
+
+  /// First hop, for "has a bastion?" consumers and cross-version JSON.
+  String? get jumpHostId => jumpHostIds.isEmpty ? null : jumpHostIds.first;
+
+  /// Whether connect-time template work exists. Drives the invisible
+  /// handshake when shell integration is off — the snippet needs the
+  /// handshake too, since DONE is its send trigger.
+  bool get hasTemplateSetup =>
+      workingDir != null || envVars.isNotEmpty || startupSnippet != null;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -64,11 +102,23 @@ class Host {
         'createdAt': createdAt.toIso8601String(),
         'detectedOs': detectedOs,
         'autoRecord': autoRecord,
+        'recordingRedaction': recordingRedaction,
+        'jumpHostIds': jumpHostIds,
+        // Dual-write the first hop so an older app reading a synced payload
+        // keeps a working single-hop bastion instead of losing it.
         'jumpHostId': jumpHostId,
         'shellIntegration': shellIntegration,
         'agentForwarding': agentForwarding,
         'sftpMode': sftpMode.name,
         'sftpServerCommand': sftpServerCommand,
+        'workingDir': workingDir,
+        'envVars': envVars,
+        'startupSnippet': startupSnippet,
+        'terminalThemeId': terminalThemeId,
+        'fontFamily': fontFamily,
+        'fontSize': fontSize,
+        'termType': termType,
+        'tmuxOverride': tmuxOverride,
       };
 
   /// Tolerant of partially-missing fields so a corrupted prefs blob or
@@ -102,6 +152,25 @@ class Host {
       // carrying a future mode must not abort loading the whole list.
       return SftpMode.values.asNameMap()[name] ?? SftpMode.normal;
     }
+    Map<String, String> parseEnvVars() {
+      final raw = json['envVars'];
+      // Malformed/forward-compat values degrade to empty rather than
+      // throwing: a single bad host in a sync payload must not abort
+      // loading the whole list.
+      if (raw is! Map) return const {};
+      return raw.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
+    List<String> parseJumpHostIds() {
+      final raw = json['jumpHostIds'];
+      if (raw is List) {
+        // Keep only real string ids — a null/int/empty element can't match a
+        // host and would just trip the "jump host not found" path.
+        return raw.whereType<String>().where((s) => s.isNotEmpty).toList();
+      }
+      // Legacy single-hop payload.
+      final legacy = json['jumpHostId'];
+      return legacy is String && legacy.isNotEmpty ? [legacy] : const [];
+    }
     return Host(
       id: json['id'] as String?,
       label: (json['label'] as String?) ?? host,
@@ -115,11 +184,20 @@ class Host {
       createdAt: parseCreatedAt(),
       detectedOs: json['detectedOs'] as String?,
       autoRecord: (json['autoRecord'] as bool?) ?? false,
-      jumpHostId: json['jumpHostId'] as String?,
+      recordingRedaction: (json['recordingRedaction'] as bool?) ?? true,
+      jumpHostIds: parseJumpHostIds(),
       shellIntegration: (json['shellIntegration'] as bool?) ?? true,
       agentForwarding: (json['agentForwarding'] as bool?) ?? false,
       sftpMode: parseSftpMode(),
       sftpServerCommand: json['sftpServerCommand'] as String?,
+      workingDir: json['workingDir'] as String?,
+      envVars: parseEnvVars(),
+      startupSnippet: json['startupSnippet'] as String?,
+      terminalThemeId: json['terminalThemeId'] as String?,
+      fontFamily: json['fontFamily'] as String?,
+      fontSize: (json['fontSize'] as num?)?.toDouble(),
+      termType: json['termType'] as String?,
+      tmuxOverride: json['tmuxOverride'] as bool?,
     );
   }
 
@@ -133,11 +211,20 @@ class Host {
     String? group,
     String? detectedOs,
     bool? autoRecord,
-    Object? jumpHostId = const _Unset(),
+    bool? recordingRedaction,
+    List<String>? jumpHostIds,
     bool? shellIntegration,
     bool? agentForwarding,
     SftpMode? sftpMode,
     Object? sftpServerCommand = const _Unset(),
+    Object? workingDir = const _Unset(),
+    Map<String, String>? envVars,
+    Object? startupSnippet = const _Unset(),
+    Object? terminalThemeId = const _Unset(),
+    Object? fontFamily = const _Unset(),
+    Object? fontSize = const _Unset(),
+    Object? termType = const _Unset(),
+    Object? tmuxOverride = const _Unset(),
   }) =>
       Host(
         id: id,
@@ -152,13 +239,29 @@ class Host {
         createdAt: createdAt,
         detectedOs: detectedOs ?? this.detectedOs,
         autoRecord: autoRecord ?? this.autoRecord,
-        jumpHostId: jumpHostId is _Unset ? this.jumpHostId : jumpHostId as String?,
+        recordingRedaction: recordingRedaction ?? this.recordingRedaction,
+        jumpHostIds: jumpHostIds ?? this.jumpHostIds,
         shellIntegration: shellIntegration ?? this.shellIntegration,
         agentForwarding: agentForwarding ?? this.agentForwarding,
         sftpMode: sftpMode ?? this.sftpMode,
         sftpServerCommand: sftpServerCommand is _Unset
             ? this.sftpServerCommand
             : sftpServerCommand as String?,
+        workingDir:
+            workingDir is _Unset ? this.workingDir : workingDir as String?,
+        envVars: envVars ?? this.envVars,
+        startupSnippet: startupSnippet is _Unset
+            ? this.startupSnippet
+            : startupSnippet as String?,
+        terminalThemeId: terminalThemeId is _Unset
+            ? this.terminalThemeId
+            : terminalThemeId as String?,
+        fontFamily:
+            fontFamily is _Unset ? this.fontFamily : fontFamily as String?,
+        fontSize: fontSize is _Unset ? this.fontSize : fontSize as double?,
+        termType: termType is _Unset ? this.termType : termType as String?,
+        tmuxOverride:
+            tmuxOverride is _Unset ? this.tmuxOverride : tmuxOverride as bool?,
       );
 }
 

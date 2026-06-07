@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/local_session.dart';
+import 'package:yourssh/models/shell_profile.dart';
 import 'package:yourssh/models/ssh_session.dart';
 import 'package:yourssh/providers/session_provider.dart';
 import 'package:yourssh/services/local_shell_service.dart';
@@ -49,7 +50,7 @@ void main() {
         .setMockMethodCallHandler(secureChannel, (_) async => null);
     p = SessionProvider(SshService(StorageService()), TabMetadataService());
     p.localShell =
-        LocalShellService(ptyFactory: (shell, c, r, env) => _FakePty());
+        LocalShellService(ptyFactory: (shell, args, c, r, env) => _FakePty());
   });
 
   tearDown(() {
@@ -62,7 +63,7 @@ void main() {
     test('assigning localShell wires shell-exit notifications to listeners',
         () async {
       final pty = _FakePty();
-      final shell = LocalShellService(ptyFactory: (s, c, r, env) => pty);
+      final shell = LocalShellService(ptyFactory: (s, a, c, r, env) => pty);
       p.localShell = shell;
       await p.newLocalSession();
 
@@ -142,6 +143,60 @@ void main() {
       expect(local.status, LocalSessionStatus.exited);
       await p.restartLocalSession(local.id);
       expect(local.status, LocalSessionStatus.running);
+    });
+  });
+
+  group('shell picker', () {
+    const gitBash = ShellProfile(
+        id: 'git-bash', name: 'Git Bash', executable: 'bash.exe');
+
+    test('newLocalSession resolves the default shell via the resolver',
+        () async {
+      String? gotShell;
+      p.localShell = LocalShellService(ptyFactory: (shell, a, c, r, env) {
+        gotShell = shell;
+        return _FakePty();
+      });
+      p.defaultShellResolver = () => (profile: gitBash, dangling: false);
+      await p.newLocalSession();
+      expect(gotShell, 'bash.exe');
+    });
+
+    test('explicit profile bypasses the resolver', () async {
+      String? gotShell;
+      p.localShell = LocalShellService(ptyFactory: (shell, a, c, r, env) {
+        gotShell = shell;
+        return _FakePty();
+      });
+      var resolverCalled = false;
+      p.defaultShellResolver = () {
+        resolverCalled = true;
+        return (profile: null, dangling: false);
+      };
+      await p.newLocalSession(profile: gitBash);
+      expect(gotShell, 'bash.exe');
+      expect(resolverCalled, false);
+    });
+
+    test('platformDefault bypasses the resolver', () async {
+      var resolverCalled = false;
+      p.defaultShellResolver = () {
+        resolverCalled = true;
+        return (profile: gitBash, dangling: false);
+      };
+      await p.newLocalSession(platformDefault: true);
+      expect(resolverCalled, false);
+      final session = p.sessions.whereType<LocalSession>().single;
+      expect(session.profile, isNull);
+    });
+
+    test('dangling default writes a yellow warning into the terminal',
+        () async {
+      p.defaultShellResolver = () => (profile: null, dangling: true);
+      await p.newLocalSession();
+      final session = p.sessions.whereType<LocalSession>().single;
+      expect(session.terminal.buffer.getText(),
+          contains('Default shell not found'));
     });
   });
 }
