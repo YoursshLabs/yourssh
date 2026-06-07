@@ -205,9 +205,15 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _sessionProvider.recordingStart = (s) => _recordingProvider.startRecording(s);
     // Effective redaction = global AND per-host; local shells (no Host)
     // follow the global toggle alone. Sampled once at recording start.
-    _recordingProvider.redactionPolicy = (s) =>
-        _settingsProvider.recordingRedactionEnabled &&
-        (s is! SshSession || s.host.recordingRedaction);
+    // Fresh HostProvider lookup — the session's Host snapshot goes stale
+    // after a panel edit (same pattern as SessionTab's distro glyph).
+    _recordingProvider.redactionPolicy = (s) {
+      if (!_settingsProvider.recordingRedactionEnabled) return false;
+      if (s is! SshSession) return true;
+      final fresh =
+          _hostProvider.allHosts.where((h) => h.id == s.host.id).firstOrNull;
+      return (fresh ?? s.host).recordingRedaction;
+    };
     _audit = AuditService();
     _auditProvider = AuditProvider(_audit);
     _ssh.audit = _audit;
