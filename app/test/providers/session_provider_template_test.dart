@@ -29,6 +29,8 @@ class _CapturingSsh extends SshService {
     SshKeyEntry? keyEntry,
     List<JumpHop> jumpChain = const [],
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
+    Future<bool> Function(Host hop, String keyType, Uint8List fp)?
+        verifyHopHostKey,
   }) async =>
       _NullClient();
 

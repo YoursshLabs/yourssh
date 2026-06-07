@@ -132,21 +132,21 @@ class SessionProvider extends ChangeNotifier {
   Future<void> _doConnect(SshSession session, Host host, {required int attempt}) async {
     try {
       final keyEntry = host.keyId != null ? keyLookup?.call(host.keyId!) : null;
-      final jumpChain = <JumpHop>[];
-      for (final jid in host.jumpHostIds) {
-        final jh = jumpHostLookup?.call(jid);
-        if (jh == null) {
-          throw StateError('Jump host not found: $jid');
-        }
-        final jk = jh.keyId == null ? null : keyLookup?.call(jh.keyId!);
-        jumpChain.add((host: jh, keyEntry: jk));
-      }
+      final jumpChain = SshService.resolveJumpChain(
+        host,
+        jumpLookup: (id) => jumpHostLookup?.call(id),
+        keyLookup: (id) => keyLookup?.call(id),
+      );
       await _ssh.connect(
         host,
         keyEntry: keyEntry,
         jumpChain: jumpChain,
         verifyHostKey: hostKeyVerifier != null
             ? (keyType, fp) => hostKeyVerifier!(host.host, host.port, keyType, fp)
+            : null,
+        verifyHopHostKey: hostKeyVerifier != null
+            ? (hop, keyType, fp) =>
+                hostKeyVerifier!(hop.host, hop.port, keyType, fp)
             : null,
       );
       session.status = SessionStatus.connected;
@@ -198,7 +198,11 @@ class SessionProvider extends ChangeNotifier {
       if (!_sessions.contains(session)) return;
       final maxAttempts = reconnectAttempts?.call() ?? 0;
       final isUnlimited = maxAttempts == 0;
-      final shouldRetry = (autoReconnectEnabled?.call() ?? false) &&
+      // A jump-chain config error (deleted bastion, cycle) can never succeed
+      // on retry — don't loop on it, surface it immediately.
+      final isConfigError = e is JumpChainException;
+      final shouldRetry = !isConfigError &&
+          (autoReconnectEnabled?.call() ?? false) &&
           (isUnlimited || attempt < maxAttempts);
       if (shouldRetry) {
         _scheduleReconnect(session, host, attempt: attempt + 1);

@@ -156,7 +156,11 @@ class Host {
     }
     List<String> parseJumpHostIds() {
       final raw = json['jumpHostIds'];
-      if (raw is List) return raw.map((e) => e.toString()).toList();
+      if (raw is List) {
+        // Keep only real string ids — a null/int/empty element can't match a
+        // host and would just trip the "jump host not found" path.
+        return raw.whereType<String>().where((s) => s.isNotEmpty).toList();
+      }
       // Legacy single-hop payload.
       final legacy = json['jumpHostId'];
       return legacy is String && legacy.isNotEmpty ? [legacy] : const [];

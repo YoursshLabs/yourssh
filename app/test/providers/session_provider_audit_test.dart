@@ -32,6 +32,8 @@ class _FakeSsh extends SshService {
     SshKeyEntry? keyEntry,
     List<JumpHop> jumpChain = const [],
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
+    Future<bool> Function(Host hop, String keyType, Uint8List fp)?
+        verifyHopHostKey,
   }) async {
     if (failConnect) throw Exception('refused');
     return _NullClient();
