@@ -22,6 +22,10 @@ class Host {
   String? detectedOs;
   bool autoRecord;
 
+  /// Mask secrets (AuditRedactor patterns) in this host's recordings.
+  /// Effective only while the global Settings toggle is also on.
+  bool recordingRedaction;
+
   /// Ordered jump-host chain (bastion → … → target). Empty = direct.
   List<String> jumpHostIds;
   bool shellIntegration;
@@ -54,6 +58,7 @@ class Host {
     DateTime? createdAt,
     this.detectedOs,
     this.autoRecord = false,
+    this.recordingRedaction = true,
     Iterable<String> jumpHostIds = const [],
     this.shellIntegration = true,
     this.agentForwarding = false,
@@ -97,6 +102,7 @@ class Host {
         'createdAt': createdAt.toIso8601String(),
         'detectedOs': detectedOs,
         'autoRecord': autoRecord,
+        'recordingRedaction': recordingRedaction,
         'jumpHostIds': jumpHostIds,
         // Dual-write the first hop so an older app reading a synced payload
         // keeps a working single-hop bastion instead of losing it.
@@ -178,6 +184,7 @@ class Host {
       createdAt: parseCreatedAt(),
       detectedOs: json['detectedOs'] as String?,
       autoRecord: (json['autoRecord'] as bool?) ?? false,
+      recordingRedaction: (json['recordingRedaction'] as bool?) ?? true,
       jumpHostIds: parseJumpHostIds(),
       shellIntegration: (json['shellIntegration'] as bool?) ?? true,
       agentForwarding: (json['agentForwarding'] as bool?) ?? false,
@@ -204,6 +211,7 @@ class Host {
     String? group,
     String? detectedOs,
     bool? autoRecord,
+    bool? recordingRedaction,
     List<String>? jumpHostIds,
     bool? shellIntegration,
     bool? agentForwarding,
@@ -231,6 +239,7 @@ class Host {
         createdAt: createdAt,
         detectedOs: detectedOs ?? this.detectedOs,
         autoRecord: autoRecord ?? this.autoRecord,
+        recordingRedaction: recordingRedaction ?? this.recordingRedaction,
         jumpHostIds: jumpHostIds ?? this.jumpHostIds,
         shellIntegration: shellIntegration ?? this.shellIntegration,
         agentForwarding: agentForwarding ?? this.agentForwarding,

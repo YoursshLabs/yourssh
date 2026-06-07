@@ -108,5 +108,27 @@ void main() {
           label: 'x', host: 'y', username: 'z', jumpHostIds: const ['a']);
       expect(() => h.jumpHostIds.add('b'), returnsNormally);
     });
+
+    test('recordingRedaction round-trips and defaults to true', () {
+      final h = Host(label: 'x', host: 'y', username: 'z');
+      expect(h.recordingRedaction, isTrue);
+      expect(Host.fromJson(h.toJson()).recordingRedaction, isTrue);
+
+      final off = Host(
+          label: 'x', host: 'y', username: 'z', recordingRedaction: false);
+      expect(Host.fromJson(off.toJson()).recordingRedaction, isFalse);
+    });
+
+    test('recordingRedaction missing in JSON defaults to true', () {
+      final decoded = Host.fromJson({'host': 'y', 'username': 'z'});
+      expect(decoded.recordingRedaction, isTrue);
+    });
+
+    test('copyWith keeps and overrides recordingRedaction', () {
+      final h = Host(
+          label: 'x', host: 'y', username: 'z', recordingRedaction: false);
+      expect(h.copyWith(label: 'new').recordingRedaction, isFalse);
+      expect(h.copyWith(recordingRedaction: true).recordingRedaction, isTrue);
+    });
   });
 }
