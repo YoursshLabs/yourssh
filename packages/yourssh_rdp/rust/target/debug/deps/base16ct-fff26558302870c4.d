@@ -1,0 +1,10 @@
+/Users/thangnguyen/Projects/Personal/yourssh/packages/yourssh_rdp/rust/target/debug/deps/base16ct-fff26558302870c4.d: /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/lib.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/lower.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/mixed.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/upper.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/display.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/error.rs
+
+/Users/thangnguyen/Projects/Personal/yourssh/packages/yourssh_rdp/rust/target/debug/deps/libbase16ct-fff26558302870c4.rmeta: /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/lib.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/lower.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/mixed.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/upper.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/display.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/error.rs
+
+/Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/lib.rs:
+/Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/lower.rs:
+/Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/mixed.rs:
+/Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/upper.rs:
+/Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/display.rs:
+/Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/base16ct-1.0.0/src/error.rs:

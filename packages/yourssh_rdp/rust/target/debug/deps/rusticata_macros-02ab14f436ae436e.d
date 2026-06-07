@@ -1,0 +1,9 @@
+/Users/thangnguyen/Projects/Personal/yourssh/packages/yourssh_rdp/rust/target/debug/deps/rusticata_macros-02ab14f436ae436e.d: /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/lib.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/combinator.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/debug.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/macros.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/traits.rs
+
+/Users/thangnguyen/Projects/Personal/yourssh/packages/yourssh_rdp/rust/target/debug/deps/librusticata_macros-02ab14f436ae436e.rmeta: /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/lib.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/combinator.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/debug.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/macros.rs /Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/traits.rs
+
+/Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/lib.rs:
+/Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/combinator.rs:
+/Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/debug.rs:
+/Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/macros.rs:
+/Users/thangnguyen/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rusticata-macros-4.1.0/src/traits.rs:
