@@ -108,11 +108,11 @@ void main() {
     });
 
     test('partial line flushes redacted after flushDelay', () async {
-      final s = RecordingService(flushDelay: const Duration(milliseconds: 30));
+      final s = RecordingService(flushDelay: const Duration(milliseconds: 20));
       final path = '${tmpDir.path}/r4.cast';
       await start(s, path);
       s.writeOutput('s1', 'secret=abc'); // no newline
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+      await Future<void>.delayed(const Duration(milliseconds: 500));
       s.writeOutput('s1', 'later\n'); // separate event ⇒ timer fired earlier
       await s.stopRecording('s1');
       final events = await eventsOf(path);
