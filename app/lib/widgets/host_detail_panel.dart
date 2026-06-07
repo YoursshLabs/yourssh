@@ -521,7 +521,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                             color: AppColors.textPrimary, fontSize: 13),
                       ),
                       subtitle: const Text(
-                        'Mask passwords/tokens before writing .cast',
+                        'Mask passwords/tokens before writing .cast (requires the global setting)',
                         style: TextStyle(
                             color: AppColors.textTertiary, fontSize: 11),
                       ),

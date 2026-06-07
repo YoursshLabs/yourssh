@@ -117,6 +117,11 @@ non-decreasing by construction.
 - **ANSI escapes inside a secret break matching.** A token interrupted by
   color/cursor sequences (e.g. a prompt redraw mid-echo) won't match the
   regexes. This feature is defense-in-depth, not a guarantee.
+- **A secret straddling a `flushDelay` boundary can leak its tail.** If the
+  head of a token is flushed by the timer (e.g. `password=hun` masked) and
+  the rest arrives afterwards, the post-timer remainder (`ter2`) is written
+  in a later event without context to match. Inherent cost of bounded
+  buffering; a larger `flushDelay` shrinks the window.
 - Only the `AuditRedactor` pattern families are caught. A bare password typed
   at a hidden prompt never echoes, so it never reaches the recording anyway.
 - Coalescing changes the `.cast` event structure (fewer, larger events).

@@ -35,6 +35,7 @@ import 'services/audit_service.dart';
 import 'services/storage_service.dart';
 import 'services/sync_service.dart';
 import 'services/recording_service.dart';
+import 'services/recording_redaction_policy.dart';
 import 'services/tab_metadata_service.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
@@ -207,13 +208,15 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     // follow the global toggle alone. Sampled once at recording start.
     // Fresh HostProvider lookup — the session's Host snapshot goes stale
     // after a panel edit (same pattern as SessionTab's distro glyph).
-    _recordingProvider.redactionPolicy = (s) {
-      if (!_settingsProvider.recordingRedactionEnabled) return false;
-      if (s is! SshSession) return true;
-      final fresh =
-          _hostProvider.allHosts.where((h) => h.id == s.host.id).firstOrNull;
-      return (fresh ?? s.host).recordingRedaction;
-    };
+    _recordingProvider.redactionPolicy = (s) => effectiveRecordingRedaction(
+          globalEnabled: _settingsProvider.recordingRedactionEnabled,
+          host: s is SshSession
+              ? (_hostProvider.allHosts
+                      .where((h) => h.id == s.host.id)
+                      .firstOrNull ??
+                  s.host)
+              : null,
+        );
     _audit = AuditService();
     _auditProvider = AuditProvider(_audit);
     _ssh.audit = _audit;
