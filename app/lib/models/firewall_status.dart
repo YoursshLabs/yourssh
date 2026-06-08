@@ -102,7 +102,9 @@ class FirewallStatus {
           t.startsWith('chain') ||
           t.startsWith('type') ||
           t == '{' ||
-          t == '}') continue;
+          t == '}') {
+        continue;
+      }
       if (t.contains('accept') || t.contains('drop') || t.contains('reject')) {
         final action = t.contains('accept')
             ? 'ACCEPT'

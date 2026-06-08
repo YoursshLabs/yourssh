@@ -23,6 +23,7 @@ import 'rdp_badge.dart';
 import 'bulk/bulk_action_bar.dart';
 import 'bulk/bulk_push_dialog.dart';
 import 'bulk/bulk_run_dialog.dart';
+import 'server_monitor_sheet.dart';
 import 'sftp_screen.dart';
 
 class HostsDashboard extends StatefulWidget {
@@ -1051,6 +1052,11 @@ class _HostCardState extends State<_HostCard> {
           const SizedBox(width: 2),
           _iconBtn(Icons.folder_outlined, 'SFTP', onTap: () => _openSftp(context)),
           const SizedBox(width: 2),
+          if (context.read<SessionProvider>().sshSessions.any((s) => s.host.id == widget.host.id)) ...[
+            _iconBtn(Icons.monitor_heart_outlined, 'Monitor',
+                onTap: () => ServerMonitorSheet.show(context, widget.host)),
+            const SizedBox(width: 2),
+          ],
         ],
         _iconBtn(Icons.more_horiz, 'More', onTapDown: (d) => _showMenu(context, d.globalPosition)),
       ],
@@ -1223,6 +1229,9 @@ class _HostCardState extends State<_HostCard> {
         _menuItem('terminal', Icons.terminal, 'Connect', () => sessionProvider.connectAny(widget.host)),
         if (isSsh)
           _menuItem('sftp', Icons.folder_outlined, 'SFTP', () => _openSftp(context)),
+        if (isSsh)
+          _menuItem('monitor', Icons.monitor_heart_outlined, 'Monitor',
+              () => ServerMonitorSheet.show(context, widget.host)),
         _menuItem('edit', Icons.edit_outlined, 'Edit', () => widget.onEditHost?.call(widget.host)),
         const PopupMenuDivider(),
         _menuItem('duplicate', Icons.copy_outlined, 'Duplicate', () => _duplicate(context, hostProvider)),
