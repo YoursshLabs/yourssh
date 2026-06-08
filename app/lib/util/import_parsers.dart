@@ -518,7 +518,7 @@ class TermiusParser extends ImportParser {
     // Fallback: try as a JSON array in YourSSH export format
     if (decoded is! List) return (hosts: [], warnings: []);
     try {
-      final hosts = (decoded as List)
+      final hosts = decoded
           .whereType<Map<String, dynamic>>()
           .map((e) {
             final map = Map<String, dynamic>.from(e)..remove('id');
