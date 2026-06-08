@@ -324,4 +324,57 @@ void main() {
       expect(result.warnings, isEmpty);
     });
   });
+
+  group('TermiusParser', () {
+    const parser = TermiusParser();
+
+    test('parses Termius JSON export format', () {
+      const input = '{"hosts":['
+          '{"label":"My Server","address":"192.168.1.1","port":22,'
+          '"username":"admin","group":{"label":"Production"}}'
+          ']}';
+      final result = parser.parse(input);
+      expect(result.hosts.length, 1);
+      expect(result.hosts[0].label, 'My Server');
+      expect(result.hosts[0].host, '192.168.1.1');
+      expect(result.hosts[0].port, 22);
+      expect(result.hosts[0].username, 'admin');
+      expect(result.hosts[0].group, 'Production');
+      expect(result.warnings, isEmpty);
+    });
+
+    test('skips entries missing address', () {
+      const input = '{"hosts":[{"label":"Bad","port":22,"username":"root"}]}';
+      final result = parser.parse(input);
+      expect(result.hosts, isEmpty);
+    });
+
+    test('host without group has empty group', () {
+      const input =
+          '{"hosts":[{"label":"X","address":"10.0.0.1","port":22,"username":"root"}]}';
+      final result = parser.parse(input);
+      expect(result.hosts[0].group, '');
+    });
+
+    test('falls back to YourSSH JSON array format when no hosts key', () {
+      const input =
+          '[{"label":"Web","host":"web.example.com","port":22,"username":"admin",'
+          '"authType":"password","group":"","tags":[]}]';
+      final result = parser.parse(input);
+      expect(result.hosts.length, 1);
+      expect(result.hosts[0].label, 'Web');
+    });
+
+    test('invalid JSON returns a warning', () {
+      final result = parser.parse('not json');
+      expect(result.hosts, isEmpty);
+      expect(result.warnings.length, 1);
+    });
+
+    test('empty input returns empty result', () {
+      final result = parser.parse('');
+      expect(result.hosts, isEmpty);
+      expect(result.warnings, isEmpty);
+    });
+  });
 }

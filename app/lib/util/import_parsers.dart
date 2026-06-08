@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:xml/xml.dart';
 import 'package:yourssh/models/host.dart';
 
@@ -468,5 +470,74 @@ class AnsibleParser extends ImportParser {
     }
 
     return (hosts: hosts, warnings: warnings);
+  }
+}
+
+// ── Termius JSON ──────────────────────────────────────────
+
+class TermiusParser extends ImportParser {
+  const TermiusParser();
+
+  @override
+  ParseResult parse(String input) {
+    if (input.trim().isEmpty) return (hosts: [], warnings: []);
+
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(input);
+    } catch (_) {
+      return (hosts: [], warnings: ['Invalid JSON']);
+    }
+
+    if (decoded is Map && decoded.containsKey('hosts')) {
+      final list = decoded['hosts'];
+      if (list is! List) {
+        return (hosts: [], warnings: ['hosts field is not an array']);
+      }
+      final hosts = <Host>[];
+      for (final entry in list) {
+        if (entry is! Map) continue;
+        final address = (entry['address'] as String?)?.trim() ?? '';
+        if (address.isEmpty) continue;
+        final label = (entry['label'] as String?)?.trim() ?? address;
+        final port = (entry['port'] as num?)?.toInt() ?? 22;
+        final username = (entry['username'] as String?)?.trim() ?? '';
+        final groupMap = entry['group'];
+        final group =
+            groupMap is Map ? (groupMap['label'] as String?)?.trim() ?? '' : '';
+        hosts.add(Host(
+            label: label,
+            host: address,
+            port: port,
+            username: username,
+            group: group));
+      }
+      return (hosts: hosts, warnings: []);
+    }
+
+    // Fallback: try as a JSON array in YourSSH export format
+    if (decoded is! List) return (hosts: [], warnings: []);
+    try {
+      final hosts = (decoded as List)
+          .whereType<Map<String, dynamic>>()
+          .map((e) {
+            final map = Map<String, dynamic>.from(e)..remove('id');
+            return Host.fromJson({
+              'label': map['label'] ?? '',
+              'host': map['host'] ?? '',
+              'port': map['port'] ?? 22,
+              'username': map['username'] ?? 'root',
+              'authType': map['authType'] ?? 'password',
+              'group': map['group'] ?? '',
+              'tags': map['tags'] ?? [],
+              'createdAt': DateTime.now().toIso8601String(),
+            });
+          })
+          .where((h) => h.host.isNotEmpty)
+          .toList();
+      return (hosts: hosts, warnings: []);
+    } catch (_) {
+      return (hosts: [], warnings: []);
+    }
   }
 }
