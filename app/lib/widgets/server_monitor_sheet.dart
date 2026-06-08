@@ -36,6 +36,8 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
   FirewallStatusService? _firewallService;
   SystemSnapshot? _snapshot;
   FirewallStatus? _firewall;
+  String? _statsError;
+  String? _firewallError;
   bool _started = false;
 
   @visibleForTesting
@@ -62,14 +64,20 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
       host: widget.host,
       sshService: ssh,
       onUpdate: (s) {
-        if (mounted) setState(() => _snapshot = s);
+        if (mounted) setState(() { _snapshot = s; _statsError = null; });
+      },
+      onError: (e) {
+        if (mounted) setState(() => _statsError = e.toString());
       },
     );
     _firewallService = FirewallStatusService(
       host: widget.host,
       sshService: ssh,
       onUpdate: (f) {
-        if (mounted) setState(() => _firewall = f);
+        if (mounted) setState(() { _firewall = f; _firewallError = null; });
+      },
+      onError: (e) {
+        if (mounted) setState(() => _firewallError = e.toString());
       },
     );
     _statsService!.start();
@@ -165,19 +173,40 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
           _sectionTitle('SYSTEM'),
-          _snapshot == null
-              ? const Center(child: CircularProgressIndicator())
-              : _systemSection(_snapshot!),
+          if (_statsError != null && _snapshot == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Failed to load stats: $_statsError',
+                style: TextStyle(color: Colors.red.shade300, fontSize: 12),
+              ),
+            )
+          else if (_snapshot == null)
+            const Center(child: CircularProgressIndicator())
+          else
+            _systemSection(_snapshot!),
           const SizedBox(height: 16),
           _sectionTitle('PORTS'),
-          _snapshot == null
-              ? const Center(child: CircularProgressIndicator())
-              : _portsSection(_snapshot!.ports),
+          if (_statsError != null && _snapshot == null)
+            const SizedBox.shrink()
+          else if (_snapshot == null)
+            const Center(child: CircularProgressIndicator())
+          else
+            _portsSection(_snapshot!.ports),
           const SizedBox(height: 16),
           _sectionTitle('FIREWALL'),
-          _firewall == null
-              ? const Center(child: CircularProgressIndicator())
-              : _firewallSection(_firewall!),
+          if (_firewallError != null && _firewall == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Failed to load firewall: $_firewallError',
+                style: TextStyle(color: Colors.red.shade300, fontSize: 12),
+              ),
+            )
+          else if (_firewall == null)
+            const Center(child: CircularProgressIndicator())
+          else
+            _firewallSection(_firewall!),
         ],
       );
 

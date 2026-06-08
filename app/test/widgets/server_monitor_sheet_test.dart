@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -7,7 +8,16 @@ import 'package:yourssh/models/system_snapshot.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/widgets/server_monitor_sheet.dart';
 
-class _FakeSsh extends Fake implements SshService {}
+class _FakeSsh extends Fake implements SshService {
+  @override
+  Future<({String stdout, String stderr, int exitCode})> exec(
+    Host host,
+    String command, {
+    String? auditSource = 'app',
+  }) async =>
+      // Never completes — simulates an in-flight exec so loading indicators remain
+      Completer<({String stdout, String stderr, int exitCode})>().future;
+}
 
 Widget _wrap(Widget child) => MultiProvider(
       providers: [
