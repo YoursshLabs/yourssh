@@ -85,6 +85,9 @@ dependencies:
   # Network info (LAN share)
   network_info_plus: ^6.0.0
 
+  # mDNS/Bonjour device discovery
+  multicast_dns: ^0.3.2
+
   # HTTP server (LAN share)
   shelf: ^1.4.1
 
