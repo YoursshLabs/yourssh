@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 import '../theme/terminal_themes.dart';
 import 'agent_status_line.dart';
 import 'host_chain_editor.dart';
+import 'network_discovery_sheet.dart';
 import 'rdp_badge.dart';
 import 'terminal_appearance_controls.dart' show kBundledTerminalFonts;
 
@@ -351,6 +352,45 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                   _Card(children: [
                     _AddressField(controller: _hostCtrl),
                   ]),
+                  if (_isNew) ...[
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.wifi_find, size: 13),
+                        label: const Text('Scan network to pick a device',
+                            style: TextStyle(fontSize: 12)),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.textSecondary,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                        ),
+                        onPressed: () => NetworkDiscoverySheet.show(
+                          context,
+                          selectionMode: true,
+                          onSelected: (h) {
+                            setState(() {
+                              _hostCtrl.text = h.ip;
+                              _portCtrl.text = (h.isRdp
+                                      ? 3389
+                                      : (h.openPorts.contains(22)
+                                          ? 22
+                                          : h.openPorts.first))
+                                  .toString();
+                              if (h.hostname != null &&
+                                  _labelCtrl.text.isEmpty) {
+                                _labelCtrl.text = h.hostname!;
+                              }
+                              if (h.isRdp &&
+                                  _protocol != HostProtocol.rdp) {
+                                _onProtocolChanged(HostProtocol.rdp);
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 16),
                   _sectionLabel('GENERAL'),
