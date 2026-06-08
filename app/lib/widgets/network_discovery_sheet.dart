@@ -54,6 +54,8 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
   bool _scanning = false;
   int _scanned = 0;
   int _total = 0;
+  String? _subnetsError;
+  String? _scanError;
 
   StreamSubscription<DiscoveredHost>? _sub;
 
@@ -86,16 +88,21 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
   }
 
   Future<void> _loadSubnets() async {
-    final subnets = await _svc.getLocalSubnets();
-    if (!mounted) return;
-    setState(() {
-      _subnets = subnets;
-      _selected = subnets.isNotEmpty ? subnets.first : null;
-      if (_selected != null) {
-        _subnetCtrl.text = _selected!.subnet;
-      }
-    });
-    if (_selected != null) _startScan();
+    try {
+      final subnets = await _svc.getLocalSubnets();
+      if (!mounted) return;
+      setState(() {
+        _subnets = subnets;
+        _selected = subnets.isNotEmpty ? subnets.first : null;
+        if (_selected != null) {
+          _subnetCtrl.text = _selected!.subnet;
+        }
+      });
+      if (_selected != null) _startScan();
+    } catch (e) {
+      debugPrint('[NetworkDiscoverySheet] failed to list network interfaces: $e');
+      if (mounted) setState(() => _subnetsError = e.toString());
+    }
   }
 
   void _startScan() {
@@ -117,6 +124,7 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
       _scanning = true;
       _scanned = 0;
       _total = 0;
+      _scanError = null;
       _results.clear();
     });
 
@@ -131,7 +139,10 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
             setState(() => _results[h.ip] = h);
           },
           onDone: () { if (mounted) setState(() => _scanning = false); },
-          onError: (_) { if (mounted) setState(() => _scanning = false); },
+          onError: (e) {
+            debugPrint('[NetworkDiscoverySheet] scan error: $e');
+            if (mounted) setState(() { _scanning = false; _scanError = e.toString(); });
+          },
         );
   }
 
@@ -252,6 +263,15 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
       );
 
   Widget _buildSubnetBar() {
+    if (_subnetsError != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+        child: Text(
+          'Failed to list interfaces: $_subnetsError',
+          style: TextStyle(color: Colors.red.shade300, fontSize: 13),
+        ),
+      );
+    }
     if (_subnets.isEmpty && _selected == null) {
       return const Padding(
         padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
@@ -362,6 +382,18 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
   Widget _buildResultList(BuildContext context, ScrollController scroll) {
     final items = _results.values.toList()
       ..sort((a, b) => a.ip.compareTo(b.ip));
+    if (items.isEmpty && _scanError != null && !_scanning) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'Scan failed: $_scanError',
+            style: TextStyle(color: Colors.red.shade300),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     if (items.isEmpty) {
       return const Center(
         child: Text(
