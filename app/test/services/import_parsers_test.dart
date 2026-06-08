@@ -377,4 +377,47 @@ void main() {
       expect(result.warnings, isEmpty);
     });
   });
+
+  group('SshUriParser', () {
+    const parser = SshUriParser();
+
+    test('parses ssh://user@host:port', () {
+      const input = 'ssh://admin@192.168.1.1:2222';
+      final result = parser.parse(input);
+      expect(result.hosts.length, 1);
+      expect(result.hosts[0].host, '192.168.1.1');
+      expect(result.hosts[0].username, 'admin');
+      expect(result.hosts[0].port, 2222);
+      expect(result.hosts[0].label, 'admin@192.168.1.1');
+    });
+
+    test('parses ssh://user@host without port — defaults to 22', () {
+      const input = 'ssh://root@10.0.0.1';
+      final result = parser.parse(input);
+      expect(result.hosts[0].port, 22);
+      expect(result.hosts[0].host, '10.0.0.1');
+    });
+
+    test('parses multiple URIs, one per line', () {
+      const input = 'ssh://admin@server1.com:22\nssh://deploy@server2.com:2222\n';
+      final result = parser.parse(input);
+      expect(result.hosts.length, 2);
+      expect(result.hosts[0].host, 'server1.com');
+      expect(result.hosts[1].host, 'server2.com');
+    });
+
+    test('skips non-URI lines silently — no warnings', () {
+      const input =
+          '# comment\nssh://user@host1.com\nnot-a-uri\nssh://user@host2.com\n';
+      final result = parser.parse(input);
+      expect(result.hosts.length, 2);
+      expect(result.warnings, isEmpty);
+    });
+
+    test('empty input returns empty result', () {
+      final result = parser.parse('');
+      expect(result.hosts, isEmpty);
+      expect(result.warnings, isEmpty);
+    });
+  });
 }

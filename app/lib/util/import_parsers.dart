@@ -541,3 +541,30 @@ class TermiusParser extends ImportParser {
     }
   }
 }
+
+// ── SSH URI ───────────────────────────────────────────────
+
+class SshUriParser extends ImportParser {
+  const SshUriParser();
+
+  static final _uriRe = RegExp(
+    r'ssh://([^@]+)@([^:/?#\s]+)(?::(\d+))?(?:[/?#][^\s]*)?$',
+    caseSensitive: false,
+  );
+
+  @override
+  ParseResult parse(String input) {
+    final hosts = <Host>[];
+    for (final raw in input.split('\n')) {
+      final line = raw.trim();
+      if (line.isEmpty) continue;
+      final m = _uriRe.firstMatch(line);
+      if (m == null) continue;
+      final user = m.group(1)!;
+      final host = m.group(2)!;
+      final port = int.tryParse(m.group(3) ?? '') ?? 22;
+      hosts.add(Host(label: '$user@$host', host: host, port: port, username: user));
+    }
+    return (hosts: hosts, warnings: []);
+  }
+}
