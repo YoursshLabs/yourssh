@@ -209,4 +209,70 @@ void main() {
       expect(result.warnings, isEmpty);
     });
   });
+
+  group('AnsibleParser', () {
+    const parser = AnsibleParser();
+
+    test('parses bare hostname in a group', () {
+      const input = '[webservers]\nweb1.example.com\n';
+      final result = parser.parse(input);
+      expect(result.hosts.length, 1);
+      expect(result.hosts[0].host, 'web1.example.com');
+      expect(result.hosts[0].label, 'web1.example.com');
+      expect(result.hosts[0].group, 'webservers');
+      expect(result.hosts[0].port, 22);
+      expect(result.hosts[0].username, 'root');
+    });
+
+    test('ansible_host overrides bare hostname', () {
+      const input =
+          '[db]\ndb-alias ansible_host=10.0.0.5 ansible_user=postgres ansible_port=5432\n';
+      final result = parser.parse(input);
+      expect(result.hosts[0].host, '10.0.0.5');
+      expect(result.hosts[0].label, 'db-alias');
+      expect(result.hosts[0].username, 'postgres');
+      expect(result.hosts[0].port, 5432);
+    });
+
+    test('ansible_ssh_user is accepted as username alias', () {
+      const input = '[servers]\nmyhost ansible_ssh_user=ubuntu\n';
+      final result = parser.parse(input);
+      expect(result.hosts[0].username, 'ubuntu');
+    });
+
+    test('skips :vars sections entirely', () {
+      const input =
+          '[webservers:vars]\nansible_user=deploy\n\n[webservers]\nweb1.example.com\n';
+      final result = parser.parse(input);
+      expect(result.hosts.length, 1);
+      expect(result.hosts[0].host, 'web1.example.com');
+    });
+
+    test('skips :children sections entirely', () {
+      const input = '[all:children]\nwebservers\ndatabases\n';
+      final result = parser.parse(input);
+      expect(result.hosts, isEmpty);
+    });
+
+    test('skips comment lines', () {
+      const input = '[servers]\n# this is a comment\nreal-server.com\n';
+      final result = parser.parse(input);
+      expect(result.hosts.length, 1);
+      expect(result.hosts[0].host, 'real-server.com');
+    });
+
+    test('invalid ansible_port produces a warning and skips the host', () {
+      const input = '[servers]\nbad-server ansible_port=notanumber\n';
+      final result = parser.parse(input);
+      expect(result.hosts, isEmpty);
+      expect(result.warnings.length, 1);
+      expect(result.warnings[0], contains('ansible_port'));
+    });
+
+    test('empty input returns empty result', () {
+      final result = parser.parse('');
+      expect(result.hosts, isEmpty);
+      expect(result.warnings, isEmpty);
+    });
+  });
 }

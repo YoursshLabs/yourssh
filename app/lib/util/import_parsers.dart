@@ -1,12 +1,4 @@
-import 'dart:convert';
-
-import 'package:xml/xml.dart'
-    show
-        XmlDocument,
-        XmlElement,
-        XmlException,
-        XmlFindExtension,
-        XmlStringExtension;
+import 'package:xml/xml.dart';
 import 'package:yourssh/models/host.dart';
 
 typedef ParseResult = ({List<Host> hosts, List<String> warnings});
@@ -346,5 +338,72 @@ class SecureCrtParser extends ImportParser {
         _walkKeys(child, newPath, hosts);
       }
     }
+  }
+}
+
+// ── Ansible INI Inventory ─────────────────────────────────
+
+class AnsibleParser extends ImportParser {
+  const AnsibleParser();
+
+  static final _sectionRe = RegExp(r'^\[(.+)\]$');
+  static final _varRe = RegExp(r'(\S+)=(\S+)');
+
+  @override
+  ParseResult parse(String input) {
+    final hosts = <Host>[];
+    final warnings = <String>[];
+    String currentGroup = '';
+    bool skipSection = false;
+
+    for (final raw in input.split('\n')) {
+      final line = raw.trim();
+      if (line.isEmpty || line.startsWith('#')) continue;
+
+      final sectionMatch = _sectionRe.firstMatch(line);
+      if (sectionMatch != null) {
+        final sectionName = sectionMatch.group(1)!;
+        skipSection =
+            sectionName.contains(':vars') || sectionName.contains(':children');
+        if (!skipSection) currentGroup = sectionName.split(':').first;
+        continue;
+      }
+
+      if (skipSection) continue;
+
+      final tokens = line.split(RegExp(r'\s+'));
+      final alias = tokens[0];
+      final vars = <String, String>{};
+      for (final token in tokens.skip(1)) {
+        final m = _varRe.firstMatch(token);
+        if (m != null) vars[m.group(1)!] = m.group(2)!;
+      }
+
+      final hostname = vars['ansible_host'] ?? alias;
+      final userVal =
+          vars['ansible_user'] ?? vars['ansible_ssh_user'] ?? 'root';
+
+      int port = 22;
+      final portStr = vars['ansible_port'];
+      if (portStr != null) {
+        final parsed = int.tryParse(portStr);
+        if (parsed == null || parsed < 1 || parsed > 65535) {
+          warnings.add(
+              'Host "$alias": invalid ansible_port "$portStr", skipped');
+          continue;
+        }
+        port = parsed;
+      }
+
+      hosts.add(Host(
+        label: alias,
+        host: hostname,
+        port: port,
+        username: userVal,
+        group: currentGroup,
+      ));
+    }
+
+    return (hosts: hosts, warnings: warnings);
   }
 }
