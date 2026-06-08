@@ -5,22 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.34] — 2026-06-08
 
 ### Added
 - **Keyword highlighting** — user-defined regex rules tint matching terminal output at paint time in the xterm fork; defaults ship with Error/Warning/Fail rules (red/yellow/cyan); toggle + rule list + add/edit dialog + color picker in Settings → Terminal and the terminal config side panel; rules persisted in `SettingsProvider`
 - **Server monitor panel** — per-host live dashboard (CPU / memory / disk / uptime / listening ports / firewall status) in a draggable bottom sheet; access from the host card hover button or right-click context menu; `SystemStatsService` polls every 5 s via a single compound SSH exec with sentinel markers; `FirewallStatusService` polls every 30 s and auto-detects ufw / iptables / nftables; requires an active SSH session
 - **Network discovery** — scan the local network for SSH/RDP hosts without typing an IP; `NetworkDiscoveryService` combines mDNS (`_ssh._tcp`, `_rdp._tcp`) and a configurable TCP port scan on the local subnet; results appear in a bottom sheet with one-tap **Add Host**; also reachable from a **Scan network** link in the Add Host panel
-- **Import sources expansion** — five additional import formats alongside the existing SSH config / JSON / CSV:
+- **Import sources expansion** — nine import sources with a source-picker grid UI; five new formats alongside the existing SSH config / JSON / CSV:
   - **PuTTY** `.reg` registry export (hex port decoding, URL-decoded session names)
   - **MobaXterm** `.mxtsessions` (SSH sessions only, type `0`; handles multi-section `[Bookmarks_N]` files)
   - **SecureCRT** XML session files (recursive folder traversal → group path)
   - **Ansible** INI inventory (`ansible_host`, `ansible_user` / `ansible_ssh_user`, `ansible_port` with validation; `:vars` and `:children` sections skipped)
   - **WinSCP** `.ini` session export (URL-decoded names, nested path → label + group)
+  - **Termius** JSON export (`address` → host, `group.label` → group; falls back to YourSSH JSON format)
+  - **SSH URI** — one `ssh://user@host:port` per line
 - **Known hosts import** — import `~/.ssh/known_hosts` into the app's known-hosts store via an IMPORT button on the Known Hosts screen; skips duplicates (host:port:keyType) and hashed entries; fingerprints computed as MD5(key\_blob) to match what dartssh2 passes to the host-key verifier
 
 ### Fixed
 - Server monitor panel: disk mount-point labels showed raw inode-count numbers on macOS servers — fixed by using `df -Pk` (POSIX output format) instead of `df -k`
+- Server monitor panel: polling services now guard against overlapping exec calls (in-flight guard); errors surface in the sheet instead of showing an infinite spinner
+- Network discovery: silent error catches replaced with `debugPrint` logging; `_loadSubnets` now handles `NetworkInterface.list` failures gracefully; scan errors shown in the UI
+- `DiscoveredHost.merge()` now preserves source when merging two hosts from the same discovery method
 
 ---
 
