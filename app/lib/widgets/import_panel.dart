@@ -57,6 +57,117 @@ List<Host> detectAndParse(String input) {
   return [];
 }
 
+// ── ImportSource registry ─────────────────────────────────
+
+enum ImportSource {
+  sshConfig, csv, putty, mobaXterm, secureCrt,
+  ansible, winScp, termius, sshUri,
+}
+
+class ImportSourceDef {
+  final ImportSource source;
+  final String label;
+  final IconData icon;
+  final Color iconColor;
+  final List<String> fileExtensions;
+  final String hint;
+  final ImportParser parser;
+
+  const ImportSourceDef({
+    required this.source,
+    required this.label,
+    required this.icon,
+    required this.iconColor,
+    required this.fileExtensions,
+    required this.hint,
+    required this.parser,
+  });
+
+  static final List<ImportSourceDef> all = [
+    ImportSourceDef(
+      source: ImportSource.sshConfig,
+      label: '~/.ssh',
+      icon: Icons.terminal,
+      iconColor: Colors.blue,
+      fileExtensions: ['config', 'conf', 'txt'],
+      hint: 'Paste your ~/.ssh/config content or pick the file.',
+      parser: const SshConfigParser(),
+    ),
+    ImportSourceDef(
+      source: ImportSource.csv,
+      label: 'CSV',
+      icon: Icons.table_chart,
+      iconColor: Colors.green,
+      fileExtensions: ['csv', 'txt'],
+      hint: 'Columns: host, label, port, username, auth_type, group, tags.',
+      parser: const CsvParser(),
+    ),
+    ImportSourceDef(
+      source: ImportSource.putty,
+      label: 'PuTTY',
+      icon: Icons.computer,
+      iconColor: Colors.amber,
+      fileExtensions: ['reg', 'txt'],
+      hint: 'Export from PuTTY: Connection → SSH → Export all settings.',
+      parser: const PuttyRegParser(),
+    ),
+    ImportSourceDef(
+      source: ImportSource.mobaXterm,
+      label: 'MobaXterm',
+      icon: Icons.grid_view,
+      iconColor: Colors.purple,
+      fileExtensions: ['mxtsessions', 'txt'],
+      hint: 'Export from MobaXterm: Tools → Export all sessions.',
+      parser: const MobaXtermParser(),
+    ),
+    ImportSourceDef(
+      source: ImportSource.secureCrt,
+      label: 'SecureCRT',
+      icon: Icons.lock,
+      iconColor: Colors.orange,
+      fileExtensions: ['xml', 'txt'],
+      hint: 'Export from SecureCRT: Tools → Export Sessions as XML.',
+      parser: const SecureCrtParser(),
+    ),
+    ImportSourceDef(
+      source: ImportSource.ansible,
+      label: 'Ansible',
+      icon: Icons.settings_suggest,
+      iconColor: Colors.red,
+      fileExtensions: ['ini', 'yml', 'yaml', 'txt'],
+      hint: 'Paste your Ansible INI inventory file.',
+      parser: const AnsibleParser(),
+    ),
+    ImportSourceDef(
+      source: ImportSource.winScp,
+      label: 'WinSCP',
+      icon: Icons.swap_horiz,
+      iconColor: Colors.teal,
+      fileExtensions: ['ini', 'txt'],
+      hint: 'Export from WinSCP: Tools → Export/Backup Configuration.',
+      parser: const WinScpParser(),
+    ),
+    ImportSourceDef(
+      source: ImportSource.termius,
+      label: 'Termius',
+      icon: Icons.phonelink,
+      iconColor: Colors.indigo,
+      fileExtensions: ['termius', 'json', 'txt'],
+      hint: 'Export from Termius: Settings → Export Hosts.',
+      parser: const TermiusParser(),
+    ),
+    ImportSourceDef(
+      source: ImportSource.sshUri,
+      label: 'SSH URI',
+      icon: Icons.link,
+      iconColor: Colors.cyan,
+      fileExtensions: ['txt'],
+      hint: 'One URI per line: ssh://user@host:port',
+      parser: const SshUriParser(),
+    ),
+  ];
+}
+
 // ── ImportPanel widget ────────────────────────────────────
 
 class ImportPanel extends StatefulWidget {
@@ -70,6 +181,7 @@ class ImportPanel extends StatefulWidget {
 enum _InputMode { file, paste }
 
 class _ImportPanelState extends State<ImportPanel> {
+  ImportSource? _selectedSource;
   _InputMode _mode = _InputMode.file;
   final _pasteCtrl = TextEditingController();
   String? _parseError;
@@ -107,6 +219,24 @@ class _ImportPanelState extends State<ImportPanel> {
   }
 
   void _parseInput(String input) {
+    if (_selectedSource != null) {
+      final def = ImportSourceDef.all.firstWhere((d) => d.source == _selectedSource);
+      try {
+        final result = def.parser.parse(input);
+        _applyParsed(result.hosts, warnings: result.warnings);
+      } on FormatException catch (e) {
+        setState(() {
+          _csvWarnings = [];
+          _parsed = [];
+          _parseError = e.message;
+          _included.clear();
+          _overwrite.clear();
+        });
+      }
+      return;
+    }
+
+    // fallback: auto-detect (legacy path, still used when no source selected)
     final trimmed = input.trimLeft();
     final firstLine = trimmed.split('\n').first;
     final looksLikeCsv = firstLine.contains(',') &&
@@ -133,9 +263,14 @@ class _ImportPanelState extends State<ImportPanel> {
   }
 
   Future<void> _pickFile() async {
+    final extensions = _selectedSource != null
+        ? ImportSourceDef.all
+            .firstWhere((d) => d.source == _selectedSource)
+            .fileExtensions
+        : ['json', 'config', 'conf', 'txt', 'csv'];
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['json', 'config', 'conf', 'txt', 'csv'],
+      allowedExtensions: extensions,
       withData: true,
     );
     if (result == null || result.files.isEmpty) return;
@@ -167,36 +302,69 @@ class _ImportPanelState extends State<ImportPanel> {
         children: [
           _buildHeader(),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              children: [
-                _buildModeToggle(),
-                const SizedBox(height: 12),
-                if (_mode == _InputMode.file) _buildFileSection(),
-                if (_mode == _InputMode.paste) _buildPasteSection(),
-                if (_parseError != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_parseError!, style: const TextStyle(color: AppColors.red, fontSize: 11)),
-                ],
-                if (_csvWarnings.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  _buildWarnings(),
-                ],
-                if (_parsed.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _buildPreview(existingHosts),
-                  const SizedBox(height: 16),
-                  _buildImportButton(context, existingHosts),
-                ],
-              ],
-            ),
+            child: _selectedSource == null
+                ? _buildSourcePicker()
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    children: [
+                      _buildModeToggle(),
+                      const SizedBox(height: 12),
+                      if (_mode == _InputMode.file) _buildFileSection(),
+                      if (_mode == _InputMode.paste) _buildPasteSection(),
+                      if (_parseError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(_parseError!, style: const TextStyle(color: AppColors.red, fontSize: 11)),
+                      ],
+                      if (_csvWarnings.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        _buildWarnings(),
+                      ],
+                      if (_parsed.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _buildPreview(existingHosts),
+                        const SizedBox(height: 16),
+                        _buildImportButton(context, existingHosts),
+                      ],
+                    ],
+                  ),
           ),
         ],
       ),
     );
   }
 
+  Widget _buildSourcePicker() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      children: [
+        GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 1.0,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          children: ImportSourceDef.all
+              .map((def) => _SourceCard(
+                    def: def,
+                    onTap: () => setState(() {
+                      _selectedSource = def.source;
+                      _parsed = [];
+                      _parseError = null;
+                      _csvWarnings = [];
+                    }),
+                  ))
+              .toList(),
+        ),
+      ],
+    );
+  }
+
   Widget _buildHeader() {
+    final sourceDef = _selectedSource != null
+        ? ImportSourceDef.all.firstWhere((d) => d.source == _selectedSource)
+        : null;
+    final title = sourceDef != null ? 'Import from ${sourceDef.label}' : 'Import Hosts';
     return Container(
       height: 52,
       decoration: const BoxDecoration(
@@ -205,9 +373,23 @@ class _ImportPanelState extends State<ImportPanel> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          const Expanded(
-            child: Text('Import Hosts',
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+          if (sourceDef != null) ...[
+            GestureDetector(
+              onTap: () => setState(() {
+                _selectedSource = null;
+                _parsed = [];
+                _parseError = null;
+                _csvWarnings = [];
+              }),
+              child: const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: Icon(Icons.arrow_back, size: 16, color: AppColors.textSecondary),
+              ),
+            ),
+          ],
+          Expanded(
+            child: Text(title,
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
           ),
           GestureDetector(
             onTap: widget.onClose,
@@ -270,29 +452,47 @@ class _ImportPanelState extends State<ImportPanel> {
   }
 
   Widget _buildFileSection() {
-    return GestureDetector(
-      onTap: _pickFile,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.border),
+    final sourceDef = _selectedSource != null
+        ? ImportSourceDef.all.firstWhere((d) => d.source == _selectedSource)
+        : null;
+    final extLabel = sourceDef != null
+        ? sourceDef.fileExtensions.map((e) => '.$e').join(', ')
+        : '.json, .csv, .config';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GestureDetector(
+          onTap: _pickFile,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.upload_file_outlined, size: 16, color: AppColors.textSecondary),
+                const SizedBox(width: 8),
+                Text('Choose file ($extLabel)',
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+              ],
+            ),
+          ),
         ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.upload_file_outlined, size: 16, color: AppColors.textSecondary),
-            SizedBox(width: 8),
-            Text('Choose file (.json, .csv, .config)',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-          ],
-        ),
-      ),
+        if (sourceDef != null) ...[
+          const SizedBox(height: 6),
+          Text(sourceDef.hint, style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+        ],
+      ],
     );
   }
 
   Widget _buildPasteSection() {
+    final hint = _selectedSource != null
+        ? ImportSourceDef.all.firstWhere((d) => d.source == _selectedSource).hint
+        : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -314,6 +514,10 @@ class _ImportPanelState extends State<ImportPanel> {
             ),
           ),
         ),
+        if (hint != null) ...[
+          const SizedBox(height: 6),
+          Text(hint, style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+        ],
         const SizedBox(height: 8),
         GestureDetector(
           onTap: _parsePaste,
@@ -441,6 +645,59 @@ class _ImportPanelState extends State<ImportPanel> {
       duration: const Duration(seconds: 2),
     ));
     widget.onClose();
+  }
+}
+
+// ── Source Card ───────────────────────────────────────────
+
+class _SourceCard extends StatefulWidget {
+  final ImportSourceDef def;
+  final VoidCallback onTap;
+  const _SourceCard({required this.def, required this.onTap});
+
+  @override
+  State<_SourceCard> createState() => _SourceCardState();
+}
+
+class _SourceCardState extends State<_SourceCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: _hovered
+                ? AppColors.textPrimary.withValues(alpha: 0.06)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: AppColors.textPrimary.withValues(alpha: 0.15),
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(widget.def.icon, color: widget.def.iconColor, size: 28),
+              const SizedBox(height: 6),
+              Text(
+                widget.def.label,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
