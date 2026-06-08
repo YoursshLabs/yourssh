@@ -39,6 +39,20 @@ void main() {
       expect(xterm.pattern.hasMatch('working'), isFalse);
     });
 
+    test('toXtermRule returns null when both foreground and background are null', () {
+      final rule = AppKeywordHighlightRule(
+        id: 'null_colors',
+        label: 'NullColors',
+        pattern: 'error',
+        isRegex: false,
+        caseSensitive: false,
+        enabled: true,
+        foreground: null,
+        background: null,
+      );
+      expect(rule.toXtermRule(), isNull);
+    });
+
     test('toXtermRule returns null for invalid regex', () {
       final rule = AppKeywordHighlightRule(
         id: '3',

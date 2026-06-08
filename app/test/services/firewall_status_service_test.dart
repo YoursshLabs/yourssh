@@ -71,5 +71,32 @@ void main() {
       await svc.poll();
       expect(got!.type, FirewallType.none);
     });
+
+    test('stop cancels the timer', () async {
+      int callCount = 0;
+      final svc = FirewallStatusService(
+        host: _host(),
+        sshService: _FakeSsh('__NO_FIREWALL__'),
+        onUpdate: (_) => callCount++,
+      );
+      svc.start(interval: const Duration(milliseconds: 10));
+      await Future<void>.delayed(const Duration(milliseconds: 35));
+      svc.stop();
+      final countAtStop = callCount;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(callCount, countAtStop);
+    });
+
+    test('onError callback is invoked on exec exception', () async {
+      Object? caughtError;
+      final svc = FirewallStatusService(
+        host: _host(),
+        sshService: _ThrowingSsh(),
+        onUpdate: (_) => fail('should not call onUpdate'),
+        onError: (e) => caughtError = e,
+      );
+      await svc.poll();
+      expect(caughtError, isNotNull);
+    });
   });
 }
