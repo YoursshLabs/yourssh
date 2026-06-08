@@ -341,6 +341,69 @@ class SecureCrtParser extends ImportParser {
   }
 }
 
+// ── WinSCP ────────────────────────────────────────────────
+
+class WinScpParser extends ImportParser {
+  const WinScpParser();
+
+  static final _sectionRe = RegExp(r'^\[Sessions\\(.+)\]$');
+
+  @override
+  ParseResult parse(String input) {
+    final hosts = <Host>[];
+    String? currentSession;
+    final props = <String, String>{};
+
+    void flush() {
+      if (currentSession == null) return;
+      final hostname = props['HostName'];
+      if (hostname == null || hostname.isEmpty) {
+        currentSession = null;
+        props.clear();
+        return;
+      }
+      final port = int.tryParse(props['PortNumber'] ?? '') ?? 22;
+      final username = props['UserName'] ?? '';
+
+      final parts = currentSession!.split(r'\');
+      final label = parts.last;
+      final group = parts.length > 1 ? parts.sublist(0, parts.length - 1).join('/') : '';
+
+      hosts.add(Host(
+        label: label,
+        host: hostname,
+        port: port,
+        username: username,
+        group: group,
+      ));
+      currentSession = null;
+      props.clear();
+    }
+
+    for (final raw in input.split('\n')) {
+      final line = raw.trim();
+      if (line.isEmpty) continue;
+
+      final sectionMatch = _sectionRe.firstMatch(line);
+      if (sectionMatch != null) {
+        flush();
+        final rawName = Uri.decodeComponent(sectionMatch.group(1)!.replaceAll('+', ' '));
+        // Skip the root [Sessions\] entry (empty name or just whitespace)
+        currentSession = rawName.trim().isEmpty ? null : rawName;
+        continue;
+      }
+
+      if (currentSession == null) continue;
+      final eq = line.indexOf('=');
+      if (eq < 0) continue;
+      props[line.substring(0, eq).trim()] = line.substring(eq + 1).trim();
+    }
+
+    flush();
+    return (hosts: hosts, warnings: const []);
+  }
+}
+
 // ── Ansible INI Inventory ─────────────────────────────────
 
 class AnsibleParser extends ImportParser {
