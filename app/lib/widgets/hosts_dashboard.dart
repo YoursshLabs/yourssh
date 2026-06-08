@@ -32,7 +32,8 @@ class HostsDashboard extends StatefulWidget {
   final VoidCallback? onOpenLocalTerminal;
   final VoidCallback? onNewGroup;
   final VoidCallback? onImport;
-  const HostsDashboard({super.key, this.onAddHost, this.onEditHost, this.onOpenLocalTerminal, this.onNewGroup, this.onImport});
+  final VoidCallback? onDiscover;
+  const HostsDashboard({super.key, this.onAddHost, this.onEditHost, this.onOpenLocalTerminal, this.onNewGroup, this.onImport, this.onDiscover});
 
   @override
   State<HostsDashboard> createState() => _HostsDashboardState();
@@ -237,6 +238,7 @@ class _HostsDashboardState extends State<HostsDashboard> {
                   onLocalTerminal: widget.onOpenLocalTerminal,
                   onNewGroup: widget.onNewGroup,
                   onImport: widget.onImport,
+                  onDiscover: widget.onDiscover,
                   onSelect: _enterSelectionMode,
                   sortMode: sortMode,
                   onSortChanged: (m) =>
@@ -329,6 +331,7 @@ class _TopBar extends StatelessWidget {
   final VoidCallback? onLocalTerminal;
   final VoidCallback? onNewGroup;
   final VoidCallback? onImport;
+  final VoidCallback? onDiscover;
   final VoidCallback? onSelect;
   final HostSortMode sortMode;
   final ValueChanged<HostSortMode> onSortChanged;
@@ -344,6 +347,7 @@ class _TopBar extends StatelessWidget {
     this.onLocalTerminal,
     this.onNewGroup,
     this.onImport,
+    this.onDiscover,
     this.onSelect,
     required this.sortMode,
     required this.onSortChanged,
@@ -408,6 +412,12 @@ class _TopBar extends StatelessWidget {
                     _SortBtn(mode: sortMode, onChanged: onSortChanged),
                     const SizedBox(width: 8),
                     _ViewToggle(viewMode: viewMode, onChanged: onViewChanged),
+                    const SizedBox(width: 8),
+                    _OutlinedBtn(
+                      icon: Icons.wifi_find,
+                      label: 'DISCOVER',
+                      onTap: onDiscover ?? () {},
+                    ),
                     const SizedBox(width: 8),
                     _OutlinedBtn(
                       icon: Icons.check_box_outlined,
