@@ -191,7 +191,7 @@ class PuttyRegParser extends ImportParser {
   @override
   ParseResult parse(String input) {
     var text = input;
-    if (text.startsWith('﻿')) text = text.substring(1); // strip UTF-16 BOM
+    if (text.startsWith('﻿')) text = text.substring(1); // strip UTF-8 BOM
 
     final hosts = <Host>[];
     final warnings = <String>[];
