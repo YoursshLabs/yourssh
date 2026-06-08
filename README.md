@@ -148,30 +148,70 @@ sudo dpkg -r yourssh
 
 ## Screenshots
 
+### Terminal & SSH
+
 <table>
   <tr>
-    <td align="center"><b>Home — Host List</b><br/><img src="screenshots/01-home-hosts.png"/></td>
+    <td align="center"><b>Hosts Dashboard</b><br/><img src="screenshots/01-terminal-ssh/01-hosts-dashboard.png"/></td>
+    <td align="center"><b>New Host Panel (SSH)</b><br/><img src="screenshots/01-terminal-ssh/02-new-host-panel-ssh.png"/></td>
+  </tr>
+  <tr>
     <td align="center"><b>SSH Terminal with AI Assistant</b><br/><img src="screenshots/02-ssh-terminal-ai.png"/></td>
+    <td align="center"><b>Dashboard — RDP Host Badges</b><br/><img src="screenshots/01-terminal-ssh/04-dashboard-with-rdp-badge.png"/></td>
+  </tr>
+</table>
+
+### SFTP
+
+<table>
+  <tr>
+    <td align="center"><b>Dual-Panel SFTP Browser</b><br/><img src="screenshots/02-sftp/01-sftp-browser.png"/></td>
+  </tr>
+</table>
+
+### Port Forwarding
+
+<table>
+  <tr>
+    <td align="center"><b>Port Forward Rules</b><br/><img src="screenshots/03-port-forwarding/01-port-forward-rules.png"/></td>
+  </tr>
+</table>
+
+### Credentials & Security
+
+<table>
+  <tr>
+    <td align="center"><b>SSH Keychain</b><br/><img src="screenshots/04-credentials-security/01-keychain.png"/></td>
+    <td align="center"><b>Known Hosts</b><br/><img src="screenshots/04-credentials-security/02-known-hosts.png"/></td>
+  </tr>
+</table>
+
+### Settings
+
+<table>
+  <tr>
+    <td align="center"><b>Connection &amp; Terminal</b><br/><img src="screenshots/05-settings/01-settings-general.png"/></td>
+    <td align="center"><b>Terminal Themes</b><br/><img src="screenshots/05-settings/02-settings-terminal.png"/></td>
   </tr>
   <tr>
-    <td align="center"><b>SFTP File Browser</b><br/><img src="screenshots/03-sftp-browser.png"/></td>
-    <td align="center"><b>Plugins</b><br/><img src="screenshots/04-plugins.png"/></td>
-  </tr>
-  <tr>
-    <td align="center"><b>DevOps Hub — Network Tools</b><br/><img src="screenshots/05-devops-hub-network-tools.png"/></td>
-    <td align="center"><b>Web Tools — HTTP Client</b><br/><img src="screenshots/08-web-tools-http-client.png"/></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Snippets</b><br/><img src="screenshots/09-snippets.png"/></td>
-    <td align="center"><b>Settings — Sync</b><br/><img src="screenshots/06-settings-sync.png"/></td>
-  </tr>
-  <tr>
+    <td align="center"><b>Sync</b><br/><img src="screenshots/05-settings/03-settings-sync.png"/></td>
     <td align="center"><b>P2P QR Sync — Export via QR</b><br/><img src="screenshots/10-settings-sync-qr-code.png"/></td>
-    <td align="center"><b>Session Recording &amp; Playback</b><br/><img src="screenshots/11-recording.png"/></td>
   </tr>
   <tr>
-    <td align="center"><b>Terminal Sharing (Multiplayer)</b><br/><img src="screenshots/12-multiple-player.png"/></td>
-    <td align="center"><b>Settings — Terminal Themes</b><br/><img src="screenshots/07-settings-terminal-themes.png"/></td>
+    <td align="center"><b>Updates</b><br/><img src="screenshots/05-settings/04-settings-updates.png"/></td>
+  </tr>
+</table>
+
+### Plugins
+
+<table>
+  <tr>
+    <td align="center"><b>Plugin Manager</b><br/><img src="screenshots/06-plugins/01-plugins.png"/></td>
+    <td align="center"><b>DevOps Hub — Network Tools</b><br/><img src="screenshots/05-devops-hub-network-tools.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Web Tools — HTTP Client</b><br/><img src="screenshots/08-web-tools-http-client.png"/></td>
+    <td align="center"><b>Snippets</b><br/><img src="screenshots/09-snippets.png"/></td>
   </tr>
 </table>
 
@@ -179,20 +219,32 @@ sudo dpkg -r yourssh
 
 <table>
   <tr>
-    <td align="center"><b>Dashboard — RDP Host Badges</b><br/><img src="screenshots/01-dashboard-rdp-badge.png"/></td>
     <td align="center"><b>Host Editor — RDP Form</b><br/><img src="screenshots/02-host-editor-rdp-form.png"/></td>
-  </tr>
-  <tr>
     <td align="center"><b>Server Certificate — TOFU Dialog</b><br/><img src="screenshots/03-tofu-certificate-dialog.png"/></td>
+  </tr>
+  <tr>
     <td align="center"><b>RDP Workspace — Connected</b><br/><img src="screenshots/04-rdp-workspace-connected.png"/></td>
-  </tr>
-  <tr>
     <td align="center"><b>Fullscreen with Hover Pill</b><br/><img src="screenshots/05-fullscreen-with-pill.png"/></td>
-    <td align="center"><b>Fullscreen — Clean View</b><br/><img src="screenshots/06-fullscreen-clean.png"/></td>
   </tr>
   <tr>
+    <td align="center"><b>Fullscreen — Clean View</b><br/><img src="screenshots/06-fullscreen-clean.png"/></td>
     <td align="center"><b>Hover Reveal — Exit Bar</b><br/><img src="screenshots/07-fullscreen-hover-reveal.png"/></td>
+  </tr>
+  <tr>
     <td align="center"><b>Back to Windowed Mode</b><br/><img src="screenshots/08-back-to-windowed.png"/></td>
+  </tr>
+</table>
+
+### Audit Log & Recording
+
+<table>
+  <tr>
+    <td align="center"><b>Audit Log</b><br/><img src="screenshots/10-audit-recording/01-audit-log.png"/></td>
+    <td align="center"><b>Recording Library</b><br/><img src="screenshots/10-audit-recording/02-recording-library.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Session Recording &amp; Playback</b><br/><img src="screenshots/11-recording.png"/></td>
+    <td align="center"><b>Terminal Sharing (Multiplayer)</b><br/><img src="screenshots/12-multiple-player.png"/></td>
   </tr>
 </table>
 
