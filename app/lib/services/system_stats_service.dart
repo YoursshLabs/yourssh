@@ -42,6 +42,6 @@ const _kCommand =
     r'c2=$(grep -m1 "^cpu " /proc/stat 2>/dev/null); '
     r'printf "__CPU1__\n%s\n__CPU2__\n%s\n" "$c1" "$c2"; '
     r'printf "__MEM__\n"; cat /proc/meminfo 2>/dev/null; '
-    r'printf "__DISK__\n"; df -k 2>/dev/null; '
+    r'printf "__DISK__\n"; df -Pk 2>/dev/null; '
     r'printf "__UPTIME__\n"; cat /proc/uptime 2>/dev/null; '
     r'printf "__PORTS__\n"; ss -tulpn 2>/dev/null || netstat -tulpn 2>/dev/null';
