@@ -1,6 +1,12 @@
 import 'dart:convert';
 
-import 'package:xml/xml.dart' show XmlDocument, XmlElement, XmlException;
+import 'package:xml/xml.dart'
+    show
+        XmlDocument,
+        XmlElement,
+        XmlException,
+        XmlFindExtension,
+        XmlStringExtension;
 import 'package:yourssh/models/host.dart';
 
 typedef ParseResult = ({List<Host> hosts, List<String> warnings});
@@ -267,5 +273,78 @@ class MobaXtermParser extends ImportParser {
     }
 
     return (hosts: hosts, warnings: warnings);
+  }
+}
+
+// ── SecureCRT XML ─────────────────────────────────────────
+
+class SecureCrtParser extends ImportParser {
+  const SecureCrtParser();
+
+  @override
+  ParseResult parse(String input) {
+    if (input.trim().isEmpty) return (hosts: [], warnings: []);
+
+    XmlDocument doc;
+    try {
+      doc = XmlDocument.parse(input);
+    } on XmlException catch (e) {
+      return (hosts: [], warnings: ['Invalid XML: ${e.message}']);
+    }
+
+    final sessionsKey = doc
+        .findAllElements('key')
+        .where((e) => e.getAttribute('name') == 'Sessions')
+        .firstOrNull;
+    if (sessionsKey == null) {
+      return (hosts: [], warnings: ['No Sessions key found in XML']);
+    }
+
+    final hosts = <Host>[];
+    _walkKeys(sessionsKey, '', hosts);
+    return (hosts: hosts, warnings: []);
+  }
+
+  void _walkKeys(XmlElement parent, String groupPath, List<Host> hosts) {
+    for (final child in parent.childElements) {
+      if (child.name.local != 'key') continue;
+      final name = child.getAttribute('name') ?? '';
+
+      final hostnameEl = child.childElements
+          .where((e) =>
+              e.name.local == 'value' &&
+              e.getAttribute('name') == 'Hostname')
+          .firstOrNull;
+
+      if (hostnameEl != null) {
+        final hostname = hostnameEl.innerText.trim();
+        if (hostname.isEmpty) continue;
+
+        final portEl = child.childElements
+            .where((e) =>
+                e.name.local == 'value' && e.getAttribute('name') == 'Port')
+            .firstOrNull;
+        final port = int.tryParse(portEl?.innerText.trim() ?? '') ?? 22;
+
+        final userEl = child.childElements
+            .where((e) =>
+                e.name.local == 'value' &&
+                e.getAttribute('name') == 'Username')
+            .firstOrNull;
+        final user = userEl?.innerText.trim() ?? '';
+
+        hosts.add(Host(
+          label: name,
+          host: hostname,
+          port: port,
+          username: user,
+          group: groupPath,
+        ));
+      } else {
+        final newPath =
+            groupPath.isEmpty ? name : '$groupPath/$name';
+        _walkKeys(child, newPath, hosts);
+      }
+    }
   }
 }

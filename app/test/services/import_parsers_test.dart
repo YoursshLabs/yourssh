@@ -136,4 +136,77 @@ void main() {
       expect(result.warnings, isEmpty);
     });
   });
+
+  group('SecureCrtParser', () {
+    const parser = SecureCrtParser();
+
+    test('parses a single session', () {
+      const input = '''<?xml version="1.0" encoding="UTF-8"?>
+<VanDyke>
+  <key name="Sessions">
+    <key name="MyServer">
+      <value name="Hostname" type="string">192.168.1.1</value>
+      <value name="Port" type="dword">22</value>
+      <value name="Username" type="string">admin</value>
+    </key>
+  </key>
+</VanDyke>
+''';
+      final result = parser.parse(input);
+      expect(result.hosts.length, 1);
+      expect(result.hosts[0].label, 'MyServer');
+      expect(result.hosts[0].host, '192.168.1.1');
+      expect(result.hosts[0].port, 22);
+      expect(result.hosts[0].username, 'admin');
+      expect(result.warnings, isEmpty);
+    });
+
+    test('nested folder becomes group', () {
+      const input = '''<?xml version="1.0" encoding="UTF-8"?>
+<VanDyke>
+  <key name="Sessions">
+    <key name="Production">
+      <key name="WebServer">
+        <value name="Hostname" type="string">prod.example.com</value>
+        <value name="Port" type="dword">22</value>
+        <value name="Username" type="string">deploy</value>
+      </key>
+    </key>
+  </key>
+</VanDyke>
+''';
+      final result = parser.parse(input);
+      expect(result.hosts.length, 1);
+      expect(result.hosts[0].label, 'WebServer');
+      expect(result.hosts[0].group, 'Production');
+    });
+
+    test('session missing Hostname is skipped silently', () {
+      const input = '''<?xml version="1.0" encoding="UTF-8"?>
+<VanDyke>
+  <key name="Sessions">
+    <key name="NoHost">
+      <value name="Port" type="dword">22</value>
+    </key>
+  </key>
+</VanDyke>
+''';
+      final result = parser.parse(input);
+      expect(result.hosts, isEmpty);
+      expect(result.warnings, isEmpty);
+    });
+
+    test('invalid XML returns a warning', () {
+      final result = parser.parse('not xml at all');
+      expect(result.hosts, isEmpty);
+      expect(result.warnings.length, 1);
+      expect(result.warnings[0], contains('XML'));
+    });
+
+    test('empty input returns empty result', () {
+      final result = parser.parse('');
+      expect(result.hosts, isEmpty);
+      expect(result.warnings, isEmpty);
+    });
+  });
 }
