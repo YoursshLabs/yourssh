@@ -1,18 +1,22 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../models/host.dart';
 import '../models/system_snapshot.dart';
 import 'ssh_service.dart';
 
 class SystemStatsService {
   Timer? _timer;
+  bool _inFlight = false;
   final Host host;
   final SshService sshService;
   final void Function(SystemSnapshot) onUpdate;
+  final void Function(Object error)? onError;
 
   SystemStatsService({
     required this.host,
     required this.sshService,
     required this.onUpdate,
+    this.onError,
   });
 
   void start({Duration interval = const Duration(seconds: 5)}) {
@@ -27,11 +31,18 @@ class SystemStatsService {
 
   /// Fires one poll cycle immediately. Exposed for tests.
   Future<void> poll() async {
+    if (_inFlight) return;
+    _inFlight = true;
     try {
       final result = await sshService.exec(host, _kCommand, auditSource: null);
       if (result.stdout.isEmpty) return;
       onUpdate(SystemSnapshot.fromShellOutput(result.stdout));
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('[SystemStatsService] poll failed for ${host.host}: $e\n$st');
+      onError?.call(e);
+    } finally {
+      _inFlight = false;
+    }
   }
 }
 
