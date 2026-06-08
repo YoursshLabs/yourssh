@@ -156,6 +156,23 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   List<KeywordHighlightRule> _keywordRules = const [];
   set keywordRules(List<KeywordHighlightRule> value) {
     if (_keywordRules == value) return;
+    // Structural check: same length and same rules by value so that a freshly
+    // built list (new identity every build) does not trigger unnecessary repaints.
+    if (_keywordRules.length == value.length) {
+      var same = true;
+      for (var i = 0; i < value.length; i++) {
+        final a = _keywordRules[i];
+        final b = value[i];
+        if (a.pattern.pattern != b.pattern.pattern ||
+            a.pattern.isCaseSensitive != b.pattern.isCaseSensitive ||
+            a.foreground != b.foreground ||
+            a.background != b.background) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return;
+    }
     _keywordRules = value;
     markNeedsPaint();
   }
