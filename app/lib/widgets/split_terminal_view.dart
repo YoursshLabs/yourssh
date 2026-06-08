@@ -20,7 +20,8 @@ import 'terminal_config_panel.dart';
 import 'terminal_snippets_panel.dart';
 
 class SplitTerminalView extends StatelessWidget {
-  const SplitTerminalView({super.key});
+  final VoidCallback? onNavigateToSettings;
+  const SplitTerminalView({super.key, this.onNavigateToSettings});
 
   void _sendCommand(TerminalSession session, String command) {
     session.terminal.textInput(command);
@@ -96,6 +97,7 @@ class SplitTerminalView extends StatelessWidget {
                 TerminalConfigPanel(
                   onClose: () =>
                       layout.toggleSidePanel(SidePanel.terminalConfig),
+                  onOpenSettings: onNavigateToSettings,
                 ),
             ],
           ),

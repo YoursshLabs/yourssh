@@ -118,13 +118,14 @@ class KeywordHighlightSection extends StatelessWidget {
       builder: (_) => _KeywordRuleDialog(initial: rule),
     );
     if (result == null || !context.mounted) return;
-    final updated = List<AppKeywordHighlightRule>.from(settings.keywordHighlightRules);
+    final current = context.read<SettingsProvider>();
+    final updated = List<AppKeywordHighlightRule>.from(current.keywordHighlightRules);
     if (index != null) {
-      updated[index] = result;
+      if (index < updated.length) updated[index] = result;
     } else {
-      updated.add(result);
+      if (updated.length < kMaxKeywordHighlightRules) updated.add(result);
     }
-    context.read<SettingsProvider>().save(keywordHighlightRules: updated);
+    current.save(keywordHighlightRules: updated);
   }
 }
 

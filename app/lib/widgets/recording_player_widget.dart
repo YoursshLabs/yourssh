@@ -134,6 +134,13 @@ class _RecordingPlayerWidgetState extends State<RecordingPlayerWidget> {
     final settings = context.watch<SettingsProvider>();
     final theme = terminalThemeByName(settings.terminalTheme);
     final progress = _events.isEmpty ? 0.0 : _currentIndex / _events.length;
+    final keywordRules = settings.keywordHighlightingEnabled
+        ? settings.keywordHighlightRules
+            .where((r) => r.enabled)
+            .map((r) => r.toXtermRule())
+            .whereType<KeywordHighlightRule>()
+            .toList()
+        : const <KeywordHighlightRule>[];
 
     return Column(
       children: [
@@ -145,6 +152,7 @@ class _RecordingPlayerWidgetState extends State<RecordingPlayerWidget> {
             padding: EdgeInsets.zero,
             autofocus: false,
             readOnly: true,
+            keywordRules: keywordRules,
           ),
         ),
         Container(

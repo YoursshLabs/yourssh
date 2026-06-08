@@ -560,6 +560,22 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     _painter.paintHighlight(canvas, startOffset, end - start, color);
   }
 
+  // Returns a list mapping string-character index → cell column.
+  // getText() emits one code-unit per code-point, skipping continuation cells
+  // of double-width characters, so string index ≠ cell column when wide chars
+  // are present.
+  List<int> _buildStrToCell(BufferLine line) {
+    final result = <int>[];
+    for (var col = 0; col < line.length; col++) {
+      final cp = line.getCodePoint(col);
+      if (cp != 0) {
+        result.add(col);
+        if (line.getWidth(col) == 2) col++;
+      }
+    }
+    return result;
+  }
+
   void _paintKeywordHighlights(Canvas canvas, int firstLine, int lastLine) {
     if (_keywordRules.isEmpty) return;
     final lines = _terminal.buffer.lines;
@@ -567,18 +583,29 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
     for (var i = firstLine; i <= lastLine; i++) {
       if (i >= lines.length) break;
-      final lineText = lines[i].getText();
+      final line = lines[i];
+      final lineText = line.getText();
       final lineY = (i * charHeight + _lineOffset).truncateToDouble();
+      final strToCell = _buildStrToCell(line);
 
       for (final rule in _keywordRules) {
         for (final m in rule.pattern.allMatches(lineText)) {
           if (m.start == m.end) continue;
 
+          final startCell =
+              m.start < strToCell.length ? strToCell[m.start] : m.start;
+          final lastCharCell = m.end > 0 && m.end - 1 < strToCell.length
+              ? strToCell[m.end - 1]
+              : m.end - 1;
+          final endCell =
+              lastCharCell + (line.getWidth(lastCharCell) == 2 ? 2 : 1);
+          final cellCount = endCell - startCell;
+
           if (rule.background != null) {
             _painter.paintHighlight(
               canvas,
-              Offset(m.start * _painter.cellSize.width, lineY),
-              m.end - m.start,
+              Offset(startCell * _painter.cellSize.width, lineY),
+              cellCount,
               rule.background!,
             );
           }
@@ -587,9 +614,9 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
             _painter.paintKeywordForeground(
               canvas,
               Offset(0, lineY),
-              lines[i],
-              m.start,
-              m.end,
+              line,
+              startCell,
+              endCell,
               rule.foreground!,
             );
           }

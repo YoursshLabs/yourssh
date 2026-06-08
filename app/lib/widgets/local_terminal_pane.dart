@@ -47,6 +47,13 @@ class _LocalTerminalPaneState extends State<LocalTerminalPane> {
 
   Widget _terminal(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
+    final keywordRules = settings.keywordHighlightingEnabled
+        ? settings.keywordHighlightRules
+            .where((r) => r.enabled)
+            .map((r) => r.toXtermRule())
+            .whereType<KeywordHighlightRule>()
+            .toList()
+        : const <KeywordHighlightRule>[];
     return Stack(
       children: [
         TerminalView(
@@ -54,6 +61,7 @@ class _LocalTerminalPaneState extends State<LocalTerminalPane> {
           session.terminal,
           controller: _controller,
           autofocus: true,
+          keywordRules: keywordRules,
           textStyle: TerminalStyle(
             fontSize: settings.fontSize,
             fontFamily: settings.terminalFont,

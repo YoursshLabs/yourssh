@@ -430,15 +430,13 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final keywordRules = context.select<SettingsProvider, List<KeywordHighlightRule>>(
-      (s) => s.keywordHighlightingEnabled
-          ? s.keywordHighlightRules
-              .where((r) => r.enabled)
-              .map((r) => r.toXtermRule())
-              .whereType<KeywordHighlightRule>()
-              .toList()
-          : const [],
-    );
+    final keywordRules = settings.keywordHighlightingEnabled
+        ? settings.keywordHighlightRules
+            .where((r) => r.enabled)
+            .map((r) => r.toXtermRule())
+            .whereType<KeywordHighlightRule>()
+            .toList()
+        : const <KeywordHighlightRule>[];
     final appearance = _appearance(watch: true);
     final theme = terminalThemeByName(appearance.themeName);
     final showGutter = settings.shellIntegrationEnabled &&

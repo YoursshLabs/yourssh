@@ -24,6 +24,7 @@ class AppKeywordHighlightRule {
   }) : id = id ?? const Uuid().v4();
 
   xterm.KeywordHighlightRule? toXtermRule() {
+    if (foreground == null && background == null) return null;
     try {
       final rawPattern = isRegex ? pattern : RegExp.escape(pattern);
       final compiled = RegExp(rawPattern, caseSensitive: caseSensitive);
@@ -50,7 +51,7 @@ class AppKeywordHighlightRule {
 
   factory AppKeywordHighlightRule.fromJson(Map<String, dynamic> json) {
     return AppKeywordHighlightRule(
-      id: json['id'] as String,
+      id: json['id'] as String?,
       label: json['label'] as String,
       pattern: json['pattern'] as String,
       isRegex: json['isRegex'] as bool? ?? false,

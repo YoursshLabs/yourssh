@@ -794,7 +794,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           Expanded(
             child: Stack(
               children: [
-                const SplitTerminalView(),
+                SplitTerminalView(
+                  onNavigateToSettings: () => setState(() {
+                    _nav = NavSection.settings;
+                    _viewingTerminal = false;
+                  }),
+                ),
                 Positioned(
                   top: 8,
                   right: showAiChat ? 348 : 8,
