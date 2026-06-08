@@ -18,6 +18,10 @@ import 'terminal_appearance_controls.dart' show kBundledTerminalFonts;
 class HostDetailPanel extends StatefulWidget {
   final Host? existing;
   final String? initialGroup;
+  final String? initialHost;
+  final int? initialPort;
+  final String? initialLabel;
+  final HostProtocol? initialProtocol;
   final VoidCallback onClose;
   final Future<void> Function(Host host, String password) onSave;
   final Future<void> Function(Host host)? onConnect;
@@ -30,6 +34,10 @@ class HostDetailPanel extends StatefulWidget {
     super.key,
     this.existing,
     this.initialGroup,
+    this.initialHost,
+    this.initialPort,
+    this.initialLabel,
+    this.initialProtocol,
     required this.onClose,
     required this.onSave,
     this.onConnect,
@@ -82,15 +90,15 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   void initState() {
     super.initState();
     final h = widget.existing;
-    _protocol = h?.protocol ?? HostProtocol.ssh;
+    _protocol = h?.protocol ?? widget.initialProtocol ?? HostProtocol.ssh;
     _domainCtrl = TextEditingController(text: h?.domain ?? '');
     _rdpSecurity = h?.rdpSecurity ?? RdpSecurityMode.auto;
-    _hostCtrl = TextEditingController(text: h?.host ?? '');
-    _labelCtrl = TextEditingController(text: h?.label ?? '');
+    _hostCtrl = TextEditingController(text: h?.host ?? widget.initialHost ?? '');
+    _labelCtrl = TextEditingController(text: h?.label ?? widget.initialLabel ?? '');
     _groupCtrl = TextEditingController(text: h?.group ?? widget.initialGroup ?? '');
     _tagsCtrl = TextEditingController(text: h?.tags.join(', ') ?? '');
-    _portCtrl =
-        TextEditingController(text: (h?.port ?? _protocol.defaultPort).toString());
+    _portCtrl = TextEditingController(
+        text: (h?.port ?? widget.initialPort ?? _protocol.defaultPort).toString());
     _usernameCtrl = TextEditingController(text: h?.username ?? '');
     _passwordCtrl = TextEditingController();
     _authType = h?.authType ?? AuthType.password;
