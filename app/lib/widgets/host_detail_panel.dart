@@ -127,6 +127,17 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     for (final c in [_hostCtrl, _portCtrl, _usernameCtrl, _passwordCtrl]) {
       c.addListener(_clearTestResult);
     }
+    if (h != null && _authType == AuthType.password) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadExistingPassword(h.id));
+    }
+  }
+
+  Future<void> _loadExistingPassword(String hostId) async {
+    if (!mounted) return;
+    final pw = await context.read<SshService>().loadPassword(hostId);
+    if (mounted && pw != null && pw.isNotEmpty && _passwordCtrl.text.isEmpty) {
+      setState(() => _passwordCtrl.text = pw);
+    }
   }
 
   void _clearTestResult() {
