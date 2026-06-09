@@ -6,6 +6,7 @@ import 'package:yourssh/models/host.dart';
 import 'package:yourssh/providers/host_provider.dart';
 import 'package:yourssh/providers/key_provider.dart';
 import 'package:yourssh/services/agent_probe.dart';
+import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/host_detail_panel.dart';
 
@@ -25,6 +26,7 @@ void main() {
           ChangeNotifierProvider<KeyProvider>(create: (_) => KeyProvider()),
           ChangeNotifierProvider<HostProvider>(
               create: (_) => HostProvider(StorageService())),
+          Provider<SshService>(create: (_) => SshService(StorageService())),
         ],
         child: MaterialApp(
           home: Scaffold(
