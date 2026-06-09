@@ -110,7 +110,7 @@ class ContainerService {
     int podPort,
     int localPort,
   ) async {
-    final remotePfPort = 40000 + Random().nextInt(9999);
+    final remotePfPort = 40000 + Random().nextInt(10000);
     final ctxFlag = context != null ? ' --context=$context' : '';
     final cmd = 'kubectl port-forward --address 0.0.0.0 pod/$pod '
         '$remotePfPort:$podPort -n $namespace$ctxFlag';
