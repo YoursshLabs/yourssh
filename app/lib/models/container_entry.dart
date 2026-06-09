@@ -66,12 +66,22 @@ class K8sForwardHandle {
   final StreamSubscription<Socket> _serverSub;
   final List<void Function()> _closers;
 
+  bool _stopped = false;
+
   Future<void> stop() async {
-    await _serverSub.cancel();
-    await _server.close();
-    for (final c in List.of(_closers)) {
-      c();
+    if (_stopped) return;
+    _stopped = true;
+    try {
+      await _serverSub.cancel();
+    } finally {
+      try {
+        await _server.close();
+      } finally {
+        for (final c in List.of(_closers)) {
+          c();
+        }
+        await _kubectlSub.cancel();
+      }
     }
-    await _kubectlSub.cancel();
   }
 }
