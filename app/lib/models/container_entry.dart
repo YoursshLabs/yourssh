@@ -50,11 +50,15 @@ class K8sForwardHandle {
     required this.namespace,
     required this.podPort,
     required this.localPort,
-    required this._kubectlSub,
-    required this._server,
-    required this._serverSub,
-    required this._closers,
-  });
+    required StreamSubscription<String> kubectlSub,
+    required ServerSocket server,
+    required StreamSubscription<Socket> serverSub,
+    required List<void Function()> closers,
+  }) // ignore: prefer_initializing_formals
+      : _kubectlSub = kubectlSub, // ignore: prefer_initializing_formals
+        _server = server, // ignore: prefer_initializing_formals
+        _serverSub = serverSub, // ignore: prefer_initializing_formals
+        _closers = closers; // ignore: prefer_initializing_formals
 
   final String pod;
   final String namespace;

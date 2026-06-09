@@ -1,6 +1,12 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:math';
+
+import 'package:dartssh2/dartssh2.dart';
+
 import '../models/container_entry.dart';
-import 'ssh_service.dart';
 import '../models/host.dart';
+import 'ssh_service.dart';
 
 /// Lists Docker containers / Kubernetes pods on a remote host and detects
 /// which container runtimes are available. Parsing is done by stateless
@@ -25,9 +31,12 @@ class ContainerService {
     Host host, {
     String namespace = 'default',
     bool allNamespaces = false,
+    String? context,
   }) async {
     final scope = allNamespaces ? '-A' : '-n $namespace';
-    final r = await ssh.exec(host, 'kubectl get pods $scope', auditSource: 'devops');
+    final ctxFlag = context != null ? ' --context=$context' : '';
+    final r = await ssh.exec(host, 'kubectl get pods $scope$ctxFlag',
+        auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(r.stderr.trim().isEmpty ? 'kubectl failed' : r.stderr.trim());
     }
@@ -65,6 +74,126 @@ class ContainerService {
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)
         .toList();
+  }
+
+  // ── Log streaming ─────────────────────────────────────
+
+  /// Streams stdout lines from `kubectl logs -f`.
+  /// Cancel the subscription to stop the stream and close the SSH channel.
+  Stream<String> streamLogs(
+    Host host,
+    String pod,
+    String namespace,
+    String? context, {
+    String? container,
+    int tail = 100,
+  }) {
+    final ctxFlag = context != null ? ' --context=$context' : '';
+    final cFlag = container != null ? ' -c $container' : '';
+    final cmd =
+        'kubectl logs -f $pod -n $namespace --tail=$tail$ctxFlag$cFlag';
+    return ssh.execStream(host, cmd, auditSource: 'devops');
+  }
+
+  // ── Port forwarding ───────────────────────────────────
+
+  /// Starts `kubectl port-forward` on [host] and creates a local [ServerSocket]
+  /// on [localPort] that tunnels connections to the pod via SSH.
+  ///
+  /// Throws [TimeoutException] if kubectl does not print "Forwarding from"
+  /// within 10 seconds, or any [Exception] on kubectl error.
+  Future<K8sForwardHandle> startPodPortForward(
+    Host host,
+    String pod,
+    String namespace,
+    String? context,
+    int podPort,
+    int localPort,
+  ) async {
+    final remotePfPort = 40000 + Random().nextInt(9999);
+    final ctxFlag = context != null ? ' --context=$context' : '';
+    final cmd = 'kubectl port-forward --address 0.0.0.0 pod/$pod '
+        '$remotePfPort:$podPort -n $namespace$ctxFlag';
+
+    final ready = Completer<void>();
+    final lines = <String>[];
+    final logStream = ssh.execStream(host, cmd, auditSource: 'devops');
+
+    late StreamSubscription<String> kubectlSub;
+    kubectlSub = logStream.listen(
+      (line) {
+        lines.add(line);
+        if (line.contains('Forwarding from') && !ready.isCompleted) {
+          ready.complete();
+        }
+      },
+      onError: (e) {
+        if (!ready.isCompleted) ready.completeError(e);
+      },
+      onDone: () {
+        if (!ready.isCompleted) {
+          ready.completeError(
+            Exception('kubectl exited: ${lines.join(' | ')}'),
+          );
+        }
+      },
+    );
+
+    try {
+      await ready.future.timeout(const Duration(seconds: 10));
+    } catch (e) {
+      await kubectlSub.cancel();
+      rethrow;
+    }
+
+    final client = await ssh.ensureClient(host);
+    final server =
+        await ServerSocket.bind(InternetAddress.loopbackIPv4, localPort);
+    final closers = <void Function()>[];
+
+    final serverSub = server.listen((socket) async {
+      try {
+        final channel = await client.forwardLocal('localhost', remotePfPort);
+        _pipeK8s(socket, channel, closers);
+      } catch (_) {
+        socket.destroy();
+      }
+    });
+
+    return K8sForwardHandle(
+      pod: pod,
+      namespace: namespace,
+      podPort: podPort,
+      localPort: localPort,
+      kubectlSub: kubectlSub,
+      server: server,
+      serverSub: serverSub,
+      closers: closers,
+    );
+  }
+
+  static void _pipeK8s(
+      Socket local, SSHSocket remote, List<void Function()> closers) {
+    var done = false;
+    late final void Function() finish;
+    finish = () {
+      if (done) return;
+      done = true;
+      local.destroy();
+      remote.destroy();
+      closers.remove(finish);
+    };
+    closers.add(finish);
+    unawaited(remote.stream
+        .cast<List<int>>()
+        .pipe(local)
+        .catchError((_) {})
+        .whenComplete(finish));
+    unawaited(local
+        .cast<List<int>>()
+        .pipe(remote.sink)
+        .catchError((_) {})
+        .whenComplete(finish));
   }
 
   static List<PodEntry> parsePods(
