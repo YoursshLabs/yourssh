@@ -9,6 +9,7 @@ class DevOpsPluginConfig {
   final Widget cloudflareScreen;
   final Widget mailCatcherScreen;
   final Widget mcpServerScreen;
+  final void Function(String url)? onOpenBrowser;
 
   const DevOpsPluginConfig({
     required this.containersScreen,
@@ -16,5 +17,6 @@ class DevOpsPluginConfig {
     required this.cloudflareScreen,
     required this.mailCatcherScreen,
     required this.mcpServerScreen,
+    this.onOpenBrowser,
   });
 }
