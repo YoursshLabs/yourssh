@@ -432,6 +432,7 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
             child: PathBreadcrumb(
               crumbs: crumbs,
               onNavigate: prov.loadDirectory,
+              editablePath: prov.currentPath,
             ),
           ),
           IconButton(

@@ -88,8 +88,24 @@ class _SftpPanelState extends State<SftpPanel> {
   /// Loads [path] and records it in the back/forward history (via setPath).
   Future<void> _loadDirectory(String path) async {
     if (widget.host == null) return;
-    widget.provider.setPath(path);
-    await _fetchEntries(path);
+    final normalized = _normalizeRemotePath(path);
+    widget.provider.setPath(normalized);
+    await _fetchEntries(normalized);
+  }
+
+  /// Cleans up a path typed into the breadcrumb editor. Remote paths are
+  /// always absolute POSIX, so a relative entry resolves against root and a
+  /// trailing slash is dropped (except root) to keep derived child paths from
+  /// doubling up. Crumb/entry paths are already canonical, so this is a no-op
+  /// for them.
+  String _normalizeRemotePath(String input) {
+    var path = input.trim();
+    if (path.isEmpty) return '/';
+    if (!path.startsWith('/')) path = '/$path';
+    if (path.length > 1 && path.endsWith('/')) {
+      path = path.substring(0, path.length - 1);
+    }
+    return path;
   }
 
   /// Lists [path] into the provider without touching the history — used by
@@ -513,6 +529,7 @@ class _SftpPanelState extends State<SftpPanel> {
             child: PathBreadcrumb(
               crumbs: posixCrumbs(prov.currentPath),
               onNavigate: _loadDirectory,
+              editablePath: prov.currentPath,
             ),
           ),
           IconButton(

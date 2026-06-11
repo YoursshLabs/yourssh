@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.35] — 2026-06-11
+
+### Added
+- **Breadcrumb path jump** — the shared `PathBreadcrumb` gains an inline path editor: an edit affordance opens a text field seeded with the current path; Enter navigates there, Escape cancels. Wired into both the remote SFTP panel and the local file panel; remote-typed paths are normalized to absolute POSIX (trailing slash dropped) so derived child paths don't double up
+
+### Fixed
+- **Non-ASCII terminal input** — typed input was sent to the SSH shell via truncated UTF-16 code units, corrupting any character above U+00FF (e.g. Vietnamese: "ế" arrived as a single garbage byte). Input is now UTF-8 encoded at every user-text write site (keystroke/IME, `terminal.input` plugin hook, startup command, snippet insert), matching the local-shell path
+
+---
+
 ## [0.1.34] — 2026-06-08
 
 ### Added

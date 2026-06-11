@@ -648,7 +648,7 @@ class SshService {
 
     final initialCommand = session.initialCommand;
     if (initialCommand != null && initialCommand.isNotEmpty) {
-      shell.write(Uint8List.fromList('$initialCommand\n'.codeUnits));
+      shell.write(Uint8List.fromList(const Utf8Encoder().convert('$initialCommand\n')));
     }
 
     // Invisible shell-integration injection (two-phase handshake; see
@@ -850,9 +850,13 @@ class SshService {
         final result = hookBus!.fireInterceptable(
             'terminal.input', TransformEvent(sessionId: session.id, data: data));
         if (result == null) return; // cancelled by plugin
-        shell.write(Uint8List.fromList(result.codeUnits));
+        // Utf8Encoder (not codeUnits): non-ASCII input (e.g. Vietnamese) has
+        // code units > 0xFF that Uint8List.fromList truncates, corrupting the
+        // bytes the server receives. The local `utf8` decoder shadows
+        // dart:convert's, so use Utf8Encoder explicitly.
+        shell.write(Uint8List.fromList(const Utf8Encoder().convert(result)));
       } else {
-        shell.write(Uint8List.fromList(data.codeUnits));
+        shell.write(Uint8List.fromList(const Utf8Encoder().convert(data)));
       }
     };
 
@@ -1234,7 +1238,8 @@ class SshService {
   bool sendInput(String sessionId, String text) {
     final shell = _shells[sessionId];
     if (shell == null) return false;
-    shell.write(Uint8List.fromList(text.codeUnits));
+    // Utf8Encoder (not codeUnits): snippet/insert text may be non-ASCII.
+    shell.write(Uint8List.fromList(const Utf8Encoder().convert(text)));
     return true;
   }
 
