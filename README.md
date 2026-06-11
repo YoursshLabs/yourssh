@@ -23,7 +23,7 @@ YourSSH also checks for new releases on launch and from **Settings → Updates**
 
 | Platform | File |
 |---|---|
-| macOS (Apple Silicon) | `YourSSH-x.x.x-macOS-arm64.dmg` |
+| macOS (Apple Silicon & Intel) | `YourSSH-x.x.x-macOS-universal.dmg` |
 | Windows (x64) | `YourSSH.Setup.x.x.x-Windows-x64.exe` |
 | Windows (ARM64 — Surface, Snapdragon) | `YourSSH.Setup.x.x.x-Windows-arm64.exe` |
 | Linux (Debian/Ubuntu — x86_64) | `yourssh_x.x.x_amd64.deb` |

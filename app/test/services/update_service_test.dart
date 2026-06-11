@@ -106,11 +106,33 @@ void main() {
           ],
         });
 
-    test('macOS arm64 -> dmg', () {
+    AppRelease universalRelease() => AppRelease.fromJson({
+          'tag_name': 'v0.2.0',
+          'assets': [
+            {'name': 'YourSSH-0.2.0-macOS-universal.dmg', 'browser_download_url': 'u/macuni', 'size': 1},
+            {'name': 'YourSSH-0.2.0-macOS-universal.zip', 'browser_download_url': 'u/maczip', 'size': 1},
+          ],
+        });
+
+    test('macOS arm64 -> universal dmg', () {
+      expect(
+          svc
+              .assetForPlatform(universalRelease(), os: 'macos', arch: 'arm64')!
+              .name,
+          'YourSSH-0.2.0-macOS-universal.dmg');
+    });
+    test('macOS x64 -> universal dmg', () {
+      expect(
+          svc
+              .assetForPlatform(universalRelease(), os: 'macos', arch: 'x64')!
+              .name,
+          'YourSSH-0.2.0-macOS-universal.dmg');
+    });
+    test('macOS arm64 falls back to arm64 dmg on a pre-universal release', () {
       expect(svc.assetForPlatform(release(), os: 'macos', arch: 'arm64')!.name,
           'YourSSH-0.2.0-macOS-arm64.dmg');
     });
-    test('macOS x64 -> null (no Intel artifact)', () {
+    test('macOS x64 -> null on a pre-universal (arm64-only) release', () {
       expect(svc.assetForPlatform(release(), os: 'macos', arch: 'x64'), isNull);
     });
     test('Windows x64 prefers Setup installer over portable', () {

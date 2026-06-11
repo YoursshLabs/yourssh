@@ -64,9 +64,10 @@ class UpdateService {
 
   /// Picks the best matching asset for [os] (`macos`/`windows`/`linux`) and
   /// [arch] (`arm64`/`x64`/`amd64`). Returns null when no artifact matches
-  /// (e.g. macOS x64 — only arm64 is shipped); callers then fall back to the
-  /// browser. For each platform the candidate names are tried in preference
-  /// order and the first asset whose name matches is returned.
+  /// (e.g. macOS x64 against a pre-universal release that only shipped
+  /// arm64); callers then fall back to the browser. For each platform the
+  /// candidate names are tried in preference order and the first asset whose
+  /// name matches is returned.
   ReleaseAsset? assetForPlatform(
     AppRelease release, {
     required String os,
@@ -75,7 +76,12 @@ class UpdateService {
     List<String> candidates() {
       switch (os) {
         case 'macos':
-          return arch == 'arm64' ? const ['macOS-arm64.dmg'] : const [];
+          // Universal DMG serves both archs; arm64 also accepts the
+          // arm64-only name older releases shipped. Intel must not — an
+          // arm64-only DMG would install but never launch there.
+          return arch == 'arm64'
+              ? const ['macOS-universal.dmg', 'macOS-arm64.dmg']
+              : const ['macOS-universal.dmg'];
         case 'linux':
           return arch == 'arm64'
               ? const ['_arm64.deb', 'Linux-arm64.tar.gz']
@@ -137,13 +143,13 @@ class UpdateService {
   }
 
   /// CPU architecture token used by [assetForPlatform].
-  /// macOS only ships arm64; Windows reads PROCESSOR_ARCHITECTURE; Linux
-  /// shells out to `uname -m`.
+  /// macOS shells out to `uname -m`; Windows reads PROCESSOR_ARCHITECTURE;
+  /// Linux shells out to `uname -m`.
   String currentArch() {
     if (Platform.isMacOS) {
-      // Only arm64 artifacts are published. Detect the real arch so Intel Macs
-      // return 'x64' -> assetForPlatform returns null -> caller falls back to
-      // the browser, rather than being handed an arm64-only DMG.
+      // Detect the real arch so Intel Macs only accept the universal DMG —
+      // against a pre-universal (arm64-only) release they fall back to the
+      // browser rather than being handed a DMG that can't launch.
       try {
         final m = Process.runSync('uname', const ['-m']).stdout.toString().trim();
         return (m == 'arm64' || m == 'aarch64') ? 'arm64' : 'x64';
