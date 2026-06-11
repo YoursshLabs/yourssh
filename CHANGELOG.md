@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Scrollback paging keys** — Shift+PageUp / Shift+PageDown page through the terminal scrollback (main buffer only; alternate-screen apps still receive the keys)
+- **Reset Terminal** — right-click action that recovers a session stuck in the alternate screen with mouse reporting left on (full-screen app crashed / SSH dropped mid-TUI): returns to the main buffer, disables mouse mode, re-shows the cursor — the local equivalent of `reset`
+
+### Changed
+- **Terminal render performance** — visible lines are painted via cached per-line pictures re-recorded only when a line's content changes (new `BufferLine.version`), turning a steady frame from O(visible cells) paragraph draws into O(visible lines) picture replays (~7× less per-frame paint work); keyword-highlight regexes now run on line change instead of every frame
+
+### Fixed
+- **Mouse wheel inside mouse-aware TUIs** (#65) — wheel up/down were reported with button codes 68/69 instead of the standard 64/65, so claude CLI, htop, `vim mouse=a`, lazygit, and tmux (mouse on) ignored every wheel event; legacy-mode reports also placed events one row below the pointer
+- **Scrollback drift at the cap** (#66) — once the buffer hit `maxLines`, content a scrolled-up reader was viewing streamed past as lines were trimmed from the top; the viewport now compensates for trimmed lines and stays pinned to the text
+- **Decomposed (NFD) Vietnamese text** (#67) — combining marks are now canonically composed into the preceding cell (every Vietnamese letter has a precomposed form), so macOS `ls` filenames and other NFD sources render correctly instead of one displaced cell per diacritic
+
+---
+
 ## [0.1.35] — 2026-06-11
 
 ### Added
