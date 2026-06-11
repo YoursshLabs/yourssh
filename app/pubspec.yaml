@@ -94,9 +94,6 @@ dependencies:
   # Markdown rendering (AI chat)
   flutter_markdown: ^0.7.1
 
-  # Local authentication / biometrics (vault)
-  local_auth: ^2.3.0
-
   # HMAC/SHA hashing for AWS Signature V4 (S3 browser)
   crypto: ^3.0.3
 
@@ -171,13 +168,10 @@ flutter:
     - family: Roboto Mono for Powerline
       fonts:
         - asset: assets/fonts/powerline/Roboto Mono for Powerline.ttf
+    # Italic faces dropped (-4.8 MB): terminals rarely hit italic, and the
+    # engine falls back to a synthetic slant of the upright faces.
     - family: MesloLGS NF
       fonts:
         - asset: assets/fonts/nerd/MesloLGS NF Regular.ttf
         - asset: assets/fonts/nerd/MesloLGS NF Bold.ttf
           weight: 700
-        - asset: assets/fonts/nerd/MesloLGS NF Italic.ttf
-          style: italic
-        - asset: assets/fonts/nerd/MesloLGS NF Bold Italic.ttf
-          weight: 700
-          style: italic
