@@ -18,6 +18,15 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
   /// overflow
   var _absoluteStartIndex = 0;
 
+  /// Total number of elements ever removed from the front of the list —
+  /// overflow trims on [push]/[insert] plus explicit [trimStart] calls.
+  /// Monotonic; lets consumers (e.g. the terminal viewport) detect that the
+  /// content above a given index has shifted and compensate scroll offsets.
+  var _droppedLines = 0;
+
+  /// Monotonic count of elements removed from the front of the list.
+  int get droppedLines => _droppedLines;
+
   /// Gets the cyclic index for the specified regular index. The cyclic index
   /// can then be used on the backing array to get the element associated with
   /// the regular index.
@@ -137,6 +146,7 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
       // When the list is full, we trim the first element
       _startIndex++;
       _absoluteStartIndex++;
+      _droppedLines++;
       if (_startIndex == _array.length) {
         _startIndex = 0;
       }
@@ -197,6 +207,7 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
     if (_length >= _array.length) {
       _startIndex += 1;
       _absoluteStartIndex += 1;
+      _droppedLines += 1;
     } else {
       _length++;
     }
@@ -227,6 +238,7 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
     _startIndex += count;
     _startIndex %= _array.length;
     _length -= count;
+    _droppedLines += count;
   }
 
   /// Replaces all elements in the list with [replacement].

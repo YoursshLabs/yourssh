@@ -174,10 +174,19 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
       if (same) return;
     }
     _keywordRules = value;
+    // The painter bakes keyword highlights into its cached line pictures;
+    // a rule change must invalidate them.
+    _painter.keywordRules = value;
     markNeedsPaint();
   }
 
   var _stickToBottom = true;
+
+  /// Bookkeeping for scrollback-trim compensation: the lines list whose
+  /// [droppedLines] counter [_seenDropped] refers to. The terminal swaps
+  /// between the main and alt buffer's line lists, so track identity.
+  Object? _trackedLines;
+  var _seenDropped = 0;
 
   void _onScroll() {
     _stickToBottom = _scrollOffset >= _maxScrollExtent;
@@ -236,10 +245,36 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
     _updateViewportSize();
 
+    _compensateScrollbackTrim();
+
     _updateScrollOffset();
 
     if (_stickToBottom) {
       _offset.correctBy(_maxScrollExtent - _scrollOffset);
+    }
+  }
+
+  /// When the scrollback buffer is at capacity, every new line trims one from
+  /// the top, shifting all content up while the pixel offset stays put — to a
+  /// user reading scrollback the text appears to stream past uncontrollably.
+  /// Compensate by shifting the offset up by exactly the trimmed amount so the
+  /// content under the viewport stays still.
+  void _compensateScrollbackTrim() {
+    final lines = _terminal.buffer.lines;
+    final dropped = lines.droppedLines;
+    if (!identical(lines, _trackedLines)) {
+      // First layout, or the terminal switched between main/alt buffers:
+      // just (re)baseline, never correct across different line lists.
+      _trackedLines = lines;
+      _seenDropped = dropped;
+      return;
+    }
+    if (dropped == _seenDropped) return;
+    final delta = dropped - _seenDropped;
+    _seenDropped = dropped;
+    if (!_stickToBottom && _offset.hasPixels) {
+      final shift = delta * _painter.cellSize.height;
+      _offset.correctBy(-shift.clamp(0.0, _offset.pixels));
     }
   }
 
@@ -440,14 +475,18 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     final effectLastLine = lastLine.clamp(0, lines.length - 1);
 
     for (var i = effectFirstLine; i <= effectLastLine; i++) {
-      _painter.paintLine(
-        canvas,
-        offset.translate(0, (i * charHeight + _lineOffset).truncateToDouble()),
-        lines[i],
+      // Lines are painted via cached per-line pictures: a line is re-recorded
+      // only when its content changes, so scrolling and steady output replay
+      // pictures instead of re-laying-out every visible cell each frame.
+      final picture = _painter.getLinePicture(lines[i]);
+      canvas.save();
+      canvas.translate(
+        offset.dx,
+        offset.dy + (i * charHeight + _lineOffset).truncateToDouble(),
       );
+      canvas.drawPicture(picture);
+      canvas.restore();
     }
-
-    _paintKeywordHighlights(canvas, effectFirstLine, effectLastLine);
 
     if (_terminal.buffer.absoluteCursorY >= effectFirstLine &&
         _terminal.buffer.absoluteCursorY <= effectLastLine) {
@@ -578,68 +617,4 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     _painter.paintHighlight(canvas, startOffset, end - start, color);
   }
 
-  // Returns a list mapping string-character index → cell column.
-  // getText() emits one code-unit per code-point, skipping continuation cells
-  // of double-width characters, so string index ≠ cell column when wide chars
-  // are present.
-  List<int> _buildStrToCell(BufferLine line) {
-    final result = <int>[];
-    for (var col = 0; col < line.length; col++) {
-      final cp = line.getCodePoint(col);
-      if (cp != 0) {
-        result.add(col);
-        if (line.getWidth(col) == 2) col++;
-      }
-    }
-    return result;
-  }
-
-  void _paintKeywordHighlights(Canvas canvas, int firstLine, int lastLine) {
-    if (_keywordRules.isEmpty) return;
-    final lines = _terminal.buffer.lines;
-    final charHeight = _painter.cellSize.height;
-
-    for (var i = firstLine; i <= lastLine; i++) {
-      if (i >= lines.length) break;
-      final line = lines[i];
-      final lineText = line.getText();
-      final lineY = (i * charHeight + _lineOffset).truncateToDouble();
-      final strToCell = _buildStrToCell(line);
-
-      for (final rule in _keywordRules) {
-        for (final m in rule.pattern.allMatches(lineText)) {
-          if (m.start == m.end) continue;
-
-          final startCell =
-              m.start < strToCell.length ? strToCell[m.start] : m.start;
-          final lastCharCell = m.end > 0 && m.end - 1 < strToCell.length
-              ? strToCell[m.end - 1]
-              : m.end - 1;
-          final endCell =
-              lastCharCell + (line.getWidth(lastCharCell) == 2 ? 2 : 1);
-          final cellCount = endCell - startCell;
-
-          if (rule.background != null) {
-            _painter.paintHighlight(
-              canvas,
-              Offset(startCell * _painter.cellSize.width, lineY),
-              cellCount,
-              rule.background!,
-            );
-          }
-
-          if (rule.foreground != null) {
-            _painter.paintKeywordForeground(
-              canvas,
-              Offset(0, lineY),
-              line,
-              startCell,
-              endCell,
-              rule.foreground!,
-            );
-          }
-        }
-      }
-    }
-  }
 }

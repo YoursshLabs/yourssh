@@ -1,9 +1,19 @@
 import 'dart:ui';
 import 'package:flutter/painting.dart';
 
+import 'package:xterm/src/ui/keyword_highlight.dart';
 import 'package:xterm/src/ui/palette_builder.dart';
 import 'package:xterm/src/ui/paragraph_cache.dart';
 import 'package:xterm/xterm.dart';
+
+/// A recorded picture of one buffer line (text + keyword highlights), painted
+/// at origin, valid for a specific [BufferLine.version].
+class _LinePicture {
+  _LinePicture(this.picture, this.version);
+
+  final Picture picture;
+  final int version;
+}
 
 /// Encapsulates the logic for painting various terminal elements.
 class TerminalPainter {
@@ -26,6 +36,17 @@ class TerminalPainter {
   /// [_textStyle] is changed, or when the system font changes.
   final _paragraphCache = ParagraphCache(10240);
 
+  /// Recorded pictures of recently painted lines, keyed by line identity and
+  /// re-recorded only when the line's [BufferLine.version] changes. Turns the
+  /// steady-state per-frame paint cost from O(visible cells) paragraph draws
+  /// into O(visible lines) picture replays — the difference between janky and
+  /// smooth scrolling/streaming. Insertion-ordered for LRU eviction.
+  final _linePictures = <BufferLine, _LinePicture>{};
+
+  /// Upper bound on cached line pictures (~20 viewports of 50 lines); beyond
+  /// this the least recently used entries are disposed.
+  static const _linePictureCacheLimit = 1024;
+
   TerminalStyle get textStyle => _textStyle;
   TerminalStyle _textStyle;
   set textStyle(TerminalStyle value) {
@@ -33,6 +54,7 @@ class TerminalPainter {
     _textStyle = value;
     _cellSize = _measureCharSize();
     _paragraphCache.clear();
+    _invalidateLinePictures();
   }
 
   TextScaler get textScaler => _textScaler;
@@ -42,6 +64,7 @@ class TerminalPainter {
     _textScaler = value;
     _cellSize = _measureCharSize();
     _paragraphCache.clear();
+    _invalidateLinePictures();
   }
 
   TerminalTheme get theme => _theme;
@@ -51,6 +74,24 @@ class TerminalPainter {
     _theme = value;
     _colorPalette = PaletteBuilder(value).build();
     _paragraphCache.clear();
+    _invalidateLinePictures();
+  }
+
+  /// Keyword highlighting rules baked into the cached line pictures. The
+  /// caller (RenderTerminal) only assigns on structural change, so a new
+  /// value always invalidates the cache.
+  List<KeywordHighlightRule> get keywordRules => _keywordRules;
+  List<KeywordHighlightRule> _keywordRules = const [];
+  set keywordRules(List<KeywordHighlightRule> value) {
+    _keywordRules = value;
+    _invalidateLinePictures();
+  }
+
+  void _invalidateLinePictures() {
+    for (final entry in _linePictures.values) {
+      entry.picture.dispose();
+    }
+    _linePictures.clear();
   }
 
   Size _measureCharSize() {
@@ -83,6 +124,94 @@ class TerminalPainter {
   void clearFontCache() {
     _cellSize = _measureCharSize();
     _paragraphCache.clear();
+    _invalidateLinePictures();
+  }
+
+  /// Returns a picture that paints [line] (text and keyword highlights) at
+  /// origin. Cached: the line is re-recorded only when its content version
+  /// changed since the last paint.
+  Picture getLinePicture(BufferLine line) {
+    // Remove + reinsert keeps the map insertion-ordered by recency (LRU).
+    final cached = _linePictures.remove(line);
+    if (cached != null && cached.version == line.version) {
+      _linePictures[line] = cached;
+      return cached.picture;
+    }
+    cached?.picture.dispose();
+
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+    paintLine(canvas, Offset.zero, line);
+    _paintLineKeywords(canvas, line);
+    final picture = recorder.endRecording();
+
+    _linePictures[line] = _LinePicture(picture, line.version);
+    if (_linePictures.length > _linePictureCacheLimit) {
+      final eldest = _linePictures.keys.first;
+      _linePictures.remove(eldest)!.picture.dispose();
+    }
+    return picture;
+  }
+
+  // Returns a list mapping string-character index → cell column.
+  // getText() emits one code-unit per code-point, skipping continuation cells
+  // of double-width characters, so string index ≠ cell column when wide chars
+  // are present.
+  List<int> _buildStrToCell(BufferLine line) {
+    final result = <int>[];
+    for (var col = 0; col < line.length; col++) {
+      final cp = line.getCodePoint(col);
+      if (cp != 0) {
+        result.add(col);
+        if (line.getWidth(col) == 2) col++;
+      }
+    }
+    return result;
+  }
+
+  /// Paints keyword highlights for [line] in line-local coordinates (y = 0).
+  /// Recorded into the line's cached picture, so the regex matching runs only
+  /// when the line content changes — not on every frame.
+  void _paintLineKeywords(Canvas canvas, BufferLine line) {
+    if (_keywordRules.isEmpty) return;
+
+    final lineText = line.getText();
+    final strToCell = _buildStrToCell(line);
+
+    for (final rule in _keywordRules) {
+      for (final m in rule.pattern.allMatches(lineText)) {
+        if (m.start == m.end) continue;
+
+        final startCell =
+            m.start < strToCell.length ? strToCell[m.start] : m.start;
+        final lastCharCell = m.end > 0 && m.end - 1 < strToCell.length
+            ? strToCell[m.end - 1]
+            : m.end - 1;
+        final endCell =
+            lastCharCell + (line.getWidth(lastCharCell) == 2 ? 2 : 1);
+        final cellCount = endCell - startCell;
+
+        if (rule.background != null) {
+          paintHighlight(
+            canvas,
+            Offset(startCell * _cellSize.width, 0),
+            cellCount,
+            rule.background!,
+          );
+        }
+
+        if (rule.foreground != null) {
+          paintKeywordForeground(
+            canvas,
+            Offset.zero,
+            line,
+            startCell,
+            endCell,
+            rule.foreground!,
+          );
+        }
+      }
+    }
   }
 
   /// Paints the cursor based on the current cursor type.
