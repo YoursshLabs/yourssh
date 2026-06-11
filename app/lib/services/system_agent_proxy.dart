@@ -366,9 +366,10 @@ class _AgentWriter {
 
   Uint8List buildMessage() {
     final body = _buf.toBytes();
-    final header = Uint8List(4);
-    ByteData.view(header.buffer).setUint32(0, body.length, Endian.big);
-    return Uint8List.fromList([...header, ...body]);
+    final message = Uint8List(4 + body.length);
+    ByteData.view(message.buffer).setUint32(0, body.length, Endian.big);
+    message.setRange(4, message.length, body);
+    return message;
   }
 }
 

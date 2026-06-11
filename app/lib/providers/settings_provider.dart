@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:xterm/xterm.dart' as xterm;
 
 import '../models/keyword_highlight_rule.dart';
 import '../models/shell_profile.dart';
@@ -53,6 +54,32 @@ class SettingsProvider extends ChangeNotifier {
 
   bool keywordHighlightingEnabled = true;
   List<AppKeywordHighlightRule> keywordHighlightRules = kDefaultKeywordHighlightRules;
+
+  List<xterm.KeywordHighlightRule>? _xtermRulesCache;
+  List<AppKeywordHighlightRule>? _xtermRulesSource;
+  bool _xtermRulesEnabled = false;
+
+  /// The enabled rules compiled for xterm, shared by every terminal surface.
+  /// Memoized: [keywordHighlightRules] is only ever replaced wholesale (load
+  /// and updateSettings assign a new list, never mutate), so list identity +
+  /// the enabled flag fully key the cache — without it each terminal build
+  /// recompiled every rule's RegExp. The stable list identity also lets
+  /// rebuild diffing treat the rules as unchanged.
+  List<xterm.KeywordHighlightRule> get xtermKeywordRules {
+    if (!identical(_xtermRulesSource, keywordHighlightRules) ||
+        _xtermRulesEnabled != keywordHighlightingEnabled) {
+      _xtermRulesSource = keywordHighlightRules;
+      _xtermRulesEnabled = keywordHighlightingEnabled;
+      _xtermRulesCache = keywordHighlightingEnabled
+          ? keywordHighlightRules
+              .where((r) => r.enabled)
+              .map((r) => r.toXtermRule())
+              .whereType<xterm.KeywordHighlightRule>()
+              .toList(growable: false)
+          : const [];
+    }
+    return _xtermRulesCache!;
+  }
 
   List<ShellProfile> get allShellProfiles =>
       [...detectedShellProfiles, ...customShellProfiles];

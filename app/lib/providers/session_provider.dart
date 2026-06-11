@@ -136,6 +136,7 @@ class SessionProvider extends ChangeNotifier {
   }
 
   void setActive(String sessionId) {
+    if (_activeSessionId == sessionId) return; // re-clicking the active tab
     _activeSessionId = sessionId;
     _safeNotify();
   }
