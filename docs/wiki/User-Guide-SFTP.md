@@ -14,6 +14,7 @@ You can also open SFTP for a specific session from the session toolbar.
 
 - Click a folder to open it.
 - Click the breadcrumb trail to jump up.
+- **Go to path**: click the edit icon next to the breadcrumb (or its tooltip "Go to path"), type or paste any path, and press **Enter** to jump straight there — **Esc** cancels. Works on both the remote and local panels.
 - Press **Backspace** or the **←** button to go up one level.
 
 ## Transferring Files

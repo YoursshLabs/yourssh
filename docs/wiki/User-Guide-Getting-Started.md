@@ -8,7 +8,7 @@ YourSSH is a dark-theme SSH client for macOS, Windows, and Linux. Install it, ad
 
 ### macOS
 
-1. Download `YourSSH-x.x.x-macOS-arm64.dmg` from the [Releases page](https://github.com/thangnm93/yourssh/releases).
+1. Download `YourSSH-x.x.x-macOS-universal.dmg` from the [Releases page](https://github.com/thangnm93/yourssh/releases) — one build for both Apple Silicon and Intel Macs. (Releases before 0.1.35 shipped an arm64-only `-macOS-arm64.dmg`.)
 2. Open the `.dmg` and drag **YourSSH** to `/Applications`.
 3. **First launch only:** macOS may block the app because it is not yet notarized. Right-click → **Open** → **Open** in the dialog. You only need to do this once.
 

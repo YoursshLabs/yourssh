@@ -9,9 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Breadcrumb path jump** — the shared `PathBreadcrumb` gains an inline path editor: an edit affordance opens a text field seeded with the current path; Enter navigates there, Escape cancels. Wired into both the remote SFTP panel and the local file panel; remote-typed paths are normalized to absolute POSIX (trailing slash dropped) so derived child paths don't double up
+- **macOS universal build** — Intel Macs are now supported: one universal (arm64 + x86_64) artifact (`YourSSH-x.x.x-macOS-universal.dmg/zip`) built on the arm64 runner; `build.sh` lipos both Rust dylib targets and the release workflow asserts both arches via `lipo -archs` so an arm64-only artifact can never ship under the universal name; the in-app updater matches the universal DMG on both archs (Intel falls back to the browser against pre-universal releases)
+
+### Changed
+- **Performance pass** — compiled keyword-highlight rules are memoized in `SettingsProvider` (previously every terminal build recompiled each rule's RegExp, duplicated across three widgets); `SessionProvider.setActive` no longer notifies when re-clicking the already-active tab; SSH agent messages are built with a direct buffer write instead of double list spreads
+- **Smaller bundles** — removed the unused `local_auth` dependency (pulled native plugins into macOS/Windows bundles); dropped the MesloLGS NF Italic / Bold Italic faces (−4.8 MB per bundle; the engine falls back to a synthetic slant); desktop release builds use `--split-debug-info`, with per-platform symbols zips attached to each release for `flutter symbolize`
 
 ### Fixed
 - **Non-ASCII terminal input** — typed input was sent to the SSH shell via truncated UTF-16 code units, corrupting any character above U+00FF (e.g. Vietnamese: "ế" arrived as a single garbage byte). Input is now UTF-8 encoded at every user-text write site (keystroke/IME, `terminal.input` plugin hook, startup command, snippet insert), matching the local-shell path
+- **Windows build on VS 2026** — unblocked the MSVC STL1011 coroutine error
 
 ---
 
