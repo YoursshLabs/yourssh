@@ -417,6 +417,29 @@ class TerminalViewState extends State<TerminalView> {
       return resultOverride;
     }
 
+    // YOURSSH PATCH: Shift+PageUp / Shift+PageDown page through the
+    // scrollback locally (standard terminal-emulator behavior) instead of
+    // reaching the shell. Only in the main buffer — alternate-screen apps
+    // own the keyboard.
+    if (event is! KeyUpEvent &&
+        HardwareKeyboard.instance.isShiftPressed &&
+        !widget.terminal.isUsingAltBuffer &&
+        (event.logicalKey == LogicalKeyboardKey.pageUp ||
+            event.logicalKey == LogicalKeyboardKey.pageDown)) {
+      final position = _scrollableKey.currentState?.position;
+      if (position != null && position.maxScrollExtent > 0) {
+        final page = position.viewportDimension * 0.9;
+        final up = event.logicalKey == LogicalKeyboardKey.pageUp;
+        position.animateTo(
+          (position.pixels + (up ? -page : page))
+              .clamp(0.0, position.maxScrollExtent),
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+        );
+        return KeyEventResult.handled;
+      }
+    }
+
     // ignore: invalid_use_of_protected_member
     final shortcutResult = _shortcutManager.handleKeypress(
       focusNode.context!,

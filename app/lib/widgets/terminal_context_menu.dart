@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 
 /// Actions offered by the terminal right-click menu (issue #43).
-enum TerminalMenuAction { copy, paste, selectAll }
+enum TerminalMenuAction { copy, paste, selectAll, resetTerminal }
 
 /// Shows the Copy / Paste / Select All context menu for a terminal at
 /// [globalPosition] and performs the chosen action.
@@ -41,6 +41,12 @@ Future<void> showTerminalContextMenu({
         height: 36,
         child: const Text('Select All'),
       ),
+      const PopupMenuDivider(),
+      PopupMenuItem(
+        value: TerminalMenuAction.resetTerminal,
+        height: 36,
+        child: const Text('Reset Terminal'),
+      ),
     ],
   );
 
@@ -60,6 +66,11 @@ Future<void> showTerminalContextMenu({
       }
     case TerminalMenuAction.selectAll:
       terminalSelectAll(terminal, controller);
+    case TerminalMenuAction.resetTerminal:
+      // A full-screen app that died uncleanly can leave the terminal stuck
+      // in the alternate screen with mouse reporting on — wheel scrolling
+      // goes dead until recovered (the `reset` command equivalent).
+      terminal.recoverFromStuckState();
     case null:
       break;
   }

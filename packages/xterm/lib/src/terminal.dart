@@ -720,6 +720,20 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
     _buffer = _mainBuffer;
   }
 
+  /// Recovers from terminal state left behind by a full-screen application
+  /// that exited uncleanly (crash, kill -9, dropped SSH connection): returns
+  /// to the main screen buffer (where the scrollback lives), turns off mouse
+  /// reporting so wheel events scroll the viewport again, and re-shows the
+  /// cursor. Purely local — nothing is sent to the remote application.
+  void recoverFromStuckState() {
+    _buffer = _mainBuffer;
+    _mouseMode = MouseMode.none;
+    _mouseReportMode = MouseReportMode.normal;
+    _cursorVisibleMode = true;
+    _mainBuffer.resetVerticalMargins();
+    notifyListeners();
+  }
+
   @override
   void clearAltBuffer() {
     _altBuffer.clear();
