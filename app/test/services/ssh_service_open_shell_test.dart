@@ -478,4 +478,32 @@ void main() {
     await shell.close();
     await shellDone;
   });
+
+  test('typed non-ASCII input is sent UTF-8 encoded, not truncated codeUnits',
+      () async {
+    // Regression: input was sent via `Uint8List.fromList(data.codeUnits)`,
+    // which truncates each UTF-16 code unit to a byte — corrupting any
+    // character above U+00FF (e.g. "ế" U+1EBF → byte 0xBF) so the server
+    // received garbage. Vietnamese must round-trip as valid UTF-8.
+    final svc = SshService(StorageService());
+    final host =
+        Host(label: 'f', host: 'e.com', username: 'u', shellIntegration: false);
+    final session = SshSession(host: host);
+    session.terminal.resize(80, 24);
+    final shell = _FakeShell();
+    svc.debugSetClient(host.id, _FakeClient(shell));
+
+    final shellDone = svc.openShell(session);
+    await pumpEventQueue();
+
+    const vietnamese = 'Tiếng Việt ô ệ';
+    session.terminal.onOutput?.call(vietnamese);
+
+    // _FakeShell.write decodes bytes as UTF-8 — corrupt input would surface
+    // as replacement characters here.
+    expect(shell.writes, contains(vietnamese));
+
+    await shell.close();
+    await shellDone;
+  });
 }
