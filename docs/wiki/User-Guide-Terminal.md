@@ -60,6 +60,14 @@ Both panes share the same SSH session. Splitting is useful for running commands 
 
 Send the same keystrokes to **all open sessions** simultaneously. Click the **Broadcast** toolbar button to toggle. A red banner indicates broadcast is active. Use with caution.
 
+## Scrolling
+
+Scroll the wheel or trackpad to move through the scrollback buffer (10 000 lines per session). While you are scrolled up, new output does **not** yank the view back down — the content you are reading stays pinned, even during fast streams once the buffer is full. Typing or pressing Enter snaps back to the bottom.
+
+- **Shift+PageUp / Shift+PageDown** — page through the scrollback from the keyboard.
+- Inside full-screen apps that take over the mouse (claude CLI, htop, `vim` with `mouse=a`, tmux with `mouse on`), the wheel is forwarded to the app so it scrolls its own view; apps without mouse support get arrow keys (so `less` and `man` still scroll).
+- If a full-screen app dies uncleanly (crash, dropped connection) and leaves the session looking frozen — prompt works but the wheel does nothing — right-click → **Reset Terminal** to recover (the local equivalent of running `reset`).
+
 ## Search in Scrollback
 
 Press **Cmd/Ctrl+F** to open the search bar. Type a regex or plain string; all matches highlight in the buffer. Navigate with **Enter** (next) / **Shift+Enter** (previous). Press **Esc** to close.
@@ -75,7 +83,7 @@ Select text by dragging (double-click selects a word). Then:
 | Context menu | right-click | right-click |
 | Paste (mouse) | middle-click | middle-click |
 
-On Windows/Linux, **Ctrl+C** copies only while text is selected — the selection is cleared after copying, so pressing it again interrupts the running program (SIGINT) as usual. Right-click opens a **Copy / Paste / Select All** menu; Copy is disabled when nothing is selected. Apps that capture the mouse (vim, htop) keep receiving mouse clicks instead of triggering selection or paste.
+On Windows/Linux, **Ctrl+C** copies only while text is selected — the selection is cleared after copying, so pressing it again interrupts the running program (SIGINT) as usual. Right-click opens a **Copy / Paste / Select All / Reset Terminal** menu; Copy is disabled when nothing is selected. Apps that capture the mouse (vim, htop) keep receiving mouse clicks instead of triggering selection or paste.
 
 ## Shell Integration
 
