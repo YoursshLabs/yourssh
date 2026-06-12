@@ -118,7 +118,13 @@ class Buffer {
     // every mark occupied its own cell, displacing the diacritics and the
     // cursor. Marks with no precomposed form keep the legacy own-cell
     // behavior (the cell model stores a single codepoint).
-    if (cellWidth == 0 && _tryComposeMark(codePoint)) {
+    //
+    // The >= U+0300 guard matters for performance, not just correctness:
+    // wcwidth is 0 for NUL too, and a NUL continuation cell is written after
+    // EVERY wide (CJK) character — without the guard each one would pay for
+    // a string allocation + unorm.nfc() call on the hottest write path.
+    // Canonical combining marks all live at U+0300 and above.
+    if (cellWidth == 0 && codePoint >= 0x0300 && _tryComposeMark(codePoint)) {
       return;
     }
 
