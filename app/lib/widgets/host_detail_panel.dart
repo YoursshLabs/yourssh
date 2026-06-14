@@ -68,6 +68,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   bool _recordingRedaction = true;
   bool _shellIntegration = true;
   bool _agentForwarding = false;
+  bool _osc52Clipboard = false;
   late final TextEditingController _workingDirCtrl;
   late final TextEditingController _startupSnippetCtrl;
   late final TextEditingController _fontSizeCtrl;
@@ -108,6 +109,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     _recordingRedaction = h?.recordingRedaction ?? true;
     _shellIntegration = h?.shellIntegration ?? true;
     _agentForwarding = h?.agentForwarding ?? false;
+    _osc52Clipboard = h?.osc52Clipboard ?? false;
     _workingDirCtrl = TextEditingController(text: h?.workingDir ?? '');
     _startupSnippetCtrl = TextEditingController(text: h?.startupSnippet ?? '');
     _fontSizeCtrl = TextEditingController(text: _fmtFontSize(h?.fontSize));
@@ -229,6 +231,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       recordingRedaction: _recordingRedaction,
       shellIntegration: _shellIntegration,
       agentForwarding: !_isRdp && _agentForwarding,
+      osc52Clipboard: !_isRdp && _osc52Clipboard,
       jumpHostIds: _jumpHostIds,
       sftpMode: _isRdp ? SftpMode.normal : _sftpMode,
       sftpServerCommand: !_isRdp && _sftpMode == SftpMode.custom
@@ -793,6 +796,26 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                         'Let this host use your local SSH keys for onward '
                         'connections — git, ssh to other servers (like '
                         'ssh -A). Applies on next connect.',
+                        style: TextStyle(
+                            color: AppColors.textTertiary, fontSize: 11),
+                      ),
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 2),
+                      activeThumbColor: AppColors.accent,
+                    ),
+                    SwitchListTile(
+                      value: _osc52Clipboard,
+                      onChanged: (v) => setState(() => _osc52Clipboard = v),
+                      title: const Text(
+                        'OSC 52 clipboard',
+                        style: TextStyle(
+                            color: AppColors.textPrimary, fontSize: 13),
+                      ),
+                      subtitle: const Text(
+                        'Let remote apps (tmux, vim) set your local clipboard. '
+                        'Write-only. Off by default — only enable for hosts you '
+                        'trust.',
                         style: TextStyle(
                             color: AppColors.textTertiary, fontSize: 11),
                       ),

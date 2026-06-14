@@ -46,6 +46,7 @@ class Host {
   List<String> jumpHostIds;
   bool shellIntegration;
   bool agentForwarding;
+  bool osc52Clipboard;
   SftpMode sftpMode;
   String? sftpServerCommand;
 
@@ -83,6 +84,7 @@ class Host {
     Iterable<String> jumpHostIds = const [],
     this.shellIntegration = true,
     this.agentForwarding = false,
+    this.osc52Clipboard = false,
     this.sftpMode = SftpMode.normal,
     this.sftpServerCommand,
     this.protocol = HostProtocol.ssh,
@@ -133,6 +135,7 @@ class Host {
         'jumpHostId': jumpHostId,
         'shellIntegration': shellIntegration,
         'agentForwarding': agentForwarding,
+        'osc52Clipboard': osc52Clipboard,
         'sftpMode': sftpMode.name,
         'sftpServerCommand': sftpServerCommand,
         'protocol': protocol.name,
@@ -223,6 +226,7 @@ class Host {
       jumpHostIds: parseJumpHostIds(),
       shellIntegration: (json['shellIntegration'] as bool?) ?? true,
       agentForwarding: (json['agentForwarding'] as bool?) ?? false,
+      osc52Clipboard: (json['osc52Clipboard'] as bool?) ?? false,
       sftpMode: parseSftpMode(),
       sftpServerCommand: json['sftpServerCommand'] as String?,
       protocol: parseProtocol(),
@@ -253,6 +257,7 @@ class Host {
     List<String>? jumpHostIds,
     bool? shellIntegration,
     bool? agentForwarding,
+    bool? osc52Clipboard,
     SftpMode? sftpMode,
     Object? sftpServerCommand = const _Unset(),
     HostProtocol? protocol,
@@ -284,6 +289,7 @@ class Host {
         jumpHostIds: jumpHostIds ?? this.jumpHostIds,
         shellIntegration: shellIntegration ?? this.shellIntegration,
         agentForwarding: agentForwarding ?? this.agentForwarding,
+        osc52Clipboard: osc52Clipboard ?? this.osc52Clipboard,
         sftpMode: sftpMode ?? this.sftpMode,
         sftpServerCommand: sftpServerCommand is _Unset
             ? this.sftpServerCommand

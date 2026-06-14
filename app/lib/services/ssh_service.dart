@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
+import 'osc52_clipboard.dart';
 import '../providers/shell_integration_provider.dart';
 import '../models/agent_forwarding_state.dart';
 import '../models/host.dart';
@@ -103,7 +105,34 @@ class SshService {
   Future<({String password, bool remember})?> Function(Host host)?
       sudoPasswordPrompt;
 
+  /// Writes [text] to the system clipboard for an OSC 52 write request.
+  /// Injectable for tests; defaults to the platform clipboard.
+  Future<void> Function(String text) clipboardWriter =
+      (text) => Clipboard.setData(ClipboardData(text: text));
+
   SshService(this._storage, {this.hookBus, this.shellIntegration});
+
+  /// Routes a private-OSC event. OSC 52 (when [osc52On]) writes the local
+  /// clipboard; everything else falls through to shell integration when
+  /// [siOn]. Extracted so the routing is unit-testable without a live session.
+  @visibleForTesting
+  void dispatchPrivateOsc(
+    String code,
+    List<String> args, {
+    required bool osc52On,
+    required bool siOn,
+    required String sessionId,
+    required int absoluteCursorY,
+  }) {
+    if (code == '52' && osc52On) {
+      final r = Osc52Clipboard.parse(args);
+      if (r is Osc52Write) clipboardWriter(r.text);
+      return;
+    }
+    if (siOn) {
+      shellIntegration?.handleOsc(sessionId, code, args, absoluteCursorY);
+    }
+  }
 
   /// Test-only: register a (fake) client so shell/exec paths can run without
   /// a real network connection.
@@ -605,12 +634,15 @@ class SshService {
     final siOn = shellIntegration != null &&
         session.host.shellIntegration &&
         (isShellIntegrationEnabled?.call() ?? true);
-    if (siOn) {
-      session.terminal.onPrivateOSC = (code, args) => shellIntegration!.handleOsc(
-            session.id,
+    final osc52On = session.host.osc52Clipboard;
+    if (siOn || osc52On) {
+      session.terminal.onPrivateOSC = (code, args) => dispatchPrivateOsc(
             code,
             args,
-            session.terminal.buffer.absoluteCursorY,
+            osc52On: osc52On,
+            siOn: siOn,
+            sessionId: session.id,
+            absoluteCursorY: session.terminal.buffer.absoluteCursorY,
           );
     }
 
