@@ -26,6 +26,34 @@ class ContainerService {
     return parseDockerPs(r.stdout);
   }
 
+  // ── Docker logs + lifecycle ───────────────────────────
+
+  /// Streams stdout+stderr of `docker logs -f <id>`.
+  Stream<String> streamDockerLogs(Host host, String id, {int tail = 100}) =>
+      ssh.execStream(host, 'docker logs -f --tail=$tail $id 2>&1',
+          auditSource: 'devops');
+
+  Future<void> stopContainer(Host host, String id) async {
+    final r = await ssh.exec(host, 'docker stop $id', auditSource: 'devops');
+    if (r.exitCode != 0) {
+      throw Exception(r.stderr.trim().isEmpty ? 'docker stop failed' : r.stderr.trim());
+    }
+  }
+
+  Future<void> startContainer(Host host, String id) async {
+    final r = await ssh.exec(host, 'docker start $id', auditSource: 'devops');
+    if (r.exitCode != 0) {
+      throw Exception(r.stderr.trim().isEmpty ? 'docker start failed' : r.stderr.trim());
+    }
+  }
+
+  Future<void> restartContainer(Host host, String id) async {
+    final r = await ssh.exec(host, 'docker restart $id', auditSource: 'devops');
+    if (r.exitCode != 0) {
+      throw Exception(r.stderr.trim().isEmpty ? 'docker restart failed' : r.stderr.trim());
+    }
+  }
+
   // ── Kubernetes ────────────────────────────────────────
   Future<List<PodEntry>> listPods(
     Host host, {
