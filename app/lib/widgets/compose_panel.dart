@@ -67,6 +67,15 @@ class _ComposePanelState extends State<ComposePanel> {
     });
   }
 
+  void _showError(Object e) {
+    if (!mounted) return;
+    final s = e.toString();
+    final msg = s.length > 200 ? '${s.substring(0, 200)}…' : s;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.red.shade800),
+    );
+  }
+
   Future<void> _loadStacks() async {
     setState(() {
       _loadingStacks = true;
@@ -98,11 +107,7 @@ class _ComposePanelState extends State<ComposePanel> {
       final svcs = await widget.service.listComposeServices(widget.host, stack);
       if (mounted) setState(() => _services = svcs);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red.shade800),
-        );
-      }
+      _showError(e);
     } finally {
       if (mounted) setState(() => _loadingServices = false);
     }
@@ -113,20 +118,14 @@ class _ComposePanelState extends State<ComposePanel> {
     setState(() => _actionLoading[key] = true);
     try {
       await action();
+      if (!mounted) return;
       await _loadStacks();
       if (_selectedStack?.projectDir == stack.projectDir) {
         final svcs = await widget.service.listComposeServices(widget.host, stack);
         if (mounted) setState(() => _services = svcs);
       }
     } catch (e) {
-      if (mounted) {
-        final msg = e.toString().length > 200
-            ? '${e.toString().substring(0, 200)}…'
-            : e.toString();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: Colors.red.shade800),
-        );
-      }
+      _showError(e);
     } finally {
       if (mounted) setState(() => _actionLoading.remove(key));
     }
@@ -192,11 +191,7 @@ class _ComposePanelState extends State<ComposePanel> {
         _manualCtrl.clear();
       });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red.shade800),
-        );
-      }
+      _showError(e);
     } finally {
       if (mounted) setState(() => _actionLoading.remove('manual'));
     }
