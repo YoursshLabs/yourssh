@@ -364,7 +364,7 @@ class ContainerService {
         final configFiles = (map['ConfigFiles'] as String? ?? '').trim();
         // ConfigFiles may be comma-separated; take the first to derive projectDir.
         final firstFile = configFiles.split(',').first.trim();
-        final projectDir = firstFile.isNotEmpty
+        final projectDir = firstFile.contains('/')
             ? firstFile.substring(0, firstFile.lastIndexOf('/'))
             : '';
         return ComposeStack(

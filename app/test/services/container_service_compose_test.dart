@@ -58,6 +58,16 @@ void main() {
       final stacks = ContainerService.parseComposeLs(json);
       expect(stacks[0].projectDir, '/srv/app');
     });
+
+    test('a slash-less ConfigFiles entry is skipped, not fatal to the list', () {
+      const json =
+          '[{"Name":"bad","Status":"x","ConfigFiles":"compose.yml"},'
+          '{"Name":"good","Status":"running(1)","ConfigFiles":"/opt/good/compose.yml"}]';
+      final stacks = ContainerService.parseComposeLs(json);
+      expect(stacks.length, 1);
+      expect(stacks[0].name, 'good');
+      expect(stacks[0].projectDir, '/opt/good');
+    });
   });
 
   // ── parseComposeFindOutput ──────────────────────────────
@@ -125,15 +135,35 @@ void main() {
     });
   });
 
+  // ── listComposeServices ────────────────────────────────
+
+  group('listComposeServices', () {
+    test('passes correct command', () async {
+      final fake = _FakeSshService();
+      String? cmd;
+      fake.execStub = (c) { cmd = c; return (stdout: '[]', stderr: '', exitCode: 0); };
+      await ContainerService(fake).listComposeServices(
+          host, ComposeStack(name: 'a', projectDir: '/opt/app', status: 'x'));
+      expect(cmd, "cd '/opt/app' && docker compose ps --format json 2>/dev/null");
+    });
+
+    test('throws on non-zero exit', () async {
+      final fake = _FakeSshService();
+      fake.execStub = (_) => (stdout: '', stderr: 'boom', exitCode: 1);
+      await expectLater(
+        ContainerService(fake).listComposeServices(
+            host, ComposeStack(name: 'a', projectDir: '/p', status: 'x')),
+        throwsException);
+    });
+  });
+
   // ── discoverComposeStacks dedup ─────────────────────────
 
   group('discoverComposeStacks', () {
     test('deduplicates by projectDir: ls result takes precedence over find', () async {
       final fake = _FakeSshService();
       // First cmd: docker compose ls; second: find
-      var callCount = 0;
       fake.execStub = (cmd) {
-        callCount++;
         if (cmd.contains('docker compose ls')) {
           return (
             stdout: '[{"Name":"myapp","Status":"running(1)","ConfigFiles":"/opt/myapp/compose.yml"}]',
