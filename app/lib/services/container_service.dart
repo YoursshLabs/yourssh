@@ -20,7 +20,7 @@ class ContainerService {
   static const _dockerFormat = '{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}';
 
   Future<List<ContainerEntry>> listDockerContainers(Host host) async {
-    final r = await ssh.exec(host, "docker ps --format '$_dockerFormat'", auditSource: 'devops');
+    final r = await ssh.exec(host, "docker ps -a --format '$_dockerFormat'", auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(r.stderr.trim().isEmpty ? 'docker ps failed' : r.stderr.trim());
     }

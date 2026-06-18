@@ -33,6 +33,20 @@ void main() {
 
   final host = Host(label: 'h', host: 'srv', port: 22, username: 'u');
 
+  group('listDockerContainers', () {
+    test('issues docker ps -a with the expected format string', () async {
+      final fake = _FakeSshService();
+      String? capturedCmd;
+      fake.execStub = (cmd) {
+        capturedCmd = cmd;
+        return (stdout: '', stderr: '', exitCode: 0);
+      };
+      await ContainerService(fake).listDockerContainers(host);
+      expect(capturedCmd,
+          "docker ps -a --format '{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}'");
+    });
+  });
+
   group('streamDockerLogs', () {
     test('passes correct command with tail flag and stderr merge', () {
       final fake = _FakeSshService();

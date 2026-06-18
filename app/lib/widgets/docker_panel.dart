@@ -63,16 +63,12 @@ class _DockerPanelState extends State<DockerPanel> {
   }
 
   Future<void> _refresh() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    setState(() { _loading = true; _error = null; });
     try {
-      _containers = await widget.service.listDockerContainers(widget.host);
+      final result = await widget.service.listDockerContainers(widget.host);
+      if (mounted) setState(() { _containers = result; _error = null; _loading = false; });
     } catch (e) {
-      _error = e.toString();
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
@@ -163,7 +159,7 @@ class _DockerPanelState extends State<DockerPanel> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Icon(Icons.inbox, size: 36, color: AppColors.textTertiary),
           const SizedBox(height: 8),
-          const Text('No running containers.'),
+          const Text('No containers found.'),
           const SizedBox(height: 12),
           FilledButton.icon(
               icon: const Icon(Icons.refresh, size: 16),

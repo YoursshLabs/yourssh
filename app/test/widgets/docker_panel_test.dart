@@ -65,13 +65,30 @@ void main() {
     expect(find.byTooltip('Stop'), findsNothing);
   });
 
-  testWidgets('shows No running containers for empty list', (tester) async {
+  testWidgets('shows No containers found for empty list', (tester) async {
     final fake = _FakeSshService();
     fake.execStub = (_) => (stdout: '', stderr: '', exitCode: 0);
     final svc = ContainerService(fake);
     await tester.pumpWidget(_wrap(DockerPanel(host: host, service: svc)));
     await tester.pump();
 
-    expect(find.text('No running containers.'), findsOneWidget);
+    expect(find.text('No containers found.'), findsOneWidget);
+  });
+
+  testWidgets('tapping Logs opens log panel with container name header', (tester) async {
+    final fake = _FakeSshService();
+    fake.execStub = (_) => (
+      stdout: 'abc123|web|nginx:latest|Up 2 hours',
+      stderr: '',
+      exitCode: 0,
+    );
+    final svc = ContainerService(fake);
+    await tester.pumpWidget(_wrap(DockerPanel(host: host, service: svc)));
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('Logs'));
+    await tester.pump();
+
+    expect(find.text('Logs: web'), findsOneWidget);
   });
 }
