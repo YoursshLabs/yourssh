@@ -29,6 +29,7 @@ class _ContainersScreenState extends State<ContainersScreen> {
 
   RuntimeStatus? _runtimes;
   bool _loading = false;
+  String? _error;
 
   ContainerService _ensureService() {
     _service ??= ContainerService(context.read<SshService>());
@@ -112,6 +113,14 @@ class _ContainersScreenState extends State<ContainersScreen> {
     }
     final runtimes = _runtimes;
     if (runtimes == null) {
+      if (_error != null) {
+        return _CenterHint(
+          icon: Icons.error_outline,
+          message: _error!,
+          actionLabel: 'Retry',
+          onAction: _refresh,
+        );
+      }
       return _CenterHint(
         icon: Icons.search,
         message: 'Tap refresh to scan for Docker / Kubernetes.',
@@ -121,8 +130,6 @@ class _ContainersScreenState extends State<ContainersScreen> {
     }
 
     final avail = _availabilityFor(runtimes);
-    // Docker and Compose both require the docker runtime; only Kubernetes
-    // uses kubectl.
     final runtimeName = _tab == _Tab.kubernetes ? 'kubectl' : 'docker';
 
     if (avail == RuntimeAvailability.notInstalled) {
@@ -156,9 +163,11 @@ class _ContainersScreenState extends State<ContainersScreen> {
   Future<void> _refresh() async {
     final host = _hostForSelected();
     if (host == null) return;
-    setState(() => _loading = true);
+    setState(() { _loading = true; _error = null; });
     try {
       _runtimes = await _ensureService().detectRuntimes(host);
+    } catch (e) {
+      _error = e.toString();
     } finally {
       if (mounted) setState(() => _loading = false);
     }

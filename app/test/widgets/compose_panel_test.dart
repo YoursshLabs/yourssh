@@ -100,6 +100,46 @@ void main() {
     expect(find.byTooltip('Stop service'), findsOneWidget);
   });
 
+  testWidgets('closes log panel when stack selection changes', (tester) async {
+    final fake = _FakeSshService();
+    fake.execStub = (cmd) {
+      if (cmd.contains('docker compose ls')) {
+        return (
+          stdout:
+              '[{"Name":"alpha","Status":"running(1)","ConfigFiles":"/opt/alpha/compose.yml"},'
+              '{"Name":"beta","Status":"running(1)","ConfigFiles":"/opt/beta/compose.yml"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      if (cmd.contains('docker compose ps --format json')) {
+        return (
+          stdout: '[{"Name":"alpha-web-1","Service":"web","State":"running","Image":"nginx:latest"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      return (stdout: '', stderr: '', exitCode: 0);
+    };
+    final svc = ContainerService(fake);
+    await tester.pumpWidget(_wrap(ComposePanel(host: host, service: svc)));
+    await tester.pump();
+
+    // Select the first stack to load its services
+    await tester.tap(find.text('alpha'));
+    await tester.pumpAndSettle();
+
+    // Open the log panel for the service
+    await tester.tap(find.byTooltip('Logs').first);
+    await tester.pump();
+    expect(find.textContaining('Logs:'), findsOneWidget);
+
+    // Now select a different stack — log panel must close
+    await tester.tap(find.text('beta'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Logs:'), findsNothing);
+  });
+
   testWidgets('shows + button for manual path input', (tester) async {
     final fake = _FakeSshService();
     fake.execStub = (_) => (stdout: '', stderr: '', exitCode: 0);

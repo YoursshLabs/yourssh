@@ -91,6 +91,7 @@ class _ComposePanelState extends State<ComposePanel> {
   }
 
   Future<void> _selectStack(ComposeStack stack) async {
+    _closeLogs();
     if (_selectedStack?.projectDir == stack.projectDir) {
       setState(() {
         _selectedStack = null;
@@ -153,9 +154,15 @@ class _ComposePanelState extends State<ComposePanel> {
         _scrollToBottom();
       }
     }, onDone: () {
-      if (mounted) setState(() => _logLines.add('— connection closed —'));
+      if (mounted) {
+        setState(() => _logLines.add('— connection closed —'));
+        _scrollToBottom();
+      }
     }, onError: (e) {
-      if (mounted) setState(() => _logLines.add('— error: $e —'));
+      if (mounted) {
+        setState(() => _logLines.add('— error: $e —'));
+        _scrollToBottom();
+      }
     });
   }
 
