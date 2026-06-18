@@ -11,15 +11,20 @@ class _FakeSshService extends SshService {
 
   ({String stdout, String stderr, int exitCode}) Function(String cmd)? execStub;
   Stream<String> Function(String cmd)? streamStub;
+  String? lastAuditSource;
 
   @override
   Future<({String stdout, String stderr, int exitCode})> exec(
-    Host host, String cmd, {String? auditSource}) async =>
-      execStub?.call(cmd) ?? (stdout: '', stderr: '', exitCode: 0);
+    Host host, String cmd, {String? auditSource}) async {
+    lastAuditSource = auditSource;
+    return execStub?.call(cmd) ?? (stdout: '', stderr: '', exitCode: 0);
+  }
 
   @override
-  Stream<String> execStream(Host host, String cmd, {String? auditSource}) =>
-      streamStub?.call(cmd) ?? const Stream.empty();
+  Stream<String> execStream(Host host, String cmd, {String? auditSource}) {
+    lastAuditSource = auditSource;
+    return streamStub?.call(cmd) ?? const Stream.empty();
+  }
 }
 
 void main() {
@@ -88,6 +93,14 @@ void main() {
       await expectLater(ContainerService(fake).startContainer(host, 'c1'),
           throwsException);
     });
+
+    test('passes correct command', () async {
+      final fake = _FakeSshService();
+      String? cmd;
+      fake.execStub = (c) { cmd = c; return (stdout: '', stderr: '', exitCode: 0); };
+      await ContainerService(fake).startContainer(host, 'abc');
+      expect(cmd, 'docker start abc');
+    });
   });
 
   group('restartContainer', () {
@@ -104,6 +117,18 @@ void main() {
       fake.execStub = (_) => (stdout: '', stderr: 'oops', exitCode: 1);
       await expectLater(ContainerService(fake).restartContainer(host, 'c1'),
           throwsException);
+    });
+  });
+
+  group('auditSource', () {
+    test('container calls carry auditSource devops', () async {
+      final fake = _FakeSshService();
+      fake.execStub = (_) => (stdout: '', stderr: '', exitCode: 0);
+      final svc = ContainerService(fake);
+      await svc.stopContainer(host, 'c1');
+      expect(fake.lastAuditSource, 'devops');
+      svc.streamDockerLogs(host, 'c1');
+      expect(fake.lastAuditSource, 'devops');
     });
   });
 }
