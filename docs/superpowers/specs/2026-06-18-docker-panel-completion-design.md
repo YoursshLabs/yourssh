@@ -65,13 +65,11 @@ class ComposeStack {
   final String name;        // project name
   final String projectDir;  // absolute path to the directory containing the compose file
   final String status;      // e.g. "running(3)", "exited(1)", "created"
-  final List<String> configFiles; // absolute paths of all compose files in this project
 
   const ComposeStack({
     required this.name,
     required this.projectDir,
     required this.status,
-    this.configFiles = const [],
   });
 }
 
@@ -124,27 +122,27 @@ Future<void> restartContainer(Host host, String id);
 /// and deduplicated by projectDir.
 Future<List<ComposeStack>> discoverComposeStacks(Host host);
 
-/// `docker compose -f <configFile> ps --format json` for the given stack.
+/// `cd <projectDir> && docker compose ps --format json` for the given stack.
 Future<List<ComposeService>> listComposeServices(Host host, ComposeStack stack);
 
-/// `docker compose -f <configFile> up -d`
+/// `cd <projectDir> && docker compose up -d`
 Future<void> composeUp(Host host, ComposeStack stack);
 
-/// `docker compose -f <configFile> down`
+/// `cd <projectDir> && docker compose down`
 Future<void> composeDown(Host host, ComposeStack stack);
 
-/// `docker compose -f <configFile> start <service>`
+/// `cd <projectDir> && docker compose start <service>`
 Future<void> startComposeService(Host host, ComposeStack stack, String service);
 
-/// `docker compose -f <configFile> stop <service>`
+/// `cd <projectDir> && docker compose stop <service>`
 Future<void> stopComposeService(Host host, ComposeStack stack, String service);
 
-/// `docker compose -f <configFile> logs -f --tail=$tail <service> 2>&1`
+/// `cd <projectDir> && docker compose logs -f --tail=$tail <service> 2>&1`
 Stream<String> streamComposeServiceLogs(
   Host host, ComposeStack stack, String service, {int tail = 100});
 ```
 
-All Compose commands use the first entry of `stack.configFiles` as `-f <path>` when the list is non-empty; otherwise omit `-f` (Docker Compose defaults to `docker-compose.yml` / `compose.yml` in the current working directory — but since we always have a projectDir from discovery, we always have a configFile).
+All Compose commands `cd` into `stack.projectDir` (single-quoted) before running `docker compose`, which auto-discovers the `docker-compose.yml` / `compose.yml` in that directory. This avoids tracking the exact config-file path (`-f`) per stack — the project directory is enough, and it works identically for `ls`-discovered and `find`-discovered stacks.
 
 ### Discovery internals
 
@@ -248,9 +246,10 @@ TextEditingController _manualPathCtrl
 
 **Discovery flow:**
 1. On mount / Refresh → call `discoverComposeStacks`
-2. If `docker compose` is not installed → show hint card: `"docker compose version"`
-3. If no stacks found → show "No Compose stacks found" + text field to add path manually
-4. Manual path → call `docker compose -f <path> config --services`; on success, synthesise a `ComposeStack` and add to list
+2. If no stacks found → show "No Compose stacks found" + a `+` to add a path manually
+3. Manual path → call `docker compose -f <path> config --services`; on success, synthesise a `ComposeStack` (projectDir = dirname of the path) and add to list
+
+The ComposePanel is only reached after the screen has confirmed the **docker** runtime is available (the Compose tab gates on `runtimes.docker`, same as the Docker tab). Compose v2 itself is not separately probed: if `docker compose` is missing/v1, `docker compose ls` returns non-zero and discovery degrades to the `find` scan only; any Up/Down/service action then fails with the daemon's own error surfaced in a SnackBar. The manual-path option remains available throughout.
 
 **Stack selection:** tapping a stack row expands service list (calls `listComposeServices`). Tapping again collapses.
 
@@ -266,12 +265,12 @@ TextEditingController _manualPathCtrl
 
 | Scenario | Behaviour |
 |----------|-----------|
-| `docker` not installed | Existing `_HintCard` with install command (unchanged) |
-| `docker compose` not available (v1 / missing) | `_HintCard` in ComposePanel: "Install Docker Compose v2" |
+| `docker` not installed | Existing screen-level `_HintCard` with install command (gates both Docker and Compose tabs) |
+| `docker compose` not available (v1 / missing) | `docker compose ls` returns non-zero → discovery degrades to `find`-only; actions fail with the daemon error in a SnackBar (no dedicated hint card) |
 | Stop/start/restart fails | `SnackBar` with error text; container list refreshed |
-| Compose up/down fails | `SnackBar` with truncated stderr |
-| Log stream drops | Log panel shows "— connection lost —" as a final line |
-| Discovery find scan timeout (>15 s) | `find` runs with `timeout 15`; on timeout, fall through to manual |
+| Compose up/down fails | `SnackBar` with truncated stderr (200 chars) |
+| Log stream drops | Log panel appends "— connection closed —" as a final line |
+| `find` scan errors (missing dirs, permission) | Suppressed via `2>/dev/null`; an empty/failed scan falls through to the manual-path option |
 
 ---
 
