@@ -31,7 +31,7 @@ class ContainerService {
 
   /// Streams stdout+stderr of `docker logs -f <id>`.
   Stream<String> streamDockerLogs(Host host, String id, {int tail = 100}) =>
-      ssh.execStream(host, 'docker logs -f --tail=$tail $id 2>&1',
+      ssh.execStream(host, 'docker logs -f --tail=$tail ${_shq(id)} 2>&1',
           auditSource: 'devops');
 
   Future<void> stopContainer(Host host, String id) async {

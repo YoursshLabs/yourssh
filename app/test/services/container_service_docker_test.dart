@@ -57,7 +57,7 @@ void main() {
       };
       final svc = ContainerService(fake);
       svc.streamDockerLogs(host, 'abc123', tail: 50);
-      expect(capturedCmd, 'docker logs -f --tail=50 abc123 2>&1');
+      expect(capturedCmd, "docker logs -f --tail=50 'abc123' 2>&1");
     });
 
     test('default tail is 100', () {
@@ -65,7 +65,7 @@ void main() {
       String? capturedCmd;
       fake.streamStub = (cmd) { capturedCmd = cmd; return const Stream.empty(); };
       ContainerService(fake).streamDockerLogs(host, 'xyz');
-      expect(capturedCmd, 'docker logs -f --tail=100 xyz 2>&1');
+      expect(capturedCmd, "docker logs -f --tail=100 'xyz' 2>&1");
     });
   });
 
