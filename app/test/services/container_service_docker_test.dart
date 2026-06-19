@@ -90,7 +90,7 @@ void main() {
       String? cmd;
       fake.execStub = (c) { cmd = c; return (stdout: '', stderr: '', exitCode: 0); };
       await ContainerService(fake).stopContainer(host, 'abc');
-      expect(cmd, 'docker stop abc');
+      expect(cmd, "docker stop 'abc'");
     });
   });
 
@@ -113,7 +113,7 @@ void main() {
       String? cmd;
       fake.execStub = (c) { cmd = c; return (stdout: '', stderr: '', exitCode: 0); };
       await ContainerService(fake).startContainer(host, 'abc');
-      expect(cmd, 'docker start abc');
+      expect(cmd, "docker start 'abc'");
     });
   });
 
@@ -123,7 +123,7 @@ void main() {
       String? cmd;
       fake.execStub = (c) { cmd = c; return (stdout: '', stderr: '', exitCode: 0); };
       await ContainerService(fake).restartContainer(host, 'abc');
-      expect(cmd, 'docker restart abc');
+      expect(cmd, "docker restart 'abc'");
     });
 
     test('throws on failure', () async {

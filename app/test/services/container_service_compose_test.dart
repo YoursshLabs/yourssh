@@ -251,7 +251,7 @@ void main() {
       fake.execStub = (c) { cmd = c; return (stdout: '', stderr: '', exitCode: 0); };
       await ContainerService(fake).startComposeService(
           host, ComposeStack(name: 'app', projectDir: '/p', status: 'x'), 'web');
-      expect(cmd, "cd '/p' && docker compose start web");
+      expect(cmd, "cd '/p' && docker compose start 'web'");
     });
 
     test('stop passes service name', () async {
@@ -260,7 +260,7 @@ void main() {
       fake.execStub = (c) { cmd = c; return (stdout: '', stderr: '', exitCode: 0); };
       await ContainerService(fake).stopComposeService(
           host, ComposeStack(name: 'app', projectDir: '/p', status: 'x'), 'web');
-      expect(cmd, "cd '/p' && docker compose stop web");
+      expect(cmd, "cd '/p' && docker compose stop 'web'");
     });
   });
 
@@ -272,7 +272,7 @@ void main() {
       ContainerService(fake).streamComposeServiceLogs(
           host, ComposeStack(name: 'app', projectDir: '/opt/app', status: 'x'), 'web',
           tail: 50);
-      expect(cmd, "cd '/opt/app' && docker compose logs -f --tail=50 web 2>&1");
+      expect(cmd, "cd '/opt/app' && docker compose logs -f --tail=50 'web' 2>&1");
     });
   });
 

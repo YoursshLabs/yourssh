@@ -96,11 +96,7 @@ class _DockerPanelState extends State<DockerPanel> {
       if (!mounted) return;
       await _refresh();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red.shade800),
-        );
-      }
+      if (mounted) AppSnack.error(context, e.toString());
     } finally {
       if (mounted) setState(() => _actionLoading.remove(c.id));
     }
@@ -148,11 +144,16 @@ class _DockerPanelState extends State<DockerPanel> {
   }
 
   Future<void> _execContainer(ContainerEntry c) async {
+    if (!mounted) return;
     final sessionProvider = context.read<SessionProvider>();
-    await sessionProvider.connect(
-      widget.host,
-      initialCommand: ContainerService.dockerExecCommand(c.id),
-    );
+    try {
+      await sessionProvider.connect(
+        widget.host,
+        initialCommand: ContainerService.dockerExecCommand(c.id),
+      );
+    } catch (e) {
+      if (mounted) AppSnack.error(context, e.toString());
+    }
   }
 
   @override

@@ -74,9 +74,7 @@ class _ComposePanelState extends State<ComposePanel> {
     if (!mounted) return;
     final s = e.toString();
     final msg = s.length > 200 ? '${s.substring(0, 200)}…' : s;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red.shade800),
-    );
+    AppSnack.error(context, msg);
   }
 
   Future<void> _loadStacks() async {
@@ -135,8 +133,9 @@ class _ComposePanelState extends State<ComposePanel> {
         });
         _closeLogs();
       } else if (_selectedStack?.projectDir == stack.projectDir) {
+        final gen = _servicesGen;
         final svcs = await widget.service.listComposeServices(widget.host, stack);
-        if (mounted) setState(() => _services = svcs);
+        if (mounted && gen == _servicesGen) setState(() => _services = svcs);
       }
     } catch (e) {
       _showError(e);

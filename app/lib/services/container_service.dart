@@ -35,21 +35,21 @@ class ContainerService {
           auditSource: 'devops');
 
   Future<void> stopContainer(Host host, String id) async {
-    final r = await ssh.exec(host, 'docker stop $id', auditSource: 'devops');
+    final r = await ssh.exec(host, 'docker stop ${_shq(id)}', auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(r.stderr.trim().isEmpty ? 'docker stop failed' : r.stderr.trim());
     }
   }
 
   Future<void> startContainer(Host host, String id) async {
-    final r = await ssh.exec(host, 'docker start $id', auditSource: 'devops');
+    final r = await ssh.exec(host, 'docker start ${_shq(id)}', auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(r.stderr.trim().isEmpty ? 'docker start failed' : r.stderr.trim());
     }
   }
 
   Future<void> restartContainer(Host host, String id) async {
-    final r = await ssh.exec(host, 'docker restart $id', auditSource: 'devops');
+    final r = await ssh.exec(host, 'docker restart ${_shq(id)}', auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(r.stderr.trim().isEmpty ? 'docker restart failed' : r.stderr.trim());
     }
@@ -531,7 +531,7 @@ class ContainerService {
   Future<void> startComposeService(
       Host host, ComposeStack stack, String service) async {
     final r = await ssh.exec(
-        host, "cd ${_shq(stack.projectDir)} && docker compose start $service",
+        host, "cd ${_shq(stack.projectDir)} && docker compose start ${_shq(service)}",
         auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(
@@ -542,7 +542,7 @@ class ContainerService {
   Future<void> stopComposeService(
       Host host, ComposeStack stack, String service) async {
     final r = await ssh.exec(
-        host, "cd ${_shq(stack.projectDir)} && docker compose stop $service",
+        host, "cd ${_shq(stack.projectDir)} && docker compose stop ${_shq(service)}",
         auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(
@@ -554,7 +554,7 @@ class ContainerService {
       Host host, ComposeStack stack, String service, {int tail = 100}) =>
       ssh.execStream(
           host,
-          "cd ${_shq(stack.projectDir)} && docker compose logs -f --tail=$tail $service 2>&1",
+          "cd ${_shq(stack.projectDir)} && docker compose logs -f --tail=$tail ${_shq(service)} 2>&1",
           auditSource: 'devops');
 
   /// Validates a Compose file at [path] by listing its services. Returns the
@@ -563,7 +563,8 @@ class ContainerService {
     final r = await ssh.exec(host, 'docker compose -f ${_shq(path)} config --services 2>&1',
         auditSource: 'devops');
     if (r.exitCode != 0) {
-      throw Exception('Not a valid Compose file: $path');
+      final detail = r.stdout.trim();
+      throw Exception(detail.isEmpty ? 'Not a valid Compose file: $path' : 'Not a valid Compose file: $path — $detail');
     }
     return r.stdout.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
   }
