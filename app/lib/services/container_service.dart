@@ -317,6 +317,10 @@ class ContainerService {
     return RuntimeAvailability.available;
   }
 
+  // ── Shell quoting ─────────────────────────────────────
+  /// POSIX single-quote-escapes [s] for safe shell interpolation.
+  static String _shq(String s) => "'${s.replaceAll("'", r"'\''")}'";
+
   // ── Exec command builders ─────────────────────────────
   static const _shFallback =
       "sh -c 'command -v bash >/dev/null 2>&1 && exec bash || exec sh'";
@@ -389,6 +393,7 @@ class ContainerService {
       final lastSlash = path.lastIndexOf('/');
       if (lastSlash < 0) continue;
       final projectDir = path.substring(0, lastSlash);
+      if (projectDir.isEmpty) continue;
       if (seen.contains(projectDir)) continue;
       seen.add(projectDir);
       final name = projectDir.substring(projectDir.lastIndexOf('/') + 1);
@@ -436,12 +441,22 @@ class ContainerService {
       (byService[svc] ??= []).add(item);
     }
     return byService.entries.map((e) {
-      final first = e.value.first;
+      final group = e.value;
+      final first = group.first;
+      final states = group.map((m) => (m['State'] as String? ?? '').trim()).toList();
+      final String status;
+      if (states.every((s) => s == 'running')) {
+        status = 'running';
+      } else if (states.any((s) => s == 'running')) {
+        status = 'degraded';
+      } else {
+        status = states.first;
+      }
       return ComposeService(
         name: e.key,
-        status: (first['State'] as String? ?? '').trim(),
+        status: status,
         image: (first['Image'] as String? ?? '').trim(),
-        replicas: e.value.length,
+        replicas: group.length,
       );
     }).toList();
   }
@@ -484,7 +499,7 @@ class ContainerService {
   Future<List<ComposeService>> listComposeServices(
       Host host, ComposeStack stack) async {
     final r = await ssh.exec(
-        host, "cd '${stack.projectDir}' && docker compose ps --format json 2>/dev/null",
+        host, "cd ${_shq(stack.projectDir)} && docker compose ps --format json 2>/dev/null",
         auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(
@@ -495,7 +510,7 @@ class ContainerService {
 
   Future<void> composeUp(Host host, ComposeStack stack) async {
     final r = await ssh.exec(
-        host, "cd '${stack.projectDir}' && docker compose up -d",
+        host, "cd ${_shq(stack.projectDir)} && docker compose up -d",
         auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(
@@ -505,7 +520,7 @@ class ContainerService {
 
   Future<void> composeDown(Host host, ComposeStack stack) async {
     final r = await ssh.exec(
-        host, "cd '${stack.projectDir}' && docker compose down",
+        host, "cd ${_shq(stack.projectDir)} && docker compose down",
         auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(
@@ -516,7 +531,7 @@ class ContainerService {
   Future<void> startComposeService(
       Host host, ComposeStack stack, String service) async {
     final r = await ssh.exec(
-        host, "cd '${stack.projectDir}' && docker compose start $service",
+        host, "cd ${_shq(stack.projectDir)} && docker compose start $service",
         auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(
@@ -527,7 +542,7 @@ class ContainerService {
   Future<void> stopComposeService(
       Host host, ComposeStack stack, String service) async {
     final r = await ssh.exec(
-        host, "cd '${stack.projectDir}' && docker compose stop $service",
+        host, "cd ${_shq(stack.projectDir)} && docker compose stop $service",
         auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(
@@ -539,6 +554,17 @@ class ContainerService {
       Host host, ComposeStack stack, String service, {int tail = 100}) =>
       ssh.execStream(
           host,
-          "cd '${stack.projectDir}' && docker compose logs -f --tail=$tail $service 2>&1",
+          "cd ${_shq(stack.projectDir)} && docker compose logs -f --tail=$tail $service 2>&1",
           auditSource: 'devops');
+
+  /// Validates a Compose file at [path] by listing its services. Returns the
+  /// service names; throws on a non-Compose / invalid file.
+  Future<List<String>> validateComposeFile(Host host, String path) async {
+    final r = await ssh.exec(host, 'docker compose -f ${_shq(path)} config --services 2>&1',
+        auditSource: 'devops');
+    if (r.exitCode != 0) {
+      throw Exception('Not a valid Compose file: $path');
+    }
+    return r.stdout.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+  }
 }

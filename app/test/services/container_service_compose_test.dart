@@ -93,6 +93,14 @@ void main() {
     test('returns empty list for empty output', () {
       expect(ContainerService.parseComposeFindOutput(''), isEmpty);
     });
+
+    test('skips root-level compose file with empty projectDir', () {
+      // /compose.yml → lastSlash=0 → projectDir='' → must be filtered out
+      const output = '/compose.yml\n/opt/app/compose.yml\n';
+      final stacks = ContainerService.parseComposeFindOutput(output);
+      expect(stacks.length, 1);
+      expect(stacks[0].projectDir, '/opt/app');
+    });
   });
 
   // ── parseComposePs ──────────────────────────────────────
@@ -132,6 +140,26 @@ void main() {
 
     test('returns empty list for malformed JSON', () {
       expect(ContainerService.parseComposePs('garbage'), isEmpty);
+    });
+
+    test('aggregates all-running replicas as running', () {
+      const output =
+          '{"Name":"app-worker-1","Service":"worker","State":"running","Image":"myimg"}\n'
+          '{"Name":"app-worker-2","Service":"worker","State":"running","Image":"myimg"}\n';
+      final services = ContainerService.parseComposePs(output);
+      expect(services.length, 1);
+      expect(services[0].status, 'running');
+      expect(services[0].replicas, 2);
+    });
+
+    test('marks degraded service when some replicas running and some exited', () {
+      const output =
+          '{"Name":"app-web-1","Service":"web","State":"running","Image":"nginx"}\n'
+          '{"Name":"app-web-2","Service":"web","State":"exited","Image":"nginx"}\n';
+      final services = ContainerService.parseComposePs(output);
+      expect(services.length, 1);
+      expect(services[0].status, 'degraded');
+      expect(services[0].replicas, 2);
     });
   });
 
@@ -245,6 +273,54 @@ void main() {
           host, ComposeStack(name: 'app', projectDir: '/opt/app', status: 'x'), 'web',
           tail: 50);
       expect(cmd, "cd '/opt/app' && docker compose logs -f --tail=50 web 2>&1");
+    });
+  });
+
+  // ── shell quoting (_shq) ────────────────────────────────
+
+  group('shell quoting via composeUp', () {
+    test('quote-free projectDir produces unchanged single-quoted command', () async {
+      final fake = _FakeSshService();
+      String? cmd;
+      fake.execStub = (c) { cmd = c; return (stdout: '', stderr: '', exitCode: 0); };
+      await ContainerService(fake).composeUp(
+          host, ComposeStack(name: 'app', projectDir: '/opt/app', status: 'x'));
+      expect(cmd, "cd '/opt/app' && docker compose up -d");
+    });
+
+    test('projectDir with single quote is properly escaped', () async {
+      final fake = _FakeSshService();
+      String? cmd;
+      fake.execStub = (c) { cmd = c; return (stdout: '', stderr: '', exitCode: 0); };
+      await ContainerService(fake).composeUp(
+          host, ComposeStack(name: "a'b", projectDir: "/opt/a'b", status: 'x'));
+      expect(cmd, r"cd '/opt/a'\''b' && docker compose up -d");
+    });
+  });
+
+  // ── validateComposeFile ─────────────────────────────────
+
+  group('validateComposeFile', () {
+    test('passes correct command and returns service names', () async {
+      final fake = _FakeSshService();
+      String? cmd;
+      fake.execStub = (c) {
+        cmd = c;
+        return (stdout: 'web\ndb\n', stderr: '', exitCode: 0);
+      };
+      final names = await ContainerService(fake)
+          .validateComposeFile(host, '/opt/app/compose.yml');
+      expect(cmd, "docker compose -f '/opt/app/compose.yml' config --services 2>&1");
+      expect(names, ['web', 'db']);
+    });
+
+    test('throws on non-zero exit', () async {
+      final fake = _FakeSshService();
+      fake.execStub = (_) => (stdout: '', stderr: 'no compose file', exitCode: 1);
+      await expectLater(
+        ContainerService(fake).validateComposeFile(host, '/bad/path.yml'),
+        throwsException,
+      );
     });
   });
 }

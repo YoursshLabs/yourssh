@@ -36,6 +36,9 @@ class _ComposePanelState extends State<ComposePanel> {
   // Per-action loading
   final Map<String, bool> _actionLoading = {};
 
+  // Generation counter for _selectStack to cancel stale fetches.
+  int _servicesGen = 0;
+
   // Manual path input
   final TextEditingController _manualCtrl = TextEditingController();
   bool _showManualInput = false;
@@ -104,13 +107,14 @@ class _ComposePanelState extends State<ComposePanel> {
       _services = [];
       _loadingServices = true;
     });
+    final gen = ++_servicesGen;
     try {
       final svcs = await widget.service.listComposeServices(widget.host, stack);
-      if (mounted) setState(() => _services = svcs);
+      if (mounted && gen == _servicesGen) setState(() => _services = svcs);
     } catch (e) {
       _showError(e);
     } finally {
-      if (mounted) setState(() => _loadingServices = false);
+      if (mounted && gen == _servicesGen) setState(() => _loadingServices = false);
     }
   }
 
@@ -121,7 +125,16 @@ class _ComposePanelState extends State<ComposePanel> {
       await action();
       if (!mounted) return;
       await _loadStacks();
-      if (_selectedStack?.projectDir == stack.projectDir) {
+      if (!mounted) return;
+      // If the previously selected stack is gone, clear selection.
+      if (_selectedStack != null &&
+          !_stacks.any((s) => s.projectDir == _selectedStack!.projectDir)) {
+        setState(() {
+          _selectedStack = null;
+          _services = [];
+        });
+        _closeLogs();
+      } else if (_selectedStack?.projectDir == stack.projectDir) {
         final svcs = await widget.service.listComposeServices(widget.host, stack);
         if (mounted) setState(() => _services = svcs);
       }
@@ -178,18 +191,17 @@ class _ComposePanelState extends State<ComposePanel> {
   Future<void> _addManualPath() async {
     final path = _manualCtrl.text.trim();
     if (path.isEmpty) return;
+    if (!path.startsWith('/')) {
+      _showError('Enter an absolute path to a compose file');
+      return;
+    }
     setState(() => _actionLoading['manual'] = true);
     try {
-      final r = await widget.service.ssh.exec(
-          widget.host,
-          "docker compose -f '$path' config --services 2>&1",
-          auditSource: 'devops');
-      if (r.exitCode != 0) throw Exception('Not a valid Compose file: $path');
-      final dir = path.contains('/')
-          ? path.substring(0, path.lastIndexOf('/'))
-          : '.';
+      await widget.service.validateComposeFile(widget.host, path);
+      final dir = path.substring(0, path.lastIndexOf('/'));
       final name = dir.substring(dir.lastIndexOf('/') + 1);
       final stack = ComposeStack(name: name, projectDir: dir, status: 'unknown');
+      if (!mounted) return;
       setState(() {
         if (!_stacks.any((s) => s.projectDir == dir)) {
           _stacks = [..._stacks, stack];

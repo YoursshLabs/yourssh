@@ -153,4 +153,33 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('Add'), findsOneWidget);
   });
+
+  testWidgets('entering a non-absolute manual path shows error snackbar and does not add a stack', (tester) async {
+    final fake = _FakeSshService();
+    bool execCalled = false;
+    fake.execStub = (cmd) {
+      // validateComposeFile should NOT be called for a relative path.
+      if (cmd.contains('config --services')) execCalled = true;
+      return (stdout: '', stderr: '', exitCode: 0);
+    };
+    final svc = ContainerService(fake);
+    await tester.pumpWidget(_wrap(ComposePanel(host: host, service: svc)));
+    await tester.pump();
+
+    // Open manual input
+    await tester.tap(find.byTooltip('Add path manually'));
+    await tester.pump();
+
+    // Enter a relative (non-absolute) path
+    await tester.enterText(find.byType(TextField), 'relative/path/compose.yml');
+    await tester.tap(find.text('Add'));
+    await tester.pump();
+
+    // An error snackbar should appear
+    expect(find.byType(SnackBar), findsOneWidget);
+    // validateComposeFile was never called (no SSH exec for config --services)
+    expect(execCalled, isFalse);
+    // No stack was added
+    expect(find.text('relative'), findsNothing);
+  });
 }

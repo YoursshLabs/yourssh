@@ -66,7 +66,21 @@ class _DockerPanelState extends State<DockerPanel> {
     setState(() { _loading = true; _error = null; });
     try {
       final result = await widget.service.listDockerContainers(widget.host);
-      if (mounted) setState(() { _containers = result; _error = null; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _containers = result;
+          _error = null;
+          _loading = false;
+          // Close log panel if the logged container is no longer in the list.
+          if (_logContainer != null &&
+              !result.any((c) => c.id == _logContainer!.id)) {
+            _logSub?.cancel();
+            _logSub = null;
+            _logContainer = null;
+            _logLines.clear();
+          }
+        });
+      }
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
@@ -79,6 +93,7 @@ class _DockerPanelState extends State<DockerPanel> {
     setState(() => _actionLoading[c.id] = true);
     try {
       await action();
+      if (!mounted) return;
       await _refresh();
     } catch (e) {
       if (mounted) {
