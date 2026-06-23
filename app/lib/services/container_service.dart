@@ -326,7 +326,7 @@ class ContainerService {
       "sh -c 'command -v bash >/dev/null 2>&1 && exec bash || exec sh'";
 
   static String dockerExecCommand(String id) =>
-      'docker exec -it $id $_shFallback';
+      'docker exec -it ${_shq(id)} $_shFallback';
 
   static String kubectlExecCommand(
       String pod, String namespace, String? container) {
@@ -402,6 +402,21 @@ class ContainerService {
     return out;
   }
 
+  /// Derives a [ComposeStack] from an absolute compose-file path (used by the
+  /// manual "add by path" flow). Returns null when [path] is not absolute.
+  /// A root-level file (`/compose.yml`) maps to projectDir `/`, never the empty
+  /// string — an empty projectDir would make `cd '' && docker compose …` run in
+  /// the login dir against the wrong project.
+  static ComposeStack? composeStackFromPath(String path) {
+    final p = path.trim();
+    if (!p.startsWith('/')) return null;
+    final lastSlash = p.lastIndexOf('/');
+    final projectDir = lastSlash == 0 ? '/' : p.substring(0, lastSlash);
+    final name =
+        projectDir == '/' ? '/' : projectDir.substring(projectDir.lastIndexOf('/') + 1);
+    return ComposeStack(name: name, projectDir: projectDir, status: 'unknown');
+  }
+
   /// Parses `docker compose ps --format json` output (JSON array or JSONL).
   /// Groups by service name, counts replicas.
   static List<ComposeService> parseComposePs(String stdout) {
@@ -450,7 +465,9 @@ class ContainerService {
       } else if (states.any((s) => s == 'running')) {
         status = 'degraded';
       } else {
-        status = states.first;
+        // First non-empty state (a missing/blank State field would otherwise
+        // render a blank status label and offer the wrong lifecycle action).
+        status = states.firstWhere((s) => s.isNotEmpty, orElse: () => 'unknown');
       }
       return ComposeService(
         name: e.key,
@@ -492,7 +509,10 @@ class ContainerService {
     const findCmd =
         r"find ~ /opt /srv /home -maxdepth 3 \( -name 'docker-compose.yml' -o -name 'compose.yml' \) 2>/dev/null";
     final r = await ssh.exec(host, findCmd, auditSource: 'devops');
-    if (r.exitCode != 0) return const [];
+    // `find` exits non-zero if ANY starting root is missing (e.g. no /srv or
+    // /opt) even though it printed matches from the roots that do exist, so we
+    // parse stdout regardless of exit code. parseComposeFindOutput is robust to
+    // empty/garbage input (returns []), so a genuine failure still degrades safely.
     return parseComposeFindOutput(r.stdout);
   }
 

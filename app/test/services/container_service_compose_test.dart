@@ -323,4 +323,63 @@ void main() {
       );
     });
   });
+
+  // ── discoverComposeStacks: find exit code (#1) ──────────
+
+  group('discoverComposeStacks — find exit code', () {
+    test('keeps find matches even when find exits non-zero (missing search root)',
+        () async {
+      final fake = _FakeSshService();
+      fake.execStub = (cmd) {
+        if (cmd.contains('docker compose ls')) {
+          return (stdout: '', stderr: '', exitCode: 0);
+        }
+        // `find ~ /opt /srv /home` emitted a real match to stdout but exited
+        // non-zero because /srv does not exist on this host.
+        return (
+          stdout: '/home/me/app/docker-compose.yml\n',
+          stderr: "find: '/srv': No such file or directory",
+          exitCode: 1,
+        );
+      };
+      final stacks = await ContainerService(fake).discoverComposeStacks(host);
+      expect(stacks.map((s) => s.projectDir), contains('/home/me/app'));
+    });
+  });
+
+  // ── composeStackFromPath (#8) ───────────────────────────
+
+  group('composeStackFromPath', () {
+    test('derives name and dir from a normal path', () {
+      final s =
+          ContainerService.composeStackFromPath('/opt/app/docker-compose.yml');
+      expect(s, isNotNull);
+      expect(s!.projectDir, '/opt/app');
+      expect(s.name, 'app');
+      expect(s.status, 'unknown');
+    });
+
+    test('root-level compose file yields projectDir "/" not empty', () {
+      final s = ContainerService.composeStackFromPath('/compose.yml');
+      expect(s, isNotNull);
+      expect(s!.projectDir, '/');
+      expect(s.name, isNotEmpty);
+    });
+
+    test('returns null for a non-absolute path', () {
+      expect(
+          ContainerService.composeStackFromPath('relative/compose.yml'), isNull);
+    });
+  });
+
+  // ── parseComposePs empty-state fallback (#9) ────────────
+
+  group('parseComposePs — empty state', () {
+    test('falls back to "unknown" when State is empty', () {
+      const out =
+          '[{"Name":"x-web-1","Service":"web","State":"","Image":"nginx"}]';
+      final svcs = ContainerService.parseComposePs(out);
+      expect(svcs.single.status, 'unknown');
+    });
+  });
 }

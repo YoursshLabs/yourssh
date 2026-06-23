@@ -113,10 +113,14 @@ void main() {
   });
 
   group('exec commands', () {
-    test('docker exec uses bash->sh fallback', () {
+    test('docker exec uses bash->sh fallback and shell-quotes the id', () {
       final cmd = ContainerService.dockerExecCommand('abc123');
-      expect(cmd, contains('docker exec -it abc123'));
+      expect(cmd, contains("docker exec -it 'abc123'"));
       expect(cmd, contains('exec bash || exec sh'));
+    });
+    test('docker exec quotes an id containing a space', () {
+      final cmd = ContainerService.dockerExecCommand('my container');
+      expect(cmd, contains("docker exec -it 'my container'"));
     });
     test('kubectl exec includes namespace and container', () {
       final cmd = ContainerService.kubectlExecCommand('web-0', 'prod', 'app');

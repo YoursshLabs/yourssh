@@ -70,6 +70,9 @@ class _ContainersScreenState extends State<ContainersScreen> {
                   onChanged: (v) => setState(() {
                     _sessionId = v;
                     _runtimes = null;
+                    // Drop the previous session's scan error so it isn't shown
+                    // against the newly-selected session.
+                    _error = null;
                   }),
                 ),
               ),
@@ -167,6 +170,9 @@ class _ContainersScreenState extends State<ContainersScreen> {
     try {
       _runtimes = await _ensureService().detectRuntimes(host);
     } catch (e) {
+      // Clear stale runtimes so _body() reaches the error branch instead of
+      // silently rendering the previous scan's panel.
+      _runtimes = null;
       _error = e.toString();
     } finally {
       if (mounted) setState(() => _loading = false);

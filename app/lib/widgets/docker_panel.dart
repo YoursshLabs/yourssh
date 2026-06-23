@@ -62,15 +62,18 @@ class _DockerPanelState extends State<DockerPanel> {
     });
   }
 
-  Future<void> _refresh() async {
-    setState(() { _loading = true; _error = null; });
+  /// [silent] skips the full-screen loading state — used for the refresh that
+  /// follows a lifecycle action so the list (and any open log panel) isn't torn
+  /// down and replaced by a spinner on every Stop/Start/Restart.
+  Future<void> _refresh({bool silent = false}) async {
+    if (!silent) setState(() { _loading = true; _error = null; });
     try {
       final result = await widget.service.listDockerContainers(widget.host);
       if (mounted) {
         setState(() {
           _containers = result;
           _error = null;
-          _loading = false;
+          if (!silent) _loading = false;
           // Close log panel if the logged container is no longer in the list.
           if (_logContainer != null &&
               !result.any((c) => c.id == _logContainer!.id)) {
@@ -82,19 +85,23 @@ class _DockerPanelState extends State<DockerPanel> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) setState(() { _error = e.toString(); if (!silent) _loading = false; });
     }
   }
 
-  bool _isRunning(ContainerEntry c) =>
-      c.status.toLowerCase().startsWith('up');
+  bool _isRunning(ContainerEntry c) {
+    final s = c.status.toLowerCase();
+    // `Up …` (incl. `Up … (Paused)`) and `Restarting …` are live containers —
+    // they get Stop/Restart, not Start.
+    return s.startsWith('up') || s.startsWith('restarting');
+  }
 
   Future<void> _runAction(ContainerEntry c, Future<void> Function() action) async {
     setState(() => _actionLoading[c.id] = true);
     try {
       await action();
       if (!mounted) return;
-      await _refresh();
+      await _refresh(silent: true);
     } catch (e) {
       if (mounted) AppSnack.error(context, e.toString());
     } finally {

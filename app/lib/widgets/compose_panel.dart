@@ -43,6 +43,10 @@ class _ComposePanelState extends State<ComposePanel> {
   final TextEditingController _manualCtrl = TextEditingController();
   bool _showManualInput = false;
 
+  // Stacks added by absolute path; kept across discovery refreshes (discovery
+  // only scans a fixed set of roots, so these would otherwise vanish).
+  final List<ComposeStack> _manualStacks = [];
+
   @override
   void initState() {
     super.initState();
@@ -83,7 +87,12 @@ class _ComposePanelState extends State<ComposePanel> {
       _stacksError = null;
     });
     try {
-      _stacks = await widget.service.discoverComposeStacks(widget.host);
+      final discovered = await widget.service.discoverComposeStacks(widget.host);
+      _stacks = [
+        ...discovered,
+        ..._manualStacks
+            .where((m) => !discovered.any((d) => d.projectDir == m.projectDir)),
+      ];
     } catch (e) {
       _stacksError = e.toString();
     } finally {
@@ -93,6 +102,9 @@ class _ComposePanelState extends State<ComposePanel> {
 
   Future<void> _selectStack(ComposeStack stack) async {
     _closeLogs();
+    // Invalidate any in-flight service fetch up front, including on the collapse
+    // path, so a stale result can't repopulate _services after deselection.
+    final gen = ++_servicesGen;
     if (_selectedStack?.projectDir == stack.projectDir) {
       setState(() {
         _selectedStack = null;
@@ -105,7 +117,6 @@ class _ComposePanelState extends State<ComposePanel> {
       _services = [];
       _loadingServices = true;
     });
-    final gen = ++_servicesGen;
     try {
       final svcs = await widget.service.listComposeServices(widget.host, stack);
       if (mounted && gen == _servicesGen) setState(() => _services = svcs);
@@ -190,19 +201,20 @@ class _ComposePanelState extends State<ComposePanel> {
   Future<void> _addManualPath() async {
     final path = _manualCtrl.text.trim();
     if (path.isEmpty) return;
-    if (!path.startsWith('/')) {
+    final stack = ContainerService.composeStackFromPath(path);
+    if (stack == null) {
       _showError('Enter an absolute path to a compose file');
       return;
     }
     setState(() => _actionLoading['manual'] = true);
     try {
       await widget.service.validateComposeFile(widget.host, path);
-      final dir = path.substring(0, path.lastIndexOf('/'));
-      final name = dir.substring(dir.lastIndexOf('/') + 1);
-      final stack = ComposeStack(name: name, projectDir: dir, status: 'unknown');
       if (!mounted) return;
       setState(() {
-        if (!_stacks.any((s) => s.projectDir == dir)) {
+        if (!_manualStacks.any((s) => s.projectDir == stack.projectDir)) {
+          _manualStacks.add(stack);
+        }
+        if (!_stacks.any((s) => s.projectDir == stack.projectDir)) {
           _stacks = [..._stacks, stack];
         }
         _showManualInput = false;
@@ -373,7 +385,8 @@ class _ComposePanelState extends State<ComposePanel> {
 
   Widget _serviceTile(ComposeService svc) {
     final stack = _selectedStack!;
-    final running = svc.status == 'running';
+    // 'degraded' = some replicas up — still offer Stop, not Start.
+    final running = svc.status == 'running' || svc.status == 'degraded';
     final startKey = 'svcstart_${stack.projectDir}_${svc.name}';
     final stopKey = 'svcstop_${stack.projectDir}_${svc.name}';
     final isLogTarget = _logService?.name == svc.name;

@@ -181,4 +181,69 @@ void main() {
     // No stack was added
     expect(find.text('relative'), findsNothing);
   });
+
+  testWidgets('manually-added stack survives a refresh (not wiped by discovery)',
+      (tester) async {
+    final fake = _FakeSshService();
+    fake.execStub = (cmd) {
+      // Discovery finds nothing (the path lives outside the scanned roots);
+      // only validateComposeFile succeeds.
+      if (cmd.contains('config --services')) {
+        return (stdout: 'web\n', stderr: '', exitCode: 0);
+      }
+      return (stdout: '', stderr: '', exitCode: 0);
+    };
+    final svc = ContainerService(fake);
+    await tester.pumpWidget(_wrap(ComposePanel(host: host, service: svc)));
+    await tester.pump();
+
+    // Add a manual path outside the discovery roots.
+    await tester.tap(find.byTooltip('Add path manually'));
+    await tester.pump();
+    await tester.enterText(
+        find.byType(TextField), '/data/app/docker-compose.yml');
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+    expect(find.text('app'), findsOneWidget);
+
+    // Refresh — discovery still returns nothing; the manual stack must remain.
+    await tester.tap(find.byTooltip('Refresh'));
+    await tester.pumpAndSettle();
+    expect(find.text('app'), findsOneWidget);
+  });
+
+  testWidgets('degraded service shows Stop control (treated as running)',
+      (tester) async {
+    final fake = _FakeSshService();
+    fake.execStub = (cmd) {
+      if (cmd.contains('docker compose ls')) {
+        return (
+          stdout:
+              '[{"Name":"myapp","Status":"running(2)","ConfigFiles":"/opt/myapp/compose.yml"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      if (cmd.contains('docker compose ps --format json')) {
+        // 2-replica service, one running + one exited → 'degraded'.
+        return (
+          stdout:
+              '{"Name":"myapp-web-1","Service":"web","State":"running","Image":"nginx"}\n'
+              '{"Name":"myapp-web-2","Service":"web","State":"exited","Image":"nginx"}\n',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      return (stdout: '', stderr: '', exitCode: 0);
+    };
+    final svc = ContainerService(fake);
+    await tester.pumpWidget(_wrap(ComposePanel(host: host, service: svc)));
+    await tester.pump();
+    await tester.tap(find.text('myapp'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('web'), findsOneWidget);
+    expect(find.byTooltip('Stop service'), findsOneWidget);
+    expect(find.byTooltip('Start service'), findsNothing);
+  });
 }
