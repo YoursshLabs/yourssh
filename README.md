@@ -15,6 +15,8 @@ A professional, open-source SSH client for **macOS**, **Windows**, and **Linux**
 
 ---
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/thangnm)
+
 ## Download
 
 Get the latest release from the [Releases page](https://github.com/YoursshLabs/yourssh/releases).
@@ -568,6 +570,12 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 
 - [ ] **iOS / iPadOS target** (experimental)
 - [ ] **Android target** (experimental)
+
+---
+
+## 🌟 Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=yoursshlabs/yourssh&type=Date)](https://www.star-history.com/#yoursshlabs/yourssh&Date)
 
 ---
 
