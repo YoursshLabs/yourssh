@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:yourssh/models/container_entry.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/services/container_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
