@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.38] — 2026-06-23
+
+### Added
+- **Docker panel completion** — the Containers screen now has dedicated **Docker** and **Compose** tabs alongside Kubernetes. Docker (`DockerPanel`): a live container list (`docker ps -a`) with per-container **Stop / Start / Restart**, one-click **Exec** into a new SSH tab, and an inline follow-mode **log viewer** (`docker logs -f --tail`, auto-scroll with manual-scroll detach, 2000-line cap). Compose (`ComposePanel`): stack discovery via `docker compose ls` merged with a `find` sweep of `~ /opt /srv /home` (ls entries take precedence) plus a manual compose-file path add; per-stack **Up / Down**, per-service **Start / Stop**, service replica counts, and per-service follow-mode logs. All commands run with `auditSource: 'devops'` and single-quote project paths; non-zero exits surface the real stderr.
+
+---
+
 ## [0.1.37] — 2026-06-18
 
 ### Added
