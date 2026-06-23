@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -19,11 +20,39 @@ class ContainerService {
   static const _dockerFormat = '{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}';
 
   Future<List<ContainerEntry>> listDockerContainers(Host host) async {
-    final r = await ssh.exec(host, "docker ps --format '$_dockerFormat'", auditSource: 'devops');
+    final r = await ssh.exec(host, "docker ps -a --format '$_dockerFormat'", auditSource: 'devops');
     if (r.exitCode != 0) {
       throw Exception(r.stderr.trim().isEmpty ? 'docker ps failed' : r.stderr.trim());
     }
     return parseDockerPs(r.stdout);
+  }
+
+  // ── Docker logs + lifecycle ───────────────────────────
+
+  /// Streams stdout+stderr of `docker logs -f <id>`.
+  Stream<String> streamDockerLogs(Host host, String id, {int tail = 100}) =>
+      ssh.execStream(host, 'docker logs -f --tail=$tail ${_shq(id)} 2>&1',
+          auditSource: 'devops');
+
+  Future<void> stopContainer(Host host, String id) async {
+    final r = await ssh.exec(host, 'docker stop ${_shq(id)}', auditSource: 'devops');
+    if (r.exitCode != 0) {
+      throw Exception(r.stderr.trim().isEmpty ? 'docker stop failed' : r.stderr.trim());
+    }
+  }
+
+  Future<void> startContainer(Host host, String id) async {
+    final r = await ssh.exec(host, 'docker start ${_shq(id)}', auditSource: 'devops');
+    if (r.exitCode != 0) {
+      throw Exception(r.stderr.trim().isEmpty ? 'docker start failed' : r.stderr.trim());
+    }
+  }
+
+  Future<void> restartContainer(Host host, String id) async {
+    final r = await ssh.exec(host, 'docker restart ${_shq(id)}', auditSource: 'devops');
+    if (r.exitCode != 0) {
+      throw Exception(r.stderr.trim().isEmpty ? 'docker restart failed' : r.stderr.trim());
+    }
   }
 
   // ── Kubernetes ────────────────────────────────────────
@@ -288,12 +317,16 @@ class ContainerService {
     return RuntimeAvailability.available;
   }
 
+  // ── Shell quoting ─────────────────────────────────────
+  /// POSIX single-quote-escapes [s] for safe shell interpolation.
+  static String _shq(String s) => "'${s.replaceAll("'", r"'\''")}'";
+
   // ── Exec command builders ─────────────────────────────
   static const _shFallback =
       "sh -c 'command -v bash >/dev/null 2>&1 && exec bash || exec sh'";
 
   static String dockerExecCommand(String id) =>
-      'docker exec -it $id $_shFallback';
+      'docker exec -it ${_shq(id)} $_shFallback';
 
   static String kubectlExecCommand(
       String pod, String namespace, String? container) {
@@ -320,5 +353,239 @@ class ContainerService {
       return r'sudo usermod -aG docker $USER   # then log out and back in';
     }
     return 'Check your kubeconfig / RBAC permissions.';
+  }
+
+  // ── Compose static parsers ────────────────────────────
+
+  /// Parses `docker compose ls --format json` output.
+  /// Returns [] on any parse failure.
+  static List<ComposeStack> parseComposeLs(String json) {
+    if (json.trim().isEmpty) return const [];
+    try {
+      final list = jsonDecode(json) as List<dynamic>;
+      return list.map((e) {
+        final map = e as Map<String, dynamic>;
+        final configFiles = (map['ConfigFiles'] as String? ?? '').trim();
+        // ConfigFiles may be comma-separated; take the first to derive projectDir.
+        final firstFile = configFiles.split(',').first.trim();
+        final projectDir = firstFile.contains('/')
+            ? firstFile.substring(0, firstFile.lastIndexOf('/'))
+            : '';
+        return ComposeStack(
+          name: (map['Name'] as String? ?? '').trim(),
+          projectDir: projectDir,
+          status: (map['Status'] as String? ?? '').trim(),
+        );
+      }).where((s) => s.name.isNotEmpty && s.projectDir.isNotEmpty).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Parses `find ... -name "docker-compose.yml" -o -name "compose.yml"` output.
+  /// Deduplicates by projectDir.
+  static List<ComposeStack> parseComposeFindOutput(String stdout) {
+    final seen = <String>{};
+    final out = <ComposeStack>[];
+    for (final line in stdout.split('\n')) {
+      final path = line.trim();
+      if (path.isEmpty) continue;
+      final lastSlash = path.lastIndexOf('/');
+      if (lastSlash < 0) continue;
+      final projectDir = path.substring(0, lastSlash);
+      if (projectDir.isEmpty) continue;
+      if (seen.contains(projectDir)) continue;
+      seen.add(projectDir);
+      final name = projectDir.substring(projectDir.lastIndexOf('/') + 1);
+      out.add(ComposeStack(name: name, projectDir: projectDir, status: 'unknown'));
+    }
+    return out;
+  }
+
+  /// Derives a [ComposeStack] from an absolute compose-file path (used by the
+  /// manual "add by path" flow). Returns null when [path] is not absolute.
+  /// A root-level file (`/compose.yml`) maps to projectDir `/`, never the empty
+  /// string — an empty projectDir would make `cd '' && docker compose …` run in
+  /// the login dir against the wrong project.
+  static ComposeStack? composeStackFromPath(String path) {
+    final p = path.trim();
+    if (!p.startsWith('/')) return null;
+    final lastSlash = p.lastIndexOf('/');
+    final projectDir = lastSlash == 0 ? '/' : p.substring(0, lastSlash);
+    final name =
+        projectDir == '/' ? '/' : projectDir.substring(projectDir.lastIndexOf('/') + 1);
+    return ComposeStack(name: name, projectDir: projectDir, status: 'unknown');
+  }
+
+  /// Parses `docker compose ps --format json` output (JSON array or JSONL).
+  /// Groups by service name, counts replicas.
+  static List<ComposeService> parseComposePs(String stdout) {
+    if (stdout.trim().isEmpty) return const [];
+    final items = <Map<String, dynamic>>[];
+    try {
+      // Try JSON array first.
+      final decoded = jsonDecode(stdout.trim());
+      if (decoded is List) {
+        for (final e in decoded) {
+          if (e is Map<String, dynamic>) items.add(e);
+        }
+      }
+    } catch (_) {
+      // Fall through to JSONL.
+    }
+    if (items.isEmpty) {
+      // Try JSONL (one JSON object per line).
+      for (final line in stdout.split('\n')) {
+        final t = line.trim();
+        if (t.isEmpty) continue;
+        try {
+          final obj = jsonDecode(t);
+          if (obj is Map<String, dynamic>) items.add(obj);
+        } catch (_) {
+          continue;
+        }
+      }
+    }
+    if (items.isEmpty) return const [];
+
+    // Group by "Service" field, count replicas.
+    final byService = <String, List<Map<String, dynamic>>>{};
+    for (final item in items) {
+      final svc = (item['Service'] as String? ?? '').trim();
+      if (svc.isEmpty) continue;
+      (byService[svc] ??= []).add(item);
+    }
+    return byService.entries.map((e) {
+      final group = e.value;
+      final first = group.first;
+      final states = group.map((m) => (m['State'] as String? ?? '').trim()).toList();
+      final String status;
+      if (states.every((s) => s == 'running')) {
+        status = 'running';
+      } else if (states.any((s) => s == 'running')) {
+        status = 'degraded';
+      } else {
+        // First non-empty state (a missing/blank State field would otherwise
+        // render a blank status label and offer the wrong lifecycle action).
+        status = states.firstWhere((s) => s.isNotEmpty, orElse: () => 'unknown');
+      }
+      return ComposeService(
+        name: e.key,
+        status: status,
+        image: (first['Image'] as String? ?? '').trim(),
+        replicas: group.length,
+      );
+    }).toList();
+  }
+
+  // ── Compose ───────────────────────────────────────────
+
+  /// Discovers Compose stacks by running `docker compose ls` (active projects)
+  /// and `find` (files on disk). Results are merged; ls entries take precedence
+  /// when the same projectDir appears in both.
+  Future<List<ComposeStack>> discoverComposeStacks(Host host) async {
+    final results = await Future.wait([
+      _composeLsStacks(host),
+      _composeFindStacks(host),
+    ]);
+    final lsStacks = results[0];
+    final findStacks = results[1];
+    // Merge: ls entries take precedence.
+    final seen = {for (final s in lsStacks) s.projectDir};
+    return [
+      ...lsStacks,
+      ...findStacks.where((s) => !seen.contains(s.projectDir)),
+    ];
+  }
+
+  Future<List<ComposeStack>> _composeLsStacks(Host host) async {
+    final r = await ssh.exec(host, 'docker compose ls --format json 2>/dev/null',
+        auditSource: 'devops');
+    if (r.exitCode != 0) return const [];
+    return parseComposeLs(r.stdout);
+  }
+
+  Future<List<ComposeStack>> _composeFindStacks(Host host) async {
+    const findCmd =
+        r"find ~ /opt /srv /home -maxdepth 3 \( -name 'docker-compose.yml' -o -name 'compose.yml' \) 2>/dev/null";
+    final r = await ssh.exec(host, findCmd, auditSource: 'devops');
+    // `find` exits non-zero if ANY starting root is missing (e.g. no /srv or
+    // /opt) even though it printed matches from the roots that do exist, so we
+    // parse stdout regardless of exit code. parseComposeFindOutput is robust to
+    // empty/garbage input (returns []), so a genuine failure still degrades safely.
+    return parseComposeFindOutput(r.stdout);
+  }
+
+  Future<List<ComposeService>> listComposeServices(
+      Host host, ComposeStack stack) async {
+    final r = await ssh.exec(
+        host, "cd ${_shq(stack.projectDir)} && docker compose ps --format json 2>/dev/null",
+        auditSource: 'devops');
+    if (r.exitCode != 0) {
+      throw Exception(
+          r.stderr.trim().isEmpty ? 'docker compose ps failed' : r.stderr.trim());
+    }
+    return parseComposePs(r.stdout);
+  }
+
+  Future<void> composeUp(Host host, ComposeStack stack) async {
+    final r = await ssh.exec(
+        host, "cd ${_shq(stack.projectDir)} && docker compose up -d",
+        auditSource: 'devops');
+    if (r.exitCode != 0) {
+      throw Exception(
+          r.stderr.trim().isEmpty ? 'docker compose up failed' : r.stderr.trim());
+    }
+  }
+
+  Future<void> composeDown(Host host, ComposeStack stack) async {
+    final r = await ssh.exec(
+        host, "cd ${_shq(stack.projectDir)} && docker compose down",
+        auditSource: 'devops');
+    if (r.exitCode != 0) {
+      throw Exception(
+          r.stderr.trim().isEmpty ? 'docker compose down failed' : r.stderr.trim());
+    }
+  }
+
+  Future<void> startComposeService(
+      Host host, ComposeStack stack, String service) async {
+    final r = await ssh.exec(
+        host, "cd ${_shq(stack.projectDir)} && docker compose start ${_shq(service)}",
+        auditSource: 'devops');
+    if (r.exitCode != 0) {
+      throw Exception(
+          r.stderr.trim().isEmpty ? 'docker compose start failed' : r.stderr.trim());
+    }
+  }
+
+  Future<void> stopComposeService(
+      Host host, ComposeStack stack, String service) async {
+    final r = await ssh.exec(
+        host, "cd ${_shq(stack.projectDir)} && docker compose stop ${_shq(service)}",
+        auditSource: 'devops');
+    if (r.exitCode != 0) {
+      throw Exception(
+          r.stderr.trim().isEmpty ? 'docker compose stop failed' : r.stderr.trim());
+    }
+  }
+
+  Stream<String> streamComposeServiceLogs(
+      Host host, ComposeStack stack, String service, {int tail = 100}) =>
+      ssh.execStream(
+          host,
+          "cd ${_shq(stack.projectDir)} && docker compose logs -f --tail=$tail ${_shq(service)} 2>&1",
+          auditSource: 'devops');
+
+  /// Validates a Compose file at [path] by listing its services. Returns the
+  /// service names; throws on a non-Compose / invalid file.
+  Future<List<String>> validateComposeFile(Host host, String path) async {
+    final r = await ssh.exec(host, 'docker compose -f ${_shq(path)} config --services 2>&1',
+        auditSource: 'devops');
+    if (r.exitCode != 0) {
+      final detail = r.stdout.trim();
+      throw Exception(detail.isEmpty ? 'Not a valid Compose file: $path' : 'Not a valid Compose file: $path — $detail');
+    }
+    return r.stdout.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
   }
 }

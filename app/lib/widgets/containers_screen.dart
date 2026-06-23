@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../models/container_entry.dart';
 import '../models/host.dart';
 import 'kubernetes_panel.dart';
+import 'docker_panel.dart';
+import 'compose_panel.dart';
 import '../providers/session_provider.dart';
 import '../services/container_service.dart';
 import '../services/ssh_service.dart';
@@ -18,16 +20,14 @@ class ContainersScreen extends StatefulWidget {
   State<ContainersScreen> createState() => _ContainersScreenState();
 }
 
-enum _Tab { docker, kubernetes }
+enum _Tab { docker, compose, kubernetes }
 
 class _ContainersScreenState extends State<ContainersScreen> {
   ContainerService? _service;
-  String? _sessionId; // active session id used as source
+  String? _sessionId;
   _Tab _tab = _Tab.docker;
 
   RuntimeStatus? _runtimes;
-  List<ContainerEntry> _containers = [];
-
   bool _loading = false;
   String? _error;
 
@@ -45,7 +45,6 @@ class _ContainersScreenState extends State<ContainersScreen> {
         message: 'Open an SSH session first, then come back to browse containers.',
       );
     }
-    // Default to the active/first session.
     _sessionId ??= sessions.first.id;
     final selected = sessions.firstWhere(
       (s) => s.id == _sessionId,
@@ -71,12 +70,15 @@ class _ContainersScreenState extends State<ContainersScreen> {
                   onChanged: (v) => setState(() {
                     _sessionId = v;
                     _runtimes = null;
+                    // Drop the previous session's scan error so it isn't shown
+                    // against the newly-selected session.
+                    _error = null;
                   }),
                 ),
               ),
               const SizedBox(width: 12),
               IconButton(
-                tooltip: 'Refresh',
+                tooltip: 'Rescan runtimes',
                 icon: const Icon(Icons.refresh),
                 onPressed: _loading ? null : _refresh,
               ),
@@ -85,6 +87,8 @@ class _ContainersScreenState extends State<ContainersScreen> {
           const SizedBox(height: 8),
           Row(children: [
             _tabButton(_Tab.docker, 'Docker'),
+            const SizedBox(width: 8),
+            _tabButton(_Tab.compose, 'Compose'),
             const SizedBox(width: 8),
             _tabButton(_Tab.kubernetes, 'Kubernetes'),
           ]),
@@ -100,11 +104,7 @@ class _ContainersScreenState extends State<ContainersScreen> {
     return ChoiceChip(
       label: Text(label),
       selected: active,
-      onSelected: (_) => setState(() {
-        _tab = tab;
-        _containers = [];
-        _error = null;
-      }),
+      onSelected: (_) => setState(() => _tab = tab),
     );
   }
 
@@ -116,6 +116,14 @@ class _ContainersScreenState extends State<ContainersScreen> {
     }
     final runtimes = _runtimes;
     if (runtimes == null) {
+      if (_error != null) {
+        return _CenterHint(
+          icon: Icons.error_outline,
+          message: _error!,
+          actionLabel: 'Retry',
+          onAction: _refresh,
+        );
+      }
       return _CenterHint(
         icon: Icons.search,
         message: 'Tap refresh to scan for Docker / Kubernetes.',
@@ -125,7 +133,7 @@ class _ContainersScreenState extends State<ContainersScreen> {
     }
 
     final avail = _availabilityFor(runtimes);
-    final runtimeName = _tab == _Tab.docker ? 'docker' : 'kubectl';
+    final runtimeName = _tab == _Tab.kubernetes ? 'kubectl' : 'docker';
 
     if (avail == RuntimeAvailability.notInstalled) {
       return _HintCard(
@@ -139,70 +147,40 @@ class _ContainersScreenState extends State<ContainersScreen> {
         command: ContainerService.permissionHint(runtimeName),
       );
     }
-    if (_error != null) {
-      return _CenterHint(icon: Icons.error_outline, message: _error!);
+
+    // Runtime is available — the panels load their own data on init. Each is
+    // remounted (fresh initState) whenever the session changes, because
+    // switching sessions sets `_runtimes = null`, which unmounts the panel
+    // until the next scan.
+    final svc = _ensureService();
+    switch (_tab) {
+      case _Tab.docker:
+        return DockerPanel(host: host, service: svc);
+      case _Tab.compose:
+        return ComposePanel(host: host, service: svc);
+      case _Tab.kubernetes:
+        return KubernetesPanel(host: host, onOpenBrowser: widget.onOpenBrowser);
     }
-    if (_tab == _Tab.docker) return _dockerList();
-    return KubernetesPanel(host: host, onOpenBrowser: widget.onOpenBrowser);
   }
 
-  Widget _dockerList() {
-    if (_containers.isEmpty) {
-      return const _CenterHint(icon: Icons.inbox, message: 'No running containers.');
-    }
-    return ListView.separated(
-      itemCount: _containers.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (_, i) {
-        final c = _containers[i];
-        return ListTile(
-          title: Text(c.name),
-          subtitle: Text('${c.image}  •  ${c.status}'),
-          trailing: FilledButton.icon(
-            icon: const Icon(Icons.terminal, size: 16),
-            label: const Text('Exec'),
-            onPressed: () => _execContainer(c),
-          ),
-        );
-      },
-    );
-  }
-
-  // ── Actions ───────────────────────────────────────────
   Future<void> _refresh() async {
     final host = _hostForSelected();
     if (host == null) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    setState(() { _loading = true; _error = null; });
     try {
-      final svc = _ensureService();
-      _runtimes = await svc.detectRuntimes(host);
-      if (_tab == _Tab.docker &&
-          _availabilityFor(_runtimes!) == RuntimeAvailability.available) {
-        _containers = await svc.listDockerContainers(host);
-      }
+      _runtimes = await _ensureService().detectRuntimes(host);
     } catch (e) {
+      // Clear stale runtimes so _body() reaches the error branch instead of
+      // silently rendering the previous scan's panel.
+      _runtimes = null;
       _error = e.toString();
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _execContainer(ContainerEntry c) async {
-    if (!mounted) return;
-    final host = _hostForSelected();
-    if (host == null) return;
-    final sessionProvider = context.read<SessionProvider>();
-    await sessionProvider.connect(
-      host,
-      initialCommand: ContainerService.dockerExecCommand(c.id),
-    );
-  }
-
   RuntimeAvailability _availabilityFor(RuntimeStatus r) =>
-      _tab == _Tab.docker ? r.docker : r.kubectl;
+      _tab == _Tab.kubernetes ? r.kubectl : r.docker;
 
   Host? _hostForSelected() {
     final id = _sessionId;

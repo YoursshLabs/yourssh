@@ -89,3 +89,31 @@ class K8sForwardHandle {
     }
   }
 }
+
+/// One Docker Compose project discovered on the remote host.
+class ComposeStack {
+  final String name;
+  final String projectDir;
+  final String status;
+
+  const ComposeStack({
+    required this.name,
+    required this.projectDir,
+    required this.status,
+  });
+}
+
+/// One service within a Docker Compose stack.
+class ComposeService {
+  final String name;
+  final String status;
+  final String image;
+  final int replicas;
+
+  const ComposeService({
+    required this.name,
+    required this.status,
+    required this.image,
+    this.replicas = 1,
+  });
+}

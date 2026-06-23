@@ -4,21 +4,33 @@ The built-in DevOps hub adds infrastructure tooling on top of your SSH sessions.
 
 <!-- SCREENSHOT: DevOps hub showing the tool grid: Containers, Network Tools, Cloudflare Tunnel, MCP Server, Mail Catcher, S3 Browser tabs -->
 
-## Containers (Docker / Kubernetes)
+## Containers (Docker / Compose / Kubernetes)
 
-List and exec into running containers on the active SSH session.
+Manage containers and Compose stacks on the active SSH session. Pick a session, tap **Scan** to detect runtimes, then switch between the **Docker**, **Compose**, and **Kubernetes** tabs. If a runtime is missing the panel shows an install/permission hint with a copyable command.
 
 ### Docker
 
-- Lists containers from `docker ps`
-- Click **Exec** to open a shell in any container in a new terminal tab
+- Lists all containers (`docker ps -a`), running and stopped
+- Per-container lifecycle: **Stop** / **Restart** (running) or **Start** (stopped)
+- **Exec** opens a shell in the container in a new terminal tab
+- **Logs** opens an inline follow-mode viewer (`docker logs -f`) below the list — auto-scrolls while you stay at the bottom, detaches when you scroll up, **Clear** to reset, capped at 2000 lines
+
+### Compose
+
+- Discovers Compose v2 stacks by combining `docker compose ls` (active projects) with a `find` sweep of `~ /opt /srv /home`; active-project status wins when a stack appears in both
+- **+** adds a Compose file by path manually (validated with `docker compose -f … config`)
+- Per-stack **Up** (`up -d`) / **Down**; select a stack to list its services
+- Per-service **Start** / **Stop**, replica count, and an inline follow-mode log viewer (`docker compose logs -f <service>`)
+- Docker Compose **v1** (`docker-compose`) is not supported — discovery degrades to find-only
 
 ### Kubernetes
 
 - Lists pods from `kubectl get pods -n <namespace>`
 - Namespace filter + **All namespaces** toggle
 - Click **Exec** to shell into any container in a pod
-- If Docker or kubectl is missing, the panel shows install/permission hints
+- `kubectl logs -f` and 1-click port-forward
+
+All container commands are recorded in the [Audit Log](User-Guide-Audit-Log) with source `devops`.
 
 ## Network Tools
 
