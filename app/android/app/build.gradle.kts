@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "com.thangnm.yourssh"
-    compileSdk = flutter.compileSdkVersion
+    // Transitive plugins (flutter_plugin_android_lifecycle via file_picker)
+    // require compiling against API 36; the Flutter default is still 34.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
