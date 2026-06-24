@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.39] — 2026-06-24
+
+### Added
+- **SSH connection screen (#82)** — while an SSH session connects, the tab now shows a host card (OS icon, label, `host:port`) with an animated node → line → terminal graphic, a **Show logs** panel over a new per-session connection log (resolve, auth method, jump-host tunnel, host-key verify, established / failed, reconnect countdown), and **Close** / **Retry** actions. Manual retry reuses the same tab and terminal and starts a fresh log. Replaces the bare "Connecting…" spinner; the step log is captured at the `SessionProvider` level so `SshService.connect`'s shared signature is untouched, and the card scrolls instead of overflowing on short / split panes (`SessionConnectingView`, `ConnectionLogLine`).
+
+---
+
 ## [0.1.38] — 2026-06-23
 
 ### Added
@@ -654,6 +661,8 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
+[0.1.39]: https://github.com/YoursshLabs/yourssh/compare/v0.1.38...v0.1.39
+[0.1.38]: https://github.com/YoursshLabs/yourssh/compare/v0.1.37...v0.1.38
 [0.1.37]: https://github.com/YoursshLabs/yourssh/compare/v0.1.36...v0.1.37
 [0.1.36]: https://github.com/YoursshLabs/yourssh/compare/v0.1.35...v0.1.36
 [0.1.35]: https://github.com/YoursshLabs/yourssh/compare/v0.1.34...v0.1.35
