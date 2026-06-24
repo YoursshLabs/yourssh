@@ -5,6 +5,7 @@ import 'package:yourssh_rdp/yourssh_rdp.dart';
 import 'package:yourssh_vnc/yourssh_vnc.dart';
 import '../models/agent_forwarding_state.dart';
 import '../models/audit_event.dart';
+import '../models/connection_log.dart';
 import '../models/host.dart';
 import '../models/local_session.dart';
 import '../models/rdp_session.dart';
@@ -457,18 +458,29 @@ class SessionProvider extends ChangeNotifier {
         jumpLookup: (id) => jumpHostLookup?.call(id),
         keyLookup: (id) => keyLookup?.call(id),
       );
+      session.logConnection(ConnectionLogLevel.info,
+          'Connecting to ${host.host}:${host.port} as ${host.username}');
+      session.logConnection(
+          ConnectionLogLevel.info, 'Auth method: ${host.authType.name}');
+      if (jumpChain.isNotEmpty) {
+        session.logConnection(ConnectionLogLevel.info,
+            'Tunneling via ${jumpChain.map((h) => h.host.label).join(' → ')}');
+      }
+      _safeNotify();
       await _ssh.connect(
         host,
         keyEntry: keyEntry,
         jumpChain: jumpChain,
         verifyHostKey: hostKeyVerifier != null
-            ? (keyType, fp) => hostKeyVerifier!(host.host, host.port, keyType, fp)
+            ? (keyType, fp) =>
+                _verifyAndLog(session, host.host, host.port, keyType, fp)
             : null,
         verifyHopHostKey: hostKeyVerifier != null
             ? (hop, keyType, fp) =>
-                hostKeyVerifier!(hop.host, hop.port, keyType, fp)
+                _verifyAndLog(session, hop.host, hop.port, keyType, fp)
             : null,
       );
+      session.logConnection(ConnectionLogLevel.success, 'Connection established');
       session.status = SessionStatus.connected;
       audit?.record(AuditEvent.now(
           type: AuditEventType.connect, host: host, sessionId: session.id));
@@ -516,6 +528,7 @@ class SessionProvider extends ChangeNotifier {
       }
     } catch (e) {
       if (!_sessions.contains(session)) return;
+      session.logConnection(ConnectionLogLevel.error, 'Connection failed: $e');
       final maxAttempts = reconnectAttempts?.call() ?? 0;
       final isUnlimited = maxAttempts == 0;
       // A jump-chain config error (deleted bastion, cycle) can never succeed
@@ -545,10 +558,45 @@ class SessionProvider extends ChangeNotifier {
     }
   }
 
+  /// Wraps the host-key verifier so the TOFU check is reflected in the
+  /// session's connection log (shown by the "Show logs" panel).
+  Future<bool> _verifyAndLog(
+      SshSession session, String host, int port, String keyType, Uint8List fp) async {
+    session.logConnection(
+        ConnectionLogLevel.info, 'Verifying host key ($keyType) for $host:$port');
+    _safeNotify();
+    final ok = await hostKeyVerifier!(host, port, keyType, fp);
+    session.logConnection(
+        ok ? ConnectionLogLevel.success : ConnectionLogLevel.warn,
+        ok ? 'Host key accepted' : 'Host key rejected');
+    _safeNotify();
+    return ok;
+  }
+
+  /// Manual retry from the connecting screen's "Retry" button. Reuses the
+  /// existing session/tab (preserving its terminal and metadata) rather than
+  /// closing and reopening, and cancels any pending auto-reconnect first.
+  void reconnectSession(String sessionId) {
+    final session = sshSessions.where((s) => s.id == sessionId).firstOrNull;
+    if (session == null || session.status == SessionStatus.connecting) return;
+    _reconnectTimers.remove(sessionId)?.cancel();
+    _countdownTimers.remove(sessionId)?.cancel();
+    session.status = SessionStatus.connecting;
+    session.errorMessage = null;
+    // A manual retry is a fresh attempt — drop the prior attempt's trace so the
+    // log panel shows only the new connection.
+    session.clearConnectionLog();
+    session.logConnection(ConnectionLogLevel.info, 'Retrying connection…');
+    _safeNotify();
+    unawaited(_doConnect(session, session.host, attempt: 1));
+  }
+
   void _scheduleReconnect(SshSession session, Host host, {required int attempt}) {
     session.reconnectCount++;
     final delay = (attempt * 2).clamp(2, 60);
     session.status = SessionStatus.connecting;
+    session.logConnection(
+        ConnectionLogLevel.warn, 'Reconnecting in ${delay}s (attempt $attempt)');
     _safeNotify();
 
     _startCountdown(session, delay, attempt);

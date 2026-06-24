@@ -7,6 +7,7 @@ import '../models/host.dart';
 import '../models/ssh_session.dart';
 import '../providers/command_history_provider.dart';
 import '../providers/host_provider.dart';
+import '../providers/session_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/shell_integration_provider.dart';
 import '../services/hotkey_service.dart';
@@ -14,6 +15,7 @@ import '../theme/terminal_themes.dart';
 import '../util/terminal_appearance.dart';
 import 'command_gutter.dart';
 import 'record_button.dart';
+import 'session_connecting_view.dart';
 import 'suggestion_popup.dart';
 import 'terminal_context_menu.dart';
 
@@ -23,27 +25,14 @@ class SessionTerminalView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return switch (session.status) {
-      SessionStatus.connecting => _statusView(Icons.sync, 'Connecting to ${session.host.host}…', Colors.orange),
-      SessionStatus.error => _statusView(Icons.error_outline, session.errorMessage ?? 'Connection error', Colors.red),
-      SessionStatus.disconnected => _statusView(Icons.link_off, 'Disconnected', Colors.grey),
-      SessionStatus.connected => _TerminalWidget(key: ValueKey(session.id), session: session),
-    };
-  }
-
-  Widget _statusView(IconData icon, String message, Color color) {
-    return Container(
-      color: Colors.black,
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 40),
-            const SizedBox(height: 12),
-            Text(message, style: TextStyle(color: color, fontFamily: 'monospace', fontSize: 13)),
-          ],
-        ),
-      ),
+    if (session.status == SessionStatus.connected) {
+      return _TerminalWidget(key: ValueKey(session.id), session: session);
+    }
+    final sessions = context.read<SessionProvider>();
+    return SessionConnectingView(
+      session: session,
+      onClose: () => sessions.closeSession(session.id),
+      onRetry: () => sessions.reconnectSession(session.id),
     );
   }
 }
