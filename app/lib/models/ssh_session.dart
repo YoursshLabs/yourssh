@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 import 'package:xterm/xterm.dart';
 import 'agent_forwarding_state.dart';
+import 'connection_log.dart';
 import 'host.dart';
 import 'terminal_session.dart';
 
@@ -32,6 +33,24 @@ class SshSession implements TerminalSession {
   /// Live forwarding status shown on the session tab; updated by
   /// SessionProvider.handleAgentForwardingEvent.
   AgentForwardingState agentForwardingState = AgentForwardingState.off;
+
+  /// Human-readable trace of the connect attempt, shown by the "Show logs"
+  /// panel on the connecting screen. Bounded to [kMaxConnectionLogLines].
+  final List<ConnectionLogLine> connectionLog = [];
+
+  /// Appends a connection-log line, trimming the oldest entries past the cap.
+  void logConnection(ConnectionLogLevel level, String message, {DateTime? at}) {
+    connectionLog.add(ConnectionLogLine(
+      time: at ?? DateTime.now(),
+      level: level,
+      message: message,
+    ));
+    if (connectionLog.length > kMaxConnectionLogLines) {
+      connectionLog.removeRange(0, connectionLog.length - kMaxConnectionLogLines);
+    }
+  }
+
+  void clearConnectionLog() => connectionLog.clear();
 
   SshSession({
     String? id,
