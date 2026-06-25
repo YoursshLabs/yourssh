@@ -25,4 +25,10 @@ void main() {
     expect(b.sync, isNotNull);
     expect(b.syncService, isNotNull);
   });
+
+  test('exposes snippets + transfer service', () {
+    final b = MobileBootstrap();
+    expect(b.snippets, isNotNull);
+    expect(b.transfer, isNotNull);
+  });
 }

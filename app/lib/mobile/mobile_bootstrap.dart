@@ -1,5 +1,6 @@
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
+import 'package:yourssh_snippets/yourssh_snippets.dart';
 
 import '../providers/host_provider.dart';
 import '../providers/key_provider.dart';
@@ -7,6 +8,7 @@ import '../providers/known_hosts_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/sync_provider.dart';
+import '../services/sftp_transfer_service.dart';
 import '../services/ssh_service.dart';
 import '../services/storage_service.dart';
 import '../services/sync_service.dart';
@@ -26,6 +28,8 @@ class MobileBootstrap {
   late final SessionProvider sessions;
   late final SyncProvider sync;
   late final SyncService syncService;
+  late final SnippetProvider snippets;
+  late final SftpTransferService transfer;
 
   MobileBootstrap() {
     storage = StorageService();
@@ -37,6 +41,8 @@ class MobileBootstrap {
     sessions = SessionProvider(ssh, TabMetadataService());
     sync = SyncProvider(storage: storage);
     syncService = SyncService(sync);
+    snippets = SnippetProvider();
+    transfer = SftpTransferService(ssh);
     _wire();
   }
 
@@ -67,5 +73,7 @@ class MobileBootstrap {
         ChangeNotifierProvider.value(value: sessions),
         ChangeNotifierProvider.value(value: sync),
         Provider.value(value: syncService),
+        ChangeNotifierProvider.value(value: snippets),
+        Provider.value(value: transfer),
       ];
 }
