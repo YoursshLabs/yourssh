@@ -19,4 +19,10 @@ void main() {
     // Exposes a provider list for the widget tree.
     expect(b.providers, isNotEmpty);
   });
+
+  test('exposes sync provider + service', () {
+    final b = MobileBootstrap();
+    expect(b.sync, isNotNull);
+    expect(b.syncService, isNotNull);
+  });
 }

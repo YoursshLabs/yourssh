@@ -6,8 +6,10 @@ import '../providers/key_provider.dart';
 import '../providers/known_hosts_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/sync_provider.dart';
 import '../services/ssh_service.dart';
 import '../services/storage_service.dart';
+import '../services/sync_service.dart';
 import '../services/tab_metadata_service.dart';
 
 /// Constructs the platform-agnostic services/providers the Android app needs
@@ -22,6 +24,8 @@ class MobileBootstrap {
   late final SettingsProvider settings;
   late final KnownHostsProvider knownHosts;
   late final SessionProvider sessions;
+  late final SyncProvider sync;
+  late final SyncService syncService;
 
   MobileBootstrap() {
     storage = StorageService();
@@ -31,6 +35,8 @@ class MobileBootstrap {
     settings = SettingsProvider();
     knownHosts = KnownHostsProvider(storage)..load();
     sessions = SessionProvider(ssh, TabMetadataService());
+    sync = SyncProvider(storage: storage);
+    syncService = SyncService(sync);
     _wire();
   }
 
@@ -59,5 +65,7 @@ class MobileBootstrap {
         ChangeNotifierProvider.value(value: settings),
         ChangeNotifierProvider.value(value: knownHosts),
         ChangeNotifierProvider.value(value: sessions),
+        ChangeNotifierProvider.value(value: sync),
+        Provider.value(value: syncService),
       ];
 }
