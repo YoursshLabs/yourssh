@@ -45,15 +45,28 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   }
 
   Future<void> _init() async {
-    final enabled = widget.enabledOverride ??
+    final wantEnabled = widget.enabledOverride ??
         (await SharedPreferences.getInstance()).getBool(kAppLockPrefKey) ??
         true;
+    // If the OS can't authenticate at all (no enrolled biometric and no device
+    // credential set), enforcing the lock would trap the user on a screen whose
+    // Unlock button can never succeed — so fall open instead of locking out.
+    final enabled = wantEnabled && await _canAuthenticate();
     if (!mounted) return;
     setState(() {
       _enabled = enabled;
       _locked = enabled;
     });
     if (enabled) _authenticate();
+  }
+
+  Future<bool> _canAuthenticate() async {
+    if (widget.authenticator != null) return true; // injected in tests
+    try {
+      return await LocalAuthentication().isDeviceSupported();
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
