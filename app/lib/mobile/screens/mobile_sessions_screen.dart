@@ -10,7 +10,9 @@ import '../../theme/terminal_themes.dart';
 import '../../util/terminal_appearance.dart';
 import '../terminal/accessory_bar_controller.dart';
 import '../terminal/accessory_key_bar.dart';
-import '../terminal/mobile_snippets_sheet.dart';
+import '../terminal/terminal_cursor_gestures.dart';
+import '../terminal/terminal_side_panel.dart';
+import '../theme/mobile_tokens.dart';
 
 /// Sessions tab: a session strip + the active SSH session's terminal (when
 /// connected, with the accessory key bar docked below and per-session
@@ -44,14 +46,14 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
     setState(() => _pinch[sessionId] = (_scaleBase * d.scale).clamp(8.0, 28.0));
   }
 
-  void _openSnippets(SshSession active) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.card,
-      isScrollControlled: true,
-      builder: (_) => MobileSnippetsSheet(
-        onInsert: (cmd) => active.terminal.textInput(cmd),
-      ),
+  void _openPanel(SshSession active, {int initialTab = 0}) {
+    showTerminalSidePanel(
+      context,
+      sessionId: active.id,
+      onInsert: (cmd) => active.terminal.textInput(cmd),
+      onKey: (k, {ctrl = false, alt = false}) =>
+          active.terminal.keyInput(k, ctrl: ctrl, alt: alt),
+      initialTab: initialTab,
     );
   }
 
@@ -92,9 +94,10 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
                 Expanded(
                     child: _SessionStrip(sessions: ssh, activeId: active.id)),
                 IconButton(
-                  icon: const Icon(Icons.code, color: AppColors.textSecondary),
-                  tooltip: 'Snippets',
-                  onPressed: () => _openSnippets(active),
+                  icon: const Icon(Icons.dashboard_customize_outlined,
+                      color: AppColors.textSecondary),
+                  tooltip: 'Keyboard, snippets, history, themes',
+                  onPressed: () => _openPanel(active),
                 ),
               ],
             ),
@@ -108,6 +111,7 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
                 onScaleStart: (_) =>
                     _onScaleStart(active.id, appearance.fontSize),
                 onScaleUpdate: (d) => _onScaleUpdate(active.id, d),
+                onOpenPanel: () => _openPanel(active),
               ),
             ),
           ],
@@ -133,11 +137,11 @@ class _SessionStrip extends StatelessWidget {
           for (final s in sessions)
             Padding(
               padding: const EdgeInsets.only(right: 6),
-              child: ChoiceChip(
-                label: Text(s.tabLabel),
+              child: _SessionPill(
+                session: s,
                 selected: s.id == activeId,
-                onSelected: (_) =>
-                    context.read<SessionProvider>().setActive(s.id),
+                onTap: () => context.read<SessionProvider>().setActive(s.id),
+                onClose: () => context.read<SessionProvider>().closeSession(s.id),
               ),
             ),
         ],
@@ -146,13 +150,70 @@ class _SessionStrip extends StatelessWidget {
   }
 }
 
-class _SessionBody extends StatelessWidget {
+class _SessionPill extends StatelessWidget {
+  final SshSession session;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onClose;
+  const _SessionPill({
+    required this.session,
+    required this.selected,
+    required this.onTap,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(MobileTokens.radiusPill),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.card : AppColors.bg,
+          borderRadius: BorderRadius.circular(MobileTokens.radiusPill),
+          border: Border.all(
+              color: selected ? AppColors.accent : AppColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: AppColors.hostColor(session.host.host),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(session.tabLabel,
+                style: TextStyle(
+                    color: selected
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+                    fontSize: 13)),
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: onClose,
+              child: const Icon(Icons.close,
+                  size: 14, color: AppColors.textTertiary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionBody extends StatefulWidget {
   final SshSession session;
   final AccessoryBarController accessory;
   final TerminalAppearance appearance;
   final double fontSize;
   final void Function(ScaleStartDetails) onScaleStart;
   final void Function(ScaleUpdateDetails) onScaleUpdate;
+  final VoidCallback onOpenPanel;
 
   const _SessionBody({
     required this.session,
@@ -161,32 +222,59 @@ class _SessionBody extends StatelessWidget {
     required this.fontSize,
     required this.onScaleStart,
     required this.onScaleUpdate,
+    required this.onOpenPanel,
   });
 
   @override
+  State<_SessionBody> createState() => _SessionBodyState();
+}
+
+class _SessionBodyState extends State<_SessionBody> {
+  final _cursor = CursorDragMapper();
+  Offset _lastDrag = Offset.zero;
+
+  @override
   Widget build(BuildContext context) {
-    if (session.status == SessionStatus.connected) {
+    if (widget.session.status == SessionStatus.connected) {
       return Column(
         children: [
           Expanded(
+            // Outer GestureDetector handles long-press-drag for cursor movement.
+            // Inner GestureDetector handles pinch-to-zoom (scale).
+            // Nesting avoids competing recognizer conflicts between scale and
+            // long-press-drag that can occur with a single GestureDetector.
             child: GestureDetector(
-              onScaleStart: onScaleStart,
-              onScaleUpdate: onScaleUpdate,
-              child: TerminalView(
-                session.terminal,
-                theme: terminalThemeByName(appearance.themeName),
-                textStyle: TerminalStyle(
-                  fontSize: fontSize,
-                  fontFamily: appearance.fontFamily,
+              onLongPressMoveUpdate: (d) {
+                final delta = d.offsetFromOrigin - _lastDrag;
+                for (final k in _cursor.addDelta(delta.dx, delta.dy)) {
+                  widget.session.terminal.keyInput(k);
+                }
+                _lastDrag = d.offsetFromOrigin;
+              },
+              onLongPressEnd: (_) {
+                _cursor.reset();
+                _lastDrag = Offset.zero;
+              },
+              child: GestureDetector(
+                onScaleStart: widget.onScaleStart,
+                onScaleUpdate: widget.onScaleUpdate,
+                child: TerminalView(
+                  widget.session.terminal,
+                  theme: terminalThemeByName(widget.appearance.themeName),
+                  textStyle: TerminalStyle(
+                    fontSize: widget.fontSize,
+                    fontFamily: widget.appearance.fontFamily,
+                  ),
                 ),
               ),
             ),
           ),
           AccessoryKeyBar(
-            controller: accessory,
+            controller: widget.accessory,
             onKey: (k, {ctrl = false, alt = false}) =>
-                session.terminal.keyInput(k, ctrl: ctrl, alt: alt),
-            onText: (s) => session.terminal.textInput(s),
+                widget.session.terminal.keyInput(k, ctrl: ctrl, alt: alt),
+            onText: (s) => widget.session.terminal.textInput(s),
+            onOpenPanel: widget.onOpenPanel,
           ),
         ],
       );
@@ -195,16 +283,16 @@ class _SessionBody extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (session.status == SessionStatus.connecting)
+          if (widget.session.status == SessionStatus.connecting)
             const Padding(
               padding: EdgeInsets.only(bottom: 12),
               child: CircularProgressIndicator(),
             ),
-          Text(session.statusLabel,
+          Text(widget.session.statusLabel,
               style: const TextStyle(color: AppColors.textSecondary)),
-          if (session.errorMessage != null) ...[
+          if (widget.session.errorMessage != null) ...[
             const SizedBox(height: 8),
-            Text(session.errorMessage!,
+            Text(widget.session.errorMessage!,
                 style: const TextStyle(color: AppColors.red, fontSize: 12)),
           ],
         ],
