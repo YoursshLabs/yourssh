@@ -23,7 +23,13 @@ class _TofuWatcherState extends State<TofuWatcher> {
     final challenge = context.watch<KnownHostsProvider>().pendingChallenge;
     if (challenge != null && !_dialogOpen) {
       _dialogOpen = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _show(challenge));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _show(challenge);
+        } else {
+          challenge.reject(); // never leave the connect future hanging
+        }
+      });
     }
     return widget.child;
   }

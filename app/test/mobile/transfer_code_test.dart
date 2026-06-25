@@ -17,4 +17,10 @@ void main() {
     expect(() => parseTransferCode('not json'), throwsFormatException);
     expect(() => parseTransferCode('{"u":"","k":"AAAA"}'), throwsFormatException);
   });
+
+  test('throws when the key is not 32 bytes (AES-256)', () {
+    final shortKey = base64.encode(List<int>.filled(16, 0));
+    expect(() => parseTransferCode('{"u":"http://x","k":"$shortKey"}'),
+        throwsFormatException);
+  });
 }

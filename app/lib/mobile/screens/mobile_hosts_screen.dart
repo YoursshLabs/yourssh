@@ -5,6 +5,7 @@ import '../../models/host.dart';
 import '../../providers/host_provider.dart';
 import '../../providers/session_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../util/host_query.dart';
 
 /// Hosts tab: searchable list of saved hosts; tap to connect, FAB to add.
 class MobileHostsScreen extends StatefulWidget {
@@ -27,15 +28,9 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
   @override
   Widget build(BuildContext context) {
     final all = context.watch<HostProvider>().allHosts;
-    final q = _query.trim().toLowerCase();
-    final hosts = q.isEmpty
-        ? all
-        : all
-            .where((h) =>
-                h.label.toLowerCase().contains(q) ||
-                h.host.toLowerCase().contains(q) ||
-                h.username.toLowerCase().contains(q))
-            .toList();
+    final q = _query.trim();
+    // Reuse the dashboard's query engine so tag/facet search works on mobile too.
+    final hosts = q.isEmpty ? all : all.where(HostQuery.parse(q).matches).toList();
 
     return Scaffold(
       backgroundColor: AppColors.bg,

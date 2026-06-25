@@ -22,5 +22,10 @@ import 'dart:convert';
   } catch (_) {
     throw const FormatException('Transfer code key is invalid');
   }
+  // P2P sync uses AES-256-GCM, whose key is exactly 32 bytes. Reject anything
+  // else here with a clear message rather than failing deep in decrypt.
+  if (key.length != 32) {
+    throw const FormatException('Transfer code key has the wrong length');
+  }
   return (url: url, key: key);
 }

@@ -23,7 +23,9 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   final _url = TextEditingController();
   final _anon = TextEditingController();
   final _code = TextEditingController();
-  bool _seeded = false;
+  // Once the user edits a field we stop syncing it from the provider, so an
+  // async config load that completes after the first build can't clobber typing.
+  bool _dirty = false;
   bool _pulling = false;
   bool _appLock = true;
 
@@ -48,11 +50,13 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final sync = context.watch<SyncProvider>();
-    if (!_seeded) {
-      _url.text = sync.supabaseUrl;
-      _anon.text = sync.supabaseAnonKey;
-      _code.text = sync.syncCode;
-      _seeded = true;
+    if (!_dirty) {
+      // Mirror the provider until the user edits a field. SyncProvider loads its
+      // values asynchronously, so this re-seeds once the load completes instead
+      // of latching empty on the first frame (which a Save would then persist).
+      if (_url.text != sync.supabaseUrl) _url.text = sync.supabaseUrl;
+      if (_anon.text != sync.supabaseAnonKey) _anon.text = sync.supabaseAnonKey;
+      if (_code.text != sync.syncCode) _code.text = sync.syncCode;
     }
 
     return Scaffold(
@@ -128,7 +132,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
               },
               title: const Text('Require biometrics to open',
                   style: TextStyle(color: AppColors.textPrimary)),
-              subtitle: const Text('Applies on next launch / resume',
+              subtitle: const Text('Applies on next app launch',
                   style:
                       TextStyle(color: AppColors.textSecondary, fontSize: 12)),
             ),
@@ -194,6 +198,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
       child: TextField(
         key: Key(key),
         controller: c,
+        onChanged: (_) => _dirty = true,
         style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
         decoration: InputDecoration(labelText: label),
       ),

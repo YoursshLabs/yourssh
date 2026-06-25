@@ -20,6 +20,12 @@ class _YourSSHMobileAppState extends State<YourSSHMobileApp> {
   final _bootstrap = MobileBootstrap();
 
   @override
+  void dispose() {
+    _bootstrap.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: _bootstrap.providers,

@@ -13,8 +13,8 @@ import '../terminal/accessory_key_bar.dart';
 import '../terminal/mobile_snippets_sheet.dart';
 
 /// Sessions tab: a session strip + the active SSH session's terminal (when
-/// connected, with the accessory key bar docked below and pinch-to-zoom font)
-/// or its connection status.
+/// connected, with the accessory key bar docked below and per-session
+/// pinch-to-zoom) or its connection status.
 class MobileSessionsScreen extends StatefulWidget {
   const MobileSessionsScreen({super.key});
 
@@ -24,8 +24,9 @@ class MobileSessionsScreen extends StatefulWidget {
 
 class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
   final _accessory = AccessoryBarController();
-  // 0 = follow the global appearance font size; non-zero = pinch override.
-  double _fontSize = 0;
+  // Pinch-zoom font overrides, keyed by session id — so zooming one session
+  // doesn't bleed its size onto another (and absence = follow appearance).
+  final Map<String, double> _pinch = {};
   double _scaleBase = 0;
 
   @override
@@ -34,14 +35,13 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
     super.dispose();
   }
 
-  double _settingsFontSize() {
-    final s = context.read<SettingsProvider>();
-    return resolveTerminalAppearance(
-      host: context.read<SessionProvider>().activeSshSession?.host,
-      globalTheme: s.terminalTheme,
-      globalFont: s.terminalFont,
-      globalFontSize: s.fontSize,
-    ).fontSize;
+  void _onScaleStart(String sessionId, double followSize) {
+    _scaleBase = _pinch[sessionId] ?? followSize;
+  }
+
+  void _onScaleUpdate(String sessionId, ScaleUpdateDetails d) {
+    if (d.scale == 1.0) return;
+    setState(() => _pinch[sessionId] = (_scaleBase * d.scale).clamp(8.0, 28.0));
   }
 
   void _openSnippets(SshSession active) {
@@ -53,16 +53,6 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
         onInsert: (cmd) => active.terminal.textInput(cmd),
       ),
     );
-  }
-
-  void _onScaleStart(ScaleStartDetails _) {
-    if (_fontSize == 0) _fontSize = _settingsFontSize();
-    _scaleBase = _fontSize;
-  }
-
-  void _onScaleUpdate(ScaleUpdateDetails d) {
-    if (d.scale == 1.0) return;
-    setState(() => _fontSize = (_scaleBase * d.scale).clamp(8.0, 28.0));
   }
 
   @override
@@ -84,6 +74,14 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
         ? sp.activeSession as SshSession
         : ssh.last;
 
+    final settings = context.watch<SettingsProvider>();
+    final appearance = resolveTerminalAppearance(
+      host: active.host,
+      globalTheme: settings.terminalTheme,
+      globalFont: settings.terminalFont,
+      globalFontSize: settings.fontSize,
+    );
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -91,7 +89,8 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
           children: [
             Row(
               children: [
-                Expanded(child: _SessionStrip(sessions: ssh, activeId: active.id)),
+                Expanded(
+                    child: _SessionStrip(sessions: ssh, activeId: active.id)),
                 IconButton(
                   icon: const Icon(Icons.code, color: AppColors.textSecondary),
                   tooltip: 'Snippets',
@@ -104,9 +103,11 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
               child: _SessionBody(
                 session: active,
                 accessory: _accessory,
-                fontSize: _fontSize,
-                onScaleStart: _onScaleStart,
-                onScaleUpdate: _onScaleUpdate,
+                appearance: appearance,
+                fontSize: _pinch[active.id] ?? appearance.fontSize,
+                onScaleStart: (_) =>
+                    _onScaleStart(active.id, appearance.fontSize),
+                onScaleUpdate: (d) => _onScaleUpdate(active.id, d),
               ),
             ),
           ],
@@ -148,6 +149,7 @@ class _SessionStrip extends StatelessWidget {
 class _SessionBody extends StatelessWidget {
   final SshSession session;
   final AccessoryBarController accessory;
+  final TerminalAppearance appearance;
   final double fontSize;
   final void Function(ScaleStartDetails) onScaleStart;
   final void Function(ScaleUpdateDetails) onScaleUpdate;
@@ -155,6 +157,7 @@ class _SessionBody extends StatelessWidget {
   const _SessionBody({
     required this.session,
     required this.accessory,
+    required this.appearance,
     required this.fontSize,
     required this.onScaleStart,
     required this.onScaleUpdate,
@@ -163,15 +166,6 @@ class _SessionBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (session.status == SessionStatus.connected) {
-      final settings = context.watch<SettingsProvider>();
-      final appearance = resolveTerminalAppearance(
-        host: session.host,
-        globalTheme: settings.terminalTheme,
-        globalFont: settings.terminalFont,
-        globalFontSize: settings.fontSize,
-      );
-      // Pinch (fontSize > 0) overrides size only; theme + font come from settings.
-      final effectiveSize = fontSize == 0 ? appearance.fontSize : fontSize;
       return Column(
         children: [
           Expanded(
@@ -182,7 +176,7 @@ class _SessionBody extends StatelessWidget {
                 session.terminal,
                 theme: terminalThemeByName(appearance.themeName),
                 textStyle: TerminalStyle(
-                  fontSize: effectiveSize,
+                  fontSize: fontSize,
                   fontFamily: appearance.fontFamily,
                 ),
               ),

@@ -58,9 +58,21 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _enabled && !_locked) {
-      setState(() => _locked = true);
-      _authenticate();
+    if (!_enabled) return;
+    // Don't disturb the lock state while our own biometric prompt is up — it
+    // briefly drives the app through inactive/paused → resumed, which would
+    // otherwise re-lock and re-prompt in a loop right after a successful unlock.
+    if (_authInFlight) return;
+    switch (state) {
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        // Cover the app-switcher snapshot: lock before the OS captures it.
+        if (!_locked && mounted) setState(() => _locked = true);
+      case AppLifecycleState.resumed:
+        if (_locked) _authenticate();
+      case AppLifecycleState.detached:
+        break;
     }
   }
 
@@ -80,8 +92,11 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
     if (_authInFlight) return;
     _authInFlight = true;
     final ok = await (widget.authenticator ?? _defaultAuth)();
-    _authInFlight = false;
     if (mounted && ok) setState(() => _locked = false);
+    // Clear the guard one frame later, so the inactive→resumed transition that
+    // accompanies dismissing the system biometric sheet is still ignored above
+    // (otherwise it re-locks immediately after unlocking).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _authInFlight = false);
   }
 
   @override

@@ -14,6 +14,7 @@ import '../../theme/app_theme.dart';
 
 /// Single-panel SFTP browser over the active SSH session's host. Lists, opens
 /// directories, downloads files to a picked folder, and uploads a picked file.
+/// One SFTP channel is held per host and reused for all operations.
 class MobileSftpScreen extends StatefulWidget {
   const MobileSftpScreen({super.key});
 
@@ -28,21 +29,44 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
   String? _error;
   String? _loadedHostId;
 
+  // One reusable SFTP channel per host (opening one per listdir/download adds a
+  // full channel-handshake RTT to every tap on a mobile link).
+  SftpClient? _sftp;
+  String? _sftpHostId;
+  // Monotonic token so a slow listdir from a previous host can't overwrite the
+  // current view when the user switches sessions mid-load.
+  int _loadToken = 0;
+
+  @override
+  void dispose() {
+    _sftp?.close();
+    super.dispose();
+  }
+
+  Future<SftpClient> _client(Host host) async {
+    if (_sftp != null && _sftpHostId == host.id) return _sftp!;
+    _sftp?.close();
+    _sftp = await context.read<SshService>().openSftp(host);
+    _sftpHostId = host.id;
+    return _sftp!;
+  }
+
   Future<void> _load(Host host, String path) async {
+    final token = ++_loadToken;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final sftp = await context.read<SshService>().openSftp(host);
+      final sftp = await _client(host);
       final raw = await sftp.listdir(path);
-      sftp.close();
       raw.sort((a, b) {
         final ad = a.attr.isDirectory, bd = b.attr.isDirectory;
         if (ad != bd) return ad ? -1 : 1;
-        return a.filename.compareTo(b.filename);
+        // Case-insensitive, matching the desktop SFTP ordering.
+        return a.filename.toLowerCase().compareTo(b.filename.toLowerCase());
       });
-      if (!mounted) return;
+      if (!mounted || token != _loadToken) return; // a newer load supersedes us
       setState(() {
         _path = path;
         _entries = raw
@@ -51,7 +75,7 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
         _loading = false;
       });
     } catch (e) {
-      if (mounted) {
+      if (mounted && token == _loadToken) {
         setState(() {
           _loading = false;
           _error = '$e';
@@ -166,26 +190,30 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
   String _join(String name) => _path == '.' ? name : p.posix.join(_path, name);
 
   Future<void> _download(Host host, SftpName e) async {
-    final ssh = context.read<SshService>();
     final dir = await FilePicker.platform.getDirectoryPath();
     if (dir == null) return;
+    final sink = io.File(p.join(dir, e.filename)).openWrite();
     try {
-      final sftp = await ssh.openSftp(host);
+      final sftp = await _client(host);
       final file = await sftp.open(_join(e.filename));
-      final bytes = await file.readBytes();
+      // Stream chunks to disk instead of buffering the whole file in memory.
+      await for (final chunk in file.read()) {
+        sink.add(chunk);
+      }
       await file.close();
-      sftp.close();
-      await io.File(p.join(dir, e.filename)).writeAsBytes(bytes);
       _snack('Downloaded ${e.filename}');
     } catch (err) {
       _snack('Download failed: $err');
+    } finally {
+      await sink.close();
     }
   }
 
   Future<void> _upload(Host host) async {
     final transfer = context.read<SftpTransferService>();
     final picked = await FilePicker.platform.pickFiles();
-    final localPath = picked?.files.single.path;
+    final localPath =
+        picked == null || picked.files.isEmpty ? null : picked.files.first.path;
     if (localPath == null) return;
     final name = p.basename(localPath);
     try {

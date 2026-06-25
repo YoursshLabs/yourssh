@@ -33,6 +33,13 @@ class AccessoryKeyBar extends StatelessWidget {
     onText(s);
   }
 
+  /// Dedicated `Ctrl+<key>` (e.g. ^C/^D). Clears any armed sticky modifier so
+  /// it can't carry over to the next keypress.
+  void _ctrlKey(TerminalKey k) {
+    controller.consumeModifiers();
+    onKey(k, ctrl: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -50,8 +57,8 @@ class AccessoryKeyBar extends StatelessWidget {
               _btn('Ctrl',
                   armed: controller.ctrlArmed, onTap: controller.armCtrl),
               _btn('Alt', armed: controller.altArmed, onTap: controller.armAlt),
-              _btn('^C', onTap: () => onKey(TerminalKey.keyC, ctrl: true)),
-              _btn('^D', onTap: () => onKey(TerminalKey.keyD, ctrl: true)),
+              _btn('^C', onTap: () => _ctrlKey(TerminalKey.keyC)),
+              _btn('^D', onTap: () => _ctrlKey(TerminalKey.keyD)),
               _icon(Icons.keyboard_arrow_left, 'Left',
                   () => _key(TerminalKey.arrowLeft)),
               _icon(Icons.keyboard_arrow_up, 'Up',

@@ -76,4 +76,18 @@ class MobileBootstrap {
         ChangeNotifierProvider.value(value: snippets),
         Provider.value(value: transfer),
       ];
+
+  /// Disposes the objects exposed via `Provider.value` (which does not dispose
+  /// them itself), most importantly [SessionProvider]'s reconnect timers and
+  /// [SyncService]'s retry timer. Called from the root widget's dispose.
+  void dispose() {
+    syncService.dispose();
+    sessions.dispose();
+    sync.dispose();
+    snippets.dispose();
+    knownHosts.dispose();
+    settings.dispose();
+    keyProvider.dispose();
+    hostProvider.dispose();
+  }
 }
