@@ -9,8 +9,8 @@ import '../terminal/accessory_bar_controller.dart';
 import '../terminal/accessory_key_bar.dart';
 
 /// Sessions tab: a session strip + the active SSH session's terminal (when
-/// connected, with the accessory key bar docked below) or its connection
-/// status.
+/// connected, with the accessory key bar docked below and pinch-to-zoom font)
+/// or its connection status.
 class MobileSessionsScreen extends StatefulWidget {
   const MobileSessionsScreen({super.key});
 
@@ -20,11 +20,20 @@ class MobileSessionsScreen extends StatefulWidget {
 
 class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
   final _accessory = AccessoryBarController();
+  double _fontSize = 14;
+  double _scaleBase = 14;
 
   @override
   void dispose() {
     _accessory.dispose();
     super.dispose();
+  }
+
+  void _onScaleStart(ScaleStartDetails _) => _scaleBase = _fontSize;
+
+  void _onScaleUpdate(ScaleUpdateDetails d) {
+    if (d.scale == 1.0) return;
+    setState(() => _fontSize = (_scaleBase * d.scale).clamp(8.0, 28.0));
   }
 
   @override
@@ -53,7 +62,15 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
           children: [
             _SessionStrip(sessions: ssh, activeId: active.id),
             const Divider(height: 1, color: AppColors.border),
-            Expanded(child: _SessionBody(session: active, accessory: _accessory)),
+            Expanded(
+              child: _SessionBody(
+                session: active,
+                accessory: _accessory,
+                fontSize: _fontSize,
+                onScaleStart: _onScaleStart,
+                onScaleUpdate: _onScaleUpdate,
+              ),
+            ),
           ],
         ),
       ),
@@ -93,14 +110,33 @@ class _SessionStrip extends StatelessWidget {
 class _SessionBody extends StatelessWidget {
   final SshSession session;
   final AccessoryBarController accessory;
-  const _SessionBody({required this.session, required this.accessory});
+  final double fontSize;
+  final void Function(ScaleStartDetails) onScaleStart;
+  final void Function(ScaleUpdateDetails) onScaleUpdate;
+
+  const _SessionBody({
+    required this.session,
+    required this.accessory,
+    required this.fontSize,
+    required this.onScaleStart,
+    required this.onScaleUpdate,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (session.status == SessionStatus.connected) {
       return Column(
         children: [
-          Expanded(child: TerminalView(session.terminal)),
+          Expanded(
+            child: GestureDetector(
+              onScaleStart: onScaleStart,
+              onScaleUpdate: onScaleUpdate,
+              child: TerminalView(
+                session.terminal,
+                textStyle: TerminalStyle(fontSize: fontSize),
+              ),
+            ),
+          ),
           AccessoryKeyBar(
             controller: accessory,
             onKey: (k, {ctrl = false, alt = false}) =>
