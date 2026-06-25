@@ -5,9 +5,10 @@ import '../../providers/host_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/sync_service.dart';
 import '../../theme/app_theme.dart';
+import 'mobile_qr_scan_screen.dart';
 
-/// Settings tab. M3.1 ships the Cloud Sync section (pull from desktop). The
-/// P2P QR scan entry is added in M3.2; appearance + app-lock in M5.
+/// Settings tab. M3 ships the Sync section (cloud pull + P2P QR scan).
+/// Appearance + app-lock arrive in M5.
 class MobileSettingsScreen extends StatefulWidget {
   const MobileSettingsScreen({super.key});
 
@@ -81,10 +82,36 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
               Text(sync.error!,
                   style: const TextStyle(color: AppColors.red, fontSize: 12)),
             ],
+            const SizedBox(height: 24),
+            const Text('P2P transfer',
+                style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            const Text(
+                'Scan the QR code shown on your desktop (Settings → Sync → Show QR).',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text('Scan QR code'),
+              onPressed: _scan,
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _scan() async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const MobileQrScanScreen()),
+    );
+    if (result != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(result)));
+    }
   }
 
   Future<void> _save() async {
