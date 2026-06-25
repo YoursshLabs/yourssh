@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import 'mobile_add_host_screen.dart';
 import 'mobile_hosts_screen.dart';
 import 'mobile_sessions_screen.dart';
+import 'mobile_settings_screen.dart';
 
 /// Bottom-navigation shell for the Android app. Hosts (0) and Sessions (1) are
 /// live; SFTP (2) and Settings (3) are placeholders filled in M4/M5.
@@ -40,6 +41,8 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
         );
       case 1:
         return const MobileSessionsScreen();
+      case 3:
+        return const MobileSettingsScreen();
       default:
         return Center(
           child: Text('${_labels[_index]} — coming soon',
