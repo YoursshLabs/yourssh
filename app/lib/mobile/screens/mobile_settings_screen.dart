@@ -6,6 +6,7 @@ import '../../providers/host_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/sync_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/terminal_appearance_controls.dart';
 import '../security/app_lock_gate.dart';
 import 'mobile_qr_scan_screen.dart';
 
@@ -131,6 +132,15 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
                   style:
                       TextStyle(color: AppColors.textSecondary, fontSize: 12)),
             ),
+            const SizedBox(height: 24),
+            const Text('Terminal appearance',
+                style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            const TerminalAppearanceControls(
+                layout: AppearanceControlsLayout.rows),
           ],
         ),
       ),

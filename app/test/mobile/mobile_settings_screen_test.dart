@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/screens/mobile_settings_screen.dart';
 import 'package:yourssh/providers/host_provider.dart';
+import 'package:yourssh/providers/settings_provider.dart';
 import 'package:yourssh/providers/sync_provider.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/sync_service.dart';
@@ -15,6 +16,7 @@ Future<void> _pump(WidgetTester tester, SyncProvider sync) async {
       providers: [
         ChangeNotifierProvider.value(value: sync),
         ChangeNotifierProvider(create: (_) => HostProvider(storage)),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
         Provider<SyncService>(create: (_) => SyncService(sync)),
       ],
       child: const MobileSettingsScreen(),

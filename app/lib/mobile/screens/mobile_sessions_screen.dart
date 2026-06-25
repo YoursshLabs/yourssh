@@ -4,7 +4,10 @@ import 'package:xterm/xterm.dart';
 
 import '../../models/ssh_session.dart';
 import '../../providers/session_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/terminal_themes.dart';
+import '../../util/terminal_appearance.dart';
 import '../terminal/accessory_bar_controller.dart';
 import '../terminal/accessory_key_bar.dart';
 import '../terminal/mobile_snippets_sheet.dart';
@@ -21,13 +24,24 @@ class MobileSessionsScreen extends StatefulWidget {
 
 class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
   final _accessory = AccessoryBarController();
-  double _fontSize = 14;
-  double _scaleBase = 14;
+  // 0 = follow the global appearance font size; non-zero = pinch override.
+  double _fontSize = 0;
+  double _scaleBase = 0;
 
   @override
   void dispose() {
     _accessory.dispose();
     super.dispose();
+  }
+
+  double _settingsFontSize() {
+    final s = context.read<SettingsProvider>();
+    return resolveTerminalAppearance(
+      host: context.read<SessionProvider>().activeSshSession?.host,
+      globalTheme: s.terminalTheme,
+      globalFont: s.terminalFont,
+      globalFontSize: s.fontSize,
+    ).fontSize;
   }
 
   void _openSnippets(SshSession active) {
@@ -41,7 +55,10 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
     );
   }
 
-  void _onScaleStart(ScaleStartDetails _) => _scaleBase = _fontSize;
+  void _onScaleStart(ScaleStartDetails _) {
+    if (_fontSize == 0) _fontSize = _settingsFontSize();
+    _scaleBase = _fontSize;
+  }
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
     if (d.scale == 1.0) return;
@@ -146,6 +163,15 @@ class _SessionBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (session.status == SessionStatus.connected) {
+      final settings = context.watch<SettingsProvider>();
+      final appearance = resolveTerminalAppearance(
+        host: session.host,
+        globalTheme: settings.terminalTheme,
+        globalFont: settings.terminalFont,
+        globalFontSize: settings.fontSize,
+      );
+      // Pinch (fontSize > 0) overrides size only; theme + font come from settings.
+      final effectiveSize = fontSize == 0 ? appearance.fontSize : fontSize;
       return Column(
         children: [
           Expanded(
@@ -154,7 +180,11 @@ class _SessionBody extends StatelessWidget {
               onScaleUpdate: onScaleUpdate,
               child: TerminalView(
                 session.terminal,
-                textStyle: TerminalStyle(fontSize: fontSize),
+                theme: terminalThemeByName(appearance.themeName),
+                textStyle: TerminalStyle(
+                  fontSize: effectiveSize,
+                  fontFamily: appearance.fontFamily,
+                ),
               ),
             ),
           ),
