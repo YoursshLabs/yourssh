@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 
 import '../../theme/app_theme.dart';
+import '../theme/mobile_tokens.dart';
 import 'accessory_bar_controller.dart';
 
 /// Mobile terminal accessory bar: special keys + sticky Ctrl/Alt above the
@@ -13,11 +14,16 @@ class AccessoryKeyBar extends StatelessWidget {
   final void Function(TerminalKey key, {bool ctrl, bool alt}) onKey;
   final void Function(String text) onText;
 
+  /// Opens the terminal side panel (extended keyboard / snippets / history /
+  /// themes). When null the leading keyboard button is hidden.
+  final VoidCallback? onOpenPanel;
+
   const AccessoryKeyBar({
     super.key,
     required this.controller,
     required this.onKey,
     required this.onText,
+    this.onOpenPanel,
   });
 
   /// Emit a special key, applying (and clearing) any armed sticky modifiers.
@@ -46,12 +52,14 @@ class AccessoryKeyBar extends StatelessWidget {
       animation: controller,
       builder: (context, _) {
         return Container(
-          height: 46,
+          height: MobileTokens.accessoryBarHeight,
           color: AppColors.card,
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             children: [
+              if (onOpenPanel != null)
+                _icon(Icons.keyboard_outlined, 'Keyboard panel', onOpenPanel!),
               _btn('Esc', onTap: () => _key(TerminalKey.escape)),
               _btn('Tab', onTap: () => _key(TerminalKey.tab)),
               _btn('Ctrl',
@@ -67,7 +75,7 @@ class AccessoryKeyBar extends StatelessWidget {
                   () => _key(TerminalKey.arrowDown)),
               _icon(Icons.keyboard_arrow_right, 'Right',
                   () => _key(TerminalKey.arrowRight)),
-              for (final ch in const ['/', '-', '|', '~', ':'])
+              for (final ch in const ['/', '-', '|', '~', ':', '\$'])
                 _btn(ch, onTap: () => _text(ch)),
             ],
           ),

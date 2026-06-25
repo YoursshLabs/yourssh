@@ -56,4 +56,42 @@ void main() {
     expect(gotKey, TerminalKey.keyC);
     expect(gotCtrl, isTrue);
   });
+
+  testWidgets('Esc/Tab/Ctrl render and Ctrl arms one-shot', (t) async {
+    final c = AccessoryBarController();
+    final keys = <(TerminalKey, bool)>[];
+    await t.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AccessoryKeyBar(
+          controller: c,
+          onKey: (k, {ctrl = false, alt = false}) => keys.add((k, ctrl)),
+          onText: (_) {},
+        ),
+      ),
+    ));
+    expect(find.text('Esc'), findsOneWidget);
+    expect(find.text('Tab'), findsOneWidget);
+    await t.tap(find.text('Ctrl'));
+    await t.pump();
+    expect(c.ctrlArmed, isTrue);
+    await t.tap(find.text('Esc'));
+    expect(keys.single, (TerminalKey.escape, true));
+    expect(c.ctrlArmed, isFalse); // consumed
+  });
+
+  testWidgets('onOpenPanel button fires when provided', (t) async {
+    var opened = false;
+    await t.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AccessoryKeyBar(
+          controller: AccessoryBarController(),
+          onKey: (k, {ctrl = false, alt = false}) {},
+          onText: (_) {},
+          onOpenPanel: () => opened = true,
+        ),
+      ),
+    ));
+    await t.tap(find.byIcon(Icons.keyboard_outlined));
+    expect(opened, isTrue);
+  });
 }
