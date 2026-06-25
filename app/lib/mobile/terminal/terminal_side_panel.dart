@@ -240,7 +240,7 @@ class _HistoryTab extends StatelessWidget {
     return ListView.builder(
       itemCount: entries.length,
       itemBuilder: (_, i) {
-        final cmd = entries[entries.length - 1 - i]; // newest first
+        final cmd = entries[i]; // entries is already newest-first (addFirst)
         return ListTile(
           title: Text(cmd,
               maxLines: 1,

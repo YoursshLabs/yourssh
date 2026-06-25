@@ -61,6 +61,8 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
   Widget build(BuildContext context) {
     final sp = context.watch<SessionProvider>();
     final ssh = sp.sshSessions;
+    // Drop pinch-zoom overrides for sessions that have since closed.
+    _pinch.removeWhere((id, _) => ssh.every((s) => s.id != id));
 
     if (ssh.isEmpty) {
       return const Scaffold(
