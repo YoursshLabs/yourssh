@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/host.dart';
+import '../../models/ssh_session.dart';
 import '../../providers/host_provider.dart';
 import '../../providers/session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../util/host_query.dart';
+import '../theme/mobile_tokens.dart';
+import '../widgets/host_card.dart';
+import '../widgets/status_dot.dart';
+import '../widgets/tag_chip.dart';
 
-/// Hosts tab: searchable list of saved hosts; tap to connect, FAB to add.
+/// Hosts tab: searchable list of saved hosts as Termius-style cards; tap to
+/// connect, long-press to delete, FAB to add. Tag chips filter the list.
 class MobileHostsScreen extends StatefulWidget {
   final VoidCallback onConnected;
   final VoidCallback onAddHost;
@@ -24,13 +30,35 @@ class MobileHostsScreen extends StatefulWidget {
 
 class _MobileHostsScreenState extends State<MobileHostsScreen> {
   String _query = '';
+  String? _tagFilter;
+
+  /// Coarse connection state for a host, derived from any live session on it.
+  HostConnState _stateFor(Host host, List<SshSession> sessions) {
+    final mine = sessions.where((s) => s.host.id == host.id);
+    if (mine.any((s) => s.status == SessionStatus.connected)) {
+      return HostConnState.connected;
+    }
+    if (mine.any((s) => s.status == SessionStatus.connecting)) {
+      return HostConnState.connecting;
+    }
+    return HostConnState.offline;
+  }
 
   @override
   Widget build(BuildContext context) {
     final all = context.watch<HostProvider>().allHosts;
+    final sessions = context.watch<SessionProvider>().sshSessions;
+
+    final tags = <String>{for (final h in all) ...h.tags}.toList()..sort();
+
+    var hosts = all;
     final q = _query.trim();
-    // Reuse the dashboard's query engine so tag/facet search works on mobile too.
-    final hosts = q.isEmpty ? all : all.where(HostQuery.parse(q).matches).toList();
+    if (q.isNotEmpty) {
+      hosts = hosts.where(HostQuery.parse(q).matches).toList();
+    }
+    if (_tagFilter != null) {
+      hosts = hosts.where((h) => h.tags.contains(_tagFilter)).toList();
+    }
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -43,33 +71,68 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.fromLTRB(
+                MobileTokens.space3,
+                MobileTokens.space3,
+                MobileTokens.space3,
+                MobileTokens.space2,
+              ),
               child: TextField(
                 onChanged: (v) => setState(() => _query = v),
                 style: const TextStyle(color: AppColors.textPrimary),
                 decoration: InputDecoration(
                   hintText: 'Search hosts',
-                  prefixIcon:
-                      const Icon(Icons.search, color: AppColors.textSecondary),
+                  prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
                   filled: true,
                   fillColor: AppColors.card,
+                  contentPadding: EdgeInsets.zero,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(MobileTokens.radiusPill),
                     borderSide: BorderSide.none,
                   ),
                 ),
               ),
             ),
+            if (tags.isNotEmpty)
+              SizedBox(
+                height: 36,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: MobileTokens.space3),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: MobileTokens.space2),
+                      child: TagChip(
+                        label: 'All',
+                        selected: _tagFilter == null,
+                        onTap: () => setState(() => _tagFilter = null),
+                      ),
+                    ),
+                    for (final tag in tags)
+                      Padding(
+                        padding: const EdgeInsets.only(right: MobileTokens.space2),
+                        child: TagChip(
+                          label: tag,
+                          selected: _tagFilter == tag,
+                          onTap: () => setState(
+                              () => _tagFilter = _tagFilter == tag ? null : tag),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             Expanded(
               child: hosts.isEmpty
-                  ? const Center(
-                      child: Text('No hosts yet — tap + to add one',
-                          style: TextStyle(color: AppColors.textSecondary)))
+                  ? _EmptyState(onAddHost: widget.onAddHost)
                   : ListView.builder(
+                      padding: const EdgeInsets.only(
+                          top: MobileTokens.space2, bottom: 80),
                       itemCount: hosts.length,
-                      itemBuilder: (_, i) => _HostRow(
+                      itemBuilder: (_, i) => HostCard(
                         host: hosts[i],
+                        state: _stateFor(hosts[i], sessions),
                         onTap: () => _connect(hosts[i]),
+                        onLongPress: () => _confirmDelete(hosts[i]),
                       ),
                     ),
             ),
@@ -80,28 +143,62 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
   }
 
   void _connect(Host host) {
-    // Fire the connect (async) and immediately switch to the Sessions tab so
-    // the user watches it come up live.
     context.read<SessionProvider>().connectAny(host);
     widget.onConnected();
   }
+
+  Future<void> _confirmDelete(Host host) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: Text('Delete ${host.label}?',
+            style: const TextStyle(color: AppColors.textPrimary)),
+        content: const Text('This removes the saved host and its credentials.',
+            style: TextStyle(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: AppColors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      await context.read<HostProvider>().deleteHost(host.id);
+    }
+  }
 }
 
-class _HostRow extends StatelessWidget {
-  final Host host;
-  final VoidCallback onTap;
-  const _HostRow({required this.host, required this.onTap});
+class _EmptyState extends StatelessWidget {
+  final VoidCallback onAddHost;
+  const _EmptyState({required this.onAddHost});
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      onTap: onTap,
-      leading: const Icon(Icons.dns_outlined, color: AppColors.textSecondary),
-      title:
-          Text(host.label, style: const TextStyle(color: AppColors.textPrimary)),
-      subtitle: Text('${host.username}@${host.host}:${host.port}',
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.dns_outlined, size: 48, color: AppColors.textTertiary),
+          const SizedBox(height: MobileTokens.space3),
+          const Text('No hosts yet',
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+          const SizedBox(height: MobileTokens.space1),
+          const Text('Add a server to get started',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          const SizedBox(height: MobileTokens.space4),
+          FilledButton.icon(
+            onPressed: onAddHost,
+            icon: const Icon(Icons.add),
+            label: const Text('Add host'),
+          ),
+        ],
+      ),
     );
   }
 }
