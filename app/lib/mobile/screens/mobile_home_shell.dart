@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import 'mobile_add_host_screen.dart';
+import 'mobile_hosts_screen.dart';
+import 'mobile_sessions_screen.dart';
 
-/// Bottom-navigation shell for the Android app. M1 renders placeholder bodies;
-/// each destination is filled in over later milestones (M2 terminal, M3 sync,
-/// M4 SFTP/snippets, M5 settings/app-lock).
+/// Bottom-navigation shell for the Android app. Hosts (0) and Sessions (1) are
+/// live; SFTP (2) and Settings (3) are placeholders filled in M4/M5.
 class MobileHomeShell extends StatefulWidget {
   const MobileHomeShell({super.key});
 
@@ -23,18 +25,35 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
     Icons.settings_outlined,
   ];
 
+  void _openAddHost() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MobileAddHostScreen()),
+    );
+  }
+
+  Widget _body() {
+    switch (_index) {
+      case 0:
+        return MobileHostsScreen(
+          onConnected: () => setState(() => _index = 1),
+          onAddHost: _openAddHost,
+        );
+      case 1:
+        return const MobileSessionsScreen();
+      default:
+        return Center(
+          child: Text('${_labels[_index]} — coming soon',
+              style:
+                  const TextStyle(color: AppColors.textSecondary, fontSize: 15)),
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: SafeArea(
-        child: Center(
-          child: Text(
-            '${_labels[_index]} — coming soon',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 15),
-          ),
-        ),
-      ),
+      body: _body(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
