@@ -39,6 +39,7 @@ dependencies:
 
   # QR code generation (P2P sync)
   qr_flutter: ^4.1.0
+  mobile_scanner: ^5.2.3
 
   # UUID generation
   uuid: ^4.5.1
