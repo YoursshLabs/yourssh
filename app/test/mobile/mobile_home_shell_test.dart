@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/screens/mobile_home_shell.dart';
 import 'package:yourssh/providers/host_provider.dart';
 import 'package:yourssh/providers/key_provider.dart';
+import 'package:yourssh/providers/known_hosts_provider.dart';
 import 'package:yourssh/providers/session_provider.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
@@ -17,6 +18,7 @@ Future<void> _pump(WidgetTester tester) async {
     providers: [
       ChangeNotifierProvider(create: (_) => HostProvider(storage)),
       ChangeNotifierProvider(create: (_) => KeyProvider()),
+      ChangeNotifierProvider(create: (_) => KnownHostsProvider(storage)),
       ChangeNotifierProvider(
           create: (_) => SessionProvider(ssh, TabMetadataService())),
     ],

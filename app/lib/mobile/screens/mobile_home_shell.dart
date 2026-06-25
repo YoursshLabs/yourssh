@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../security/tofu_watcher.dart';
 import 'mobile_add_host_screen.dart';
 import 'mobile_hosts_screen.dart';
 import 'mobile_sessions_screen.dart';
@@ -55,7 +56,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: _body(),
+      body: TofuWatcher(child: _body()),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
