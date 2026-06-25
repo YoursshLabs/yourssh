@@ -7,6 +7,7 @@ import '../../providers/session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../terminal/accessory_bar_controller.dart';
 import '../terminal/accessory_key_bar.dart';
+import '../terminal/mobile_snippets_sheet.dart';
 
 /// Sessions tab: a session strip + the active SSH session's terminal (when
 /// connected, with the accessory key bar docked below and pinch-to-zoom font)
@@ -27,6 +28,17 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
   void dispose() {
     _accessory.dispose();
     super.dispose();
+  }
+
+  void _openSnippets(SshSession active) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      isScrollControlled: true,
+      builder: (_) => MobileSnippetsSheet(
+        onInsert: (cmd) => active.terminal.textInput(cmd),
+      ),
+    );
   }
 
   void _onScaleStart(ScaleStartDetails _) => _scaleBase = _fontSize;
@@ -60,7 +72,16 @@ class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _SessionStrip(sessions: ssh, activeId: active.id),
+            Row(
+              children: [
+                Expanded(child: _SessionStrip(sessions: ssh, activeId: active.id)),
+                IconButton(
+                  icon: const Icon(Icons.code, color: AppColors.textSecondary),
+                  tooltip: 'Snippets',
+                  onPressed: () => _openSnippets(active),
+                ),
+              ],
+            ),
             const Divider(height: 1, color: AppColors.border),
             Expanded(
               child: _SessionBody(
