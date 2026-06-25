@@ -34,10 +34,10 @@ void main() {
     expect(find.textContaining('No hosts'), findsOneWidget); // Hosts screen body
   });
 
-  testWidgets('switches to SFTP placeholder', (tester) async {
+  testWidgets('SFTP tab prompts to connect when no session', (tester) async {
     await _pump(tester);
     await tester.tap(find.text('SFTP').last);
     await tester.pumpAndSettle();
-    expect(find.text('SFTP — coming soon'), findsOneWidget);
+    expect(find.textContaining('Connect a host'), findsOneWidget);
   });
 }
