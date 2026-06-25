@@ -5,12 +5,27 @@ import 'package:xterm/xterm.dart';
 import '../../models/ssh_session.dart';
 import '../../providers/session_provider.dart';
 import '../../theme/app_theme.dart';
+import '../terminal/accessory_bar_controller.dart';
+import '../terminal/accessory_key_bar.dart';
 
 /// Sessions tab: a session strip + the active SSH session's terminal (when
-/// connected) or its connection status. The accessory key bar (M2.2) docks
-/// below the terminal.
-class MobileSessionsScreen extends StatelessWidget {
+/// connected, with the accessory key bar docked below) or its connection
+/// status.
+class MobileSessionsScreen extends StatefulWidget {
   const MobileSessionsScreen({super.key});
+
+  @override
+  State<MobileSessionsScreen> createState() => _MobileSessionsScreenState();
+}
+
+class _MobileSessionsScreenState extends State<MobileSessionsScreen> {
+  final _accessory = AccessoryBarController();
+
+  @override
+  void dispose() {
+    _accessory.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +53,7 @@ class MobileSessionsScreen extends StatelessWidget {
           children: [
             _SessionStrip(sessions: ssh, activeId: active.id),
             const Divider(height: 1, color: AppColors.border),
-            Expanded(child: _SessionBody(session: active)),
+            Expanded(child: _SessionBody(session: active, accessory: _accessory)),
           ],
         ),
       ),
@@ -77,12 +92,23 @@ class _SessionStrip extends StatelessWidget {
 
 class _SessionBody extends StatelessWidget {
   final SshSession session;
-  const _SessionBody({required this.session});
+  final AccessoryBarController accessory;
+  const _SessionBody({required this.session, required this.accessory});
 
   @override
   Widget build(BuildContext context) {
     if (session.status == SessionStatus.connected) {
-      return TerminalView(session.terminal);
+      return Column(
+        children: [
+          Expanded(child: TerminalView(session.terminal)),
+          AccessoryKeyBar(
+            controller: accessory,
+            onKey: (k, {ctrl = false, alt = false}) =>
+                session.terminal.keyInput(k, ctrl: ctrl, alt: alt),
+            onText: (s) => session.terminal.textInput(s),
+          ),
+        ],
+      );
     }
     return Center(
       child: Column(
