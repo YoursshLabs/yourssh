@@ -11,6 +11,7 @@ import '../../providers/session_provider.dart';
 import '../../services/sftp_transfer_service.dart';
 import '../../services/ssh_service.dart';
 import '../../theme/app_theme.dart';
+import '../theme/mobile_tokens.dart';
 
 /// Single-panel SFTP browser over the active SSH session's host. Lists, opens
 /// directories, downloads files to a picked folder, and uploads a picked file.
@@ -138,23 +139,38 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
   }
 
   Widget _bar(Host host) {
+    final parts = _path == '.' ? <String>[] : _path.split('/').where((s) => s.isNotEmpty).toList();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: MobileTokens.space2, vertical: MobileTokens.space2),
       color: AppColors.card,
       child: Row(
         children: [
           IconButton(
-            icon:
-                const Icon(Icons.arrow_upward, color: AppColors.textSecondary),
+            icon: const Icon(Icons.arrow_upward, color: AppColors.textSecondary),
             onPressed: _path == '.' || _path == '/'
                 ? null
                 : () => _load(host, p.posix.dirname(_path)),
           ),
           Expanded(
-            child: Text(_path,
-                overflow: TextOverflow.ellipsis,
-                style:
-                    const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              child: Row(
+                children: [
+                  _crumb(host, 'home', _path == '.' ? null : () => _load(host, '.')),
+                  for (var i = 0; i < parts.length; i++) ...[
+                    const Icon(Icons.chevron_right, size: 16, color: AppColors.textTertiary),
+                    _crumb(
+                      host,
+                      parts[i],
+                      i == parts.length - 1
+                          ? null
+                          : () => _load(host, '/${parts.sublist(0, i + 1).join('/')}'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.refresh, color: AppColors.textSecondary),
@@ -165,20 +181,46 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
     );
   }
 
+  Widget _crumb(Host host, String label, VoidCallback? onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Text(label,
+            style: TextStyle(
+                color: onTap == null ? AppColors.textPrimary : AppColors.accent,
+                fontSize: 13)),
+      ),
+    );
+  }
+
+  static String _fmtSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / 1048576).toStringAsFixed(1)} MB';
+    return '${(bytes / 1073741824).toStringAsFixed(1)} GB';
+  }
+
+  IconData _iconFor(SftpName e) {
+    if (e.attr.isDirectory) return Icons.folder;
+    final name = e.filename.toLowerCase();
+    if (RegExp(r'\.(zip|tar|gz|tgz|bz2|xz|7z|rar)$').hasMatch(name)) return Icons.folder_zip;
+    if (RegExp(r'\.(png|jpe?g|gif|webp|svg|bmp)$').hasMatch(name)) return Icons.image;
+    if (RegExp(r'\.(sh|bash|zsh|py|js|ts|go|rs|c|cpp|dart|rb|json|ya?ml|toml|conf)$').hasMatch(name)) return Icons.description;
+    return Icons.insert_drive_file;
+  }
+
   Widget _row(Host host, SftpName e) {
     final isDir = e.attr.isDirectory;
     return ListTile(
-      leading: Icon(isDir ? Icons.folder : Icons.insert_drive_file,
-          color: isDir ? AppColors.accent : AppColors.textSecondary),
-      title:
-          Text(e.filename, style: const TextStyle(color: AppColors.textPrimary)),
+      leading: Icon(_iconFor(e), color: isDir ? AppColors.accent : AppColors.textSecondary),
+      title: Text(e.filename, style: const TextStyle(color: AppColors.textPrimary)),
       subtitle: isDir
           ? null
-          : Text('${e.attr.size ?? 0} bytes',
-              style:
-                  const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+          : Text(_fmtSize(e.attr.size ?? 0),
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
       trailing: isDir
-          ? null
+          ? const Icon(Icons.chevron_right, color: AppColors.textTertiary)
           : IconButton(
               icon: const Icon(Icons.download, color: AppColors.textSecondary),
               onPressed: () => _download(host, e),
