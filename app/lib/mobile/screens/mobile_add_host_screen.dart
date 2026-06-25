@@ -7,6 +7,8 @@ import '../../models/ssh_key.dart';
 import '../../providers/host_provider.dart';
 import '../../providers/key_provider.dart';
 import '../../theme/app_theme.dart';
+import '../theme/mobile_tokens.dart';
+import '../widgets/section_header.dart';
 
 /// Minimal add-host form for mobile: label/host/port/username + password or a
 /// saved key. The full editor (tags, proxy, jump chain, RDP/VNC) is
@@ -70,6 +72,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const SectionHeader('Connection'),
             _field(_label, 'Label', fieldKey: 'host-label'),
             _field(_address, 'Host / IP', fieldKey: 'host-address'),
             _field(_port, 'Port',
@@ -77,7 +80,8 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
                 keyboard: TextInputType.number,
                 formatters: [FilteringTextInputFormatter.digitsOnly]),
             _field(_username, 'Username', fieldKey: 'host-username'),
-            const SizedBox(height: 8),
+            const SizedBox(height: MobileTokens.space2),
+            const SectionHeader('Authentication'),
             SwitchListTile(
               value: _useKey,
               onChanged:
