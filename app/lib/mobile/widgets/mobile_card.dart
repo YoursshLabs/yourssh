@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_theme.dart';
+import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 
 /// The single source of card styling for the mobile UI: card surface, rounded
@@ -19,13 +19,16 @@ class MobileCard extends StatelessWidget {
     this.padding,
   });
 
+  // Card radius per spec: 15
+  static const double _radius = 15;
+
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(MobileTokens.radiusCard),
-        border: Border.all(color: AppColors.border),
+        color: MobileColors.surface,
+        borderRadius: BorderRadius.circular(_radius),
+        border: Border.all(color: MobileColors.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(

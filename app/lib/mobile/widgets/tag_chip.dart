@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_theme.dart';
+import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 
-/// Compact pill for a host tag or a filter chip. [selected] tints it with the
-/// accent; tappable when [onTap] is provided.
+/// Compact pill for a host tag or a filter chip. [selected] fills it with the
+/// accent color; tappable when [onTap] is provided.
 class TagChip extends StatelessWidget {
   final String label;
   final bool selected;
@@ -14,14 +14,14 @@ class TagChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = selected ? Colors.black : AppColors.textSecondary;
-    final bg = selected ? AppColors.accent : AppColors.bg;
+    final fg = selected ? Colors.black : MobileColors.textMuted;
+    final bg = selected ? MobileColors.accent : MobileColors.surface;
     final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: MobileTokens.space2, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(MobileTokens.radiusPill),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: MobileColors.border),
       ),
       child: Text(label, style: TextStyle(color: fg, fontSize: 11)),
     );

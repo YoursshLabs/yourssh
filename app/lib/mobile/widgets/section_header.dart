@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_theme.dart';
 import '../theme/mobile_tokens.dart';
 
 /// Uppercase, letter-spaced section label for grouped lists/settings.
@@ -18,12 +17,7 @@ class SectionHeader extends StatelessWidget {
       ),
       child: Text(
         title.toUpperCase(),
-        style: const TextStyle(
-          color: AppColors.textTertiary,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.8,
-        ),
+        style: MobileTokens.sectionLabel(),
       ),
     );
   }

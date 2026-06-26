@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_theme.dart';
+import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 
 /// Coarse connection state for a host row / session, decoupled from
@@ -8,9 +8,9 @@ import '../theme/mobile_tokens.dart';
 enum HostConnState { connected, connecting, offline }
 
 Color statusColor(HostConnState s) => switch (s) {
-      HostConnState.connected => AppColors.accent,
-      HostConnState.connecting => AppColors.orange,
-      HostConnState.offline => AppColors.textTertiary,
+      HostConnState.connected => MobileColors.green,
+      HostConnState.connecting => MobileColors.accent,
+      HostConnState.offline => MobileColors.textFaint,
     };
 
 class StatusDot extends StatelessWidget {
