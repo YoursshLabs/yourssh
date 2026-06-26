@@ -24,10 +24,14 @@ void main() {
   testWidgets('saving creates a host in the provider', (tester) async {
     final hosts = HostProvider(StorageService());
     await tester.pumpWidget(wrap(hosts, const MobileAddHostScreen()));
+    await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(const Key('host-label')), 'edge-1');
+    await tester.pump();
     await tester.enterText(find.byKey(const Key('host-address')), '192.168.1.9');
+    await tester.pump();
     await tester.enterText(find.byKey(const Key('host-username')), 'pi');
+    await tester.pump();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
@@ -58,6 +62,7 @@ void main() {
     expect(find.text('10.0.0.5'), findsOneWidget);
 
     await tester.enterText(find.byKey(const Key('host-label')), 'New Name');
+    await tester.pump();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
@@ -89,6 +94,7 @@ void main() {
     expect(find.byKey(const Key('host-password')), findsNothing);
 
     await tester.enterText(find.byKey(const Key('host-label')), 'Cert Box 2');
+    await tester.pump();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
