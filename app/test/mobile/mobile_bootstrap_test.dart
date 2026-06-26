@@ -1,6 +1,10 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/mobile_bootstrap.dart';
+import 'package:yourssh/providers/port_forward_provider.dart';
+import 'package:yourssh_snippets/yourssh_snippets.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -40,10 +44,24 @@ void main() {
 
   test('port-forward provider is in the providers list', () {
     final b = MobileBootstrap();
-    // providers list must be non-empty and include entries for the new services
-    // (checked indirectly: the list grew by at least 1 vs the known-good count
-    // from before Task-14 — easier to just confirm the fields exist and the
-    // list length is reasonable).
     expect(b.providers.length, greaterThanOrEqualTo(13));
+  });
+
+  testWidgets('providers resolve from a child context', (tester) async {
+    final b = MobileBootstrap();
+    late BuildContext childCtx;
+    await tester.pumpWidget(MultiProvider(
+      providers: b.providers,
+      child: Builder(builder: (ctx) {
+        childCtx = ctx;
+        return const SizedBox();
+      }),
+    ));
+
+    // These assertions exercise the real Flutter Provider lookup path — a wrong
+    // type param or Provider.value vs ChangeNotifierProvider.value mismatch
+    // would throw here even though field-access checks above would pass.
+    expect(Provider.of<PortForwardProvider>(childCtx, listen: false), isNotNull);
+    expect(Provider.of<SnippetProvider>(childCtx, listen: false), isNotNull);
   });
 }
