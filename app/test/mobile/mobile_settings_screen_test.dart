@@ -4,6 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/screens/mobile_settings_screen.dart';
+import 'package:yourssh/mobile/screens/mobile_sync_screen.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
 import 'package:yourssh/providers/host_provider.dart';
 import 'package:yourssh/providers/settings_provider.dart';
@@ -15,8 +16,8 @@ Future<SyncProvider> _pump(WidgetTester tester) async {
   final sync    = SyncProvider();
   final storage = StorageService();
 
-  // Providers must wrap MaterialApp (not just home:) so that modal bottom
-  // sheets — which run in a separate overlay route — can still find them.
+  // Providers wrap MaterialApp so pushed routes (MobileSyncScreen) also find
+  // them in the tree.
   await tester.pumpWidget(
     MultiProvider(
       providers: [
@@ -55,26 +56,17 @@ void main() {
     );
   });
 
-  testWidgets('saving cloud config writes to the provider', (tester) async {
-    final sync = await _pump(tester);
+  testWidgets('"Supabase sync" row navigates to MobileSyncScreen', (tester) async {
+    await _pump(tester);
 
-    // Open the Supabase sync bottom sheet via the row tap.
+    // Tap the row — now pushes MobileSyncScreen instead of opening a sheet.
     await tester.tap(find.text('Supabase sync'));
-    await tester.pumpAndSettle();
+    // Use pump(Duration) to avoid pumpAndSettle timing out on the P2P Timer.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
-    // The sheet fields are now visible.
-    await tester.enterText(
-        find.byKey(const Key('sync-url')), 'https://x.supabase.co');
-    await tester.enterText(
-        find.byKey(const Key('sync-anon')), 'anon-key-123');
-    await tester.enterText(
-        find.byKey(const Key('sync-code')), '123456789012');
-
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
-
-    expect(sync.supabaseUrl, 'https://x.supabase.co');
-    expect(sync.supabaseAnonKey, 'anon-key-123');
-    expect(sync.syncCode, '123456789012');
+    // MobileSyncScreen heading must be visible.
+    expect(find.text('Sync with Supabase'), findsOneWidget);
+    expect(find.byType(MobileSyncScreen), findsOneWidget);
   });
 }

@@ -6,7 +6,7 @@ import '../../providers/host_provider.dart';
 import '../../services/p2p_sync_encryption.dart';
 import '../../services/p2p_sync_service.dart';
 import '../../services/sync_service.dart';
-import '../../theme/app_theme.dart';
+import '../theme/mobile_theme.dart';
 import '../sync/transfer_code.dart';
 
 /// Full-screen camera QR scanner for P2P host import. On the first valid code
@@ -63,7 +63,16 @@ class _MobileQrScanScreenState extends State<MobileQrScanScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-          backgroundColor: AppColors.bg, title: const Text('Scan transfer QR')),
+        backgroundColor: MobileColors.bg,
+        surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, size: 18),
+          color: MobileColors.accent,
+          onPressed: () => Navigator.of(context).maybePop(),
+          tooltip: 'Back',
+        ),
+        title: Text('Scan transfer QR', style: mobileHeading()),
+      ),
       body: MobileScanner(onDetect: _onDetect),
     );
   }
