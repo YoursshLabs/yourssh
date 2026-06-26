@@ -6,6 +6,7 @@ import '../services/host_reachability_probe.dart';
 import '../widgets/mobile_tab_bar.dart';
 import 'mobile_hosts_screen.dart';
 import 'mobile_keys_screen.dart';
+import 'mobile_snippets_screen.dart';
 
 /// Bottom-navigation shell for the Android app.
 /// Four tabs: Hosts · Snippets · Keys · Settings.
@@ -30,7 +31,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
             index: MobileTab.values.indexOf(_current),
             children: const [
               MobileHostsScreen(),
-              Center(child: Text('Snippets')),
+              MobileSnippetsScreen(),
               MobileKeysScreen(),
               Center(child: Text('Settings')),
             ],
