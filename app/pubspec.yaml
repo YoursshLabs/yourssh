@@ -120,6 +120,9 @@ dependencies:
 
   package_info_plus: ^9.0.1
 
+  # Google Fonts (Manrope, Inter, Roboto Mono) for the mobile UI
+  google_fonts: ^6.2.1
+
 
 dependency_overrides:
   dartssh2:
