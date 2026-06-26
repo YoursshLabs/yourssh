@@ -35,6 +35,13 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
 
   bool get _isEdit => widget.existing != null;
 
+  /// Certificate and agent auth have no UI in this minimal form, so editing
+  /// such a host shows a read-only note and preserves the auth untouched.
+  bool get _isCertOrAgent {
+    final a = widget.existing?.authType;
+    return a == AuthType.certificate || a == AuthType.agent;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -71,20 +78,32 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
 
     if (existing != null) {
       // Preserve id, tags, jump chain, and other fields the minimal form
-      // doesn't expose; only overwrite what's editable here. A blank password
-      // leaves the stored one untouched (updateHost skips empty passwords).
-      final updated = existing.copyWith(
-        label: label,
-        host: address,
-        port: port,
-        username: username,
-        authType: authType,
-        keyId: keyId,
-      );
-      await provider.updateHost(
-        updated,
-        password: _useKey ? null : _password.text,
-      );
+      // doesn't expose; only overwrite what's editable here.
+      if (_isCertOrAgent) {
+        // Certificate / agent auth isn't editable here (no cert-path / agent
+        // UI), so keep authType + keyId exactly as-is — editing connection
+        // fields must never silently downgrade it to password.
+        await provider.updateHost(existing.copyWith(
+          label: label,
+          host: address,
+          port: port,
+          username: username,
+        ));
+      } else {
+        // A blank password leaves the stored one untouched (updateHost skips
+        // empty passwords).
+        await provider.updateHost(
+          existing.copyWith(
+            label: label,
+            host: address,
+            port: port,
+            username: username,
+            authType: authType,
+            keyId: keyId,
+          ),
+          password: _useKey ? null : _password.text,
+        );
+      }
     } else {
       final host = Host(
         label: label,
@@ -123,33 +142,37 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
             _field(_username, 'Username', fieldKey: 'host-username'),
             const SizedBox(height: MobileTokens.space2),
             const SectionHeader('Authentication'),
-            SwitchListTile(
-              value: _useKey,
-              onChanged:
-                  keys.isEmpty ? null : (v) => setState(() => _useKey = v),
-              title: const Text('Use SSH key',
-                  style: TextStyle(color: AppColors.textPrimary)),
-              subtitle: keys.isEmpty
-                  ? const Text('No keys imported — using password',
-                      style:
-                          TextStyle(color: AppColors.textSecondary, fontSize: 12))
-                  : null,
-            ),
-            if (_useKey)
-              DropdownButtonFormField<String>(
-                initialValue: _keyId,
-                items: [
-                  for (final SshKeyEntry k in keys)
-                    DropdownMenuItem(value: k.id, child: Text(k.label)),
-                ],
-                onChanged: (v) => setState(() => _keyId = v),
-                decoration: const InputDecoration(labelText: 'Key'),
-              )
-            else
-              _field(_password, 'Password',
-                  fieldKey: 'host-password',
-                  obscure: true,
-                  hint: _isEdit ? 'Leave blank to keep current' : null),
+            if (_isCertOrAgent)
+              _CertAgentNote(authType: widget.existing!.authType)
+            else ...[
+              SwitchListTile(
+                value: _useKey,
+                onChanged:
+                    keys.isEmpty ? null : (v) => setState(() => _useKey = v),
+                title: const Text('Use SSH key',
+                    style: TextStyle(color: AppColors.textPrimary)),
+                subtitle: keys.isEmpty
+                    ? const Text('No keys imported — using password',
+                        style: TextStyle(
+                            color: AppColors.textSecondary, fontSize: 12))
+                    : null,
+              ),
+              if (_useKey)
+                DropdownButtonFormField<String>(
+                  initialValue: _keyId,
+                  items: [
+                    for (final SshKeyEntry k in keys)
+                      DropdownMenuItem(value: k.id, child: Text(k.label)),
+                  ],
+                  onChanged: (v) => setState(() => _keyId = v),
+                  decoration: const InputDecoration(labelText: 'Key'),
+                )
+              else
+                _field(_password, 'Password',
+                    fieldKey: 'host-password',
+                    obscure: true,
+                    hint: _isEdit ? 'Leave blank to keep current' : null),
+            ],
           ],
         ),
       ),
@@ -176,6 +199,29 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
         style: const TextStyle(color: AppColors.textPrimary),
         decoration: InputDecoration(labelText: label, hintText: hint),
       ),
+    );
+  }
+}
+
+/// Read-only authentication note shown when editing a certificate- or
+/// agent-authenticated host (which the minimal mobile form can't edit). The
+/// auth is preserved as-is on save.
+class _CertAgentNote extends StatelessWidget {
+  final AuthType authType;
+  const _CertAgentNote({required this.authType});
+
+  @override
+  Widget build(BuildContext context) {
+    final kind =
+        authType == AuthType.certificate ? 'Certificate' : 'SSH agent';
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.verified_user_outlined,
+          color: AppColors.textSecondary),
+      title: Text('$kind authentication',
+          style: const TextStyle(color: AppColors.textPrimary)),
+      subtitle: const Text('Configured on desktop — kept unchanged',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
     );
   }
 }

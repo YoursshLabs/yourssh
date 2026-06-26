@@ -69,4 +69,33 @@ void main() {
     expect(updated.port, 2222);
     expect(updated.tags, ['prod']);
   });
+
+  testWidgets('editing a certificate host preserves auth and hides password',
+      (tester) async {
+    final hosts = HostProvider(StorageService());
+    final cert = Host(
+      label: 'Cert Box',
+      host: '10.0.0.7',
+      username: 'deploy',
+      authType: AuthType.certificate,
+      keyId: 'key-1',
+    );
+    await hosts.addHost(cert);
+
+    await tester.pumpWidget(wrap(hosts, MobileAddHostScreen(existing: cert)));
+
+    // Read-only note replaces the password/key controls.
+    expect(find.text('Certificate authentication'), findsOneWidget);
+    expect(find.byKey(const Key('host-password')), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('host-label')), 'Cert Box 2');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // Connection field changed; auth kept exactly as-is (no downgrade).
+    final updated = hosts.allHosts.single;
+    expect(updated.label, 'Cert Box 2');
+    expect(updated.authType, AuthType.certificate);
+    expect(updated.keyId, 'key-1');
+  });
 }
