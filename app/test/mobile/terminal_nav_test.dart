@@ -22,14 +22,22 @@ import 'package:yourssh/services/tab_metadata_service.dart';
 // ---------------------------------------------------------------------------
 
 class _FakeSessionProvider extends SessionProvider {
-  final List<SshSession> _injected;
+  final List<SshSession> _sessions;
   int connectAnyCalls = 0;
 
-  _FakeSessionProvider(this._injected)
+  _FakeSessionProvider(this._sessions)
       : super(SshService(StorageService()), TabMetadataService());
 
   @override
-  List<SshSession> get sshSessions => List.unmodifiable(_injected);
+  List<SshSession> get sshSessions => List.unmodifiable(_sessions);
+
+  /// Mutate the injected list and notify so [didChangeDependencies] fires.
+  void setSessions(List<SshSession> updated) {
+    _sessions
+      ..clear()
+      ..addAll(updated);
+    notifyListeners();
+  }
 
   /// Override the real connectAny so no SSH dial happens.
   @override
@@ -57,7 +65,7 @@ Future<({_FakeSessionProvider sp, HostProvider hp})> _pump(
   }
 
   final sp = _FakeSessionProvider(sessions);
-  final probe = HostReachabilityProbe(connector: (_, __, ___) async {});
+  final probe = HostReachabilityProbe(connector: (_, _, _) async {});
   final settings = SettingsProvider();
 
   await tester.pumpWidget(
@@ -169,5 +177,67 @@ void main() {
 
     // A bottom sheet should appear with 'Connect to host' heading.
     expect(find.text('Connect to host'), findsOneWidget);
+  });
+
+  // ---------------------------------------------------------------------------
+  // T5: closing the LAST session pops Terminal (pop-on-empty works)
+  // ---------------------------------------------------------------------------
+  testWidgets('closing last session pops Terminal screen', (tester) async {
+    final host = Host(label: 'prod', host: '10.0.0.1', username: 'root');
+    final session = SshSession(host: host);
+
+    final result = await _pump(tester, hosts: [host], sessions: [session]);
+
+    // Navigate to Terminal.
+    await tester.tap(find.byType(HostCard));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(MobileTerminalScreen), findsOneWidget);
+
+    // Drain sessions — simulates the last session being closed.
+    result.sp.setSessions([]);
+    // Let didChangeDependencies fire and schedule the postFrameCallback.
+    await tester.pump();
+    // Let the postFrameCallback fire (pop-on-empty re-check runs here).
+    await tester.pump();
+    // Let Navigator complete the pop transition.
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+    // Terminal screen should have been popped.
+    expect(find.byType(MobileHostsScreen), findsOneWidget);
+    expect(find.byType(MobileTerminalScreen), findsNothing);
+  });
+
+  // ---------------------------------------------------------------------------
+  // T6: no spurious pop when sessions go empty then non-empty in same frame
+  // ---------------------------------------------------------------------------
+  testWidgets(
+      'no spurious pop when session added before postFrameCallback fires',
+      (tester) async {
+    final host = Host(label: 'prod', host: '10.0.0.1', username: 'root');
+    final session = SshSession(host: host);
+    final session2 = SshSession(host: host);
+
+    final result = await _pump(tester, hosts: [host], sessions: [session]);
+
+    // Navigate to Terminal.
+    await tester.tap(find.byType(HostCard));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(MobileTerminalScreen), findsOneWidget);
+
+    // Drain sessions → schedules the postFrameCallback (sets _popScheduled=true).
+    result.sp.setSessions([]);
+    await tester.pump(); // didChangeDependencies fires, callback queued
+
+    // Before the callback fires, add a new session back.
+    result.sp.setSessions([session2]);
+    await tester.pump(); // postFrameCallback fires — re-checks, sees non-empty
+
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Terminal must still be visible — no spurious pop.
+    expect(find.byType(MobileTerminalScreen), findsOneWidget);
   });
 }

@@ -337,7 +337,7 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
         .where((s) => s.host.id == host.id)
         .toList();
     if (existing.isNotEmpty) {
-      final sessionId = existing.first.id;
+      final sessionId = existing.last.id;
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
