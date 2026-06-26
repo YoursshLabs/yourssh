@@ -52,13 +52,7 @@ class MobilePortForwardScreen extends StatelessWidget {
           ],
         ),
         centerTitle: true,
-        actions: [
-          PopupMenuButton<Never>(
-            icon: const Icon(Icons.more_vert,
-                color: MobileColors.textMuted, size: 20),
-            itemBuilder: (_) => const [],
-          ),
-        ],
+        actions: const [SizedBox(width: 8)],
         elevation: 0,
       ),
       body: Column(

@@ -17,6 +17,10 @@ abstract final class MobileColors {
   static const red         = Color(0xFFFF6464);
   static const blue        = Color(0xFF4DA3FF);
   static const yellow      = Color(0xFFFFCE35);
+  /// Input field fill color.
+  static const fieldFill   = Color(0xFF1C1C1E);
+  /// Tab bar inactive icon/label color.
+  static const tabInactive = Color(0xFF6D6D72);
 }
 
 /// Builds the dark [ThemeData] used by the mobile UI.

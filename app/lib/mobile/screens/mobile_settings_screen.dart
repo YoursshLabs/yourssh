@@ -61,12 +61,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
         backgroundColor: MobileColors.bg,
         surfaceTintColor: Colors.transparent,
         title: Text('Settings', style: mobileHeading()),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.tune, color: MobileColors.textMuted, size: 22),
-            onPressed: null, // placeholder
-          ),
-        ],
+        actions: const [],
       ),
       body: ListView(
         padding: EdgeInsets.only(
@@ -181,10 +176,9 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
           },
         ),
         SettingsRow(
-          leading: Icon(Icons.lock_clock_outlined, color: MobileColors.textMuted, size: 20),
+          leading: const Icon(Icons.lock_clock_outlined, color: MobileColors.textMuted, size: 20),
           title: 'Auto-lock',
           value: 'After 1 min',
-          onTap: () {}, // placeholder — future enhancement
         ),
       ],
     );

@@ -48,7 +48,7 @@ class MobileTabBar extends StatelessWidget {
   final MobileTab current;
   final ValueChanged<MobileTab> onSelect;
 
-  static const _inactiveColor = Color(0xFF6D6D72);
+  static const _inactiveColor = MobileColors.tabInactive;
 
   @override
   Widget build(BuildContext context) {

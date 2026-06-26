@@ -11,6 +11,7 @@ import '../providers/port_forward_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/sync_provider.dart';
+import '../services/key_gen_service.dart';
 import '../services/port_forward_service.dart';
 import '../services/sftp_transfer_service.dart';
 import '../services/ssh_service.dart';
@@ -36,6 +37,7 @@ class MobileBootstrap {
   late final SftpTransferService transfer;
   late final PortForwardProvider portForwardProvider;
   late final PortForwardService portForwardService;
+  late final KeyGenService keyGen;
 
   MobileBootstrap() {
     storage = StorageService();
@@ -59,6 +61,7 @@ class MobileBootstrap {
           portForwardProvider.setStatus(id, status, error: error),
       onConnections: (id, n) => portForwardProvider.setConnections(id, n),
     );
+    keyGen = KeyGenService();
     hostProvider.onHostDeleted =
         (id) => unawaited(portForwardService.stopForHost(id));
     unawaited(portForwardProvider.ready.then(
@@ -97,6 +100,7 @@ class MobileBootstrap {
         Provider.value(value: transfer),
         ChangeNotifierProvider.value(value: portForwardProvider),
         Provider.value(value: portForwardService),
+        Provider.value(value: keyGen),
       ];
 
   /// Disposes the objects exposed via `Provider.value` (which does not dispose

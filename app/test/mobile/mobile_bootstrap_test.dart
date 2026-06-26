@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/mobile_bootstrap.dart';
 import 'package:yourssh/providers/port_forward_provider.dart';
+import 'package:yourssh/services/key_gen_service.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 
 void main() {
@@ -44,7 +45,7 @@ void main() {
 
   test('port-forward provider is in the providers list', () {
     final b = MobileBootstrap();
-    expect(b.providers.length, greaterThanOrEqualTo(13));
+    expect(b.providers.length, greaterThanOrEqualTo(14));
   });
 
   testWidgets('providers resolve from a child context', (tester) async {
@@ -63,5 +64,8 @@ void main() {
     // would throw here even though field-access checks above would pass.
     expect(Provider.of<PortForwardProvider>(childCtx, listen: false), isNotNull);
     expect(Provider.of<SnippetProvider>(childCtx, listen: false), isNotNull);
+    // Regression: KeyGenService was missing from the provider list prior to
+    // the fix; opening the Generate sheet would throw ProviderNotFoundException.
+    expect(Provider.of<KeyGenService>(childCtx, listen: false), isNotNull);
   });
 }

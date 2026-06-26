@@ -388,12 +388,6 @@ class _TerminalHeader extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.call_split_outlined,
-                color: MobileColors.textMuted, size: 20),
-            tooltip: 'Split',
-            onPressed: () {},
-          ),
-          IconButton(
             icon: const Icon(Icons.more_vert,
                 color: MobileColors.textMuted, size: 20),
             tooltip: 'More',

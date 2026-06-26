@@ -171,17 +171,9 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
                           ],
                         ),
                       ),
-                      // TODO(later): wire overflow menu — visual placeholder.
-                      _CircleButton(
-                        icon: Icons.more_horiz,
-                        onTap: () {},
-                      ),
+                      const _DecorativeCircle(icon: Icons.more_horiz),
                       const SizedBox(width: MobileTokens.space2),
-                      // TODO(later): wire user/profile action — visual placeholder.
-                      _CircleButton(
-                        icon: Icons.person_outline,
-                        onTap: () {},
-                      ),
+                      const _DecorativeCircle(icon: Icons.person_outline),
                     ],
                   ),
                 ),
@@ -202,7 +194,7 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
                       prefixIcon: const Icon(Icons.search,
                           color: MobileColors.textFaint, size: 20),
                       filled: true,
-                      fillColor: const Color(0xFF1C1C1E),
+                      fillColor: MobileColors.fieldFill,
                       contentPadding: const EdgeInsets.symmetric(
                           vertical: MobileTokens.space3),
                       border: OutlineInputBorder(
@@ -496,25 +488,22 @@ final class _HostRow extends _ListRow {
 
 // ── Helper widgets ────────────────────────────────────────────────────────────
 
-class _CircleButton extends StatelessWidget {
-  const _CircleButton({required this.icon, required this.onTap});
+/// Non-interactive decorative circle icon — purely visual, no tap target.
+class _DecorativeCircle extends StatelessWidget {
+  const _DecorativeCircle({required this.icon});
   final IconData icon;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: MobileColors.surface,
-          shape: BoxShape.circle,
-          border: Border.all(color: MobileColors.border),
-        ),
-        child: Icon(icon, color: MobileColors.textMuted, size: 18),
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: MobileColors.surface,
+        shape: BoxShape.circle,
+        border: Border.all(color: MobileColors.border),
       ),
+      child: Icon(icon, color: MobileColors.textMuted, size: 18),
     );
   }
 }

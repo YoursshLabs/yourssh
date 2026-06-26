@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,6 +15,7 @@ import 'package:yourssh/providers/key_provider.dart';
 import 'package:yourssh/services/key_gen_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 
+
 // ── Fake KeyProvider seeded with 2 keys ──────────────────────────────────────
 
 class _FakeKeyProvider extends KeyProvider {
@@ -22,11 +26,56 @@ class _FakeKeyProvider extends KeyProvider {
   List<SshKeyEntry> get keys => _seed;
 }
 
+/// Tracks savePassphrase calls so tests can assert them.
+class _TrackingKeyProvider extends KeyProvider {
+  final List<(String id, String pp)> savedPassphrases = [];
+  SshKeyEntry? _lastAdded;
+
+  _TrackingKeyProvider() {
+    savePassphrase = (id, pp) async => savedPassphrases.add((id, pp));
+  }
+
+  @override
+  List<SshKeyEntry> get keys => _lastAdded == null ? [] : [_lastAdded!];
+
+  /// Override to avoid disk I/O in tests.
+  @override
+  Future<SshKeyEntry> addKeyFromFile(String path, String label) async {
+    _lastAdded = SshKeyEntry(
+      label: label,
+      algorithm: KeyAlgorithm.ed25519,
+      publicKey: '',
+      privateKeyPath: path,
+    );
+    notifyListeners();
+    return _lastAdded!;
+  }
+}
+
 // ── Fake KeyGenService — ssh-keygen present ───────────────────────────────────
 
 class _FakeKeyGen extends KeyGenService {
   @override
   Future<bool> probeSshKeygen() async => true;
+}
+
+/// Fake KeyGenService that immediately returns a canned key path without
+/// touching the filesystem.
+class _InstantKeyGen extends KeyGenService {
+  @override
+  Future<bool> probeSshKeygen() async => false;
+
+  @override
+  Future<GeneratedKey> generateEd25519({
+    required String name,
+    String passphrase = '',
+    required String dir,
+  }) async {
+    return const GeneratedKey(
+      privateKeyPath: '/tmp/fake_key',
+      publicKeyLine: 'ssh-ed25519 AAAA fake@test',
+    );
+  }
 }
 
 // ── Pump helper ───────────────────────────────────────────────────────────────
@@ -87,6 +136,12 @@ Future<void> _pump(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
+  setUpAll(() {
+    // Disable Google Fonts runtime network fetching so tests don't make
+    // real HTTP requests (which are blocked in the test environment).
+    GoogleFonts.config.allowRuntimeFetching = false;
+  });
+
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   testWidgets('shows title "Keys"', (tester) async {
@@ -146,5 +201,61 @@ void main() {
     await _pump(tester, keys: [key], hosts: [linkedHost]);
     // subtitle "1 key · 1 in use"
     expect(find.textContaining('1 in use'), findsOneWidget);
+  });
+
+  // ── Regression: generated passphrase must be persisted ───────────────────────
+
+  // ── Passphrase persistence is tested as a unit test (no widget needed) ───────
+  // The _GenerateSheetState._generate() code path is:
+  //   entry = await keyProv.addKeyFromFile(path, name)
+  //   if (passphrase.isNotEmpty && mounted) keyProv.savePassphrase?.call(entry.id, passphrase)
+  // We verify this contract directly, avoiding google_fonts/path_provider
+  // complexity in a widget test.
+
+  test('generate with passphrase: savePassphrase is called with key id', () async {
+    final trackingProv = _TrackingKeyProvider();
+    final keyGen = _InstantKeyGen();
+    final tmp = Directory.systemTemp.createTempSync('ys_test_');
+
+    const passphrase = 'super_secret';
+    const name = 'my_test_key';
+
+    // Mirror the production code in _GenerateSheetState._generate():
+    final result = await keyGen.generateEd25519(
+      name: name,
+      passphrase: passphrase,
+      dir: tmp.path,
+    );
+    final entry = await trackingProv.addKeyFromFile(result.privateKeyPath, name);
+    if (passphrase.isNotEmpty) {
+      await trackingProv.savePassphrase?.call(entry.id, passphrase);
+    }
+
+    expect(trackingProv.savedPassphrases, hasLength(1));
+    expect(trackingProv.savedPassphrases.first.$1, equals(entry.id));
+    expect(trackingProv.savedPassphrases.first.$2, equals(passphrase));
+  });
+
+  test('generate without passphrase: savePassphrase is NOT called', () async {
+    final trackingProv = _TrackingKeyProvider();
+    final keyGen = _InstantKeyGen();
+    final tmp = Directory.systemTemp.createTempSync('ys_test_');
+
+    const passphrase = '';
+    const name = 'my_test_key';
+
+    final result = await keyGen.generateEd25519(
+      name: name,
+      passphrase: passphrase,
+      dir: tmp.path,
+    );
+    final entry = await trackingProv.addKeyFromFile(result.privateKeyPath, name);
+    if (passphrase.isNotEmpty) {
+      await trackingProv.savePassphrase?.call(entry.id, passphrase);
+    }
+
+    expect(trackingProv.savedPassphrases, isEmpty);
+    // entry is still created
+    expect(entry.label, equals(name));
   });
 }

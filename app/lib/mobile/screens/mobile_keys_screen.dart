@@ -300,7 +300,10 @@ class _GenerateSheetState extends State<_GenerateSheet> {
         );
       }
       if (!mounted) return;
-      await keyProv.addKeyFromFile(result.privateKeyPath, name);
+      final entry = await keyProv.addKeyFromFile(result.privateKeyPath, name);
+      if (_passphraseCtrl.text.isNotEmpty && mounted) {
+        await keyProv.savePassphrase?.call(entry.id, _passphraseCtrl.text);
+      }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -601,7 +604,7 @@ class _MobileField extends StatelessWidget {
             hintStyle:
                 mobileBody(size: 15, color: MobileColors.textFaint),
             filled: true,
-            fillColor: const Color(0xFF1C1C1E),
+            fillColor: MobileColors.fieldFill,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: MobileTokens.space3,
               vertical: MobileTokens.space3,

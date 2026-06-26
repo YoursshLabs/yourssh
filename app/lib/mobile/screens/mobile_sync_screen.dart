@@ -247,13 +247,7 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
           tooltip: 'Settings',
         ),
         title: Text('Pair device', style: mobileHeading()),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert, size: 20),
-            color: MobileColors.textMuted,
-            onPressed: null, // placeholder
-          ),
-        ],
+        actions: const [SizedBox(width: 8)],
       );
 
   // ── Hero copy ─────────────────────────────────────────────────────────────
