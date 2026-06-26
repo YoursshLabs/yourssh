@@ -11,9 +11,11 @@ import '../theme/mobile_tokens.dart';
 import '../widgets/host_card.dart';
 import '../widgets/status_dot.dart';
 import '../widgets/tag_chip.dart';
+import 'mobile_add_host_screen.dart';
 
 /// Hosts tab: searchable list of saved hosts as Termius-style cards; tap to
-/// connect, long-press to delete, FAB to add. Tag chips filter the list.
+/// connect, long-press for edit/delete actions, FAB to add. Tag chips filter
+/// the list.
 class MobileHostsScreen extends StatefulWidget {
   final VoidCallback onConnected;
   final VoidCallback onAddHost;
@@ -132,7 +134,7 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
                         host: hosts[i],
                         state: _stateFor(hosts[i], sessions),
                         onTap: () => _connect(hosts[i]),
-                        onLongPress: () => _confirmDelete(hosts[i]),
+                        onLongPress: () => _showActions(hosts[i]),
                       ),
                     ),
             ),
@@ -145,6 +147,42 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
   void _connect(Host host) {
     context.read<SessionProvider>().connectAny(host);
     widget.onConnected();
+  }
+
+  /// Long-press action sheet: edit (opens the form pre-filled) or delete.
+  Future<void> _showActions(Host host) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.card,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading:
+                  const Icon(Icons.edit_outlined, color: AppColors.textPrimary),
+              title: const Text('Edit',
+                  style: TextStyle(color: AppColors.textPrimary)),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => MobileAddHostScreen(existing: host),
+                ));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: AppColors.red),
+              title: const Text('Delete',
+                  style: TextStyle(color: AppColors.red)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _confirmDelete(host);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmDelete(Host host) async {

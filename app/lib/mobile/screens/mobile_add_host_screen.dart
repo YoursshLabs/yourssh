@@ -10,11 +10,15 @@ import '../../theme/app_theme.dart';
 import '../theme/mobile_tokens.dart';
 import '../widgets/section_header.dart';
 
-/// Minimal add-host form for mobile: label/host/port/username + password or a
-/// saved key. The full editor (tags, proxy, jump chain, RDP/VNC) is
-/// desktop-only.
+/// Minimal add/edit host form for mobile: label/host/port/username + password
+/// or a saved key. Pass [existing] to edit an existing host (preserving its
+/// id, tags, jump chain, and other desktop-only fields); omit it to add a new
+/// one. The full editor (tags, proxy, jump chain, RDP/VNC) is desktop-only.
 class MobileAddHostScreen extends StatefulWidget {
-  const MobileAddHostScreen({super.key});
+  /// The host to edit, or null to create a new one.
+  final Host? existing;
+
+  const MobileAddHostScreen({super.key, this.existing});
 
   @override
   State<MobileAddHostScreen> createState() => _MobileAddHostScreenState();
@@ -28,6 +32,22 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
   final _password = TextEditingController();
   bool _useKey = false;
   String? _keyId;
+
+  bool get _isEdit => widget.existing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final h = widget.existing;
+    if (h != null) {
+      _label.text = h.label;
+      _address.text = h.host;
+      _port.text = '${h.port}';
+      _username.text = h.username;
+      _useKey = h.authType == AuthType.privateKey;
+      _keyId = h.keyId;
+    }
+  }
 
   @override
   void dispose() {
@@ -43,18 +63,39 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
     final username = _username.text.trim();
     if (label.isEmpty || address.isEmpty || username.isEmpty) return;
 
-    final host = Host(
-      label: label,
-      host: address,
-      port: int.tryParse(_port.text.trim()) ?? 22,
-      username: username,
-      authType: _useKey ? AuthType.privateKey : AuthType.password,
-      keyId: _useKey ? _keyId : null,
-    );
-    await context.read<HostProvider>().addHost(
-          host,
-          password: _useKey ? null : _password.text,
-        );
+    final port = int.tryParse(_port.text.trim()) ?? 22;
+    final authType = _useKey ? AuthType.privateKey : AuthType.password;
+    final keyId = _useKey ? _keyId : null;
+    final provider = context.read<HostProvider>();
+    final existing = widget.existing;
+
+    if (existing != null) {
+      // Preserve id, tags, jump chain, and other fields the minimal form
+      // doesn't expose; only overwrite what's editable here. A blank password
+      // leaves the stored one untouched (updateHost skips empty passwords).
+      final updated = existing.copyWith(
+        label: label,
+        host: address,
+        port: port,
+        username: username,
+        authType: authType,
+        keyId: keyId,
+      );
+      await provider.updateHost(
+        updated,
+        password: _useKey ? null : _password.text,
+      );
+    } else {
+      final host = Host(
+        label: label,
+        host: address,
+        port: port,
+        username: username,
+        authType: authType,
+        keyId: keyId,
+      );
+      await provider.addHost(host, password: _useKey ? null : _password.text);
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -65,7 +106,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.bg,
-        title: const Text('Add host'),
+        title: Text(_isEdit ? 'Edit host' : 'Add host'),
         actions: [TextButton(onPressed: _save, child: const Text('Save'))],
       ),
       body: SafeArea(
@@ -106,7 +147,9 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
               )
             else
               _field(_password, 'Password',
-                  fieldKey: 'host-password', obscure: true),
+                  fieldKey: 'host-password',
+                  obscure: true,
+                  hint: _isEdit ? 'Leave blank to keep current' : null),
           ],
         ),
       ),
@@ -118,6 +161,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
     String label, {
     required String fieldKey,
     bool obscure = false,
+    String? hint,
     TextInputType? keyboard,
     List<TextInputFormatter>? formatters,
   }) {
@@ -130,7 +174,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
         keyboardType: keyboard,
         inputFormatters: formatters,
         style: const TextStyle(color: AppColors.textPrimary),
-        decoration: InputDecoration(labelText: label),
+        decoration: InputDecoration(labelText: label, hintText: hint),
       ),
     );
   }
