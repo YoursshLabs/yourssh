@@ -7,12 +7,11 @@ import '../../models/host.dart';
 import '../../models/ssh_key.dart';
 import '../../providers/host_provider.dart';
 import '../../providers/key_provider.dart';
+import '../../providers/session_provider.dart';
+import '../security/app_lock_gate.dart';
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 import '../widgets/list_group.dart';
-
-// Shared pref key for the app-lock toggle (same as AppLockGate).
-const _kAppLockPrefKey = 'yourssh.app_lock_enabled';
 
 /// Grouped add/edit host form for mobile (Design 02).
 ///
@@ -179,7 +178,14 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
   Future<void> _saveAndConnect() async {
     if (!_canSave) return;
     await _doSave();
-    if (mounted) Navigator.of(context).pop(true); // true = caller should connect
+    if (!mounted) return;
+    // Look up the just-saved host by id so we get the freshest copy.
+    final hostId = widget.existing?.id ?? context.read<HostProvider>().allHosts.last.id;
+    final host = context.read<HostProvider>().byId(hostId);
+    if (host != null && mounted) {
+      context.read<SessionProvider>().connectAny(host);
+    }
+    if (mounted) Navigator.of(context).pop();
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -626,7 +632,7 @@ class _CertAgentNoteRow extends StatelessWidget {
 }
 
 /// Amber toggle row for Face ID / biometric app-lock (reads/writes
-/// [_kAppLockPrefKey] in SharedPreferences — same key as AppLockGate).
+/// [kAppLockPrefKey] in SharedPreferences — same key as AppLockGate).
 class _BiometricRow extends StatefulWidget {
   const _BiometricRow();
 
@@ -644,7 +650,7 @@ class _BiometricRowState extends State<_BiometricRow> {
     SharedPreferences.getInstance().then((p) {
       if (!mounted) return;
       setState(() {
-        _enabled = p.getBool(_kAppLockPrefKey) ?? true;
+        _enabled = p.getBool(kAppLockPrefKey) ?? true;
         _loaded = true;
       });
     });
@@ -653,7 +659,7 @@ class _BiometricRowState extends State<_BiometricRow> {
   Future<void> _toggle(bool v) async {
     setState(() => _enabled = v);
     final p = await SharedPreferences.getInstance();
-    await p.setBool(_kAppLockPrefKey, v);
+    await p.setBool(kAppLockPrefKey, v);
   }
 
   @override

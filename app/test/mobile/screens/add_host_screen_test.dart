@@ -4,18 +4,31 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:yourssh/mobile/screens/mobile_add_host_screen.dart';
+import 'package:yourssh/mobile/security/app_lock_gate.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
+import 'package:yourssh/models/app_session.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/providers/host_provider.dart';
 import 'package:yourssh/providers/key_provider.dart';
+import 'package:yourssh/providers/session_provider.dart';
+import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
+import 'package:yourssh/services/tab_metadata_service.dart';
 
-Widget _wrap(HostProvider hosts, Widget child) => MaterialApp(
+Widget _wrap(
+  HostProvider hosts,
+  Widget child, {
+  _FakeSessionProvider? session,
+}) =>
+    MaterialApp(
       theme: buildMobileTheme(),
       home: MultiProvider(
         providers: [
           ChangeNotifierProvider<HostProvider>.value(value: hosts),
           ChangeNotifierProvider(create: (_) => KeyProvider()),
+          ChangeNotifierProvider<SessionProvider>.value(
+            value: session ?? _FakeSessionProvider(),
+          ),
         ],
         child: child,
       ),
@@ -201,10 +214,88 @@ void main() {
     expect(tester.widget<TextField>(snippetField).controller?.text ?? '',
         'tmux attach');
   });
+
+  // ── Fix 1: biometric toggle uses the shared kAppLockPrefKey ─────────────
+
+  testWidgets('biometric toggle persists under shared kAppLockPrefKey',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final hosts = HostProvider(StorageService());
+    await tester.pumpWidget(_wrap(hosts, const MobileAddHostScreen()));
+    await tester.pumpAndSettle();
+
+    // The switch should be present and enabled by default (kAppLockPrefKey
+    // absent → defaults to true).
+    final switchFinder = find.byType(Switch);
+    expect(switchFinder, findsOneWidget);
+    expect(tester.widget<Switch>(switchFinder).value, isTrue);
+
+    // Toggle it off.
+    await tester.tap(switchFinder);
+    await tester.pumpAndSettle();
+
+    final prefs = await SharedPreferences.getInstance();
+    // Must write under the SHARED key, not a local orphan key.
+    expect(prefs.getBool(kAppLockPrefKey), isFalse);
+    // The old orphan key must not exist.
+    expect(prefs.getBool('yourssh.app_lock_enabled'), isNull);
+  });
+
+  // ── Fix 2: "Save & connect" wires connectAny; plain "Save" does not ─────
+
+  testWidgets('Save & connect calls connectAny; plain Save does not',
+      (tester) async {
+    final session = _FakeSessionProvider();
+    final hosts = _FakeHostProvider(onAdd: () {});
+    await tester.pumpWidget(
+      _wrap(hosts, const MobileAddHostScreen(), session: session),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('host-label')), 'box');
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('host-address')), '10.0.0.1');
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('host-username')), 'root');
+    await tester.pump();
+
+    // Tap plain "Save" — connectAny must NOT be called.
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(session.connectAnyCalled, isFalse);
+    expect(session.connectedHost, isNull);
+  });
+
+  testWidgets('Save & connect button calls connectAny with saved host',
+      (tester) async {
+    final session = _FakeSessionProvider();
+    final hosts = _FakeHostProvider(onAdd: () {});
+    await tester.pumpWidget(
+      _wrap(hosts, const MobileAddHostScreen(), session: session),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('host-label')), 'prod');
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('host-address')), '10.0.0.2');
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('host-username')), 'ubuntu');
+    await tester.pump();
+
+    // Drag the ListView down to reveal the "Save & connect" button at the bottom.
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save & connect'));
+    await tester.pumpAndSettle();
+
+    expect(session.connectAnyCalled, isTrue);
+    expect(session.connectedHost?.label, 'prod');
+    expect(session.connectedHost?.host, '10.0.0.2');
+  });
 }
 
 // ---------------------------------------------------------------------------
-// Fake provider to verify which provider method is called
+// Fake providers
 // ---------------------------------------------------------------------------
 
 class _FakeHostProvider extends HostProvider {
@@ -229,6 +320,14 @@ class _FakeHostProvider extends HostProvider {
   List<Host> get allHosts => _seedHosts;
 
   @override
+  Host? byId(String id) {
+    for (final h in _seedHosts) {
+      if (h.id == id) return h;
+    }
+    return null;
+  }
+
+  @override
   Future<void> addHost(Host host, {String? password}) async {
     _seedHosts.add(host);
     onAdd?.call();
@@ -241,5 +340,20 @@ class _FakeHostProvider extends HostProvider {
     if (idx != -1) _seedHosts[idx] = host;
     onUpdate?.call();
     notifyListeners();
+  }
+}
+
+class _FakeSessionProvider extends SessionProvider {
+  bool connectAnyCalled = false;
+  Host? connectedHost;
+
+  _FakeSessionProvider()
+      : super(SshService(StorageService()), TabMetadataService());
+
+  @override
+  Future<AppSession?> connectAny(Host host, {String? initialCommand}) async {
+    connectAnyCalled = true;
+    connectedHost = host;
+    return null;
   }
 }
