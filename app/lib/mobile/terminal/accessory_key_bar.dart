@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 
-import '../../theme/app_theme.dart';
+import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 import 'accessory_bar_controller.dart';
 
@@ -53,7 +53,7 @@ class AccessoryKeyBar extends StatelessWidget {
       builder: (context, _) {
         return Container(
           height: MobileTokens.accessoryBarHeight,
-          color: AppColors.card,
+          color: MobileColors.surfaceAlt,
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
@@ -93,12 +93,12 @@ class AccessoryKeyBar extends StatelessWidget {
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: armed ? AppColors.accent : AppColors.bg,
+            color: armed ? MobileColors.accent : MobileColors.bg,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(label,
               style: TextStyle(
-                  color: armed ? Colors.black : AppColors.textPrimary,
+                  color: armed ? Colors.black : MobileColors.textPrimary,
                   fontSize: 14)),
         ),
       ),
@@ -116,10 +116,10 @@ class AccessoryKeyBar extends StatelessWidget {
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
-              color: AppColors.bg,
+              color: MobileColors.bg,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: AppColors.textPrimary, size: 20),
+            child: Icon(icon, color: MobileColors.textPrimary, size: 20),
           ),
         ),
       ),

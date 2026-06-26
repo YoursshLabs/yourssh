@@ -271,8 +271,12 @@ class _TerminalHeader extends StatelessWidget {
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: const BoxDecoration(
-                        color: MobileColors.green,
+                      decoration: BoxDecoration(
+                        color: session.status == SessionStatus.connected
+                            ? MobileColors.green
+                            : session.status == SessionStatus.connecting
+                                ? MobileColors.accent
+                                : MobileColors.red,
                         shape: BoxShape.circle,
                       ),
                     ),
