@@ -20,6 +20,11 @@ class _FakePortForwardProvider extends PortForwardProvider {
 
   @override
   List<PortForward> get forwards => List.unmodifiable(_fakeForwards);
+
+  final List<PortForward> added = [];
+
+  @override
+  Future<void> add(PortForward fwd) async => added.add(fwd);
 }
 
 class _FakePortForwardService extends PortForwardService {
@@ -112,6 +117,26 @@ Future<_FakePortForwardService> _pump(WidgetTester tester) async {
   return service;
 }
 
+/// Pump helper that returns both the provider and the service.
+Future<({_FakePortForwardProvider provider, _FakePortForwardService service})>
+    _pumpWithProvider(WidgetTester tester) async {
+  final provider = _FakePortForwardProvider([]);
+  final service = _FakePortForwardService();
+
+  await tester.pumpWidget(MaterialApp(
+    theme: buildMobileTheme(),
+    home: MultiProvider(
+      providers: [
+        ChangeNotifierProvider<PortForwardProvider>.value(value: provider),
+        Provider<PortForwardService>.value(value: service),
+      ],
+      child: MobilePortForwardScreen(host: _host),
+    ),
+  ));
+  await tester.pump();
+  return (provider: provider, service: service);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -158,5 +183,113 @@ void main() {
     await tester.tap(find.byIcon(Icons.stop_circle_outlined));
     await tester.pump();
     expect(svc.stoppedIds, contains(_activeRule.id));
+  });
+
+  // -------------------------------------------------------------------------
+  // Validation: add-rule dialog
+  // -------------------------------------------------------------------------
+
+  testWidgets('empty local port blocks save — provider.add not called',
+      (tester) async {
+    final result = await _pumpWithProvider(tester);
+
+    // Open the add-rule sheet.
+    await tester.tap(find.text('Add forwarding rule'));
+    await tester.pumpAndSettle();
+
+    // Leave local port empty; tap "Add rule".
+    await tester.tap(find.text('Add rule'));
+    await tester.pumpAndSettle();
+
+    // provider.add must NOT have been called.
+    expect(result.provider.added, isEmpty);
+
+    // An inline error message should be visible.
+    expect(
+      find.textContaining('Local port must be between 1 and 65535'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('zero local port blocks save — provider.add not called',
+      (tester) async {
+    final result = await _pumpWithProvider(tester);
+
+    await tester.tap(find.text('Add forwarding rule'));
+    await tester.pumpAndSettle();
+
+    // Enter "0" — out of valid range.
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Local port'), '0');
+    await tester.tap(find.text('Add rule'));
+    await tester.pumpAndSettle();
+
+    expect(result.provider.added, isEmpty);
+    expect(
+      find.textContaining('Local port must be between 1 and 65535'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+      'valid local port + empty remote host blocks save for LOCAL type',
+      (tester) async {
+    final result = await _pumpWithProvider(tester);
+
+    await tester.tap(find.text('Add forwarding rule'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Local port'), '5432');
+    // Leave remote host empty.
+    await tester.tap(find.text('Add rule'));
+    await tester.pumpAndSettle();
+
+    expect(result.provider.added, isEmpty);
+    expect(
+      find.textContaining('Remote host must not be empty'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('valid inputs for LOCAL type calls provider.add', (tester) async {
+    final result = await _pumpWithProvider(tester);
+
+    await tester.tap(find.text('Add forwarding rule'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Local port'), '5432');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Remote host'), 'db-server');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Remote port'), '5432');
+    await tester.tap(find.text('Add rule'));
+    await tester.pumpAndSettle();
+
+    expect(result.provider.added, hasLength(1));
+    expect(result.provider.added.first.localPort, 5432);
+  });
+
+  testWidgets(
+      'valid local port for DYNAMIC type calls provider.add without remote check',
+      (tester) async {
+    final result = await _pumpWithProvider(tester);
+
+    await tester.tap(find.text('Add forwarding rule'));
+    await tester.pumpAndSettle();
+
+    // Switch to Dynamic tab.
+    await tester.tap(find.text('Dynamic'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Local port'), '1080');
+    await tester.tap(find.text('Add rule'));
+    await tester.pumpAndSettle();
+
+    expect(result.provider.added, hasLength(1));
+    expect(result.provider.added.first.type, ForwardType.dynamic);
+    expect(result.provider.added.first.localPort, 1080);
   });
 }

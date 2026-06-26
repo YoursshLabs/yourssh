@@ -22,8 +22,7 @@ import '../util/mobile_prefs.dart';
 ///
 /// [focusSessionId] — if non-null, switch to that session on mount.
 /// The ⋮ menu exposes [onOpenFiles] and [onOpenPortForward] hooks; these are
-/// wired by Tasks 13 & 15 respectively. Passing null shows a "coming soon"
-/// SnackBar as an interim stub.
+/// wired by Tasks 13 & 15 respectively.
 class MobileTerminalScreen extends StatefulWidget {
   final String? focusSessionId;
 
@@ -150,10 +149,6 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
                 Navigator.pop(context);
                 if (widget.onOpenFiles != null && active != null) {
                   widget.onOpenFiles!(active.host);
-                } else if (widget.onOpenFiles == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Files — coming soon')),
-                  );
                 }
               },
             ),
@@ -166,11 +161,6 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
                 Navigator.pop(context);
                 if (widget.onOpenPortForward != null && active != null) {
                   widget.onOpenPortForward!(active.host);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Port forwarding — coming soon')),
-                  );
                 }
               },
             ),

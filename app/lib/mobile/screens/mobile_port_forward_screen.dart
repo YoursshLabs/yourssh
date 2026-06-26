@@ -177,6 +177,8 @@ class _AddRuleSheetState extends State<_AddRuleSheet> {
   final _remoteHostCtrl = TextEditingController();
   final _remotePortCtrl = TextEditingController();
 
+  String? _validationError;
+
   @override
   void dispose() {
     _labelCtrl.dispose();
@@ -186,9 +188,35 @@ class _AddRuleSheetState extends State<_AddRuleSheet> {
     super.dispose();
   }
 
+  /// Returns an error message if the inputs are invalid, otherwise null.
+  String? _validate() {
+    final localPort = int.tryParse(_localPortCtrl.text.trim());
+    if (localPort == null || localPort < 1 || localPort > 65535) {
+      return 'Local port must be between 1 and 65535.';
+    }
+    if (_type != ForwardType.dynamic) {
+      if (_remoteHostCtrl.text.trim().isEmpty) {
+        return 'Remote host must not be empty.';
+      }
+      final remotePort = int.tryParse(_remotePortCtrl.text.trim());
+      if (remotePort == null || remotePort < 1 || remotePort > 65535) {
+        return 'Remote port must be between 1 and 65535.';
+      }
+    }
+    return null;
+  }
+
   void _save() {
-    final localPort = int.tryParse(_localPortCtrl.text.trim()) ?? 0;
-    final remotePort = int.tryParse(_remotePortCtrl.text.trim()) ?? 0;
+    final error = _validate();
+    if (error != null) {
+      setState(() => _validationError = error);
+      return;
+    }
+
+    final localPort = int.parse(_localPortCtrl.text.trim());
+    final remotePort = _type != ForwardType.dynamic
+        ? int.parse(_remotePortCtrl.text.trim())
+        : 0;
     final label = _labelCtrl.text.trim().isEmpty
         ? _type.name
         : _labelCtrl.text.trim();
@@ -242,7 +270,11 @@ class _AddRuleSheetState extends State<_AddRuleSheet> {
                   value: ForwardType.dynamic, label: Text('Dynamic')),
             ],
             selected: {_type},
-            onSelectionChanged: (s) => setState(() => _type = s.first),
+            onSelectionChanged: (s) =>
+                setState(() {
+                  _type = s.first;
+                  _validationError = null;
+                }),
             style: ButtonStyle(
               backgroundColor: WidgetStateProperty.resolveWith((states) =>
                   states.contains(WidgetState.selected)
@@ -268,6 +300,14 @@ class _AddRuleSheetState extends State<_AddRuleSheet> {
                 numeric: true, hint: '5432'),
           ],
           const SizedBox(height: MobileTokens.space4),
+          if (_validationError != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: MobileTokens.space3),
+              child: Text(
+                _validationError!,
+                style: mobileBody(size: 13, color: MobileColors.red),
+              ),
+            ),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
