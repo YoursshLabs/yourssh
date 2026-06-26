@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../providers/host_provider.dart';
-import '../../providers/settings_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/sync_service.dart';
 import '../../theme/app_theme.dart';
@@ -12,6 +11,7 @@ import '../../widgets/terminal_appearance_controls.dart';
 import '../security/app_lock_gate.dart';
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
+import '../util/mobile_prefs.dart';
 import '../widgets/list_group.dart';
 import '../widgets/settings_row.dart';
 import 'mobile_qr_scan_screen.dart';
@@ -38,6 +38,9 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   // ── Security ──────────────────────────────────────────────────────────────
   bool _appLock = true;
 
+  // ── Keyboard ──────────────────────────────────────────────────────────────
+  bool _accessoryBar = true;
+
   // ── Version ───────────────────────────────────────────────────────────────
   String _version = '';
 
@@ -45,7 +48,12 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   void initState() {
     super.initState();
     SharedPreferences.getInstance().then((p) {
-      if (mounted) setState(() => _appLock = p.getBool(kAppLockPrefKey) ?? true);
+      if (mounted) {
+        setState(() {
+          _appLock      = p.getBool(kAppLockPrefKey)      ?? true;
+          _accessoryBar = p.getBool(kAccessoryBarPrefKey) ?? true;
+        });
+      }
     });
     PackageInfo.fromPlatform().then((info) {
       if (mounted) setState(() => _version = info.version);
@@ -217,8 +225,12 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
         SettingsRow(
           leading: Icon(Icons.keyboard_outlined, color: MobileColors.textMuted, size: 20),
           title: 'Shortcut key bar',
-          toggle: context.watch<SettingsProvider>().shellIntegrationEnabled,
-          onToggle: (v) => context.read<SettingsProvider>().save(shellIntegrationEnabled: v),
+          toggle: _accessoryBar,
+          onToggle: (v) async {
+            setState(() => _accessoryBar = v);
+            final p = await SharedPreferences.getInstance();
+            await p.setBool(kAccessoryBarPrefKey, v);
+          },
         ),
         SettingsRow(
           leading: Icon(Icons.cloud_sync_outlined, color: MobileColors.textMuted, size: 20),
@@ -256,20 +268,26 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => _SupabaseSyncSheet(
-        urlController: _url,
-        anonController: _anon,
-        codeController: _code,
-        pulling: _pulling,
-        onDirty: () => _dirty = true,
-        onSave: () async {
-          await _save();
-          if (ctx.mounted) Navigator.of(ctx).pop();
-        },
-        onPull: () async {
-          await _pull();
-          if (ctx.mounted) Navigator.of(ctx).pop();
-        },
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => _SupabaseSyncSheet(
+          urlController: _url,
+          anonController: _anon,
+          codeController: _code,
+          pulling: _pulling,
+          onDirty: () => _dirty = true,
+          onSave: () async {
+            await _save();
+            if (ctx.mounted) Navigator.of(ctx).pop();
+          },
+          onPull: () async {
+            setSheetState(() => _pulling = true);
+            await _pull();
+            if (ctx.mounted) {
+              setSheetState(() => _pulling = false);
+              Navigator.of(ctx).pop();
+            }
+          },
+        ),
       ),
     );
   }
@@ -299,7 +317,6 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   }
 
   Future<void> _pull() async {
-    setState(() => _pulling = true);
     final payload = await context.read<SyncService>().pull();
     if (!mounted) return;
     if (payload != null) {
@@ -316,7 +333,6 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(err ?? 'Nothing new to pull')));
     }
-    if (mounted) setState(() => _pulling = false);
   }
 }
 
