@@ -151,4 +151,105 @@ void main() {
     // Fields are hidden until Edit is tapped.
     expect(find.byKey(const Key('sync-url')), findsNothing);
   });
+
+  // ── Validation: empty URL does NOT persist and shows error ────────────────
+
+  testWidgets('Save with empty URL does not configure SyncProvider and shows error',
+      (tester) async {
+    final sync = await _pump(tester, configured: false);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // Leave URL empty; fill in anon key.
+    await tester.enterText(find.byKey(const Key('sync-anon')), 'my-anon-key');
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Save'));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Provider must NOT be configured.
+    expect(sync.isSupabaseConfigured, isFalse);
+    // Error message must be visible.
+    expect(find.byKey(const Key('sync-config-error')), findsOneWidget);
+  });
+
+  // ── Validation: invalid (non-http) URL does NOT persist ───────────────────
+
+  testWidgets('Save with non-http URL does not configure SyncProvider and shows error',
+      (tester) async {
+    final sync = await _pump(tester, configured: false);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.enterText(
+        find.byKey(const Key('sync-url')), 'not-a-valid-url');
+    await tester.enterText(
+        find.byKey(const Key('sync-anon')), 'my-anon-key');
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Save'));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(sync.isSupabaseConfigured, isFalse);
+    expect(find.byKey(const Key('sync-config-error')), findsOneWidget);
+  });
+
+  // ── Validation: empty anon key does NOT persist ───────────────────────────
+
+  testWidgets('Save with empty anon key does not configure SyncProvider and shows error',
+      (tester) async {
+    final sync = await _pump(tester, configured: false);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.enterText(
+        find.byKey(const Key('sync-url')), 'https://my.supabase.co');
+    // Leave anon key empty.
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Save'));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(sync.isSupabaseConfigured, isFalse);
+    expect(find.byKey(const Key('sync-config-error')), findsOneWidget);
+  });
+
+  // ── Validation: valid round-trip also exercises setSyncCode ──────────────
+
+  testWidgets('Save with valid URL+anon+code calls setSyncCode',
+      (tester) async {
+    final sync = await _pump(tester, configured: false);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.enterText(
+        find.byKey(const Key('sync-url')), 'https://my.supabase.co');
+    await tester.enterText(
+        find.byKey(const Key('sync-anon')), 'my-anon-key');
+    // Use Crockford Base32 chars only (no I/L/O/U ambiguity).
+    await tester.enterText(
+        find.byKey(const Key('sync-code')), 'ABCDEFGH0JKM');
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Save'));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Provider fully configured and syncCode stored.
+    expect(sync.isSupabaseConfigured, isTrue);
+    expect(sync.syncCode, 'ABCDEFGH0JKM');
+    // No error shown.
+    expect(find.byKey(const Key('sync-config-error')), findsNothing);
+  });
 }

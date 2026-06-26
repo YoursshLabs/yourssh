@@ -44,6 +44,7 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
   final _code = TextEditingController();
   bool _editingConfig = false;
   bool _pulling = false;
+  String? _configError;
 
   @override
   void initState() {
@@ -71,8 +72,30 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
   }
 
   Future<void> _saveConfig() async {
+    final url     = _url.text.trim();
+    final anonKey = _anon.text.trim();
+
+    // Validate URL — must be non-empty and parse as http/https.
+    if (url.isEmpty) {
+      setState(() => _configError = 'Supabase URL is required.');
+      return;
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      setState(() => _configError = 'URL must start with https:// (or http://).');
+      return;
+    }
+
+    // Validate anon key — must be non-empty.
+    if (anonKey.isEmpty) {
+      setState(() => _configError = 'Anon key is required.');
+      return;
+    }
+
+    // All valid — clear any previous error, persist and close the form.
+    setState(() => _configError = null);
     final sync = context.read<SyncProvider>();
-    await sync.setSupabaseConfig(_url.text, _anon.text);
+    await sync.setSupabaseConfig(url, anonKey);
     await sync.setSyncCode(_code.text);
     if (mounted) {
       setState(() => _editingConfig = false);
@@ -461,7 +484,14 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
                 ),
               ],
             ),
-            if (sync.error != null) ...[
+            if (_configError != null) ...[
+              const SizedBox(height: MobileTokens.space2),
+              Text(
+                _configError!,
+                key: const Key('sync-config-error'),
+                style: mobileBody(size: 12, color: MobileColors.red),
+              ),
+            ] else if (sync.error != null) ...[
               const SizedBox(height: MobileTokens.space2),
               Text(
                 sync.error!,
