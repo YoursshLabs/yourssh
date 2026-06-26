@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../security/tofu_watcher.dart';
+import '../services/host_reachability_probe.dart';
 import '../widgets/mobile_tab_bar.dart';
+import 'mobile_hosts_screen.dart';
 
 /// Bottom-navigation shell for the Android app.
 /// Four tabs: Hosts · Snippets · Keys · Settings.
-/// Tab bodies are temporary placeholders until tasks T6/T8/T9 land.
+/// Tab bodies are temporary placeholders until tasks T8/T9 land.
 class MobileHomeShell extends StatefulWidget {
   const MobileHomeShell({super.key});
 
@@ -16,25 +19,26 @@ class MobileHomeShell extends StatefulWidget {
 class _MobileHomeShellState extends State<MobileHomeShell> {
   MobileTab _current = MobileTab.hosts;
 
-  static const _bodies = <MobileTab, Widget>{
-    MobileTab.hosts: Center(child: Text('Hosts')),
-    MobileTab.snippets: Center(child: Text('Snippets')),
-    MobileTab.keys: Center(child: Text('Keys')),
-    MobileTab.settings: Center(child: Text('Settings')),
-  };
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: TofuWatcher(
-        child: IndexedStack(
-          index: MobileTab.values.indexOf(_current),
-          children: MobileTab.values.map((t) => _bodies[t]!).toList(),
+    return ChangeNotifierProvider(
+      create: (_) => HostReachabilityProbe(),
+      child: Scaffold(
+        body: TofuWatcher(
+          child: IndexedStack(
+            index: MobileTab.values.indexOf(_current),
+            children: const [
+              MobileHostsScreen(),
+              Center(child: Text('Snippets')),
+              Center(child: Text('Keys')),
+              Center(child: Text('Settings')),
+            ],
+          ),
         ),
-      ),
-      bottomNavigationBar: MobileTabBar(
-        current: _current,
-        onSelect: (tab) => setState(() => _current = tab),
+        bottomNavigationBar: MobileTabBar(
+          current: _current,
+          onSelect: (tab) => setState(() => _current = tab),
+        ),
       ),
     );
   }

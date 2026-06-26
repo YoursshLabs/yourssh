@@ -6,6 +6,7 @@ import 'package:yourssh/models/host.dart';
 import 'package:yourssh/providers/host_provider.dart';
 import 'package:yourssh/providers/session_provider.dart';
 import 'package:yourssh/mobile/screens/mobile_hosts_screen.dart';
+import 'package:yourssh/mobile/services/host_reachability_probe.dart';
 import 'package:yourssh/mobile/widgets/host_card.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
@@ -13,13 +14,15 @@ import 'package:yourssh/services/tab_metadata_service.dart';
 
 Future<void> _pump(WidgetTester tester, HostProvider hosts) async {
   final sessions = SessionProvider(SshService(StorageService()), TabMetadataService());
+  final probe = HostReachabilityProbe(connector: (_, __, ___) async {});
   await tester.pumpWidget(MaterialApp(
     home: MultiProvider(
       providers: [
         ChangeNotifierProvider<HostProvider>.value(value: hosts),
         ChangeNotifierProvider<SessionProvider>.value(value: sessions),
+        ChangeNotifierProvider<HostReachabilityProbe>.value(value: probe),
       ],
-      child: MobileHostsScreen(onConnected: () {}, onAddHost: () {}),
+      child: const MobileHostsScreen(),
     ),
   ));
   await tester.pumpAndSettle();

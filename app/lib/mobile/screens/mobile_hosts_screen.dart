@@ -5,34 +5,50 @@ import '../../models/host.dart';
 import '../../models/ssh_session.dart';
 import '../../providers/host_provider.dart';
 import '../../providers/session_provider.dart';
-import '../../theme/app_theme.dart';
 import '../../util/host_query.dart';
+import '../services/host_reachability_probe.dart';
+import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 import '../widgets/host_card.dart';
+import '../widgets/mobile_fab.dart';
+import '../widgets/section_header.dart';
 import '../widgets/status_dot.dart';
 import '../widgets/tag_chip.dart';
 import 'mobile_add_host_screen.dart';
 
-/// Hosts tab: searchable list of saved hosts as Termius-style cards; tap to
-/// connect, long-press for edit/delete actions, FAB to add. Tag chips filter
-/// the list.
+/// Hosts tab: header + search + folder chips + tag-grouped list + amber FAB.
+/// Tap a host → connect via SessionProvider. Long-press → edit/delete sheet.
 class MobileHostsScreen extends StatefulWidget {
-  final VoidCallback onConnected;
-  final VoidCallback onAddHost;
-
-  const MobileHostsScreen({
-    super.key,
-    required this.onConnected,
-    required this.onAddHost,
-  });
+  const MobileHostsScreen({super.key});
 
   @override
   State<MobileHostsScreen> createState() => _MobileHostsScreenState();
 }
 
 class _MobileHostsScreenState extends State<MobileHostsScreen> {
+  final _searchCtrl = TextEditingController();
   String _query = '';
   String? _tagFilter;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _kickProbe());
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _kickProbe() {
+    if (!mounted) return;
+    final all = context.read<HostProvider>().allHosts;
+    context.read<HostReachabilityProbe>().probeAll(
+          all.map((h) => (id: h.id, host: h.host, port: h.port)),
+        );
+  }
 
   /// Coarse connection state for a host, derived from any live session on it.
   HostConnState _stateFor(Host host, List<SshSession> sessions) {
@@ -46,13 +62,7 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
     return HostConnState.offline;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final all = context.watch<HostProvider>().allHosts;
-    final sessions = context.watch<SessionProvider>().sshSessions;
-
-    final tags = <String>{for (final h in all) ...h.tags}.toList()..sort();
-
+  List<Host> _filtered(List<Host> all) {
     var hosts = all;
     final q = _query.trim();
     if (q.isNotEmpty) {
@@ -61,86 +71,203 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
     if (_tagFilter != null) {
       hosts = hosts.where((h) => h.tags.contains(_tagFilter)).toList();
     }
+    return hosts;
+  }
+
+  /// Groups hosts by their first tag (or "Other" if untagged).
+  Map<String, List<Host>> _grouped(List<Host> hosts) {
+    final map = <String, List<Host>>{};
+    for (final h in hosts) {
+      final key = h.tags.isNotEmpty ? h.tags.first : 'Other';
+      map.putIfAbsent(key, () => []).add(h);
+    }
+    // Stable alphabetical order for sections.
+    return Map.fromEntries(
+      map.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final all = context.watch<HostProvider>().allHosts;
+    final sessions = context.watch<SessionProvider>().sshSessions;
+    final probe = context.watch<HostReachabilityProbe>();
+
+    final tags = <String>{for (final h in all) ...h.tags}.toList()..sort();
+    final filtered = _filtered(all);
+    final grouped = _grouped(filtered);
+
+    // Online/total derived from probe states.
+    final onlineCount = all
+        .where((h) => probe.pingFor(h.id).state == HostReachState.online)
+        .length;
+    final totalCount = all.length;
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      floatingActionButton: FloatingActionButton(
-        onPressed: widget.onAddHost,
-        backgroundColor: AppColors.accent,
-        child: const Icon(Icons.add, color: Colors.black),
-      ),
+      backgroundColor: MobileColors.bg,
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                MobileTokens.space3,
-                MobileTokens.space3,
-                MobileTokens.space3,
-                MobileTokens.space2,
-              ),
-              child: TextField(
-                onChanged: (v) => setState(() => _query = v),
-                style: const TextStyle(color: AppColors.textPrimary),
-                decoration: InputDecoration(
-                  hintText: 'Search hosts',
-                  prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
-                  filled: true,
-                  fillColor: AppColors.card,
-                  contentPadding: EdgeInsets.zero,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(MobileTokens.radiusPill),
-                    borderSide: BorderSide.none,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header ──────────────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    MobileTokens.space4,
+                    MobileTokens.space4,
+                    MobileTokens.space4,
+                    MobileTokens.space2,
                   ),
-                ),
-              ),
-            ),
-            if (tags.isNotEmpty)
-              SizedBox(
-                height: 36,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: MobileTokens.space3),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(right: MobileTokens.space2),
-                      child: TagChip(
-                        label: 'All',
-                        selected: _tagFilter == null,
-                        onTap: () => setState(() => _tagFilter = null),
-                      ),
-                    ),
-                    for (final tag in tags)
-                      Padding(
-                        padding: const EdgeInsets.only(right: MobileTokens.space2),
-                        child: TagChip(
-                          label: tag,
-                          selected: _tagFilter == tag,
-                          onTap: () => setState(
-                              () => _tagFilter = _tagFilter == tag ? null : tag),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Hosts',
+                                style: mobileHeading(
+                                    size: 30, weight: FontWeight.w800)),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: MobileColors.green,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '$onlineCount online · $totalCount total',
+                                  style: mobileBody(
+                                    size: 13,
+                                    color: MobileColors.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                  ],
+                      _CircleButton(
+                        icon: Icons.more_horiz,
+                        onTap: () {},
+                      ),
+                      const SizedBox(width: MobileTokens.space2),
+                      _CircleButton(
+                        icon: Icons.person_outline,
+                        onTap: () {},
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            Expanded(
-              child: hosts.isEmpty
-                  ? _EmptyState(onAddHost: widget.onAddHost)
-                  : ListView.builder(
-                      padding: const EdgeInsets.only(
-                          top: MobileTokens.space2, bottom: 80),
-                      itemCount: hosts.length,
-                      itemBuilder: (_, i) {
-                        final s = _stateFor(hosts[i], sessions);
-                        return HostCard(
-                          host: hosts[i],
-                          online: s == HostConnState.connected,
-                          connecting: s == HostConnState.connecting,
-                          onTap: () => _connect(hosts[i]),
-                          onLongPress: () => _showActions(hosts[i]),
-                        );
-                      },
+
+                // ── Search field ─────────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: MobileTokens.space4,
+                  ),
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: (v) => setState(() => _query = v),
+                    style: mobileBody(size: 15),
+                    decoration: InputDecoration(
+                      hintText: 'Search hosts, tags, IPs…',
+                      hintStyle: mobileBody(
+                          size: 15, color: MobileColors.textFaint),
+                      prefixIcon: const Icon(Icons.search,
+                          color: MobileColors.textFaint, size: 20),
+                      filled: true,
+                      fillColor: const Color(0xFF1C1C1E),
+                      contentPadding: const EdgeInsets.symmetric(
+                          vertical: MobileTokens.space3),
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(MobileTokens.radiusField),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(MobileTokens.radiusField),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(MobileTokens.radiusField),
+                        borderSide: const BorderSide(
+                            color: MobileColors.accent, width: 1.5),
+                      ),
                     ),
+                  ),
+                ),
+                const SizedBox(height: MobileTokens.space3),
+
+                // ── Folder chips ─────────────────────────────────────────────
+                if (tags.isNotEmpty)
+                  SizedBox(
+                    height: 34,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: MobileTokens.space4),
+                      children: [
+                        Padding(
+                          padding:
+                              const EdgeInsets.only(right: MobileTokens.space2),
+                          child: TagChip(
+                            label: 'All',
+                            selected: _tagFilter == null,
+                            onTap: () => setState(() => _tagFilter = null),
+                          ),
+                        ),
+                        for (final tag in tags)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                                right: MobileTokens.space2),
+                            child: TagChip(
+                              label: tag,
+                              selected: _tagFilter == tag,
+                              onTap: () => setState(() =>
+                                  _tagFilter = _tagFilter == tag ? null : tag),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+
+                const SizedBox(height: MobileTokens.space2),
+
+                // ── Host list ────────────────────────────────────────────────
+                Expanded(
+                  child: filtered.isEmpty
+                      ? _EmptyState(
+                          onAdd: () => _pushAddHost(),
+                          hasQuery: _query.isNotEmpty || _tagFilter != null,
+                        )
+                      : RefreshIndicator(
+                          onRefresh: () async => _kickProbe(),
+                          color: MobileColors.accent,
+                          child: ListView.builder(
+                            padding: const EdgeInsets.only(
+                                bottom: MobileTokens.space4 * 4),
+                            itemCount: _groupedItemCount(grouped),
+                            itemBuilder: (_, i) =>
+                                _groupedItem(i, grouped, sessions, probe),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+
+            // ── FAB ──────────────────────────────────────────────────────────
+            Positioned(
+              right: MobileTokens.space4,
+              bottom: MobileTokens.space4,
+              child: MobileFab(onTap: _pushAddHost),
             ),
           ],
         ),
@@ -148,25 +275,103 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
     );
   }
 
-  void _connect(Host host) {
-    context.read<SessionProvider>().connectAny(host);
-    widget.onConnected();
+  // ── Grouped list helpers ─────────────────────────────────────────────────
+
+  int _groupedItemCount(Map<String, List<Host>> grouped) {
+    int count = 0;
+    for (final entry in grouped.entries) {
+      count += 1 + entry.value.length; // header + cards
+    }
+    return count;
   }
 
-  /// Long-press action sheet: edit (opens the form pre-filled) or delete.
+  Widget _groupedItem(
+    int index,
+    Map<String, List<Host>> grouped,
+    List<SshSession> sessions,
+    HostReachabilityProbe probe,
+  ) {
+    int cursor = 0;
+    for (final entry in grouped.entries) {
+      if (index == cursor) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+            MobileTokens.space4,
+            MobileTokens.space3,
+            MobileTokens.space4,
+            0,
+          ),
+          child: SectionHeader(entry.key),
+        );
+      }
+      cursor++;
+      final localIdx = index - cursor;
+      if (localIdx < entry.value.length) {
+        final host = entry.value[localIdx];
+        final ping = probe.pingFor(host.id);
+        final connState = _stateFor(host, sessions);
+        return HostCard(
+          host: host,
+          online: connState == HostConnState.connected ||
+              ping.state == HostReachState.online,
+          connecting: connState == HostConnState.connecting ||
+              ping.state == HostReachState.probing,
+          latencyMs: ping.ms,
+          onTap: () => _connect(host),
+          onLongPress: () => _showActions(host),
+        );
+      }
+      cursor += entry.value.length;
+    }
+    return const SizedBox.shrink();
+  }
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+
+  void _connect(Host host) {
+    context.read<SessionProvider>().connectAny(host);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Connecting to ${host.label}…'),
+        duration: const Duration(seconds: 2),
+        backgroundColor: MobileColors.surface,
+      ),
+    );
+  }
+
+  void _pushAddHost() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MobileAddHostScreen()),
+    );
+  }
+
   Future<void> _showActions(Host host) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.card,
+      backgroundColor: MobileColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Handle
+            Container(
+              margin: const EdgeInsets.only(top: MobileTokens.space3),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: MobileColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: MobileTokens.space2),
             ListTile(
-              leading:
-                  const Icon(Icons.edit_outlined, color: AppColors.textPrimary),
-              title: const Text('Edit',
-                  style: TextStyle(color: AppColors.textPrimary)),
+              leading: const Icon(Icons.edit_outlined,
+                  color: MobileColors.textPrimary),
+              title: Text('Edit',
+                  style: mobileBody(size: 16, weight: FontWeight.w500)),
               onTap: () {
                 Navigator.pop(ctx);
                 Navigator.of(context).push(MaterialPageRoute(
@@ -175,14 +380,17 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: AppColors.red),
-              title: const Text('Delete',
-                  style: TextStyle(color: AppColors.red)),
+              leading:
+                  const Icon(Icons.delete_outline, color: MobileColors.red),
+              title: Text('Delete',
+                  style:
+                      mobileBody(size: 16, color: MobileColors.red)),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDelete(host);
               },
             ),
+            const SizedBox(height: MobileTokens.space2),
           ],
         ),
       ),
@@ -193,19 +401,22 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
+        backgroundColor: MobileColors.surface,
         title: Text('Delete ${host.label}?',
-            style: const TextStyle(color: AppColors.textPrimary)),
-        content: const Text('This removes the saved host and its credentials.',
-            style: TextStyle(color: AppColors.textSecondary)),
+            style: mobileHeading(size: 17)),
+        content: Text(
+          'This removes the saved host and its credentials.',
+          style: mobileBody(size: 14, color: MobileColors.textMuted),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: mobileBody(size: 15)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: AppColors.red)),
+            child: Text('Delete',
+                style: mobileBody(size: 15, color: MobileColors.red)),
           ),
         ],
       ),
@@ -216,9 +427,35 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
   }
 }
 
+// ── Helper widgets ────────────────────────────────────────────────────────────
+
+class _CircleButton extends StatelessWidget {
+  const _CircleButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: MobileColors.surface,
+          shape: BoxShape.circle,
+          border: Border.all(color: MobileColors.border),
+        ),
+        child: Icon(icon, color: MobileColors.textMuted, size: 18),
+      ),
+    );
+  }
+}
+
 class _EmptyState extends StatelessWidget {
-  final VoidCallback onAddHost;
-  const _EmptyState({required this.onAddHost});
+  const _EmptyState({required this.onAdd, required this.hasQuery});
+  final VoidCallback onAdd;
+  final bool hasQuery;
 
   @override
   Widget build(BuildContext context) {
@@ -226,19 +463,34 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.dns_outlined, size: 48, color: AppColors.textTertiary),
-          const SizedBox(height: MobileTokens.space3),
-          const Text('No hosts yet',
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
-          const SizedBox(height: MobileTokens.space1),
-          const Text('Add a server to get started',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          const SizedBox(height: MobileTokens.space4),
-          FilledButton.icon(
-            onPressed: onAddHost,
-            icon: const Icon(Icons.add),
-            label: const Text('Add host'),
+          Icon(
+            hasQuery ? Icons.search_off : Icons.dns_outlined,
+            size: 48,
+            color: MobileColors.textFaint,
           ),
+          const SizedBox(height: MobileTokens.space3),
+          Text(
+            hasQuery ? 'No results' : 'No hosts yet',
+            style: mobileHeading(size: 17),
+          ),
+          const SizedBox(height: MobileTokens.space1),
+          Text(
+            hasQuery
+                ? 'Try a different search term or tag'
+                : 'Add a server to get started',
+            style: mobileBody(size: 13, color: MobileColors.textMuted),
+          ),
+          if (!hasQuery) ...[
+            const SizedBox(height: MobileTokens.space4),
+            FilledButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add),
+              label: const Text('Add host'),
+              style: FilledButton.styleFrom(
+                  backgroundColor: MobileColors.accent,
+                  foregroundColor: Colors.black),
+            ),
+          ],
         ],
       ),
     );
