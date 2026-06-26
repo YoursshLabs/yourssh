@@ -6,6 +6,7 @@ import '../services/host_reachability_probe.dart';
 import '../widgets/mobile_tab_bar.dart';
 import 'mobile_hosts_screen.dart';
 import 'mobile_keys_screen.dart';
+import 'mobile_settings_screen.dart';
 import 'mobile_snippets_screen.dart';
 
 /// Bottom-navigation shell for the Android app.
@@ -33,7 +34,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
               MobileHostsScreen(),
               MobileSnippetsScreen(),
               MobileKeysScreen(),
-              Center(child: Text('Settings')),
+              MobileSettingsScreen(),
             ],
           ),
         ),
