@@ -6,8 +6,10 @@ import 'package:yourssh/mobile/screens/mobile_home_shell.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
 import 'package:yourssh/mobile/widgets/mobile_tab_bar.dart';
 import 'package:yourssh/providers/host_provider.dart';
+import 'package:yourssh/providers/key_provider.dart';
 import 'package:yourssh/providers/known_hosts_provider.dart';
 import 'package:yourssh/providers/session_provider.dart';
+import 'package:yourssh/services/key_gen_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/tab_metadata_service.dart';
@@ -20,9 +22,15 @@ Widget _wrap(Widget child) => MultiProvider(
         ChangeNotifierProvider<HostProvider>(
           create: (_) => HostProvider(StorageService()),
         ),
+        ChangeNotifierProvider<KeyProvider>(
+          create: (_) => KeyProvider(),
+        ),
         ChangeNotifierProvider<SessionProvider>(
           create: (_) =>
               SessionProvider(SshService(StorageService()), TabMetadataService()),
+        ),
+        Provider<KeyGenService>(
+          create: (_) => KeyGenService(),
         ),
       ],
       child: MaterialApp(
