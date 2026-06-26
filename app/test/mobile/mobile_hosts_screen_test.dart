@@ -14,7 +14,7 @@ import 'package:yourssh/services/tab_metadata_service.dart';
 
 Future<void> _pump(WidgetTester tester, HostProvider hosts) async {
   final sessions = SessionProvider(SshService(StorageService()), TabMetadataService());
-  final probe = HostReachabilityProbe(connector: (_, __, ___) async {});
+  final probe = HostReachabilityProbe(connector: (h, p, to) async {});
   await tester.pumpWidget(MaterialApp(
     home: MultiProvider(
       providers: [

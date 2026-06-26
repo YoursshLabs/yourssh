@@ -65,7 +65,7 @@ class _MobileSnippetsScreenState extends State<MobileSnippetsScreen> {
                     'Snippets',
                     style: mobileHeading(size: 30, weight: FontWeight.w800),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: MobileTokens.space1),
                   Text(
                     subtitle,
                     style: mobileBody(size: 13, color: MobileColors.textMuted),

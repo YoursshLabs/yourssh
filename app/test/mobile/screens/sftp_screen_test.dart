@@ -121,4 +121,9 @@ void main() {
     await _pump(tester, entries: [_dir('a'), _file('b.txt', 100)]);
     expect(find.textContaining('2 items'), findsAtLeastNWidgets(1));
   });
+
+  testWidgets('sensitive file (.env) shows Icons.lock_outline', (tester) async {
+    await _pump(tester, entries: [_file('.env', 512)]);
+    expect(find.byIcon(Icons.lock_outline), findsAtLeastNWidgets(1));
+  });
 }

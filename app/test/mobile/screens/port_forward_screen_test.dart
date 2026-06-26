@@ -30,10 +30,10 @@ class _FakePortForwardProvider extends PortForwardProvider {
 class _FakePortForwardService extends PortForwardService {
   _FakePortForwardService()
       : super(
-          acquireTransport: (_) async => throw UnimplementedError(),
-          resolveHost: (_) => null,
-          onStatus: (_, __, {error}) {},
-          onConnections: (_, __) {},
+          acquireTransport: (id) async => throw UnimplementedError(),
+          resolveHost: (id) => null,
+          onStatus: (fwdId, status, {error}) {},
+          onConnections: (fwdId, count) {},
         );
 
   final startedIds = <String>[];

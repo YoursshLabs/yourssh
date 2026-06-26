@@ -112,18 +112,13 @@ void main() {
   });
 
   testWidgets('shows "No active session" subtitle when no session', (tester) async {
-    final noSession = _FakeSessionProvider(
-      SshSession(
-        host: Host(label: 'dummy', host: '0.0.0.0', username: 'u'),
-      ),
-    );
-    // Override to return null active session
+    final noSession = _NullSessionProvider();
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<SnippetProvider>.value(value: fakeSnippets),
           ChangeNotifierProvider<SessionProvider>.value(
-            value: _NullSessionProvider(),
+            value: noSession,
           ),
           Provider<SshService>.value(value: fakeSsh),
         ],
