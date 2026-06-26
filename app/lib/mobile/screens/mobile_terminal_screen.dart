@@ -30,7 +30,10 @@ class MobileTerminalScreen extends StatefulWidget {
   /// Called when the user taps "Files" in the ⋮ menu.  Receives the active
   /// session's [Host] so the caller can open the contextual SFTP screen.
   final void Function(Host host)? onOpenFiles;
-  final VoidCallback? onOpenPortForward;
+
+  /// Called when the user taps "Port forwarding" in the ⋮ menu.  Receives the
+  /// active session's [Host] so the caller can open the contextual screen.
+  final void Function(Host host)? onOpenPortForward;
 
   const MobileTerminalScreen({
     super.key,
@@ -161,8 +164,8 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
                   style: mobileBody(color: MobileColors.textPrimary)),
               onTap: () {
                 Navigator.pop(context);
-                if (widget.onOpenPortForward != null) {
-                  widget.onOpenPortForward!();
+                if (widget.onOpenPortForward != null && active != null) {
+                  widget.onOpenPortForward!(active.host);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(

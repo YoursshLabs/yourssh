@@ -15,6 +15,7 @@ import '../widgets/section_header.dart';
 import '../widgets/status_dot.dart';
 import '../widgets/tag_chip.dart';
 import 'mobile_add_host_screen.dart';
+import 'mobile_port_forward_screen.dart';
 import 'mobile_sftp_screen.dart';
 import 'mobile_terminal_screen.dart';
 
@@ -345,6 +346,7 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
           builder: (ctx) => MobileTerminalScreen(
             focusSessionId: sessionId,
             onOpenFiles: (h) => _pushSftp(ctx, h),
+            onOpenPortForward: (h) => _pushPortForward(ctx, h),
           ),
         ),
       );
@@ -366,6 +368,7 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
         builder: (ctx) => MobileTerminalScreen(
           focusSessionId: sessionId,
           onOpenFiles: (h) => _pushSftp(ctx, h),
+          onOpenPortForward: (h) => _pushPortForward(ctx, h),
         ),
       ),
     );
@@ -375,6 +378,14 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
     Navigator.of(ctx).push(
       MaterialPageRoute(
         builder: (_) => MobileSftpScreen(host: host),
+      ),
+    );
+  }
+
+  void _pushPortForward(BuildContext ctx, Host host) {
+    Navigator.of(ctx).push(
+      MaterialPageRoute(
+        builder: (_) => MobilePortForwardScreen(host: host),
       ),
     );
   }
