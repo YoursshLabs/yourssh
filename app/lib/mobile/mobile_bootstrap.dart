@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
@@ -5,9 +7,11 @@ import 'package:yourssh_snippets/yourssh_snippets.dart';
 import '../providers/host_provider.dart';
 import '../providers/key_provider.dart';
 import '../providers/known_hosts_provider.dart';
+import '../providers/port_forward_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/sync_provider.dart';
+import '../services/port_forward_service.dart';
 import '../services/sftp_transfer_service.dart';
 import '../services/ssh_service.dart';
 import '../services/storage_service.dart';
@@ -30,6 +34,8 @@ class MobileBootstrap {
   late final SyncService syncService;
   late final SnippetProvider snippets;
   late final SftpTransferService transfer;
+  late final PortForwardProvider portForwardProvider;
+  late final PortForwardService portForwardService;
 
   MobileBootstrap() {
     storage = StorageService();
@@ -43,6 +49,20 @@ class MobileBootstrap {
     syncService = SyncService(sync);
     snippets = SnippetProvider();
     transfer = SftpTransferService(ssh);
+    portForwardProvider = PortForwardProvider();
+    portForwardService = PortForwardService(
+      acquireTransport: (host) async =>
+          SshTunnelTransport(await ssh.ensureClient(host)),
+      resolveHost: (id) =>
+          hostProvider.allHosts.where((h) => h.id == id).firstOrNull,
+      onStatus: (id, status, {error}) =>
+          portForwardProvider.setStatus(id, status, error: error),
+      onConnections: (id, n) => portForwardProvider.setConnections(id, n),
+    );
+    hostProvider.onHostDeleted =
+        (id) => unawaited(portForwardService.stopForHost(id));
+    unawaited(portForwardProvider.ready.then(
+        (_) => portForwardService.autoStartAll(portForwardProvider.forwards)));
     _wire();
   }
 
@@ -75,6 +95,8 @@ class MobileBootstrap {
         Provider.value(value: syncService),
         ChangeNotifierProvider.value(value: snippets),
         Provider.value(value: transfer),
+        ChangeNotifierProvider.value(value: portForwardProvider),
+        Provider.value(value: portForwardService),
       ];
 
   /// Disposes the objects exposed via `Provider.value` (which does not dispose
