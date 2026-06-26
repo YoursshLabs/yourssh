@@ -38,6 +38,13 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
   int _secondsLeft = 120;
   Timer? _countdown;
 
+  // ── Supabase config form state ────────────────────────────────────────────
+  final _url  = TextEditingController();
+  final _anon = TextEditingController();
+  final _code = TextEditingController();
+  bool _editingConfig = false;
+  bool _pulling = false;
+
   @override
   void initState() {
     super.initState();
@@ -48,7 +55,56 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
   void dispose() {
     _countdown?.cancel();
     _p2p.stop();
+    _url.dispose();
+    _anon.dispose();
+    _code.dispose();
     super.dispose();
+  }
+
+  // ── Supabase config helpers ───────────────────────────────────────────────
+
+  void _prefillConfig() {
+    final sync = context.read<SyncProvider>();
+    _url.text  = sync.supabaseUrl;
+    _anon.text = sync.supabaseAnonKey;
+    _code.text = sync.syncCode;
+  }
+
+  Future<void> _saveConfig() async {
+    final sync = context.read<SyncProvider>();
+    await sync.setSupabaseConfig(_url.text, _anon.text);
+    await sync.setSyncCode(_code.text);
+    if (mounted) {
+      setState(() => _editingConfig = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sync settings saved')),
+      );
+    }
+  }
+
+  Future<void> _pullFromCloud() async {
+    setState(() => _pulling = true);
+    try {
+      final payload = await context.read<SyncService>().pull();
+      if (!mounted) return;
+      if (payload != null) {
+        await context
+            .read<HostProvider>()
+            .replaceAll(payload.hosts, payload.passwords);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Imported ${payload.hosts.length} hosts from cloud'),
+          ));
+        }
+      } else if (mounted) {
+        final err = context.read<SyncProvider>().error;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(err ?? 'Nothing new to pull')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pulling = false);
+    }
   }
 
   // ── P2P server / QR build ─────────────────────────────────────────────────
@@ -147,6 +203,8 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
           _buildQrSection(),
           const SizedBox(height: MobileTokens.space5),
           _buildStatusSection(sync),
+          const SizedBox(height: MobileTokens.space5),
+          _buildConfigSection(sync),
           const SizedBox(height: MobileTokens.space5),
           _buildScanButton(),
         ],
@@ -334,6 +392,102 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
             ),
           ),
         ],
+      );
+
+  // ── Supabase config section ───────────────────────────────────────────────
+
+  Widget _buildConfigSection(SyncProvider sync) {
+    final isConfigured = sync.isSupabaseConfigured;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader('Supabase credentials'),
+        if (!isConfigured || _editingConfig)
+          _buildConfigForm(sync)
+        else
+          MobileCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'URL: ${sync.supabaseUrl}',
+                  style: mobileBody(size: 12, color: MobileColors.textMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: MobileTokens.space2),
+                OutlinedButton(
+                  onPressed: () {
+                    _prefillConfig();
+                    setState(() => _editingConfig = true);
+                  },
+                  child: const Text('Edit credentials'),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildConfigForm(SyncProvider sync) => MobileCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Enter your Supabase project URL, anon key, and 12-character sync code.',
+              style: mobileBody(size: 13, color: MobileColors.textMuted),
+            ),
+            const SizedBox(height: MobileTokens.space3),
+            _configField(_url, 'Supabase URL', 'sync-url'),
+            _configField(_anon, 'Anon key', 'sync-anon'),
+            _configField(_code, 'Sync code (12 chars)', 'sync-code'),
+            const SizedBox(height: MobileTokens.space3),
+            Row(
+              children: [
+                FilledButton(
+                  onPressed: _saveConfig,
+                  child: const Text('Save'),
+                ),
+                const SizedBox(width: MobileTokens.space3),
+                OutlinedButton(
+                  onPressed: _pulling ? null : _pullFromCloud,
+                  child: _pulling
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Pull from cloud'),
+                ),
+              ],
+            ),
+            if (sync.error != null) ...[
+              const SizedBox(height: MobileTokens.space2),
+              Text(
+                sync.error!,
+                style: mobileBody(size: 12, color: MobileColors.red),
+              ),
+            ],
+          ],
+        ),
+      );
+
+  Widget _configField(
+    TextEditingController controller,
+    String label,
+    String key,
+  ) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: MobileTokens.space3),
+        child: TextField(
+          key: Key(key),
+          controller: controller,
+          style: const TextStyle(
+            color: MobileColors.textPrimary,
+            fontSize: 13,
+          ),
+          decoration: InputDecoration(labelText: label),
+        ),
       );
 
   // ── Scan button ───────────────────────────────────────────────────────────

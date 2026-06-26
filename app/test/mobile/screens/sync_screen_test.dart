@@ -8,10 +8,11 @@ import 'package:yourssh/mobile/theme/mobile_theme.dart';
 import 'package:yourssh/providers/host_provider.dart';
 import 'package:yourssh/providers/sync_provider.dart';
 import 'package:yourssh/services/storage_service.dart';
+import 'package:yourssh/services/sync_service.dart';
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
-Future<void> _pump(
+Future<SyncProvider> _pump(
   WidgetTester tester, {
   bool configured = true,
   SyncStatus status = SyncStatus.synced,
@@ -24,10 +25,11 @@ Future<void> _pump(
     });
   }
 
-  final sync = SyncProvider();
+  final sync  = SyncProvider();
   if (status != SyncStatus.idle) sync.setStatus(status);
 
-  final hosts = HostProvider(StorageService());
+  final hosts    = HostProvider(StorageService());
+  final syncSvc  = SyncService(sync);
 
   await tester.pumpWidget(
     MaterialApp(
@@ -36,6 +38,7 @@ Future<void> _pump(
         providers: [
           ChangeNotifierProvider<SyncProvider>.value(value: sync),
           ChangeNotifierProvider<HostProvider>.value(value: hosts),
+          Provider<SyncService>.value(value: syncSvc),
         ],
         child: const MobileSyncScreen(),
       ),
@@ -48,6 +51,8 @@ Future<void> _pump(
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 100));
   await tester.pump(const Duration(milliseconds: 100));
+
+  return sync;
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -86,5 +91,64 @@ void main() {
   testWidgets('renders QR pairing caption', (tester) async {
     await _pump(tester);
     expect(find.textContaining('another device'), findsOneWidget);
+  });
+
+  // ── Config form: unconfigured state shows URL/anon/code fields ────────────
+
+  testWidgets('shows config fields when Supabase is not configured',
+      (tester) async {
+    await _pump(tester, configured: false);
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('sync-url')),  findsOneWidget);
+    expect(find.byKey(const Key('sync-anon')), findsOneWidget);
+    expect(find.byKey(const Key('sync-code')), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget);
+    expect(find.text('Pull from cloud'), findsOneWidget);
+  });
+
+  // ── Config form: Save round-trip calls setSupabaseConfig + setSyncCode ────
+
+  testWidgets('Save calls setSupabaseConfig and setSyncCode on SyncProvider',
+      (tester) async {
+    final sync = await _pump(tester, configured: false);
+
+    // Scroll config section into view.
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // Enter values into each field.
+    await tester.enterText(
+        find.byKey(const Key('sync-url')), 'https://my.supabase.co');
+    await tester.enterText(
+        find.byKey(const Key('sync-anon')), 'my-anon-key');
+    await tester.enterText(
+        find.byKey(const Key('sync-code')), 'ABCDEFGHIJKL');
+    await tester.pump();
+
+    // Ensure the Save button is scrolled into view before tapping.
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // Tap Save.
+    await tester.tap(find.text('Save'));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Verify SyncProvider state was updated.
+    expect(sync.supabaseUrl,     'https://my.supabase.co');
+    expect(sync.supabaseAnonKey, 'my-anon-key');
+    expect(sync.isSupabaseConfigured, isTrue);
+  });
+
+  // ── Config form: configured state shows "Edit credentials" affordance ─────
+
+  testWidgets('shows Edit credentials button when already configured',
+      (tester) async {
+    await _pump(tester, configured: true);
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Edit credentials'), findsOneWidget);
+    // Fields are hidden until Edit is tapped.
+    expect(find.byKey(const Key('sync-url')), findsNothing);
   });
 }
