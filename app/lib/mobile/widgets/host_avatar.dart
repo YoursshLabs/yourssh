@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 import '../theme/mobile_tokens.dart';
+import 'status_dot.dart';
 
 /// Up to two uppercase initials from a host label. Words are whitespace-split;
 /// two-plus words use the first letter of the first two words. A single word
@@ -22,25 +23,31 @@ String hostInitials(String label) {
   return w[0].toUpperCase();
 }
 
-/// Rounded-square avatar: seeded background tint + initials in the seed color.
-/// Falls back to a terminal glyph when the label yields no initials.
+/// Rounded-square avatar (radius 11): seeded background tint + initials or
+/// optional [icon] glyph in the seed color. An optional [statusState] places
+/// a small [StatusDot] at the bottom-right corner.
 class HostAvatar extends StatelessWidget {
   final String label;
   final String seed;
+  final IconData? icon;
   final double size;
+  final HostConnState? statusState;
 
   const HostAvatar({
     super.key,
     required this.label,
     required this.seed,
+    this.icon,
     this.size = MobileTokens.avatar,
+    this.statusState,
   });
 
   @override
   Widget build(BuildContext context) {
     final color = AppColors.hostColor(seed);
     final initials = hostInitials(label);
-    return Container(
+
+    Widget tile = Container(
       width: size,
       height: size,
       alignment: Alignment.center,
@@ -48,16 +55,32 @@ class HostAvatar extends StatelessWidget {
         color: color.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(MobileTokens.radiusAvatar),
       ),
-      child: initials.isEmpty
-          ? Icon(Icons.dns_outlined, color: color, size: size * 0.5)
-          : Text(
-              initials,
-              style: TextStyle(
-                color: color,
-                fontSize: size * 0.36,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+      child: icon != null
+          ? Icon(icon, color: color, size: size * 0.5)
+          : initials.isEmpty
+              ? Icon(Icons.dns_outlined, color: color, size: size * 0.5)
+              : Text(
+                  initials,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: size * 0.36,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+    );
+
+    if (statusState == null) return tile;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        tile,
+        Positioned(
+          right: -2,
+          bottom: -2,
+          child: StatusDot(state: statusState!),
+        ),
+      ],
     );
   }
 }

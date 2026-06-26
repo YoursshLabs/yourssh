@@ -130,12 +130,16 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
                       padding: const EdgeInsets.only(
                           top: MobileTokens.space2, bottom: 80),
                       itemCount: hosts.length,
-                      itemBuilder: (_, i) => HostCard(
-                        host: hosts[i],
-                        state: _stateFor(hosts[i], sessions),
-                        onTap: () => _connect(hosts[i]),
-                        onLongPress: () => _showActions(hosts[i]),
-                      ),
+                      itemBuilder: (_, i) {
+                        final s = _stateFor(hosts[i], sessions);
+                        return HostCard(
+                          host: hosts[i],
+                          online: s == HostConnState.connected,
+                          connecting: s == HostConnState.connecting,
+                          onTap: () => _connect(hosts[i]),
+                          onLongPress: () => _showActions(hosts[i]),
+                        );
+                      },
                     ),
             ),
           ],
