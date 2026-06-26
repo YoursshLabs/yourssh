@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../security/tofu_watcher.dart';
 import '../widgets/mobile_tab_bar.dart';
 
 /// Bottom-navigation shell for the Android app.
@@ -25,9 +26,11 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: MobileTab.values.indexOf(_current),
-        children: MobileTab.values.map((t) => _bodies[t]!).toList(),
+      body: TofuWatcher(
+        child: IndexedStack(
+          index: MobileTab.values.indexOf(_current),
+          children: MobileTab.values.map((t) => _bodies[t]!).toList(),
+        ),
       ),
       bottomNavigationBar: MobileTabBar(
         current: _current,

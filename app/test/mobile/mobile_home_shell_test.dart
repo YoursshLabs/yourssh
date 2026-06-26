@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:yourssh/mobile/screens/mobile_home_shell.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
 import 'package:yourssh/mobile/widgets/mobile_tab_bar.dart';
+import 'package:yourssh/providers/known_hosts_provider.dart';
 
-Widget _wrap(Widget child) => MaterialApp(
-      theme: buildMobileTheme(),
-      home: child,
+Widget _wrap(Widget child) => MultiProvider(
+      providers: [
+        ChangeNotifierProvider<KnownHostsProvider>(
+          create: (_) => KnownHostsProvider.forTest([]),
+        ),
+      ],
+      child: MaterialApp(
+        theme: buildMobileTheme(),
+        home: child,
+      ),
     );
 
 void main() {
