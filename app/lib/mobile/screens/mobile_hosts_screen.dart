@@ -87,6 +87,20 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
     );
   }
 
+  /// Flat list of row descriptors for the grouped host list.
+  /// Each entry is either a [_HeaderRow] (section title) or a [_HostRow].
+  /// Built once per [build] — O(n) — so [ListView.builder] indexes O(1).
+  List<_ListRow> _buildRows(Map<String, List<Host>> grouped) {
+    final rows = <_ListRow>[];
+    for (final entry in grouped.entries) {
+      rows.add(_HeaderRow(entry.key));
+      for (final host in entry.value) {
+        rows.add(_HostRow(host));
+      }
+    }
+    return rows;
+  }
+
   @override
   Widget build(BuildContext context) {
     final all = context.watch<HostProvider>().allHosts;
@@ -96,6 +110,7 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
     final tags = <String>{for (final h in all) ...h.tags}.toList()..sort();
     final filtered = _filtered(all);
     final grouped = _grouped(filtered);
+    final rows = _buildRows(grouped);
 
     // Online/total derived from probe states.
     final onlineCount = all
@@ -153,11 +168,13 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
                           ],
                         ),
                       ),
+                      // TODO(later): wire overflow menu — visual placeholder.
                       _CircleButton(
                         icon: Icons.more_horiz,
                         onTap: () {},
                       ),
                       const SizedBox(width: MobileTokens.space2),
+                      // TODO(later): wire user/profile action — visual placeholder.
                       _CircleButton(
                         icon: Icons.person_outline,
                         onTap: () {},
@@ -254,9 +271,9 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
                           child: ListView.builder(
                             padding: const EdgeInsets.only(
                                 bottom: MobileTokens.space4 * 4),
-                            itemCount: _groupedItemCount(grouped),
+                            itemCount: rows.length,
                             itemBuilder: (_, i) =>
-                                _groupedItem(i, grouped, sessions, probe),
+                                _buildRowWidget(rows[i], sessions, probe),
                           ),
                         ),
                 ),
@@ -277,53 +294,36 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
 
   // ── Grouped list helpers ─────────────────────────────────────────────────
 
-  int _groupedItemCount(Map<String, List<Host>> grouped) {
-    int count = 0;
-    for (final entry in grouped.entries) {
-      count += 1 + entry.value.length; // header + cards
-    }
-    return count;
-  }
-
-  Widget _groupedItem(
-    int index,
-    Map<String, List<Host>> grouped,
+  /// O(1) item builder — indexes into the pre-built flat [rows] list.
+  Widget _buildRowWidget(
+    _ListRow row,
     List<SshSession> sessions,
     HostReachabilityProbe probe,
   ) {
-    int cursor = 0;
-    for (final entry in grouped.entries) {
-      if (index == cursor) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(
-            MobileTokens.space4,
-            MobileTokens.space3,
-            MobileTokens.space4,
-            0,
-          ),
-          child: SectionHeader(entry.key),
-        );
-      }
-      cursor++;
-      final localIdx = index - cursor;
-      if (localIdx < entry.value.length) {
-        final host = entry.value[localIdx];
-        final ping = probe.pingFor(host.id);
-        final connState = _stateFor(host, sessions);
-        return HostCard(
-          host: host,
-          online: connState == HostConnState.connected ||
-              ping.state == HostReachState.online,
-          connecting: connState == HostConnState.connecting ||
-              ping.state == HostReachState.probing,
-          latencyMs: ping.ms,
-          onTap: () => _connect(host),
-          onLongPress: () => _showActions(host),
-        );
-      }
-      cursor += entry.value.length;
+    if (row is _HeaderRow) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(
+          MobileTokens.space4,
+          MobileTokens.space3,
+          MobileTokens.space4,
+          0,
+        ),
+        child: SectionHeader(row.title),
+      );
     }
-    return const SizedBox.shrink();
+    final host = (row as _HostRow).host;
+    final ping = probe.pingFor(host.id);
+    final connState = _stateFor(host, sessions);
+    return HostCard(
+      host: host,
+      online: connState == HostConnState.connected ||
+          ping.state == HostReachState.online,
+      connecting: connState == HostConnState.connecting ||
+          ping.state == HostReachState.probing,
+      latencyMs: ping.ms,
+      onTap: () => _connect(host),
+      onLongPress: () => _showActions(host),
+    );
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────
@@ -425,6 +425,22 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
       await context.read<HostProvider>().deleteHost(host.id);
     }
   }
+}
+
+// ── Flat-list row descriptors ─────────────────────────────────────────────────
+
+sealed class _ListRow {}
+
+/// A section-header row carrying the tag/title string.
+final class _HeaderRow extends _ListRow {
+  _HeaderRow(this.title);
+  final String title;
+}
+
+/// A host row carrying the [Host] to render.
+final class _HostRow extends _ListRow {
+  _HostRow(this.host);
+  final Host host;
 }
 
 // ── Helper widgets ────────────────────────────────────────────────────────────
