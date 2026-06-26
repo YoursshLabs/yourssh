@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
-import 'package:yourssh/mobile/theme/mobile_tokens.dart';
 import 'package:yourssh/mobile/widgets/latency_badge.dart';
 import 'package:yourssh/mobile/widgets/tag_chip.dart';
 import 'package:yourssh/mobile/widgets/list_group.dart';
@@ -38,6 +37,12 @@ void main() {
       final container = tester.widget<Container>(find.byType(Container).first);
       final deco = container.decoration as BoxDecoration;
       expect(deco.color, MobileColors.textFaint);
+    });
+
+    testWidgets('no ms and not offline renders "—" not "nullms"', (tester) async {
+      await tester.pumpWidget(_wrap(const LatencyBadge()));
+      expect(find.text('—'), findsOneWidget);
+      expect(find.text('nullms'), findsNothing);
     });
   });
 

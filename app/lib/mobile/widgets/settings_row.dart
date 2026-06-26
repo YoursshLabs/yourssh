@@ -78,8 +78,10 @@ class SettingsRow extends StatelessWidget {
               style: mobileMono(size: 13, color: MobileColors.textMuted),
             ),
           ],
-          const SizedBox(width: MobileTokens.space2),
-          _buildTrailing(),
+          if (trailing != null || toggle != null || onTap != null) ...[
+            const SizedBox(width: MobileTokens.space2),
+            _buildTrailing(),
+          ],
         ],
       ),
     );

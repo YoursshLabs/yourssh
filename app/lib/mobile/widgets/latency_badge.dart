@@ -12,7 +12,7 @@ class LatencyBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = offline ? MobileColors.textFaint : MobileColors.green;
-    final label = offline ? 'offline' : '${ms}ms';
+    final label = offline ? 'offline' : (ms != null ? '${ms}ms' : '—');
 
     return Container(
       padding: const EdgeInsets.symmetric(
