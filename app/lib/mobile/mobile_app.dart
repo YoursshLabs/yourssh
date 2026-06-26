@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../theme/app_theme.dart';
 import 'mobile_bootstrap.dart';
 import 'screens/mobile_home_shell.dart';
 import 'security/app_lock_gate.dart';
+import 'theme/mobile_theme.dart';
 
-/// Root widget for the Android build. Dark-only; reuses the shared
-/// [buildAppTheme] so the mobile surface matches desktop. Holds the
-/// [MobileBootstrap] and exposes its providers to the tree.
+/// Root widget for the Android build. Dark-only; uses [buildMobileTheme]
+/// for the mobile-specific design language. Holds the [MobileBootstrap]
+/// and exposes its providers to the tree.
 class YourSSHMobileApp extends StatefulWidget {
   const YourSSHMobileApp({super.key});
 
@@ -33,7 +33,7 @@ class _YourSSHMobileAppState extends State<YourSSHMobileApp> {
         title: 'YourSSH',
         debugShowCheckedModeBanner: false,
         themeMode: ThemeMode.dark,
-        theme: buildAppTheme(),
+        theme: buildMobileTheme(),
         home: const AppLockGate(child: MobileHomeShell()),
       ),
     );

@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_theme.dart';
-import '../security/tofu_watcher.dart';
-import 'mobile_add_host_screen.dart';
-import 'mobile_hosts_screen.dart';
-import 'mobile_sessions_screen.dart';
-import 'mobile_settings_screen.dart';
-import 'mobile_sftp_screen.dart';
+import '../widgets/mobile_tab_bar.dart';
 
-/// Bottom-navigation shell for the Android app. Hosts (0) and Sessions (1) are
-/// live; SFTP (2) and Settings (3) are placeholders filled in M4/M5.
+/// Bottom-navigation shell for the Android app.
+/// Four tabs: Hosts · Snippets · Keys · Settings.
+/// Tab bodies are temporary placeholders until tasks T6/T8/T9 land.
 class MobileHomeShell extends StatefulWidget {
   const MobileHomeShell({super.key});
 
@@ -18,52 +13,25 @@ class MobileHomeShell extends StatefulWidget {
 }
 
 class _MobileHomeShellState extends State<MobileHomeShell> {
-  int _index = 0;
+  MobileTab _current = MobileTab.hosts;
 
-  static const _labels = ['Hosts', 'Sessions', 'SFTP', 'Settings'];
-  static const _icons = [
-    Icons.dns_outlined,
-    Icons.terminal_outlined,
-    Icons.folder_outlined,
-    Icons.settings_outlined,
-  ];
-
-  void _openAddHost() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const MobileAddHostScreen()),
-    );
-  }
-
-  Widget _body() {
-    switch (_index) {
-      case 0:
-        return MobileHostsScreen(
-          onConnected: () => setState(() => _index = 1),
-          onAddHost: _openAddHost,
-        );
-      case 1:
-        return const MobileSessionsScreen();
-      case 2:
-        return const MobileSftpScreen();
-      case 3:
-        return const MobileSettingsScreen();
-      default:
-        return const SizedBox.shrink();
-    }
-  }
+  static const _bodies = <MobileTab, Widget>{
+    MobileTab.hosts: Center(child: Text('Hosts')),
+    MobileTab.snippets: Center(child: Text('Snippets')),
+    MobileTab.keys: Center(child: Text('Keys')),
+    MobileTab.settings: Center(child: Text('Settings')),
+  };
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: TofuWatcher(child: _body()),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: [
-          for (var i = 0; i < _labels.length; i++)
-            NavigationDestination(icon: Icon(_icons[i]), label: _labels[i]),
-        ],
+      body: IndexedStack(
+        index: MobileTab.values.indexOf(_current),
+        children: MobileTab.values.map((t) => _bodies[t]!).toList(),
+      ),
+      bottomNavigationBar: MobileTabBar(
+        current: _current,
+        onSelect: (tab) => setState(() => _current = tab),
       ),
     );
   }

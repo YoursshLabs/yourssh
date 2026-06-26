@@ -1,45 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/screens/mobile_home_shell.dart';
-import 'package:yourssh/providers/host_provider.dart';
-import 'package:yourssh/providers/key_provider.dart';
-import 'package:yourssh/providers/known_hosts_provider.dart';
-import 'package:yourssh/providers/session_provider.dart';
-import 'package:yourssh/services/ssh_service.dart';
-import 'package:yourssh/services/storage_service.dart';
-import 'package:yourssh/services/tab_metadata_service.dart';
+import 'package:yourssh/mobile/theme/mobile_theme.dart';
+import 'package:yourssh/mobile/widgets/mobile_tab_bar.dart';
 
-Future<void> _pump(WidgetTester tester) async {
-  final storage = StorageService();
-  final ssh = SshService(storage);
-  await tester.pumpWidget(MultiProvider(
-    providers: [
-      ChangeNotifierProvider(create: (_) => HostProvider(storage)),
-      ChangeNotifierProvider(create: (_) => KeyProvider()),
-      ChangeNotifierProvider(create: (_) => KnownHostsProvider(storage)),
-      ChangeNotifierProvider(
-          create: (_) => SessionProvider(ssh, TabMetadataService())),
-    ],
-    child: const MaterialApp(home: MobileHomeShell()),
-  ));
-  await tester.pumpAndSettle();
-}
+Widget _wrap(Widget child) => MaterialApp(
+      theme: buildMobileTheme(),
+      home: child,
+    );
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  testWidgets('shows MobileTabBar with four destinations', (tester) async {
+    await tester.pumpWidget(_wrap(const MobileHomeShell()));
+    await tester.pumpAndSettle();
 
-  testWidgets('shows four destinations; Hosts first', (tester) async {
-    await _pump(tester);
-    expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.textContaining('No hosts'), findsOneWidget); // Hosts screen body
+    expect(find.byType(MobileTabBar), findsOneWidget);
+    final bar = find.byType(MobileTabBar);
+    for (final label in ['Hosts', 'Snippets', 'Keys', 'Settings']) {
+      expect(
+        find.descendant(of: bar, matching: find.text(label)),
+        findsOneWidget,
+      );
+    }
   });
 
-  testWidgets('SFTP tab prompts to connect when no session', (tester) async {
-    await _pump(tester);
-    await tester.tap(find.text('SFTP').last);
+  testWidgets('Settings tab is reachable', (tester) async {
+    await tester.pumpWidget(_wrap(const MobileHomeShell()));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Connect a host'), findsOneWidget);
+
+    final bar = find.byType(MobileTabBar);
+    await tester.tap(
+      find.descendant(of: bar, matching: find.text('Settings')),
+    );
+    await tester.pumpAndSettle();
+
+    final stack = tester.widget<IndexedStack>(find.byType(IndexedStack));
+    expect(stack.index, MobileTab.values.indexOf(MobileTab.settings));
   });
 }
