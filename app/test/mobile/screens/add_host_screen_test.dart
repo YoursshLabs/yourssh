@@ -291,6 +291,13 @@ void main() {
     expect(session.connectAnyCalled, isTrue);
     expect(session.connectedHost?.label, 'prod');
     expect(session.connectedHost?.host, '10.0.0.2');
+
+    // The host passed to connectAny must be the one that was actually saved —
+    // id lookup must not rely on allHosts.last.
+    final savedHost = hosts.lastAdded;
+    expect(savedHost, isNotNull, reason: 'addHost was not called');
+    expect(session.connectedHost?.id, savedHost!.id,
+        reason: 'connectAny received a different host than the one saved');
   });
 }
 
@@ -316,6 +323,10 @@ class _FakeHostProvider extends HostProvider {
   // fake we override add/update without persisting.
   final List<Host> _seedHosts = [];
 
+  /// The most recently added host — used to verify connectAny received the
+  /// correct host instance (id must match, not just label).
+  Host? lastAdded;
+
   @override
   List<Host> get allHosts => _seedHosts;
 
@@ -330,6 +341,7 @@ class _FakeHostProvider extends HostProvider {
   @override
   Future<void> addHost(Host host, {String? password}) async {
     _seedHosts.add(host);
+    lastAdded = host;
     onAdd?.call();
     notifyListeners();
   }

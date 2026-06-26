@@ -106,7 +106,8 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
     return [groupVal, ...rest];
   }
 
-  Future<void> _doSave() async {
+  /// Persists the form and returns the saved host's id.
+  Future<String> _doSave() async {
     final label = _label.text.trim();
     final address = _address.text.trim();
     final username = _username.text.trim();
@@ -151,6 +152,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
           password: _useKey ? null : _password.text,
         );
       }
+      return existing.id;
     } else {
       final authType = _useKey ? AuthType.privateKey : AuthType.password;
       final keyId = _useKey ? _keyId : null;
@@ -166,6 +168,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
         startupSnippet: snippetVal.isEmpty ? null : snippetVal,
       );
       await provider.addHost(host, password: _useKey ? null : _password.text);
+      return host.id;
     }
   }
 
@@ -177,11 +180,10 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
 
   Future<void> _saveAndConnect() async {
     if (!_canSave) return;
-    await _doSave();
+    final savedId = await _doSave();
     if (!mounted) return;
-    // Look up the just-saved host by id so we get the freshest copy.
-    final hostId = widget.existing?.id ?? context.read<HostProvider>().allHosts.last.id;
-    final host = context.read<HostProvider>().byId(hostId);
+    // Use the id returned by _doSave — deterministic, no .last assumption.
+    final host = context.read<HostProvider>().byId(savedId);
     if (host != null && mounted) {
       context.read<SessionProvider>().connectAny(host);
     }
