@@ -15,6 +15,7 @@ import '../widgets/section_header.dart';
 import '../widgets/status_dot.dart';
 import '../widgets/tag_chip.dart';
 import 'mobile_add_host_screen.dart';
+import 'mobile_terminal_screen.dart';
 
 /// Hosts tab: header + search + folder chips + tag-grouped list + amber FAB.
 /// Tap a host → connect via SessionProvider. Long-press → edit/delete sheet.
@@ -321,20 +322,44 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
       connecting: connState == HostConnState.connecting ||
           ping.state == HostReachState.probing,
       latencyMs: ping.ms,
-      onTap: () => _connect(host),
+      onTap: () => _openSession(host),
       onLongPress: () => _showActions(host),
     );
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
-  void _connect(Host host) {
-    context.read<SessionProvider>().connectAny(host);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Connecting to ${host.label}…'),
-        duration: const Duration(seconds: 2),
-        backgroundColor: MobileColors.surface,
+  Future<void> _openSession(Host host) async {
+    final sp = context.read<SessionProvider>();
+
+    // Re-entry: if a live session exists for this host, just open the terminal.
+    final existing = sp.sshSessions
+        .where((s) => s.host.id == host.id)
+        .toList();
+    if (existing.isNotEmpty) {
+      final sessionId = existing.first.id;
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => MobileTerminalScreen(focusSessionId: sessionId),
+        ),
+      );
+      return;
+    }
+
+    // No live session — connect, then navigate.
+    await sp.connectAny(host);
+    if (!mounted) return;
+
+    // After connectAny the session is in sshSessions; find the freshest one.
+    final after = sp.sshSessions
+        .where((s) => s.host.id == host.id)
+        .toList();
+    final sessionId = after.isNotEmpty ? after.last.id : null;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MobileTerminalScreen(focusSessionId: sessionId),
       ),
     );
   }

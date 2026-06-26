@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xterm/xterm.dart';
 
 import '../../models/ssh_session.dart';
+import '../../providers/host_provider.dart';
 import '../../providers/session_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/terminal_themes.dart';
@@ -46,6 +47,10 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
   double _scaleBase = 0;
   bool _accessoryBarEnabled = true;
 
+  /// Whether we have already scheduled a pop-on-empty frame. Prevents double-pop
+  /// when the provider fires multiple notifications in one frame.
+  bool _popScheduled = false;
+
   @override
   void initState() {
     super.initState();
@@ -55,6 +60,18 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
         if (mounted) {
           context.read<SessionProvider>().setActive(widget.focusSessionId!);
         }
+      });
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ssh = context.watch<SessionProvider>().sshSessions;
+    if (ssh.isEmpty && !_popScheduled) {
+      _popScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.maybePop(context);
       });
     }
   }
@@ -154,6 +171,80 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
     );
   }
 
+  /// Opens a bottom-sheet host picker so the user can start a new session
+  /// without leaving the terminal. Picking a host calls [SessionProvider.connectAny].
+  Future<void> _showHostPicker(BuildContext ctx) async {
+    final hosts = ctx.read<HostProvider>().allHosts;
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: ctx,
+      backgroundColor: MobileColors.surfaceAlt,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: MobileColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: MobileTokens.space4,
+                vertical: MobileTokens.space3,
+              ),
+              child: Text(
+                'Connect to host',
+                style: mobileBody(size: 16, weight: FontWeight.w600),
+              ),
+            ),
+            if (hosts.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: MobileTokens.space4),
+                child: Text(
+                  'No hosts configured',
+                  style: mobileBody(
+                      size: 14, color: MobileColors.textMuted),
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                itemCount: hosts.length,
+                itemBuilder: (_, i) {
+                  final host = hosts[i];
+                  return ListTile(
+                    leading: const Icon(Icons.dns_outlined,
+                        color: MobileColors.textPrimary),
+                    title: Text(host.label,
+                        style: mobileBody(
+                            size: 15, color: MobileColors.textPrimary)),
+                    subtitle: Text(
+                      '${host.username}@${host.host}',
+                      style: mobileMono(
+                          size: 12, color: MobileColors.textMuted),
+                    ),
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      ctx.read<SessionProvider>().connectAny(host);
+                    },
+                  );
+                },
+              ),
+            const SizedBox(height: MobileTokens.space2),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final sp = context.watch<SessionProvider>();
@@ -209,9 +300,7 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
             _SessionTabStrip(
               sessions: ssh,
               activeId: active.id,
-              onAdd: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Add session — pick a host')),
-              ),
+              onAdd: () => _showHostPicker(context),
             ),
             Expanded(
               child: _SessionBody(
