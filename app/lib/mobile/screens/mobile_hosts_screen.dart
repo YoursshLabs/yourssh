@@ -15,6 +15,7 @@ import '../widgets/section_header.dart';
 import '../widgets/status_dot.dart';
 import '../widgets/tag_chip.dart';
 import 'mobile_add_host_screen.dart';
+import 'mobile_sftp_screen.dart';
 import 'mobile_terminal_screen.dart';
 
 /// Hosts tab: header + search + folder chips + tag-grouped list + amber FAB.
@@ -341,7 +342,10 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => MobileTerminalScreen(focusSessionId: sessionId),
+          builder: (ctx) => MobileTerminalScreen(
+            focusSessionId: sessionId,
+            onOpenFiles: (h) => _pushSftp(ctx, h),
+          ),
         ),
       );
       return;
@@ -359,7 +363,18 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
 
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => MobileTerminalScreen(focusSessionId: sessionId),
+        builder: (ctx) => MobileTerminalScreen(
+          focusSessionId: sessionId,
+          onOpenFiles: (h) => _pushSftp(ctx, h),
+        ),
+      ),
+    );
+  }
+
+  void _pushSftp(BuildContext ctx, Host host) {
+    Navigator.of(ctx).push(
+      MaterialPageRoute(
+        builder: (_) => MobileSftpScreen(host: host),
       ),
     );
   }

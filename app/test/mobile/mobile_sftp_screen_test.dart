@@ -3,27 +3,45 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/screens/mobile_sftp_screen.dart';
-import 'package:yourssh/providers/session_provider.dart';
+import 'package:yourssh/models/host.dart';
+import 'package:yourssh/services/sftp_transfer_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
-import 'package:yourssh/services/tab_metadata_service.dart';
+
+// Updated after Task 13 redesign: MobileSftpScreen is now contextual and
+// requires a [Host]. The full smoke-test suite lives in
+// test/mobile/screens/sftp_screen_test.dart.
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('shows connect prompt with no SSH session', (tester) async {
+  testWidgets('shows empty folder message with empty listing', (tester) async {
     final storage = StorageService();
     final ssh = SshService(storage);
-    final sp = SessionProvider(ssh, TabMetadataService());
+    final transfer = SftpTransferService(ssh);
+    final host = Host(
+      id: 'h1',
+      label: 'web-01',
+      host: '10.0.0.1',
+      port: 22,
+      username: 'deploy',
+    );
+
     await tester.pumpWidget(MaterialApp(
       home: MultiProvider(
         providers: [
-          ChangeNotifierProvider.value(value: sp),
           Provider<SshService>.value(value: ssh),
+          Provider<SftpTransferService>.value(value: transfer),
         ],
-        child: const MobileSftpScreen(),
+        child: MobileSftpScreen(
+          host: host,
+          lister: (_) async => [],
+        ),
       ),
     ));
-    expect(find.textContaining('Connect a host'), findsOneWidget);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.textContaining('Empty'), findsOneWidget);
   });
 }

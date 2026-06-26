@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xterm/xterm.dart';
 
+import '../../models/host.dart';
 import '../../models/ssh_session.dart';
 import '../../providers/host_provider.dart';
 import '../../providers/session_provider.dart';
@@ -25,7 +26,10 @@ import '../util/mobile_prefs.dart';
 /// SnackBar as an interim stub.
 class MobileTerminalScreen extends StatefulWidget {
   final String? focusSessionId;
-  final VoidCallback? onOpenFiles;
+
+  /// Called when the user taps "Files" in the ⋮ menu.  Receives the active
+  /// session's [Host] so the caller can open the contextual SFTP screen.
+  final void Function(Host host)? onOpenFiles;
   final VoidCallback? onOpenPortForward;
 
   const MobileTerminalScreen({
@@ -141,9 +145,9 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
                   style: mobileBody(color: MobileColors.textPrimary)),
               onTap: () {
                 Navigator.pop(context);
-                if (widget.onOpenFiles != null) {
-                  widget.onOpenFiles!();
-                } else {
+                if (widget.onOpenFiles != null && active != null) {
+                  widget.onOpenFiles!(active.host);
+                } else if (widget.onOpenFiles == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Files — coming soon')),
                   );
