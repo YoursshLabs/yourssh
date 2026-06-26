@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/ssh_key.dart';
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
+import '../util/ssh_fingerprint.dart';
 import 'mobile_card.dart';
 
 /// Termius-style SSH key row:
@@ -37,14 +38,7 @@ class KeyCard extends StatelessWidget {
   String get _fingerprintLine {
     final pk = entry.publicKey;
     if (pk.isEmpty) return '';
-    // publicKey is "type base64comment" — show first 40 chars of base64 portion
-    final parts = pk.split(' ');
-    if (parts.length >= 2) {
-      final b64 = parts[1];
-      final trunc = b64.length > 28 ? '${b64.substring(0, 28)}…' : b64;
-      return '${parts[0]} $trunc';
-    }
-    return pk.length > 40 ? '${pk.substring(0, 40)}…' : pk;
+    return sha256Fingerprint(pk) ?? 'SHA256:(pending)';
   }
 
   @override

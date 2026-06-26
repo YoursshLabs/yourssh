@@ -39,18 +39,22 @@ Future<void> _pump(
 }) async {
   SharedPreferences.setMockInitialValues({});
 
+  // Realistic OpenSSH public key lines — the card now computes a real SHA256
+  // fingerprint from the base64 blob rather than displaying a literal.
   final seedKeys = keys ??
       [
         SshKeyEntry(
           label: 'id_ed25519',
           algorithm: KeyAlgorithm.ed25519,
-          publicKey: 'SHA256:abcdefABCDEF1234567890==',
+          publicKey:
+              'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPM4vCvRPxj8W9BoYRLsNJNMW5JCZw0DhS4OxGmwsUAZ user@host',
           privateKeyPath: '/home/user/.ssh/id_ed25519',
         ),
         SshKeyEntry(
           label: 'id_rsa',
           algorithm: KeyAlgorithm.rsa,
-          publicKey: 'SHA256:rstuvwRSTUVW0987654321==',
+          publicKey:
+              'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC2 user@host',
           privateKeyPath: '/home/user/.ssh/id_rsa',
         ),
       ];
@@ -127,7 +131,8 @@ void main() {
     final key = SshKeyEntry(
       label: 'prod_key',
       algorithm: KeyAlgorithm.ed25519,
-      publicKey: 'SHA256:prod==',
+      publicKey:
+          'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPM4vCvRPxj8W9BoYRLsNJNMW5JCZw0DhS4OxGmwsUAZ prod@host',
       privateKeyPath: '/home/user/.ssh/prod_key',
     );
     final linkedHost = Host(
@@ -139,7 +144,7 @@ void main() {
     );
 
     await _pump(tester, keys: [key], hosts: [linkedHost]);
-    // subtitle "1 keys · 1 in use"
+    // subtitle "1 key · 1 in use"
     expect(find.textContaining('1 in use'), findsOneWidget);
   });
 }

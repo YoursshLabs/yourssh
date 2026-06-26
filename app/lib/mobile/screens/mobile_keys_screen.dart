@@ -124,9 +124,34 @@ class MobileKeysScreen extends StatelessWidget {
     final path = result.files.first.path;
     if (path == null) return;
     if (!context.mounted) return;
-    await context
-        .read<KeyProvider>()
-        .addKeyFromFile(path, result.files.first.name);
+
+    // Prompt for an optional passphrase before registering the key.
+    final passphrase = await _showPassphraseSheet(context, result.files.first.name);
+    if (passphrase == null) return; // user cancelled
+
+    if (!context.mounted) return;
+    final keyProv = context.read<KeyProvider>();
+    final entry = await keyProv.addKeyFromFile(path, result.files.first.name);
+
+    if (passphrase.isNotEmpty && context.mounted) {
+      await keyProv.savePassphrase?.call(entry.id, passphrase);
+    }
+  }
+
+  /// Shows a bottom sheet asking for an optional passphrase.
+  /// Returns the passphrase string (may be empty) on Import, or `null` if
+  /// the user cancelled.
+  Future<String?> _showPassphraseSheet(
+      BuildContext context, String filename) async {
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: MobileColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _ImportPassphraseSheet(filename: filename),
+    );
   }
 
   void _showGenerateDialog(BuildContext context) {
@@ -674,3 +699,127 @@ Widget _sheetHandle() => Container(
         borderRadius: BorderRadius.circular(2),
       ),
     );
+
+// ── Import passphrase sheet ───────────────────────────────────────────────────
+
+/// Bottom sheet that asks for an optional passphrase before importing a key.
+/// [Navigator.pop]s with the passphrase string (may be empty) on Import, or
+/// `null` if the user cancels.
+class _ImportPassphraseSheet extends StatefulWidget {
+  final String filename;
+  const _ImportPassphraseSheet({required this.filename});
+
+  @override
+  State<_ImportPassphraseSheet> createState() => _ImportPassphraseSheetState();
+}
+
+class _ImportPassphraseSheetState extends State<_ImportPassphraseSheet> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _sheetHandle(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                MobileTokens.space4,
+                MobileTokens.space3,
+                MobileTokens.space4,
+                0,
+              ),
+              child: Text('Import Key', style: mobileHeading(size: 18)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                MobileTokens.space4,
+                MobileTokens.space1,
+                MobileTokens.space4,
+                0,
+              ),
+              child: Text(
+                widget.filename,
+                style: mobileBody(size: 13, color: MobileColors.textMuted),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: MobileTokens.space3),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: MobileTokens.space4),
+              child: _MobileField(
+                controller: _ctrl,
+                label: 'Passphrase (optional)',
+                hint: 'Leave empty if the key is unencrypted',
+                obscure: true,
+              ),
+            ),
+            const SizedBox(height: MobileTokens.space4),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: MobileTokens.space4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context, null),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: MobileColors.border),
+                        foregroundColor: MobileColors.textPrimary,
+                        minimumSize: const Size.fromHeight(
+                            MobileTokens.touchTarget),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                              MobileTokens.radiusField),
+                        ),
+                      ),
+                      child: Text('Cancel',
+                          style: mobileBody(
+                              size: 15, weight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: MobileTokens.space3),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(context, _ctrl.text),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: MobileColors.accent,
+                        foregroundColor: Colors.black,
+                        minimumSize: const Size.fromHeight(
+                            MobileTokens.touchTarget),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                              MobileTokens.radiusField),
+                        ),
+                      ),
+                      child: Text('Import',
+                          style: mobileBody(
+                              size: 15,
+                              weight: FontWeight.w600,
+                              color: Colors.black)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: MobileTokens.space4),
+          ],
+        ),
+      ),
+    );
+  }
+}
