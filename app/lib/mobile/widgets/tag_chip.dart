@@ -31,8 +31,12 @@ class TagChip extends StatelessWidget {
         ? MobileColors.accent
         : (large ? MobileColors.fieldFill : MobileColors.surface);
     final chip = Container(
+      // Large (folder/category filter) chips get a min width + centered text so
+      // short labels like "All"/"logs" don't look cramped next to longer ones.
+      constraints: large ? const BoxConstraints(minWidth: 64) : null,
+      alignment: large ? Alignment.center : null,
       padding: large
-          ? const EdgeInsets.symmetric(horizontal: 15, vertical: 7)
+          ? const EdgeInsets.symmetric(horizontal: 14, vertical: 8)
           : const EdgeInsets.symmetric(
               horizontal: MobileTokens.space2, vertical: 3),
       decoration: BoxDecoration(
@@ -40,16 +44,17 @@ class TagChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(MobileTokens.radiusPill),
         border: large ? null : Border.all(color: MobileColors.border),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: fg,
-          fontSize: large ? 13 : 11,
-          fontWeight: large
-              ? (selected ? FontWeight.w600 : FontWeight.w500)
-              : FontWeight.normal,
-        ),
-      ),
+      child: large
+          ? Text(
+              label,
+              textAlign: TextAlign.center,
+              style: mobileBody(
+                size: 13,
+                color: fg,
+                weight: selected ? FontWeight.w600 : FontWeight.w500,
+              ).copyWith(height: 1.0),
+            )
+          : Text(label, style: TextStyle(color: fg, fontSize: 11)),
     );
     if (onTap == null) return chip;
     return InkWell(

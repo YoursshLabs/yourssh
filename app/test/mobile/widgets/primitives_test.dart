@@ -74,9 +74,11 @@ void main() {
       expect(deco.color, MobileColors.fieldFill);
       final text = tester.widget<Text>(find.text('All'));
       expect(text.style?.fontSize, 13);
-      // padding wide enough that a 3-char label stays a pill, not a circle
+      expect(text.textAlign, TextAlign.center);
+      // padding + min width so a short label stays a balanced pill, not a circle
       expect(container.padding,
-          const EdgeInsets.symmetric(horizontal: 15, vertical: 7));
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 8));
+      expect(container.constraints, const BoxConstraints(minWidth: 64));
     });
   });
 
