@@ -63,6 +63,21 @@ void main() {
       final deco = container.decoration as BoxDecoration;
       expect(deco.color, MobileColors.surface);
     });
+
+    testWidgets('large filter chip uses 13px text, no border, fieldFill bg',
+        (tester) async {
+      await tester.pumpWidget(
+          _wrap(const TagChip(label: 'All', large: true, selected: false)));
+      final container = tester.widget<Container>(find.byType(Container).first);
+      final deco = container.decoration as BoxDecoration;
+      expect(deco.border, isNull); // folder chips have no border
+      expect(deco.color, MobileColors.fieldFill);
+      final text = tester.widget<Text>(find.text('All'));
+      expect(text.style?.fontSize, 13);
+      // padding wide enough that a 3-char label stays a pill, not a circle
+      expect(container.padding,
+          const EdgeInsets.symmetric(horizontal: 15, vertical: 7));
+    });
   });
 
   // ── SectionHeader ─────────────────────────────────────────────────────────

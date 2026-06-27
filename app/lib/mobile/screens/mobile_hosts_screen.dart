@@ -221,7 +221,7 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
                 // ── Folder chips ─────────────────────────────────────────────
                 if (tags.isNotEmpty)
                   SizedBox(
-                    height: 34,
+                    height: 38,
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(
@@ -232,6 +232,7 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
                               const EdgeInsets.only(right: MobileTokens.space2),
                           child: TagChip(
                             label: 'All',
+                            large: true,
                             selected: _tagFilter == null,
                             onTap: () => setState(() => _tagFilter = null),
                           ),
@@ -242,6 +243,7 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
                                 right: MobileTokens.space2),
                             child: TagChip(
                               label: tag,
+                              large: true,
                               selected: _tagFilter == tag,
                               onTap: () => setState(() =>
                                   _tagFilter = _tagFilter == tag ? null : tag),
