@@ -77,7 +77,7 @@ class _MobileSnippetsScreenState extends State<MobileSnippetsScreen> {
             // ── Category filter chips ────────────────────────────────────────
             if (tags.isNotEmpty)
               SizedBox(
-                height: 36,
+                height: 38,
                 child: ListView(
                   padding: const EdgeInsets.symmetric(
                       horizontal: MobileTokens.space4),
@@ -85,6 +85,7 @@ class _MobileSnippetsScreenState extends State<MobileSnippetsScreen> {
                   children: [
                     TagChip(
                       label: 'All',
+                      large: true,
                       selected: _selectedTag == null,
                       onTap: () => setState(() => _selectedTag = null),
                     ),
@@ -92,6 +93,7 @@ class _MobileSnippetsScreenState extends State<MobileSnippetsScreen> {
                       const SizedBox(width: MobileTokens.space2),
                       TagChip(
                         label: tag,
+                        large: true,
                         selected: _selectedTag == tag,
                         onTap: () => setState(() => _selectedTag = tag),
                       ),
