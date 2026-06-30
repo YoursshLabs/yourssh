@@ -41,6 +41,11 @@ app/build
 
 # Review/scratch artifacts
 .tmp-review/
+.review_diff_tmp.txt
+
+# Throwaway local debug probes (self-labelled "delete after debugging")
+app/integration_test/local_shell_probe_test.dart
+app/integration_test/pty_probe_test.dart
 
 # Dart package build artifacts (packages/ subdirectories only)
 packages/*/.dart_tool/
