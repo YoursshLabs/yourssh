@@ -1,0 +1,962 @@
+diff --git a/app/lib/models/ssh_session.dart b/app/lib/models/ssh_session.dart
+index bc52353..092c4ae 100644
+--- a/app/lib/models/ssh_session.dart
++++ b/app/lib/models/ssh_session.dart
+@@ -1,6 +1,7 @@
+ import 'package:uuid/uuid.dart';
+ import 'package:xterm/xterm.dart';
+ import 'agent_forwarding_state.dart';
++import 'connection_log.dart';
+ import 'host.dart';
+ import 'terminal_session.dart';
+ 
+@@ -33,6 +34,24 @@ class SshSession implements TerminalSession {
+   /// SessionProvider.handleAgentForwardingEvent.
+   AgentForwardingState agentForwardingState = AgentForwardingState.off;
+ 
++  /// Human-readable trace of the connect attempt, shown by the "Show logs"
++  /// panel on the connecting screen. Bounded to [kMaxConnectionLogLines].
++  final List<ConnectionLogLine> connectionLog = [];
++
++  /// Appends a connection-log line, trimming the oldest entries past the cap.
++  void logConnection(ConnectionLogLevel level, String message, {DateTime? at}) {
++    connectionLog.add(ConnectionLogLine(
++      time: at ?? DateTime.now(),
++      level: level,
++      message: message,
++    ));
++    if (connectionLog.length > kMaxConnectionLogLines) {
++      connectionLog.removeRange(0, connectionLog.length - kMaxConnectionLogLines);
++    }
++  }
++
++  void clearConnectionLog() => connectionLog.clear();
++
+   SshSession({
+     String? id,
+     required this.host,
+diff --git a/app/lib/providers/session_provider.dart b/app/lib/providers/session_provider.dart
+index 5acbafa..b359ae9 100644
+--- a/app/lib/providers/session_provider.dart
++++ b/app/lib/providers/session_provider.dart
+@@ -5,6 +5,7 @@ import 'package:yourssh_rdp/yourssh_rdp.dart';
+ import 'package:yourssh_vnc/yourssh_vnc.dart';
+ import '../models/agent_forwarding_state.dart';
+ import '../models/audit_event.dart';
++import '../models/connection_log.dart';
+ import '../models/host.dart';
+ import '../models/local_session.dart';
+ import '../models/rdp_session.dart';
+@@ -457,18 +458,29 @@ class SessionProvider extends ChangeNotifier {
+         jumpLookup: (id) => jumpHostLookup?.call(id),
+         keyLookup: (id) => keyLookup?.call(id),
+       );
++      session.logConnection(ConnectionLogLevel.info,
++          'Connecting to ${host.host}:${host.port} as ${host.username}');
++      session.logConnection(
++          ConnectionLogLevel.info, 'Auth method: ${host.authType.name}');
++      if (jumpChain.isNotEmpty) {
++        session.logConnection(ConnectionLogLevel.info,
++            'Tunneling via ${jumpChain.map((h) => h.host.label).join(' → ')}');
++      }
++      _safeNotify();
+       await _ssh.connect(
+         host,
+         keyEntry: keyEntry,
+         jumpChain: jumpChain,
+         verifyHostKey: hostKeyVerifier != null
+-            ? (keyType, fp) => hostKeyVerifier!(host.host, host.port, keyType, fp)
++            ? (keyType, fp) =>
++                _verifyAndLog(session, host.host, host.port, keyType, fp)
+             : null,
+         verifyHopHostKey: hostKeyVerifier != null
+             ? (hop, keyType, fp) =>
+-                hostKeyVerifier!(hop.host, hop.port, keyType, fp)
++                _verifyAndLog(session, hop.host, hop.port, keyType, fp)
+             : null,
+       );
++      session.logConnection(ConnectionLogLevel.success, 'Connection established');
+       session.status = SessionStatus.connected;
+       audit?.record(AuditEvent.now(
+           type: AuditEventType.connect, host: host, sessionId: session.id));
+@@ -516,6 +528,7 @@ class SessionProvider extends ChangeNotifier {
+       }
+     } catch (e) {
+       if (!_sessions.contains(session)) return;
++      session.logConnection(ConnectionLogLevel.error, 'Connection failed: $e');
+       final maxAttempts = reconnectAttempts?.call() ?? 0;
+       final isUnlimited = maxAttempts == 0;
+       // A jump-chain config error (deleted bastion, cycle) can never succeed
+@@ -545,10 +558,42 @@ class SessionProvider extends ChangeNotifier {
+     }
+   }
+ 
++  /// Wraps the host-key verifier so the TOFU check is reflected in the
++  /// session's connection log (shown by the "Show logs" panel).
++  Future<bool> _verifyAndLog(
++      SshSession session, String host, int port, String keyType, Uint8List fp) async {
++    session.logConnection(
++        ConnectionLogLevel.info, 'Verifying host key ($keyType) for $host:$port');
++    _safeNotify();
++    final ok = await hostKeyVerifier!(host, port, keyType, fp);
++    session.logConnection(
++        ok ? ConnectionLogLevel.success : ConnectionLogLevel.warn,
++        ok ? 'Host key accepted' : 'Host key rejected');
++    _safeNotify();
++    return ok;
++  }
++
++  /// Manual retry from the connecting screen's "Retry" button. Reuses the
++  /// existing session/tab (preserving its terminal and metadata) rather than
++  /// closing and reopening, and cancels any pending auto-reconnect first.
++  void reconnectSession(String sessionId) {
++    final session = sshSessions.where((s) => s.id == sessionId).firstOrNull;
++    if (session == null || session.status == SessionStatus.connecting) return;
++    _reconnectTimers.remove(sessionId)?.cancel();
++    _countdownTimers.remove(sessionId)?.cancel();
++    session.status = SessionStatus.connecting;
++    session.errorMessage = null;
++    session.logConnection(ConnectionLogLevel.info, 'Retrying connection…');
++    _safeNotify();
++    unawaited(_doConnect(session, session.host, attempt: 1));
++  }
++
+   void _scheduleReconnect(SshSession session, Host host, {required int attempt}) {
+     session.reconnectCount++;
+     final delay = (attempt * 2).clamp(2, 60);
+     session.status = SessionStatus.connecting;
++    session.logConnection(
++        ConnectionLogLevel.warn, 'Reconnecting in ${delay}s (attempt $attempt)');
+     _safeNotify();
+ 
+     _startCountdown(session, delay, attempt);
+diff --git a/app/lib/widgets/terminal_view.dart b/app/lib/widgets/terminal_view.dart
+index 6211a18..2a5fef9 100644
+--- a/app/lib/widgets/terminal_view.dart
++++ b/app/lib/widgets/terminal_view.dart
+@@ -7,6 +7,7 @@ import '../models/host.dart';
+ import '../models/ssh_session.dart';
+ import '../providers/command_history_provider.dart';
+ import '../providers/host_provider.dart';
++import '../providers/session_provider.dart';
+ import '../providers/settings_provider.dart';
+ import '../providers/shell_integration_provider.dart';
+ import '../services/hotkey_service.dart';
+@@ -14,6 +15,7 @@ import '../theme/terminal_themes.dart';
+ import '../util/terminal_appearance.dart';
+ import 'command_gutter.dart';
+ import 'record_button.dart';
++import 'session_connecting_view.dart';
+ import 'suggestion_popup.dart';
+ import 'terminal_context_menu.dart';
+ 
+@@ -23,27 +25,14 @@ class SessionTerminalView extends StatelessWidget {
+ 
+   @override
+   Widget build(BuildContext context) {
+-    return switch (session.status) {
+-      SessionStatus.connecting => _statusView(Icons.sync, 'Connecting to ${session.host.host}…', Colors.orange),
+-      SessionStatus.error => _statusView(Icons.error_outline, session.errorMessage ?? 'Connection error', Colors.red),
+-      SessionStatus.disconnected => _statusView(Icons.link_off, 'Disconnected', Colors.grey),
+-      SessionStatus.connected => _TerminalWidget(key: ValueKey(session.id), session: session),
+-    };
+-  }
+-
+-  Widget _statusView(IconData icon, String message, Color color) {
+-    return Container(
+-      color: Colors.black,
+-      child: Center(
+-        child: Column(
+-          mainAxisSize: MainAxisSize.min,
+-          children: [
+-            Icon(icon, color: color, size: 40),
+-            const SizedBox(height: 12),
+-            Text(message, style: TextStyle(color: color, fontFamily: 'monospace', fontSize: 13)),
+-          ],
+-        ),
+-      ),
++    if (session.status == SessionStatus.connected) {
++      return _TerminalWidget(key: ValueKey(session.id), session: session);
++    }
++    final sessions = context.read<SessionProvider>();
++    return SessionConnectingView(
++      session: session,
++      onClose: () => sessions.closeSession(session.id),
++      onRetry: () => sessions.reconnectSession(session.id),
+     );
+   }
+ }
+
+=== NEW FILES ===
+
+diff --git a/app/lib/models/connection_log.dart b/app/lib/models/connection_log.dart (NEW)
+diff --git a/app/lib/models/connection_log.dart b/app/lib/models/connection_log.dart
+new file mode 100644
+index 0000000..ef9f187
+--- /dev/null
++++ b/app/lib/models/connection_log.dart
+@@ -0,0 +1,22 @@
++/// A single line in a session's connection log — the human-readable trace of a
++/// connect attempt (resolve → TCP → host-key verify → auth → shell) surfaced by
++/// the "Show logs" panel on the connecting screen.
++library;
++
++enum ConnectionLogLevel { info, success, warn, error }
++
++class ConnectionLogLine {
++  final DateTime time;
++  final ConnectionLogLevel level;
++  final String message;
++
++  const ConnectionLogLine({
++    required this.time,
++    required this.level,
++    required this.message,
++  });
++}
++
++/// Cap on retained connection-log lines. A flapping host with verbose reconnect
++/// chatter must not grow this list without bound.
++const int kMaxConnectionLogLines = 200;
+
+diff --git a/app/lib/widgets/session_connecting_view.dart b/app/lib/widgets/session_connecting_view.dart (NEW)
+diff --git a/app/lib/widgets/session_connecting_view.dart b/app/lib/widgets/session_connecting_view.dart
+new file mode 100644
+index 0000000..408d560
+--- /dev/null
++++ b/app/lib/widgets/session_connecting_view.dart
+@@ -0,0 +1,444 @@
++import 'dart:math' as math;
++
++import 'package:flutter/material.dart';
++import 'package:flutter_svg/flutter_svg.dart';
++
++import '../models/connection_log.dart';
++import '../models/host.dart';
++import '../models/ssh_session.dart';
++import '../services/os_detection.dart';
++import '../theme/app_theme.dart';
++
++/// Full-area screen shown inside a session tab while an SSH session is
++/// connecting, has errored, or has disconnected. Mirrors mstsc-style connect
++/// UX: a host card, an animated node → line → terminal connection graphic, a
++/// "Show logs" panel over [SshSession.connectionLog], and Close/Retry actions.
++class SessionConnectingView extends StatefulWidget {
++  final SshSession session;
++  final VoidCallback onClose;
++  final VoidCallback onRetry;
++
++  const SessionConnectingView({
++    super.key,
++    required this.session,
++    required this.onClose,
++    required this.onRetry,
++  });
++
++  @override
++  State<SessionConnectingView> createState() => _SessionConnectingViewState();
++}
++
++class _SessionConnectingViewState extends State<SessionConnectingView>
++    with SingleTickerProviderStateMixin {
++  late final AnimationController _anim;
++  bool _showLogs = false;
++
++  @override
++  void initState() {
++    super.initState();
++    _anim = AnimationController(
++      vsync: this,
++      duration: const Duration(milliseconds: 1400),
++    );
++    _syncAnimation();
++  }
++
++  @override
++  void didUpdateWidget(SessionConnectingView old) {
++    super.didUpdateWidget(old);
++    _syncAnimation();
++  }
++
++  /// Spin only while connecting; freeze for error/disconnected states.
++  void _syncAnimation() {
++    final connecting = widget.session.status == SessionStatus.connecting;
++    if (connecting && !_anim.isAnimating) {
++      _anim.repeat();
++    } else if (!connecting && _anim.isAnimating) {
++      _anim.stop();
++    }
++  }
++
++  @override
++  void dispose() {
++    _anim.dispose();
++    super.dispose();
++  }
++
++  Color get _nodeColor => switch (widget.session.status) {
++        SessionStatus.error => AppColors.red,
++        SessionStatus.disconnected => AppColors.textTertiary,
++        _ => AppColors.blue,
++      };
++
++  @override
++  Widget build(BuildContext context) {
++    final session = widget.session;
++    final host = session.host;
++    final status = session.status;
++    final isError = status == SessionStatus.error;
++    final isDisconnected = status == SessionStatus.disconnected;
++    final canRetry = isError || isDisconnected;
++
++    final message = switch (status) {
++      SessionStatus.error => session.errorMessage ?? 'Connection error',
++      SessionStatus.disconnected => 'Disconnected',
++      _ => 'Connecting…',
++    };
++    final messageColor = switch (status) {
++      SessionStatus.error => AppColors.red,
++      SessionStatus.disconnected => AppColors.textSecondary,
++      _ => AppColors.textSecondary,
++    };
++
++    return Container(
++      color: AppColors.bg,
++      alignment: Alignment.center,
++      padding: const EdgeInsets.all(24),
++      child: ConstrainedBox(
++        constraints: const BoxConstraints(maxWidth: 520),
++        child: Container(
++          decoration: BoxDecoration(
++            color: AppColors.card,
++            borderRadius: BorderRadius.circular(16),
++            border: Border.all(color: AppColors.border),
++          ),
++          padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
++          child: Column(
++            mainAxisSize: MainAxisSize.min,
++            crossAxisAlignment: CrossAxisAlignment.start,
++            children: [
++              _header(host),
++              const SizedBox(height: 22),
++              _ConnectionGraphic(
++                animation: _anim,
++                active: status == SessionStatus.connecting,
++                nodeColor: _nodeColor,
++              ),
++              const SizedBox(height: 14),
++              Text(message, style: TextStyle(color: messageColor, fontSize: 12.5)),
++              const SizedBox(height: 18),
++              Row(
++                children: [
++                  _PillButton(label: 'Close', onTap: widget.onClose),
++                  if (canRetry) ...[
++                    const SizedBox(width: 10),
++                    _PillButton(
++                      label: 'Retry',
++                      accent: true,
++                      onTap: widget.onRetry,
++                    ),
++                  ],
++                ],
++              ),
++              if (_showLogs) ...[
++                const SizedBox(height: 16),
++                _LogsPanel(lines: session.connectionLog),
++              ],
++            ],
++          ),
++        ),
++      ),
++    );
++  }
++
++  Widget _header(Host host) {
++    return Row(
++      crossAxisAlignment: CrossAxisAlignment.center,
++      children: [
++        _OsAvatar(detectedOs: host.detectedOs),
++        const SizedBox(width: 14),
++        Expanded(
++          child: Column(
++            crossAxisAlignment: CrossAxisAlignment.start,
++            mainAxisSize: MainAxisSize.min,
++            children: [
++              Text(
++                host.label,
++                maxLines: 1,
++                overflow: TextOverflow.ellipsis,
++                style: const TextStyle(
++                  color: AppColors.textPrimary,
++                  fontSize: 15,
++                  fontWeight: FontWeight.w600,
++                ),
++              ),
++              const SizedBox(height: 2),
++              Text(
++                'SSH ${host.host}:${host.port}',
++                maxLines: 1,
++                overflow: TextOverflow.ellipsis,
++                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
++              ),
++            ],
++          ),
++        ),
++        const SizedBox(width: 12),
++        _PillButton(
++          label: _showLogs ? 'Hide logs' : 'Show logs',
++          onTap: () => setState(() => _showLogs = !_showLogs),
++        ),
++      ],
++    );
++  }
++}
++
++class _OsAvatar extends StatelessWidget {
++  final String? detectedOs;
++  const _OsAvatar({required this.detectedOs});
++
++  @override
++  Widget build(BuildContext context) {
++    final asset = osIconAsset(detectedOs);
++    return Container(
++      width: 44,
++      height: 44,
++      decoration: BoxDecoration(
++        color: Colors.black,
++        borderRadius: BorderRadius.circular(12),
++      ),
++      alignment: Alignment.center,
++      child: asset != null
++          ? SvgPicture.asset(
++              asset,
++              width: 22,
++              height: 22,
++              colorFilter:
++                  const ColorFilter.mode(AppColors.textPrimary, BlendMode.srcIn),
++            )
++          : const Icon(Icons.dns_outlined, size: 22, color: AppColors.textPrimary),
++    );
++  }
++}
++
++/// node (link icon, spinning arc while active) ── line ── terminal node.
++class _ConnectionGraphic extends StatelessWidget {
++  final Animation<double> animation;
++  final bool active;
++  final Color nodeColor;
++
++  const _ConnectionGraphic({
++    required this.animation,
++    required this.active,
++    required this.nodeColor,
++  });
++
++  @override
++  Widget build(BuildContext context) {
++    return SizedBox(
++      height: 48,
++      child: AnimatedBuilder(
++        animation: animation,
++        builder: (context, _) {
++          final t = animation.value;
++          return Row(
++            children: [
++              _node(
++                child: _spinningRing(t),
++              ),
++              Expanded(
++                child: CustomPaint(
++                  size: const Size(double.infinity, 48),
++                  painter: _LinePainter(
++                    progress: active ? t : null,
++                    color: nodeColor,
++                  ),
++                ),
++              ),
++              _node(
++                color: AppColors.cardHover,
++                child: const Icon(Icons.terminal, size: 20, color: AppColors.textPrimary),
++              ),
++            ],
++          );
++        },
++      ),
++    );
++  }
++
++  Widget _spinningRing(double t) {
++    final icon = const Icon(Icons.link, size: 18, color: Colors.white);
++    if (!active) return icon;
++    return CustomPaint(
++      painter: _ArcPainter(turn: t, color: Colors.white),
++      child: SizedBox(width: 38, height: 38, child: Center(child: icon)),
++    );
++  }
++
++  Widget _node({Color? color, required Widget child}) {
++    return Container(
++      width: 38,
++      height: 38,
++      decoration: BoxDecoration(
++        color: color ?? nodeColor,
++        shape: BoxShape.circle,
++      ),
++      alignment: Alignment.center,
++      child: child,
++    );
++  }
++}
++
++class _ArcPainter extends CustomPainter {
++  final double turn;
++  final Color color;
++  _ArcPainter({required this.turn, required this.color});
++
++  @override
++  void paint(Canvas canvas, Size size) {
++    final center = size.center(Offset.zero);
++    final radius = size.width / 2 - 1;
++    final paint = Paint()
++      ..color = color
++      ..style = PaintingStyle.stroke
++      ..strokeWidth = 2.5
++      ..strokeCap = StrokeCap.round;
++    final start = turn * 2 * math.pi;
++    canvas.drawArc(
++      Rect.fromCircle(center: center, radius: radius),
++      start,
++      math.pi * 0.6,
++      false,
++      paint,
++    );
++  }
++
++  @override
++  bool shouldRepaint(_ArcPainter old) => old.turn != turn || old.color != color;
++}
++
++class _LinePainter extends CustomPainter {
++  /// Animation phase in [0,1] while connecting; null when frozen.
++  final double? progress;
++  final Color color;
++  _LinePainter({required this.progress, required this.color});
++
++  @override
++  void paint(Canvas canvas, Size size) {
++    final y = size.height / 2;
++    final base = Paint()
++      ..color = AppColors.border
++      ..strokeWidth = 2
++      ..strokeCap = StrokeCap.round;
++    canvas.drawLine(Offset(0, y), Offset(size.width, y), base);
++
++    if (progress == null) return;
++    // A short glowing segment travels left → right along the line.
++    final dotX = progress! * size.width;
++    final glow = Paint()
++      ..color = color
++      ..strokeWidth = 3
++      ..strokeCap = StrokeCap.round;
++    final half = size.width * 0.12;
++    canvas.drawLine(
++      Offset((dotX - half).clamp(0, size.width), y),
++      Offset((dotX + half).clamp(0, size.width), y),
++      glow,
++    );
++  }
++
++  @override
++  bool shouldRepaint(_LinePainter old) =>
++      old.progress != progress || old.color != color;
++}
++
++class _LogsPanel extends StatelessWidget {
++  final List<ConnectionLogLine> lines;
++  const _LogsPanel({required this.lines});
++
++  @override
++  Widget build(BuildContext context) {
++    return Container(
++      constraints: const BoxConstraints(maxHeight: 180),
++      width: double.infinity,
++      decoration: BoxDecoration(
++        color: AppColors.bg,
++        borderRadius: BorderRadius.circular(8),
++        border: Border.all(color: AppColors.border),
++      ),
++      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
++      child: lines.isEmpty
++          ? const Text(
++              'No logs yet',
++              style: TextStyle(color: AppColors.textTertiary, fontSize: 12, fontFamily: 'monospace'),
++            )
++          : SingleChildScrollView(
++              reverse: true,
++              child: Column(
++                crossAxisAlignment: CrossAxisAlignment.start,
++                children: [for (final l in lines) _line(l)],
++              ),
++            ),
++    );
++  }
++
++  Widget _line(ConnectionLogLine l) {
++    final color = switch (l.level) {
++      ConnectionLogLevel.success => AppColors.accent,
++      ConnectionLogLevel.warn => AppColors.orange,
++      ConnectionLogLevel.error => AppColors.red,
++      ConnectionLogLevel.info => AppColors.textSecondary,
++    };
++    const base = TextStyle(fontSize: 12, fontFamily: 'monospace', height: 1.35);
++    return Padding(
++      padding: const EdgeInsets.symmetric(vertical: 1),
++      child: Row(
++        crossAxisAlignment: CrossAxisAlignment.start,
++        children: [
++          Text(_hms(l.time), style: base.copyWith(color: AppColors.textTertiary)),
++          const SizedBox(width: 10),
++          Expanded(child: Text(l.message, style: base.copyWith(color: color))),
++        ],
++      ),
++    );
++  }
++
++  String _hms(DateTime t) {
++    String two(int n) => n.toString().padLeft(2, '0');
++    return '${two(t.hour)}:${two(t.minute)}:${two(t.second)}';
++  }
++}
++
++class _PillButton extends StatefulWidget {
++  final String label;
++  final bool accent;
++  final VoidCallback onTap;
++  const _PillButton({required this.label, this.accent = false, required this.onTap});
++
++  @override
++  State<_PillButton> createState() => _PillButtonState();
++}
++
++class _PillButtonState extends State<_PillButton> {
++  bool _hovered = false;
++
++  @override
++  Widget build(BuildContext context) {
++    final accent = widget.accent;
++    final bg = accent
++        ? (_hovered ? AppColors.accentDim : AppColors.accent)
++        : (_hovered ? AppColors.cardHover : AppColors.bg);
++    final fg = accent ? Colors.black : AppColors.textPrimary;
++    return MouseRegion(
++      cursor: SystemMouseCursors.click,
++      onEnter: (_) => setState(() => _hovered = true),
++      onExit: (_) => setState(() => _hovered = false),
++      child: GestureDetector(
++        onTap: widget.onTap,
++        child: Container(
++          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
++          decoration: BoxDecoration(
++            color: bg,
++            borderRadius: BorderRadius.circular(8),
++            border: Border.all(color: accent ? AppColors.accent : AppColors.border),
++          ),
++          child: Text(
++            widget.label,
++            style: TextStyle(color: fg, fontSize: 13, fontWeight: FontWeight.w500),
++          ),
++        ),
++      ),
++    );
++  }
++}
+
+diff --git a/app/test/models/connection_log_test.dart b/app/test/models/connection_log_test.dart (NEW)
+diff --git a/app/test/models/connection_log_test.dart b/app/test/models/connection_log_test.dart
+new file mode 100644
+index 0000000..c6d5258
+--- /dev/null
++++ b/app/test/models/connection_log_test.dart
+@@ -0,0 +1,53 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:yourssh/models/connection_log.dart';
++import 'package:yourssh/models/host.dart';
++import 'package:yourssh/models/ssh_session.dart';
++
++SshSession _session() => SshSession(
++      host: Host(id: 'h1', label: 'Box', host: 'example.com', port: 22, username: 'root'),
++    );
++
++void main() {
++  group('SshSession.logConnection', () {
++    test('starts empty', () {
++      expect(_session().connectionLog, isEmpty);
++    });
++
++    test('appends a line with the given level and message', () {
++      final s = _session();
++      s.logConnection(ConnectionLogLevel.info, 'Connecting…');
++      s.logConnection(ConnectionLogLevel.success, 'Connected');
++
++      expect(s.connectionLog, hasLength(2));
++      expect(s.connectionLog.first.level, ConnectionLogLevel.info);
++      expect(s.connectionLog.first.message, 'Connecting…');
++      expect(s.connectionLog.last.level, ConnectionLogLevel.success);
++    });
++
++    test('uses the provided timestamp when given', () {
++      final s = _session();
++      final t = DateTime(2026, 6, 23, 10, 30, 45);
++      s.logConnection(ConnectionLogLevel.info, 'x', at: t);
++      expect(s.connectionLog.single.time, t);
++    });
++
++    test('bounds the log to the most recent kMaxConnectionLogLines', () {
++      final s = _session();
++      for (var i = 0; i < kMaxConnectionLogLines + 50; i++) {
++        s.logConnection(ConnectionLogLevel.info, 'line $i');
++      }
++      expect(s.connectionLog, hasLength(kMaxConnectionLogLines));
++      // Oldest lines dropped; the newest line is retained.
++      expect(s.connectionLog.last.message, 'line ${kMaxConnectionLogLines + 49}');
++      expect(s.connectionLog.first.message, 'line 50');
++    });
++
++    test('clearConnectionLog empties the buffer', () {
++      final s = _session()
++        ..logConnection(ConnectionLogLevel.info, 'a')
++        ..logConnection(ConnectionLogLevel.error, 'b');
++      s.clearConnectionLog();
++      expect(s.connectionLog, isEmpty);
++    });
++  });
++}
+
+diff --git a/app/test/providers/session_provider_connection_log_test.dart b/app/test/providers/session_provider_connection_log_test.dart (NEW)
+diff --git a/app/test/providers/session_provider_connection_log_test.dart b/app/test/providers/session_provider_connection_log_test.dart
+new file mode 100644
+index 0000000..b2478e6
+--- /dev/null
++++ b/app/test/providers/session_provider_connection_log_test.dart
+@@ -0,0 +1,123 @@
++import 'dart:async';
++import 'dart:typed_data';
++
++import 'package:dartssh2/dartssh2.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:shared_preferences/shared_preferences.dart';
++import 'package:yourssh/models/connection_log.dart';
++import 'package:yourssh/models/host.dart';
++import 'package:yourssh/models/ssh_key.dart';
++import 'package:yourssh/models/ssh_session.dart';
++import 'package:yourssh/providers/session_provider.dart';
++import 'package:yourssh/services/ssh_service.dart';
++import 'package:yourssh/services/storage_service.dart';
++import 'package:yourssh/services/tab_metadata_service.dart';
++
++class _NullClient implements SSHClient {
++  @override
++  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
++}
++
++class _FakeSsh extends SshService {
++  _FakeSsh() : super(StorageService());
++  bool failConnect = false;
++
++  /// Keeps connect() pending so the session stays in `connecting`.
++  Completer<void>? connectGate;
++
++  /// Keeps openShell pending so a connected session doesn't drop.
++  Completer<void>? shellGate;
++
++  @override
++  Future<SSHClient> connect(
++    Host host, {
++    SshKeyEntry? keyEntry,
++    List<JumpHop> jumpChain = const [],
++    Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
++    Future<bool> Function(Host hop, String keyType, Uint8List fp)?
++        verifyHopHostKey,
++  }) async {
++    final gate = connectGate;
++    if (gate != null) await gate.future;
++    if (failConnect) throw Exception('refused');
++    return _NullClient();
++  }
++
++  @override
++  Future<void> openShell(SshSession session,
++      {bool useTmux = false, String termType = 'xterm-256color'}) async {
++    final gate = shellGate;
++    if (gate != null) await gate.future;
++  }
++
++  @override
++  void disconnectSession(String sessionId) {}
++  @override
++  void disconnect(String hostId) {}
++}
++
++Host _host() => Host(label: 'prod', host: 'p.com', username: 'root');
++
++List<String> _messages(SshSession s) =>
++    s.connectionLog.map((l) => l.message).toList();
++
++void main() {
++  TestWidgetsFlutterBinding.ensureInitialized();
++  setUp(() => SharedPreferences.setMockInitialValues({}));
++
++  test('successful connect logs the connecting and established steps', () async {
++    final p = SessionProvider(_FakeSsh(), TabMetadataService());
++    await p.connect(_host());
++    final s = p.sshSessions.single;
++
++    final msgs = _messages(s);
++    expect(msgs, contains('Connecting to p.com:22 as root'));
++    expect(msgs, contains('Connection established'));
++    p.dispose();
++  });
++
++  test('failed connect logs an error line', () async {
++    final p = SessionProvider(_FakeSsh()..failConnect = true, TabMetadataService());
++    await p.connect(_host());
++    final s = p.sshSessions.single;
++
++    expect(s.status, SessionStatus.error);
++    expect(_messages(s).any((m) => m.startsWith('Connection failed:')), isTrue);
++    expect(s.connectionLog.last.level, ConnectionLogLevel.error);
++    p.dispose();
++  });
++
++  test('reconnectSession retries an errored session and clears the error', () async {
++    final ssh = _FakeSsh()..failConnect = true;
++    final p = SessionProvider(ssh, TabMetadataService());
++    await p.connect(_host());
++    final s = p.sshSessions.single;
++    expect(s.status, SessionStatus.error);
++
++    // Next attempt succeeds and the shell stays open.
++    ssh.failConnect = false;
++    ssh.shellGate = Completer();
++    p.reconnectSession(s.id);
++    await Future<void>.delayed(Duration.zero);
++
++    expect(s.status, SessionStatus.connected);
++    expect(s.errorMessage, isNull);
++    expect(_messages(s), contains('Retrying connection…'));
++    p.dispose();
++  });
++
++  test('reconnectSession is a no-op while already connecting', () async {
++    final ssh = _FakeSsh()..connectGate = Completer();
++    final p = SessionProvider(ssh, TabMetadataService());
++    // Don't await: the gated connect() keeps the session in `connecting`.
++    unawaited(p.connect(_host()));
++    await Future<void>.delayed(Duration.zero);
++    final s = p.sshSessions.single;
++    expect(s.status, SessionStatus.connecting);
++
++    final before = s.connectionLog.length;
++    p.reconnectSession(s.id);
++    expect(s.connectionLog.length, before); // no "Retrying…" line appended
++    p.dispose();
++  });
++}
+
+diff --git a/app/test/widgets/session_connecting_view_test.dart b/app/test/widgets/session_connecting_view_test.dart (NEW)
+diff --git a/app/test/widgets/session_connecting_view_test.dart b/app/test/widgets/session_connecting_view_test.dart
+new file mode 100644
+index 0000000..9272b25
+--- /dev/null
++++ b/app/test/widgets/session_connecting_view_test.dart
+@@ -0,0 +1,90 @@
++import 'package:flutter/material.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:yourssh/models/connection_log.dart';
++import 'package:yourssh/models/host.dart';
++import 'package:yourssh/models/ssh_session.dart';
++import 'package:yourssh/widgets/session_connecting_view.dart';
++
++SshSession _session({
++  SessionStatus status = SessionStatus.connecting,
++  String? error,
++}) {
++  final s = SshSession(
++    host: Host(id: 'h1', label: 'Thang MacBook Pro', host: 'thngs-macbook-pro', port: 22, username: 'thang'),
++    status: status,
++  );
++  s.errorMessage = error;
++  return s;
++}
++
++Future<void> _pump(
++  WidgetTester tester,
++  SshSession session, {
++  VoidCallback? onClose,
++  VoidCallback? onRetry,
++}) async {
++  await tester.pumpWidget(MaterialApp(
++    home: Scaffold(
++      body: SessionConnectingView(
++        session: session,
++        onClose: onClose ?? () {},
++        onRetry: onRetry ?? () {},
++      ),
++    ),
++  ));
++  await tester.pump(); // start the spinner animation; don't settle (it repeats).
++}
++
++void main() {
++  testWidgets('shows the host label and SSH host:port subtitle', (tester) async {
++    await _pump(tester, _session());
++    expect(find.text('Thang MacBook Pro'), findsOneWidget);
++    expect(find.text('SSH thngs-macbook-pro:22'), findsOneWidget);
++  });
++
++  testWidgets('connecting state shows Close but not Retry', (tester) async {
++    await _pump(tester, _session(status: SessionStatus.connecting));
++    expect(find.text('Close'), findsOneWidget);
++    expect(find.text('Retry'), findsNothing);
++  });
++
++  testWidgets('error state shows the error message and a Retry button', (tester) async {
++    await _pump(tester, _session(status: SessionStatus.error, error: 'Auth failed'));
++    expect(find.text('Auth failed'), findsOneWidget);
++    expect(find.text('Retry'), findsOneWidget);
++    expect(find.text('Close'), findsOneWidget);
++  });
++
++  testWidgets('Show logs toggles the connection log panel', (tester) async {
++    final s = _session()
++      ..logConnection(ConnectionLogLevel.info, 'Resolving thngs-macbook-pro')
++      ..logConnection(ConnectionLogLevel.success, 'TCP established');
++    await _pump(tester, s);
++
++    // Hidden by default.
++    expect(find.text('Resolving thngs-macbook-pro'), findsNothing);
++
++    await tester.tap(find.text('Show logs'));
++    await tester.pump();
++
++    expect(find.text('Resolving thngs-macbook-pro'), findsOneWidget);
++    expect(find.text('TCP established'), findsOneWidget);
++  });
++
++  testWidgets('Close and Retry fire their callbacks', (tester) async {
++    var closed = 0, retried = 0;
++    await _pump(
++      tester,
++      _session(status: SessionStatus.error, error: 'x'),
++      onClose: () => closed++,
++      onRetry: () => retried++,
++    );
++
++    await tester.tap(find.text('Retry'));
++    await tester.tap(find.text('Close'));
++    await tester.pump();
++
++    expect(retried, 1);
++    expect(closed, 1);
++  });
++}
