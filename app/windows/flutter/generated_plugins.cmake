@@ -7,7 +7,9 @@ list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_windows
   flutter_secure_storage_windows
   hotkey_manager_windows
+  local_auth_windows
   local_notifier
+  passkeys_windows
   screen_retriever
   sqlite3_flutter_libs
   url_launcher_windows
