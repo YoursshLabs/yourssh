@@ -1,4 +1,5 @@
 // app/test/services/app_discovery_service_test.dart
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -116,6 +117,37 @@ void main() {
     service.dispose();
   });
 
+  test('concurrent lookups for one extension share a single query (issue #88)',
+      () async {
+    // Right-clicking several files of the same unseen type used to fire one
+    // full platform query each — on Windows every query spawns PowerShell
+    // processes, which pinned the CPU.
+    var queryCalls = 0;
+    final gate = Completer<void>();
+    final service = AppDiscoveryService.withQuerier((_) async {
+      queryCalls++;
+      await gate.future;
+      return [
+        const AppOption(name: 'Editor', executablePath: '/e', isDefault: false),
+      ];
+    });
+
+    final futures = [
+      service.getAppsFor('/tmp/a.log'),
+      service.getAppsFor('/tmp/b.log'),
+      service.getAppsFor('/tmp/c.log'),
+    ];
+    gate.complete();
+    final results = await Future.wait(futures);
+
+    expect(queryCalls, 1);
+    expect(results.every((r) => r.length == 1), isTrue);
+    // The completed lookup is now cached, not left dangling in flight.
+    await service.getAppsFor('/tmp/d.log');
+    expect(queryCalls, 1);
+    service.dispose();
+  });
+
   group('Windows script builders', () {
     test('isSafeWindowsExtension accepts plain extensions only', () {
       expect(AppDiscoveryService.isSafeWindowsExtension('.txt'), isTrue);
@@ -139,27 +171,57 @@ void main() {
       expect(script, isNot(contains('param(')));
     });
 
-    test('resolve-exe script uses the provider-qualified HKCR path', () {
-      // HKCR: is not a default PSDrive in powershell.exe — only HKLM:/HKCU:
-      // are. Registry::HKEY_CLASSES_ROOT needs no drive mounted.
-      final script =
-          AppDiscoveryService.windowsResolveExeScript('notepad.exe');
-      expect(script, contains('Registry::HKEY_CLASSES_ROOT'));
+    test('resolve script never wildcard-scans HKCR (issue #88)', () {
+      // The old per-app scan enumerated every class under HKCR
+      // (`Registry::HKEY_CLASSES_ROOT\*\shell\open\command`), which pinned
+      // the CPU. Lookups must be direct key reads.
+      final script = AppDiscoveryService.windowsResolveAppsScript(
+          ['notepad.exe', 'notepad++.exe']);
+      expect(script, isNot(contains('HKEY_CLASSES_ROOT\\*')));
+      expect(script, isNot(contains('Get-ChildItem')));
+      expect(script, contains('App Paths'));
+      expect(script, contains(r'Registry::HKEY_CLASSES_ROOT\Applications\'));
       expect(script, isNot(contains('HKCR:')));
-      expect(script, contains('notepad.exe'));
     });
 
-    test('resolve-exe script doubles single quotes in the exe name', () {
-      final script =
-          AppDiscoveryService.windowsResolveExeScript("o'brien.exe");
-      expect(script, contains("o''brien.exe"));
-    });
-
-    test('file-description script doubles single quotes in the path', () {
-      final script = AppDiscoveryService.windowsFileDescriptionScript(
-          r"C:\Apps\O'Brien\app.exe");
-      expect(script, contains("O''Brien"));
+    test('resolve script batches every exe into one invocation', () {
+      final script = AppDiscoveryService.windowsResolveAppsScript(
+          ['notepad.exe', 'code.exe', 'notepad++.exe']);
+      expect(script, contains(r"@('notepad.exe','code.exe','notepad++.exe')"));
+      // One loop over the batch, and the description is read in the same
+      // process instead of a second one per app.
+      expect(script, contains('foreach (\$n in \$names)'));
       expect(script, contains('GetVersionInfo'));
+    });
+
+    test('resolve script doubles single quotes in exe names', () {
+      final script =
+          AppDiscoveryService.windowsResolveAppsScript(["o'brien.exe"]);
+      expect(script, contains("'o''brien.exe'"));
+    });
+
+    test('isSafeWindowsExeName accepts plain exe filenames only', () {
+      expect(AppDiscoveryService.isSafeWindowsExeName('notepad.exe'), isTrue);
+      expect(AppDiscoveryService.isSafeWindowsExeName('notepad++.exe'), isTrue);
+      expect(AppDiscoveryService.isSafeWindowsExeName('Sublime Text.exe'),
+          isTrue);
+      expect(AppDiscoveryService.isSafeWindowsExeName('notepad'), isFalse);
+      // OpenWithList values are registry-sourced but still interpolated.
+      expect(AppDiscoveryService.isSafeWindowsExeName(r'a$(x).exe'), isFalse);
+      expect(AppDiscoveryService.isSafeWindowsExeName('a`b.exe'), isFalse);
+      expect(AppDiscoveryService.isSafeWindowsExeName('a";del.exe'), isFalse);
+    });
+
+    test('parseWindowsResolvedApps reads name/path/description triples', () {
+      final apps = AppDiscoveryService.parseWindowsResolvedApps(
+          'notepad.exe\tC:\\Windows\\notepad.exe\tNotepad\r\n'
+          'raw.exe\tC:\\Apps\\raw.exe\t\r\n'
+          'broken-line\r\n'
+          '\r\n');
+      expect(apps.map((a) => a.name), ['Notepad', 'raw']);
+      expect(apps.first.executablePath, r'C:\Windows\notepad.exe');
+      // A binary with no FileDescription falls back to its filename.
+      expect(apps.last.executablePath, r'C:\Apps\raw.exe');
     });
   });
 }
