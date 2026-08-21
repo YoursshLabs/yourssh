@@ -386,6 +386,26 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _updateProvider.startPeriodicChecks();
     _notificationCenter = NotificationCenterProvider();
     _updateProvider.addListener(_pushUpdateNotification);
+    // A secret that could not reach the Keychain is sitting in prefs as
+    // readable text — the user has to know, not just the debug log (#91).
+    _storage.onPlaintextFallback = (key, _) {
+      _notificationCenter.add(AppNotification(
+        type: AppNotificationType.insecureStorage,
+        title: 'Secret stored without encryption',
+        body: 'The system keychain refused to store a credential, so it was '
+            'written to the app preferences file in plain text. '
+            'See Settings → Security.',
+        dedupeKey: 'insecure-storage',
+      ));
+    };
+    // Carry secrets that older releases could only write in cleartext over
+    // into the keychain. Retried on every launch; a no-op once prefs are
+    // clean.
+    _storage.migratePlaintextSecrets().then((moved) {
+      if (moved > 0) {
+        debugPrint('[main] moved $moved secret(s) into the keychain');
+      }
+    });
     // Informational by design: the disconnect item stays in the bell until
     // the user clears it, even if the session later reconnects (spec v1).
     // Covers SSH and RDP sessions alike (AppSession).

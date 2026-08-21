@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +14,7 @@ import '../providers/sync_provider.dart';
 import '../services/sync_service.dart';
 import '../services/sync_code.dart';
 import '../providers/host_provider.dart';
+import '../services/storage_service.dart';
 import '../services/supabase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
@@ -250,6 +253,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ]),
+                const SizedBox(height: 24),
+                const _SecuritySection(),
                 const SizedBox(height: 24),
                 _SyncSection(sync: sync),
                 const SizedBox(height: 24),
@@ -1360,6 +1365,91 @@ class _Section extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Settings → Security. Names the store host passwords and key passphrases
+/// actually live in, and — the point of the section — makes a downgrade to
+/// cleartext prefs visible instead of leaving it in the debug log (issue #91).
+class _SecuritySection extends StatefulWidget {
+  const _SecuritySection();
+
+  @override
+  State<_SecuritySection> createState() => _SecuritySectionState();
+}
+
+class _SecuritySectionState extends State<_SecuritySection> {
+  bool _retrying = false;
+
+  static String get _storeName {
+    if (Platform.isMacOS) return 'macOS Keychain';
+    if (Platform.isWindows) return 'Windows Credential Manager';
+    return 'system keyring';
+  }
+
+  Future<void> _retry(StorageService storage) async {
+    setState(() => _retrying = true);
+    final moved = await storage.migratePlaintextSecrets();
+    if (!mounted) return;
+    setState(() => _retrying = false);
+    final left = storage.plaintextSecretKeys.length;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(left == 0
+          ? 'Moved $moved credential(s) into the $_storeName.'
+          : '$left credential(s) still could not be stored securely.'),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final storage = context.read<StorageService>();
+    return ListenableBuilder(
+      listenable: storage.secretStorageRevision,
+      builder: (context, _) {
+        final plaintext = storage.plaintextSecretKeys.length;
+        final secure = plaintext == 0;
+        return _Section(title: 'Security', children: [
+          _Row(
+            label: 'Credential storage',
+            subtitle: 'Host passwords, sudo passwords and key passphrases are '
+                'kept in the $_storeName',
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(secure ? Icons.lock_outline : Icons.lock_open,
+                    size: 14,
+                    color: secure ? AppColors.accent : AppColors.red),
+                const SizedBox(width: 6),
+                Text(
+                  secure ? 'Encrypted' : 'Plain text',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: secure ? AppColors.accent : AppColors.red,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!secure)
+            _Row(
+              label: '$plaintext credential(s) stored without encryption',
+              subtitle: 'The system keychain refused these, so they were '
+                  'written to the app preferences file as readable text — '
+                  'anything that can read your user account can read them.',
+              trailing: TextButton.icon(
+                icon: _retrying
+                    ? const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.lock_reset, size: 14),
+                label: const Text('Retry', style: TextStyle(fontSize: 12)),
+                onPressed: _retrying ? null : () => _retry(storage),
+              ),
+            ),
+        ]);
+      },
     );
   }
 }

@@ -250,11 +250,13 @@ class _NotificationTile extends StatelessWidget {
       AppNotificationType.sessionDisconnect => Icons.link_off,
       AppNotificationType.agentForwarding => Icons.key_off,
       AppNotificationType.update => Icons.system_update_alt,
+      AppNotificationType.insecureStorage => Icons.lock_open,
     };
     final iconColor = switch (item.type) {
       AppNotificationType.sessionDisconnect ||
       AppNotificationType.agentForwarding =>
         AppColors.orange,
+      AppNotificationType.insecureStorage => AppColors.red,
       AppNotificationType.update => AppColors.accent,
     };
 

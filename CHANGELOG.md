@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Windows: 100% CPU when browsing SFTP files** (#88) — resolving the "Open with" app list ran one `Get-ChildItem "Registry::HKEY_CLASSES_ROOT\*\shell\open\command"` per app, a wildcard enumeration of every class in HKCR, plus a second PowerShell process for the file description — `1 + 2N` processes churning the registry at once. Lookups are now direct `App Paths` / `HKCR\Applications\<exe>` key reads batched into a single PowerShell invocation, and concurrent lookups for the same file type share one query instead of each firing its own
+- **macOS: credentials stored in plain text instead of the Keychain** (#91) — `flutter_secure_storage` defaults to the data-protection Keychain, which needs a keychain-access-group entitlement no ad-hoc-signed build can carry, so every write returned `-34018` and each host password / sudo password / key passphrase silently fell back to cleartext in `~/Library/Preferences/<bundle-id>.plist`. macOS now uses the legacy file Keychain, which takes the same items unsandboxed with no entitlement; secrets already sitting in prefs are moved into the Keychain on launch (written, read back to confirm, then removed — a failed write never destroys the only copy); and a fallback that still happens now raises a notification and shows up in a new **Settings → Security** section with a Retry action, instead of only a debug log line
 
 ---
 
