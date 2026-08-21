@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -35,6 +36,7 @@ import 'services/audit_service.dart';
 import 'services/storage_service.dart';
 import 'services/sync_service.dart';
 import 'services/recording_service.dart';
+import 'services/sandbox_migration.dart';
 import 'services/recording_redaction_policy.dart';
 import 'services/tab_metadata_service.dart';
 import 'screens/main_screen.dart';
@@ -109,7 +111,11 @@ class _SshBridgeAdapter implements SshBridgeDelegate {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  kAppVersion = (await PackageInfo.fromPlatform()).version;
+  final packageInfo = await PackageInfo.fromPlatform();
+  kAppVersion = packageInfo.version;
+  // Before any provider reads prefs: carry data over from the old sandboxed
+  // container, which a previous release stored everything in.
+  await _migrateSandboxContainer(packageInfo.packageName);
   await windowManager.ensureInitialized();
   const windowOptions = WindowOptions(
     size: Size(1280, 800),
@@ -124,6 +130,21 @@ void main() async {
   await hotKeyManager.unregisterAll();
   await NotificationService.init();
   runApp(const YourSSHApp());
+}
+
+/// Fail-soft: a broken migration must never keep the app from starting — the
+/// worst case is a launch that looks like a fresh install.
+Future<void> _migrateSandboxContainer(String bundleId) async {
+  if (!Platform.isMacOS) return;
+  final home = Platform.environment['HOME'];
+  // A container HOME means this build is still sandboxed — nothing to move.
+  if (home == null || home.contains('/Library/Containers/')) return;
+  try {
+    await SandboxMigrationService(homeRoot: home, bundleId: bundleId)
+        .run(await SharedPreferences.getInstance());
+  } catch (e) {
+    debugPrint('[main] sandbox migration failed: $e');
+  }
 }
 
 class YourSSHApp extends StatefulWidget {

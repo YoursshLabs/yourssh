@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import '../models/local_entry.dart';
+import '../util/fs_error.dart';
 
 enum LocalFilePanelLoadState { idle, loading, loaded, error }
 
@@ -146,7 +147,7 @@ class LocalFilePanelProvider extends ChangeNotifier {
     } catch (e) {
       if (token != _fetchToken) return;
       loadState = LocalFilePanelLoadState.error;
-      errorMessage = e.toString();
+      errorMessage = describeFileSystemError(e, path: path);
     }
     notifyListeners();
   }
