@@ -51,6 +51,17 @@ Enter API keys for AI providers:
 
 Select the default model per provider. Keys are stored in the OS keychain.
 
+## Security
+
+Shows where YourSSH keeps your host passwords, sudo passwords and key passphrases: the **macOS Keychain**, the **Windows Credential Manager**, or the system keyring on Linux. Everything else (host list, settings, known hosts) is plain configuration and lives in the app preferences.
+
+- **Encrypted** — every credential is in the OS secure store. This is the normal state.
+- **Plain text** — the OS secure store refused one or more credentials, so they were written to the app preferences file as readable text. Anything that can read your user account can read them. The row tells you how many, and **Retry** attempts to move them back into the secure store. A credential that cannot be moved is left where it is rather than deleted, and YourSSH retries automatically on the next launch.
+
+The first time a credential has to be stored unencrypted, it is also reported in the notification bell, so the downgrade is never silent.
+
+Secrets are always written to the secure store first and only fall back to preferences if that write fails — and a successful write purges any stale plain-text copy left over from an earlier version.
+
 ## Sync
 
 See [Sync](User-Guide-Sync) for full setup instructions.

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+---
+
+## [0.1.40] — 2026-08-21
+
+### Fixed
+- **macOS: local file panel could not list any real folder** (#89) — the app shipped with `com.apple.security.app-sandbox` while holding only `files.user-selected.read-write`, so `HOME` was rewritten to `~/Library/Containers/<bundle-id>/Data`, where `Downloads`, `Desktop`, `Pictures`, `Movies` and `Music` exist only as symlinks that raise `EPERM`. The local panel starts at `HOME`, so every listing failed — and `~/.ssh` was unreachable, so existing user SSH keys could not be used at all. The sandbox is now dropped (this is a DMG/zip app, not a Mac App Store one) and folder access is governed by macOS privacy prompts explained by the `NS*FolderUsageDescription` strings; `SandboxMigrationService` carries prefs, the audit database and JS plugins over from the old container on first launch. Filesystem failures in the local panel also read as sentences now instead of raw exceptions (`describeFileSystemError`)
+- **macOS: credentials stored in plain text instead of the Keychain** (#91) — `flutter_secure_storage` defaults to the data-protection Keychain, which needs a keychain-access-group entitlement no ad-hoc-signed build can carry, so every write returned `-34018` and each host password / sudo password / key passphrase silently fell back to cleartext in `~/Library/Preferences/<bundle-id>.plist`. macOS now uses the legacy file Keychain, which takes the same items unsandboxed with no entitlement; secrets already sitting in prefs are moved into the Keychain on launch (written, read back to confirm, then removed — a failed write never destroys the only copy); and a fallback that still happens now raises a notification and shows up in a new **Settings → Security** section with a Retry action, instead of only a debug log line
+- **Windows: 100% CPU when browsing SFTP files** (#88) — resolving the "Open with" app list ran one `Get-ChildItem "Registry::HKEY_CLASSES_ROOT\*\shell\open\command"` per app, a wildcard enumeration of every class in HKCR, plus a second PowerShell process for the file description and a `where.exe` call — `1 + 3N` processes churning the registry at once. Lookups are now direct `App Paths` / `HKCR\Applications\<exe>` key reads batched into a single PowerShell invocation, so a lookup costs two processes regardless of how many apps are registered, and concurrent lookups for the same file type share one query instead of each firing its own
+
+---
+
 ## [0.1.39] — 2026-06-24
 
 ### Added
@@ -661,6 +674,7 @@ Initial release of YourSSH — a cross-platform SSH client for macOS, Windows, a
 - **Host management** — CRUD for SSH host profiles with `StorageService`
 - **Known hosts** — TOFU dialog for host-key verification; `KnownHostsProvider`
 
+[0.1.40]: https://github.com/YoursshLabs/yourssh/compare/v0.1.39...v0.1.40
 [0.1.39]: https://github.com/YoursshLabs/yourssh/compare/v0.1.38...v0.1.39
 [0.1.38]: https://github.com/YoursshLabs/yourssh/compare/v0.1.37...v0.1.38
 [0.1.37]: https://github.com/YoursshLabs/yourssh/compare/v0.1.36...v0.1.37

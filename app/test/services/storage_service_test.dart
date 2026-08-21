@@ -13,12 +13,18 @@ void main() {
   late Map<String, String> secureStore;
   late int writeCallCount;
   late bool secureFailsNextWrite;
+  late bool secureFailsAllWrites;
+  /// Simulates a store that accepts the write but hands back something else,
+  /// so migratePlaintextSecrets' read-back guard can be exercised.
+  late bool secureCorruptsReads;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     secureStore = {};
     writeCallCount = 0;
     secureFailsNextWrite = false;
+    secureFailsAllWrites = false;
+    secureCorruptsReads = false;
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -26,13 +32,14 @@ void main() {
       switch (call.method) {
         case 'write':
           writeCallCount++;
-          if (secureFailsNextWrite) {
+          if (secureFailsAllWrites || secureFailsNextWrite) {
             secureFailsNextWrite = false;
             throw PlatformException(code: 'kSecMissingEntitlement');
           }
           secureStore[args['key'] as String] = args['value'] as String;
           return null;
         case 'read':
+          if (secureCorruptsReads) return null;
           return secureStore[args['key'] as String];
         case 'delete':
           secureStore.remove(args['key'] as String);
@@ -150,6 +157,164 @@ void main() {
       await svc.deleteSudoPassword('h1');
       expect(secureStore.containsKey('sudopw_h1'), isFalse);
       expect(await svc.loadSudoPassword('h1'), isNull);
+    });
+  });
+
+  group('macOS keychain selection (issue #91)', () {
+    test('uses the legacy file keychain, not the data-protection one', () {
+      // The data-protection keychain needs a keychain-access-group
+      // entitlement, which an ad-hoc-signed build cannot carry: every
+      // SecItemAdd returned -34018 and each secret silently landed in
+      // SharedPreferences as readable text.
+      expect(
+        StorageService.macOsKeychainOptions.params['useDataProtectionKeyChain'],
+        'false',
+      );
+      expect(StorageService.macOsKeychainOptions.params['accountName'],
+          'yourssh');
+    });
+  });
+
+  group('plaintext-secret carry-over (issue #91)', () {
+    test('classifies which prefs keys hold secrets', () {
+      expect(StorageService.isSecretPrefsKey('pw_host-1'), isTrue);
+      expect(StorageService.isSecretPrefsKey('sudopw_host-1'), isTrue);
+      expect(StorageService.isSecretPrefsKey('pp_key-1'), isTrue);
+      expect(StorageService.isSecretPrefsKey('sync_passphrase'), isTrue);
+      expect(StorageService.isSecretPrefsKey('yourssh.hosts'), isFalse);
+      expect(StorageService.isSecretPrefsKey('auto_reconnect'), isFalse);
+    });
+
+    test('moves cleartext secrets into the secure store and clears prefs',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'pw_host-1': 'hostpass',
+        'sudopw_host-1': 'sudopass',
+        'pp_key-1': 'keyphrase',
+        'sync_passphrase': 'syncphrase',
+        'yourssh.hosts': '[]', // not a secret — must be left alone
+      });
+      final svc = StorageService();
+
+      expect(await svc.migratePlaintextSecrets(), 4);
+
+      final prefs = await SharedPreferences.getInstance();
+      for (final key in ['pw_host-1', 'sudopw_host-1', 'pp_key-1',
+        'sync_passphrase']) {
+        expect(prefs.getString(key), isNull, reason: '$key left in prefs');
+      }
+      expect(prefs.getString('yourssh.hosts'), '[]');
+      expect(secureStore['pw_host-1'], 'hostpass');
+      expect(secureStore['sudopw_host-1'], 'sudopass');
+      expect(secureStore['pp_key-1'], 'keyphrase');
+      expect(secureStore['sync_passphrase'], 'syncphrase');
+      expect(svc.hasPlaintextSecrets, isFalse);
+    });
+
+    test('keeps the prefs copy when the secure write fails', () async {
+      SharedPreferences.setMockInitialValues({'pw_host-1': 'hostpass'});
+      secureFailsAllWrites = true;
+      final svc = StorageService();
+
+      expect(await svc.migratePlaintextSecrets(), 0);
+
+      // Losing the only copy of a password would be worse than storing it
+      // in cleartext, so the prefs entry stays put.
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('pw_host-1'), 'hostpass');
+      expect(svc.plaintextSecretKeys, {'pw_host-1'});
+    });
+
+    test('keeps the prefs copy when the write cannot be read back', () async {
+      SharedPreferences.setMockInitialValues({'pw_host-1': 'hostpass'});
+      secureCorruptsReads = true;
+      final svc = StorageService();
+
+      expect(await svc.migratePlaintextSecrets(), 0);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('pw_host-1'), 'hostpass');
+      expect(svc.plaintextSecretKeys, {'pw_host-1'});
+    });
+
+    test('a value already in the secure store wins over the prefs copy',
+        () async {
+      // _loadSecret prefers the secure store, so the prefs entry is stale —
+      // rewriting it would resurrect an old password.
+      SharedPreferences.setMockInitialValues({'pw_host-1': 'stale'});
+      secureStore['pw_host-1'] = 'current';
+      final svc = StorageService();
+
+      expect(await svc.migratePlaintextSecrets(), 1);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('pw_host-1'), isNull);
+      expect(secureStore['pw_host-1'], 'current');
+    });
+
+    test('a retry after the store recovers completes the move', () async {
+      SharedPreferences.setMockInitialValues({'pw_host-1': 'hostpass'});
+      secureFailsAllWrites = true;
+      final svc = StorageService();
+      await svc.migratePlaintextSecrets();
+      expect(svc.hasPlaintextSecrets, isTrue);
+
+      secureFailsAllWrites = false;
+      expect(await svc.migratePlaintextSecrets(), 1);
+
+      expect(svc.hasPlaintextSecrets, isFalse);
+      expect(secureStore['pw_host-1'], 'hostpass');
+    });
+  });
+
+  group('plaintext fallback is reported, not silent (issue #91)', () {
+    test('a fallback write marks the key and notifies', () async {
+      final reported = <String>[];
+      final svc = StorageService()..onPlaintextFallback = (k, _) =>
+          reported.add(k);
+      var revisions = 0;
+      svc.secretStorageRevision.addListener(() => revisions++);
+
+      secureFailsNextWrite = true;
+      await svc.savePassword('host-1', 'fallback-secret');
+
+      expect(reported, ['pw_host-1']);
+      expect(svc.plaintextSecretKeys, {'pw_host-1'});
+      expect(svc.hasPlaintextSecrets, isTrue);
+      expect(revisions, 1);
+    });
+
+    test('a later successful write clears the flag', () async {
+      final svc = StorageService();
+      secureFailsNextWrite = true;
+      await svc.savePassword('host-1', 'fallback-secret');
+      expect(svc.hasPlaintextSecrets, isTrue);
+
+      await svc.savePassword('host-1', 'now-secure');
+
+      expect(svc.hasPlaintextSecrets, isFalse);
+      expect(secureStore['pw_host-1'], 'now-secure');
+    });
+
+    test('deleting the secret clears the flag', () async {
+      final svc = StorageService();
+      secureFailsNextWrite = true;
+      await svc.savePassword('host-1', 'fallback-secret');
+
+      await svc.deletePassword('host-1');
+
+      expect(svc.hasPlaintextSecrets, isFalse);
+    });
+
+    test('the same failing key is only reported once', () async {
+      var calls = 0;
+      final svc = StorageService()..onPlaintextFallback = (_, _) => calls++;
+      secureFailsAllWrites = true;
+
+      await svc.savePassword('host-1', 'a');
+      await svc.savePassword('host-1', 'b');
+
+      expect(calls, 1);
     });
   });
 }

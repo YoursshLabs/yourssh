@@ -2,10 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
-	<key>com.apple.security.files.user-selected.read-write</key>
-	<true/>
+	<!-- No com.apple.security.app-sandbox on purpose. The sandbox rewrites HOME
+	     to ~/Library/Containers/<bundle-id>/Data, where ~/Downloads, ~/Desktop
+	     and ~/.ssh are only symlinks that raise EPERM ("Operation not
+	     permitted") — an SSH/SFTP client cannot browse the local filesystem or
+	     read the user's keys through that. Apple ships no entitlement for
+	     Desktop/Documents, and the exception entitlements that would cover
+	     them (keychain-access-groups, temporary-exception.*) are restricted:
+	     an ad-hoc-signed build claiming one is SIGKILLed at launch, and this
+	     app ships unsigned via DMG/zip, not through the Mac App Store.
+	     Folder access is instead governed by macOS privacy (TCC) prompts —
+	     see the NS*FolderUsageDescription strings in Info.plist. Existing
+	     container data is carried over by SandboxMigrationService. -->
 	<key>com.apple.security.network.client</key>
 	<true/>
 	<key>com.apple.security.network.server</key>

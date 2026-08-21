@@ -30,5 +30,18 @@
 	<string>NSApplication</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Used to scan QR codes for P2P host transfer</string>
+	<!-- The app is unsandboxed (see Release.entitlements), so these strings are
+	     what macOS shows when the local file panel, key import or an SFTP
+	     transfer first touches a privacy-protected folder. -->
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Used to browse and transfer files in your Downloads folder</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Used to browse and transfer files on your Desktop</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Used to browse and transfer files in your Documents folder, and to store generated SSH keys and session recordings</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>Used to browse and transfer files on removable drives</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>Used to browse and transfer files on network volumes</string>
 </dict>
 </plist>

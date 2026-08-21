@@ -8,6 +8,7 @@ import '../providers/local_file_panel_provider.dart';
 import '../services/app_discovery_service.dart';
 import '../util/app_launcher.dart';
 import '../util/file_mode.dart';
+import '../util/fs_error.dart';
 import 'entry_context_menu.dart';
 import 'path_breadcrumb.dart';
 import 'permissions_dialog.dart';
@@ -61,7 +62,10 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
       await Directory(newPath).create();
       if (mounted) await widget.provider.reload();
     } catch (e) {
-      if (mounted) _showError('Failed to create folder: $e');
+      if (mounted) {
+        _showError('Failed to create folder: '
+            '${describeFileSystemError(e, path: newPath)}');
+      }
     }
   }
 
@@ -92,7 +96,10 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
       }
       if (mounted) await widget.provider.reload();
     } catch (e) {
-      if (mounted) _showError('Rename failed: $e');
+      if (mounted) {
+        _showError(
+            'Rename failed: ${describeFileSystemError(e, path: entry.path)}');
+      }
     }
   }
 
@@ -136,7 +143,10 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
       }
       if (mounted) await widget.provider.reload();
     } catch (e) {
-      if (mounted) _showError('Delete failed: $e');
+      if (mounted) {
+        _showError('Delete failed: '
+            '${describeFileSystemError(e, path: entries.first.path)}');
+      }
     }
   }
 
@@ -170,7 +180,10 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
       await chmodLocal(entry.path, result.mode, recursive: result.recursive);
       if (mounted) await widget.provider.reload();
     } catch (e) {
-      if (mounted) _showError('chmod failed: $e');
+      if (mounted) {
+        _showError(
+            'chmod failed: ${describeFileSystemError(e, path: entry.path)}');
+      }
     }
   }
 

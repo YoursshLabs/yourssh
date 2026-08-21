@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -35,6 +36,7 @@ import 'services/audit_service.dart';
 import 'services/storage_service.dart';
 import 'services/sync_service.dart';
 import 'services/recording_service.dart';
+import 'services/sandbox_migration.dart';
 import 'services/recording_redaction_policy.dart';
 import 'services/tab_metadata_service.dart';
 import 'screens/main_screen.dart';
@@ -109,7 +111,11 @@ class _SshBridgeAdapter implements SshBridgeDelegate {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  kAppVersion = (await PackageInfo.fromPlatform()).version;
+  final packageInfo = await PackageInfo.fromPlatform();
+  kAppVersion = packageInfo.version;
+  // Before any provider reads prefs: carry data over from the old sandboxed
+  // container, which a previous release stored everything in.
+  await _migrateSandboxContainer(packageInfo.packageName);
   await windowManager.ensureInitialized();
   const windowOptions = WindowOptions(
     size: Size(1280, 800),
@@ -124,6 +130,21 @@ void main() async {
   await hotKeyManager.unregisterAll();
   await NotificationService.init();
   runApp(const YourSSHApp());
+}
+
+/// Fail-soft: a broken migration must never keep the app from starting — the
+/// worst case is a launch that looks like a fresh install.
+Future<void> _migrateSandboxContainer(String bundleId) async {
+  if (!Platform.isMacOS) return;
+  final home = Platform.environment['HOME'];
+  // A container HOME means this build is still sandboxed — nothing to move.
+  if (home == null || home.contains('/Library/Containers/')) return;
+  try {
+    await SandboxMigrationService(homeRoot: home, bundleId: bundleId)
+        .run(await SharedPreferences.getInstance());
+  } catch (e) {
+    debugPrint('[main] sandbox migration failed: $e');
+  }
 }
 
 class YourSSHApp extends StatefulWidget {
@@ -365,6 +386,26 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _updateProvider.startPeriodicChecks();
     _notificationCenter = NotificationCenterProvider();
     _updateProvider.addListener(_pushUpdateNotification);
+    // A secret that could not reach the Keychain is sitting in prefs as
+    // readable text — the user has to know, not just the debug log (#91).
+    _storage.onPlaintextFallback = (key, _) {
+      _notificationCenter.add(AppNotification(
+        type: AppNotificationType.insecureStorage,
+        title: 'Secret stored without encryption',
+        body: 'The system keychain refused to store a credential, so it was '
+            'written to the app preferences file in plain text. '
+            'See Settings → Security.',
+        dedupeKey: 'insecure-storage',
+      ));
+    };
+    // Carry secrets that older releases could only write in cleartext over
+    // into the keychain. Retried on every launch; a no-op once prefs are
+    // clean.
+    _storage.migratePlaintextSecrets().then((moved) {
+      if (moved > 0) {
+        debugPrint('[main] moved $moved secret(s) into the keychain');
+      }
+    });
     // Informational by design: the disconnect item stays in the bell until
     // the user clears it, even if the session later reconnects (spec v1).
     // Covers SSH and RDP sessions alike (AppSession).

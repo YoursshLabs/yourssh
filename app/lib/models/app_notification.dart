@@ -1,5 +1,10 @@
 /// In-app notification types surfaced by the bell in the top tab bar.
-enum AppNotificationType { update, sessionDisconnect, agentForwarding }
+enum AppNotificationType {
+  update,
+  sessionDisconnect,
+  agentForwarding,
+  insecureStorage,
+}
 
 /// One item in the in-app notification center. In-memory only — not
 /// persisted across restarts (the debounced update check recreates the
