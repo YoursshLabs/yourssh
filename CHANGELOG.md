@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Windows: 100% CPU when browsing SFTP files** (#88) — resolving the "Open with" app list ran one `Get-ChildItem "Registry::HKEY_CLASSES_ROOT\*\shell\open\command"` per app, a wildcard enumeration of every class in HKCR, plus a second PowerShell process for the file description — `1 + 2N` processes churning the registry at once. Lookups are now direct `App Paths` / `HKCR\Applications\<exe>` key reads batched into a single PowerShell invocation, and concurrent lookups for the same file type share one query instead of each firing its own
+
+---
+
 ## [0.1.38] — 2026-06-23
 
 ### Added
