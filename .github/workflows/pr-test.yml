@@ -16,7 +16,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  # The app suite needs no Rust at all: nothing under app/test loads the native
+  # bridge, so this runs beside the crate jobs instead of behind them.
+  app:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -24,28 +26,6 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            packages/yourssh_rdp/rust
-            packages/yourssh_vnc/rust
-
-      # --release so the test build and build.sh's `cargo build --release`
-      # share one compiled profile instead of compiling the IronRDP tree twice.
-      - name: Rust tests (yourssh_rdp)
-        run: cargo test --release --manifest-path packages/yourssh_rdp/rust/Cargo.toml
-
-      - name: Rust tests (yourssh_vnc)
-        run: cargo test --release --manifest-path packages/yourssh_vnc/rust/Cargo.toml
-
-      - name: Build RDP native library for Dart tests
-        run: bash packages/yourssh_rdp/build.sh
-
-      - name: Build VNC native library for Dart tests
-        run: bash packages/yourssh_vnc/build.sh
 
       - name: Install Linux build dependencies
         run: |
@@ -68,10 +48,54 @@ jobs:
         working-directory: app
         run: flutter test
 
-      - name: Dart tests (yourssh_rdp)
-        working-directory: packages/yourssh_rdp
+  # One job per Rust crate. The cargo tests, build.sh and the Dart bridge tests
+  # stay together on purpose: both cargo invocations use --release, so the
+  # library build reuses the test build's compilation. Splitting them across jobs
+  # would compile the IronRDP / vnc-rs tree twice.
+  bridge:
+    name: bridge (${{ matrix.crate }})
+    runs-on: ubuntu-latest
+    strategy:
+      # A broken RDP crate should not hide a broken VNC crate.
+      fail-fast: false
+      matrix:
+        crate: [yourssh_rdp, yourssh_vnc]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/${{ matrix.crate }}/rust
+
+      - name: Rust tests
+        run: cargo test --release --manifest-path packages/${{ matrix.crate }}/rust/Cargo.toml
+
+      - name: Build native library for Dart tests
+        run: bash packages/${{ matrix.crate }}/build.sh
+
+      - name: Dart tests
+        working-directory: packages/${{ matrix.crate }}
         run: flutter test
 
-      - name: Dart tests (yourssh_vnc)
-        working-directory: packages/yourssh_vnc
-        run: flutter test
+  # Aggregate gate. master's branch protection requires a check literally named
+  # "test", so that name has to survive the split — this job carries it, and it
+  # is red unless every job above is green. `always()` matters: without it the
+  # job would be skipped when something fails, leaving the required check pending
+  # forever instead of failing.
+  test:
+    name: test
+    needs: [app, bridge]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check job results
+        run: |
+          echo "app=${{ needs.app.result }} bridge=${{ needs.bridge.result }}"
+          [ "${{ needs.app.result }}" = "success" ] || exit 1
+          [ "${{ needs.bridge.result }}" = "success" ] || exit 1
