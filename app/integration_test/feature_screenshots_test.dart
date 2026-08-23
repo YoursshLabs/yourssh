@@ -11,12 +11,14 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/main.dart' as app;
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/services/storage_service.dart';
+import 'package:yourssh/widgets/theme_picker.dart';
 
 const _outDir = '/Users/thangnguyen/Projects/Personal/yourssh/screenshots';
 
@@ -226,6 +228,17 @@ void main() {
         await tester.drag(scrollFinder.first, const Offset(0, -300));
         await tester.pump(const Duration(milliseconds: 300));
         await _snap(tester, '$_g5/02-settings-terminal.png');
+
+        // Terminal theme picker dialog (visual swatch grid)
+        final themeBtn = find.byType(ThemePickerButton);
+        if (themeBtn.evaluate().isNotEmpty) {
+          await tester.tap(themeBtn.first);
+          await tester.pump(const Duration(milliseconds: 600));
+          await _snap(tester, '$_g5/05-terminal-theme-picker.png');
+          // Close the dialog so the following drags hit the settings scroll view
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pump(const Duration(milliseconds: 400));
+        }
 
         // Scroll more to show Sync section
         await tester.drag(scrollFinder.first, const Offset(0, -400));

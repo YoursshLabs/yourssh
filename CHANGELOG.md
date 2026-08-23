@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **"YourSSH Dark" terminal theme** (catalog 44 → 45) — the app's own color scheme, first in the visual picker and the fallback an unknown theme name resolves to: a neutral charcoal base with a deliberately desaturated ANSI set so long log output stays flat and readable, and azure/teal accents on the cursor, selection, and current search hit. The stored default for existing and new installs is unchanged (Dracula).
+
 ### Fixed
 - **Local terminal tabs ignored the color theme** — `LocalTerminalPane` built xterm's `TerminalView` without a `theme:` argument, so every local shell rendered in xterm's built-in default palette and the Settings → Terminal color theme silently applied to SSH tabs only. The pane now resolves the global theme (local sessions have no host, so no per-host override applies).
 

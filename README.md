@@ -132,7 +132,7 @@ sudo dpkg -r yourssh
 
 ### Design
 - Dark-only interface with a cohesive green-accent palette
-- **44 terminal color themes** with a visual picker (Dracula, Solarized, Gruvbox, One Dark, Nord, Kanagawa, Tokyo Night, Flexoki, and more)
+- **45 terminal color themes** with a visual picker (YourSSH Dark, Dracula, Solarized, Gruvbox, One Dark, Nord, Kanagawa, Tokyo Night, Flexoki, and more)
 - 7 bundled monospace fonts: 6 Powerline-compatible (DejaVu, Inconsolata, Meslo LGS, Source Code Pro, Ubuntu Mono, Roboto Mono) + MesloLGS NF (Nerd Font)
 - Network stats overlay — real-time traffic counter widget per session
 - Minimum window size enforced (800×600); fully resizable
@@ -212,6 +212,7 @@ sudo dpkg -r yourssh
   </tr>
   <tr>
     <td align="center"><b>Updates</b><br/><img src="screenshots/05-settings/04-settings-updates.png"/></td>
+    <td align="center"><b>Terminal Theme Picker</b><br/><img src="screenshots/05-settings/05-terminal-theme-picker.png"/></td>
   </tr>
 </table>
 
