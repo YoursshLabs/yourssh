@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Screenshot harness wrote two shots to stale paths** — the recording-library and audit-log captures went to `screenshots/09-recording/` and a flat `screenshots/audit-log.png`, neither of which the README reads, so those two images silently went stale while every run left untracked files behind. Both now write into `screenshots/10-audit-recording/` under the filenames the README references. The output root is also derived from the repo (walked up from the CWD) instead of one developer's absolute home path, and the run now fails if the README references a screenshot that is not on disk.
+
 ### Changed
 - **New app icon** — the launcher artwork is redrawn as a vector master instead of hand-exported bitmaps: an amber squircle (superellipse corners) with a chunky `>_` prompt glyph that stays legible down to 16 px. `tool/gen_app_icons.py` regenerates every platform target from `assets/branding/*.svg` — macOS iconset (inset to Apple's 824/1024 grid), a 16–256 px Windows `.ico`, Android adaptive layers (gradient background drawable, foreground inside the 66dp safe circle, plus an Android 13+ themed/monochrome layer), and the in-app / README logos
 

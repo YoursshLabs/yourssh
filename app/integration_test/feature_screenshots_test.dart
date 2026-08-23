@@ -18,16 +18,34 @@ import 'package:yourssh/main.dart' as app;
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/services/storage_service.dart';
 
-const _outDir = '/Users/thangnguyen/Projects/Personal/yourssh/screenshots';
+/// Repo root, walked up from the CWD — `flutter test -d macos` runs from
+/// `app/`, but the harness is also invoked from the repo root. `.git` is a
+/// directory in a normal clone and a file inside a worktree.
+String _findRepoRoot() {
+  var dir = Directory.current;
+  while (true) {
+    final marker = '${dir.path}/.git';
+    if (Directory(marker).existsSync() || File(marker).existsSync()) {
+      return dir.path;
+    }
+    final parent = dir.parent;
+    if (parent.path == dir.path) {
+      throw StateError('no .git found above ${Directory.current.path}');
+    }
+    dir = parent;
+  }
+}
+
+final _outDir = '${_findRepoRoot()}/screenshots';
 
 // Screenshot folder groups
-const _g1 = '$_outDir/01-terminal-ssh';
-const _g2 = '$_outDir/02-sftp';
-const _g3 = '$_outDir/03-port-forwarding';
-const _g4 = '$_outDir/04-credentials-security';
-const _g5 = '$_outDir/05-settings';
-const _g6 = '$_outDir/06-plugins';
-const _g9 = '$_outDir/09-recording';
+final _g1 = '$_outDir/01-terminal-ssh';
+final _g2 = '$_outDir/02-sftp';
+final _g3 = '$_outDir/03-port-forwarding';
+final _g4 = '$_outDir/04-credentials-security';
+final _g5 = '$_outDir/05-settings';
+final _g6 = '$_outDir/06-plugins';
+final _g10 = '$_outDir/10-audit-recording';
 
 Future<void> _snap(WidgetTester tester, String path) async {
   await tester.pump(const Duration(milliseconds: 200));
@@ -65,12 +83,28 @@ Future<void> _navTo(WidgetTester tester, String label) async {
   await tester.pump(const Duration(milliseconds: 400));
 }
 
+/// Fail the run if README references a screenshot that is not on disk.
+void _expectReadmeScreenshotsExist() {
+  final readme = File('${_findRepoRoot()}/README.md');
+  if (!readme.existsSync()) return;
+  final referenced = RegExp(r'screenshots/[^"\s)]+\.png')
+      .allMatches(readme.readAsStringSync())
+      .map((m) => m.group(0)!)
+      .toSet();
+  final missing = referenced
+      .where((rel) => !File('${_findRepoRoot()}/$rel').existsSync())
+      .toList()
+    ..sort();
+  expect(missing, isEmpty,
+      reason: 'README references screenshots that do not exist: $missing');
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('capture feature screenshots', (tester) async {
     // Create output directories
-    for (final d in [_g1, _g2, _g3, _g4, _g5, _g6, _g9]) {
+    for (final d in [_g1, _g2, _g3, _g4, _g5, _g6, _g10]) {
       Directory(d).createSync(recursive: true);
     }
 
@@ -246,18 +280,22 @@ void main() {
       // ── 9. RECORDING ─────────────────────────────────────────────────────
       await _navTo(tester, 'Recordings');
       await tester.pump(const Duration(milliseconds: 500));
-      await _snap(tester, '$_g9/01-recording-library.png');
+      await _snap(tester, '$_g10/02-recording-library.png');
 
       // ── Audit Log ────────────────────────────────────────────────────────
       await _navTo(tester, 'Audit Log');
       await tester.pump(const Duration(milliseconds: 500));
-      await _snap(tester, '$_outDir/audit-log.png');
+      await _snap(tester, '$_g10/01-audit-log.png');
 
       // ── Back to Hosts — dashboard with RDP badge visible ─────────────────
       await _navTo(tester, 'Hosts');
       await tester.pump(const Duration(milliseconds: 400));
       await _snap(tester, '$_g1/04-dashboard-with-rdp-badge.png');
 
+      // Every screenshot the README displays must exist on disk. Snap paths
+      // have drifted from the README's before (the audit-log and recording
+      // shots wrote to folders nobody reads), and nothing caught it.
+      _expectReadmeScreenshotsExist();
     } finally {
       // Restore user data
       if (backupHosts != null) {
