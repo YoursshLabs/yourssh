@@ -12,7 +12,6 @@
 #include <hotkey_manager_windows/hotkey_manager_windows_plugin_c_api.h>
 #include <local_auth_windows/local_auth_plugin.h>
 #include <local_notifier/local_notifier_plugin.h>
-#include <passkeys_windows/passkeys_windows_plugin.h>
 #include <screen_retriever/screen_retriever_plugin.h>
 #include <sqlite3_flutter_libs/sqlite3_flutter_libs_plugin.h>
 #include <url_launcher_windows/url_launcher_windows.h>
@@ -31,8 +30,6 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("LocalAuthPlugin"));
   LocalNotifierPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("LocalNotifierPlugin"));
-  PasskeysWindowsPluginRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("PasskeysWindowsPlugin"));
   ScreenRetrieverPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("ScreenRetrieverPlugin"));
   Sqlite3FlutterLibsPluginRegisterWithRegistrar(

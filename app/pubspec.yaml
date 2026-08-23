@@ -61,7 +61,11 @@ dependencies:
   # WebView for code editor
   webview_flutter: ^4.8.0
 
-  # Supabase backend integration
+  # Supabase backend integration.
+  # Held at 2.12.x by the lockfile on purpose (#96): 2.13+ depends on passkeys,
+  # whose passkeys_darwin plugin needs macOS 13.5 while the Runner targets 10.15,
+  # which breaks `flutter build macos`. Bumping this means raising
+  # MACOSX_DEPLOYMENT_TARGET in the same change.
   supabase_flutter: ^2.5.0
 
   # HTTP client for Supabase migration API calls
