@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Every SSH / SFTP / port-forward connection needs this. Flutter only
+         declares it in the debug and profile manifests, so without it here a
+         release build installs with no network access at all. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Camera is used only to scan the desktop's P2P sync QR code. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <application
