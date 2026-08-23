@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -48,6 +50,23 @@ class _FakeSessionProvider extends SessionProvider {
   }
 }
 
+/// Fake whose `connectAny` future stays pending, which is what the real one
+/// does: SessionProvider._doConnect awaits SshService.openShell, and that only
+/// completes when the shell closes. A caller that awaits it before navigating
+/// would sit on the host list for the whole session.
+class _PendingSessionProvider extends _FakeSessionProvider {
+  _PendingSessionProvider(super.sessions);
+
+  @override
+  Future<AppSession?> connectAny(Host host, {String? initialCommand}) {
+    connectAnyCalls++;
+    // Mirror the real provider: the session is registered synchronously…
+    setSessions([..._sessions, SshSession(host: host)]);
+    // …while the future itself stays pending until the shell closes.
+    return Completer<AppSession?>().future;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Helper: pumps MobileHostsScreen inside a Navigator with all required
 // providers so that navigation to MobileTerminalScreen works in tests.
@@ -57,6 +76,7 @@ Future<({_FakeSessionProvider sp, HostProvider hp})> _pump(
   WidgetTester tester, {
   List<Host> hosts = const [],
   List<SshSession> sessions = const [],
+  _FakeSessionProvider Function(List<SshSession>)? provider,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final hp = HostProvider(StorageService());
@@ -64,7 +84,7 @@ Future<({_FakeSessionProvider sp, HostProvider hp})> _pump(
     await hp.addHost(h);
   }
 
-  final sp = _FakeSessionProvider(sessions);
+  final sp = (provider ?? _FakeSessionProvider.new)(sessions.toList());
   final probe = HostReachabilityProbe(connector: (_, _, _) async {});
   final settings = SettingsProvider();
 
@@ -104,6 +124,28 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
+    expect(find.byType(MobileTerminalScreen), findsOneWidget);
+  });
+
+  // ---------------------------------------------------------------------------
+  // T1b: The terminal must open while the connection is still live
+  // ---------------------------------------------------------------------------
+  testWidgets('tapping a host opens the terminal without waiting for the '
+      'session to end', (tester) async {
+    final host = Host(label: 'prod', host: '10.0.0.1', username: 'root');
+
+    // No live session yet, so the tap takes the connect path.
+    final result = await _pump(
+      tester,
+      hosts: [host],
+      provider: _PendingSessionProvider.new,
+    );
+
+    await tester.tap(find.byType(HostCard));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(result.sp.connectAnyCalls, 1);
     expect(find.byType(MobileTerminalScreen), findsOneWidget);
   });
 

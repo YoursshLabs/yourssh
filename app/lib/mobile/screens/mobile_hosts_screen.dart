@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -347,11 +349,16 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
       return;
     }
 
-    // No live session — connect, then navigate.
-    await sp.connectAny(host);
+    // No live session — start connecting and navigate straight away. The
+    // connect future must NOT be awaited: SessionProvider._doConnect awaits
+    // SshService.openShell, which only completes once the shell closes, so
+    // awaiting it would strand the user on the host list for the whole session.
+    // The session is registered synchronously, so the terminal can pick it up
+    // now and render its own connecting state.
+    unawaited(sp.connectAny(host));
     if (!mounted) return;
 
-    // After connectAny the session is in sshSessions; find the freshest one.
+    // The session is in sshSessions already; find the freshest one.
     final after = sp.sshSessions
         .where((s) => s.host.id == host.id)
         .toList();
