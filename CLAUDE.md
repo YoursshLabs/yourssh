@@ -24,6 +24,24 @@ cd app && flutter test test/services/sync_service_test.dart   # single test file
 cd app && flutter test --name "pattern"                       # filter by test name
 ```
 
+## App icon
+
+Every platform icon is generated from the vector masters in `assets/branding/` —
+never hand-edit a PNG/ICO under `app/`:
+
+```bash
+python3 tool/gen_app_icons.py   # macOS only (rasterises via sips), idempotent
+```
+
+`yourssh_icon.svg` is the composite artwork (macOS / Windows / legacy Android
+launcher / in-app); `yourssh_icon_{background,foreground,monochrome}.svg` are the
+Android adaptive-icon layers (the foreground glyph is scaled to 0.95 so it stays
+inside the 66dp-of-108dp safe circle under any OEM mask); `yourssh_mark.svg` is
+the bare glyph for docs. The Android background is emitted as a gradient
+`drawable/ic_launcher_background.xml` (sharp at any density, ~380 KB smaller than
+five PNG buckets) with its colours read out of the master SVG. macOS rasters are
+inset to 824/1024 per Apple's icon grid.
+
 ## Native RDP library
 
 ```bash
