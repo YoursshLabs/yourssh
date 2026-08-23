@@ -9,11 +9,17 @@ on:
       - develop
       - master
 
+# One run per PR: a push supersedes whatever is still compiling for that PR
+# instead of queueing another full Rust + Flutter suite beside it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: subosito/flutter-action@v2
         with:
