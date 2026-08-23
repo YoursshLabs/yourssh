@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **"YourSSH Dark" terminal theme** (catalog 44 → 45) — the app's own color scheme, first in the visual picker and the fallback an unknown theme name resolves to: a neutral charcoal base with a deliberately desaturated ANSI set so long log output stays flat and readable, and azure/teal accents on the cursor, selection, and current search hit. The stored default for existing and new installs is unchanged (Dracula).
+
 ### Changed
 - **New app icon** — the launcher artwork is redrawn as a vector master instead of hand-exported bitmaps: an amber squircle (superellipse corners) with a chunky `>_` prompt glyph that stays legible down to 16 px. `tool/gen_app_icons.py` regenerates every platform target from `assets/branding/*.svg` — macOS iconset (inset to Apple's 824/1024 grid), a 16–256 px Windows `.ico`, Android adaptive layers (gradient background drawable, foreground inside the 66dp safe circle, plus an Android 13+ themed/monochrome layer), and the in-app / README logos
 

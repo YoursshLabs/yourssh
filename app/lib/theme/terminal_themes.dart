@@ -8,6 +8,7 @@ class TerminalThemeEntry {
 }
 
 const List<TerminalThemeEntry> kTerminalThemes = [
+  TerminalThemeEntry('YourSSH Dark', _yourSshDark),
   TerminalThemeEntry('Dracula', _dracula),
   TerminalThemeEntry('One Dark', _oneDark),
   TerminalThemeEntry('Tokyo Night', _tokyoNight),
@@ -61,6 +62,37 @@ TerminalTheme terminalThemeByName(String name) {
       .firstWhere((e) => e.name == name, orElse: () => kTerminalThemes.first)
       .data;
 }
+
+// ── YourSSH Dark ──────────────────────────────
+// The app's own scheme, and the fallback `terminalThemeByName` resolves to.
+// Neutral charcoal base (no blue/purple cast) with a deliberately
+// desaturated ANSI set so long log output stays flat and readable;
+// azure/teal carry the accents (cursor, selection, current search hit).
+const _yourSshDark = TerminalTheme(
+  cursor: Color(0xFF56B6D8),
+  selection: Color(0xAA2E4A57),
+  foreground: Color(0xFFC9CCD1),
+  background: Color(0xFF1A1D20),
+  black: Color(0xFF1F2225),
+  red: Color(0xFFCF6A6A),
+  green: Color(0xFF7CB07A),
+  yellow: Color(0xFFD6A15C),
+  blue: Color(0xFF5A9BD4),
+  magenta: Color(0xFFA98BC9),
+  cyan: Color(0xFF5FB3B8),
+  white: Color(0xFFB8BCC2),
+  brightBlack: Color(0xFF4E545C),
+  brightRed: Color(0xFFE08A8A),
+  brightGreen: Color(0xFF97C795),
+  brightYellow: Color(0xFFE8BC7A),
+  brightBlue: Color(0xFF7DB4E3),
+  brightMagenta: Color(0xFFC2A6DD),
+  brightCyan: Color(0xFF7FCBCF),
+  brightWhite: Color(0xFFE8EAED),
+  searchHitBackground: Color(0xFFD6A15C),
+  searchHitBackgroundCurrent: Color(0xFF5A9BD4),
+  searchHitForeground: Color(0xFF1A1D20),
+);
 
 // ── Dracula ───────────────────────────────────────────────
 const _dracula = TerminalTheme(
