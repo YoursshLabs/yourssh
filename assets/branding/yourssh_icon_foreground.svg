@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Android adaptive-icon foreground layer. Glyph scaled to 0.95 so it stays
+     inside the 66dp-of-108dp safe circle under any OEM mask. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <g transform="translate(512 512) scale(0.95) translate(-512 -512)" fill="none" stroke="#141416" stroke-width="104"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M310 358 L472 512 L310 666"/>
+    <path d="M532 666 L736 666"/>
+  </g>
+</svg>

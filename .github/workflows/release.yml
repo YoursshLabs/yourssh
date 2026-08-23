@@ -397,9 +397,62 @@ jobs:
             YourSSH-${{ steps.version.outputs.version }}-Linux-${{ matrix.arch }}-symbols.zip
 
   # ── GitHub Release ─────────────────────────────────────────────────────────
+  # Android is a development preview: the APK is signed with the debug key that
+  # app/android/app/build.gradle.kts falls back to when no key.properties is
+  # present. It installs and runs, but it cannot go to Play and cannot be
+  # upgraded in place by a later properly-signed build — a real release keystore
+  # has to come first.
+  build-android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      # No Rust step: the mobile UI is SSH-only, so nothing pulls the RDP/VNC
+      # native libraries into the Android build.
+      - name: Build APK
+        working-directory: app
+        run: flutter build apk --release --split-debug-info=build/symbols
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep '^version:' app/pubspec.yaml | sed 's/^version:[[:space:]]*//' | cut -d'+' -f1)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Name the APK
+        run: |
+          mv app/build/app/outputs/flutter-apk/app-release.apk \
+             "YourSSH-${{ steps.version.outputs.version }}-Android.apk"
+
+      - name: Zip debug symbols
+        run: |
+          cd app/build/symbols
+          zip -r "$GITHUB_WORKSPACE/YourSSH-${{ steps.version.outputs.version }}-Android-symbols.zip" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: |
+            YourSSH-${{ steps.version.outputs.version }}-Android.apk
+            YourSSH-${{ steps.version.outputs.version }}-Android-symbols.zip
+
   release:
     runs-on: ubuntu-latest
-    needs: [build-macos, build-windows, build-linux]
+    needs: [build-macos, build-windows, build-linux, build-android]
     steps:
       - uses: actions/checkout@v4
 
@@ -424,6 +477,10 @@ jobs:
           pattern: linux-*
           merge-multiple: true
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: android
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
@@ -441,4 +498,5 @@ jobs:
             YourSSH-${{ steps.version.outputs.version }}-Linux-x86_64.tar.gz
             yourssh_${{ steps.version.outputs.version }}_arm64.deb
             YourSSH-${{ steps.version.outputs.version }}-Linux-arm64.tar.gz
+            YourSSH-${{ steps.version.outputs.version }}-Android.apk
             YourSSH-${{ steps.version.outputs.version }}-*-symbols.zip

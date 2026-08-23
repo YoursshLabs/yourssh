@@ -7,6 +7,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
+import 'platform/runtime_platform.dart';
+import 'mobile/mobile_app.dart';
 import 'utils/bundled_plugin_installer.dart';
 import 'providers/ai_chat_provider.dart';
 import 'providers/command_history_provider.dart';
@@ -113,9 +115,18 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final packageInfo = await PackageInfo.fromPlatform();
   kAppVersion = packageInfo.version;
+
+  if (isMobilePlatform) {
+    // Mobile: skip all desktop-only bootstrap (window_manager, hotkey_manager,
+    // local_notifier have no Android implementation and would throw).
+    runApp(const YourSSHMobileApp());
+    return;
+  }
+
   // Before any provider reads prefs: carry data over from the old sandboxed
   // container, which a previous release stored everything in.
   await _migrateSandboxContainer(packageInfo.packageName);
+
   await windowManager.ensureInitialized();
   const windowOptions = WindowOptions(
     size: Size(1280, 800),
