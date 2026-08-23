@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Local terminal tabs ignored the color theme** — `LocalTerminalPane` built xterm's `TerminalView` without a `theme:` argument, so every local shell rendered in xterm's built-in default palette and the Settings → Terminal color theme silently applied to SSH tabs only. The pane now resolves the global theme (local sessions have no host, so no per-host override applies).
 - **Screenshot harness wrote two shots to stale paths** — the recording-library and audit-log captures went to `screenshots/09-recording/` and a flat `screenshots/audit-log.png`, neither of which the README reads, so those two images silently went stale while every run left untracked files behind. Both now write into `screenshots/10-audit-recording/` under the filenames the README references. The output root is also derived from the repo (walked up from the CWD) instead of one developer's absolute home path, and the run now fails if the README references a screenshot that is not on disk.
 
 ### Changed
