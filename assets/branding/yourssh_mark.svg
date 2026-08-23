@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- YourSSH glyph on its own, tight-cropped. No background. -->
+<!-- YourSSH glyph on its own, tight-cropped. No background.
+     Stroked with currentColor: the ink #141416 of the app icon is invisible on
+     the dark app surfaces (1.0:1 against the desktop sidebar #141414), so the
+     consumer picks the colour. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="530" height="412" viewBox="258 306 530 412">
-  <g fill="none" stroke="#141416" stroke-width="104"
+  <g fill="none" stroke="currentColor" stroke-width="104"
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M310 358 L472 512 L310 666"/>
     <path d="M532 666 L736 666"/>
