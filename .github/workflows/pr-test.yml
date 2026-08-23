@@ -3,6 +3,10 @@ name: PR Test
 on:
   pull_request:
     branches:
+      # develop is the integration trunk: feature PRs land there, so without it
+      # every feature PR reported no checks at all and only got tested once the
+      # release PR reached master.
+      - develop
       - master
 
 jobs:
