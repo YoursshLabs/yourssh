@@ -4,7 +4,7 @@
   <p align="center">
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
     <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.x-54C5F8?logo=flutter" alt="Flutter" /></a>
-    <a href="https://github.com/YoursshLabs/yourssh/releases"><img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?logo=apple" alt="Platform" /></a>
+    <a href="https://github.com/YoursshLabs/yourssh/releases"><img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Android-lightgrey?logo=apple" alt="Platform" /></a>
     <a href="https://github.com/YoursshLabs/yourssh/releases"><img src="https://img.shields.io/github/v/release/YoursshLabs/yourssh?color=green" alt="Release" /></a>
     <a href="https://github.com/YoursshLabs/yourssh/actions"><img src="https://img.shields.io/github/actions/workflow/status/YoursshLabs/yourssh/release.yml?label=build" alt="CI" /></a>
     <a href="https://github.com/YoursshLabs/yourssh/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" /></a>
@@ -30,6 +30,7 @@ YourSSH also checks for new releases on launch and from **Settings → Updates**
 | Windows (ARM64 — Surface, Snapdragon) | `YourSSH.Setup.x.x.x-Windows-arm64.exe` |
 | Linux (Debian/Ubuntu — x86_64) | `yourssh_x.x.x_amd64.deb` |
 | Linux (Debian/Ubuntu — ARM64) | `yourssh_x.x.x_arm64.deb` |
+| Android (development preview) | `YourSSH-x.x.x-Android.apk` |
 
 ### macOS — First Launch
 
@@ -132,7 +133,7 @@ sudo dpkg -r yourssh
 
 ### Design
 - Dark-only interface with a cohesive green-accent palette
-- **44 terminal color themes** with a visual picker (Dracula, Solarized, Gruvbox, One Dark, Nord, Kanagawa, Tokyo Night, Flexoki, and more)
+- **45 terminal color themes** with a visual picker (YourSSH Dark, Dracula, Solarized, Gruvbox, One Dark, Nord, Kanagawa, Tokyo Night, Flexoki, and more)
 - 7 bundled monospace fonts: 6 Powerline-compatible (DejaVu, Inconsolata, Meslo LGS, Source Code Pro, Ubuntu Mono, Roboto Mono) + MesloLGS NF (Nerd Font)
 - Network stats overlay — real-time traffic counter widget per session
 - Minimum window size enforced (800×600); fully resizable
@@ -583,7 +584,7 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 ### 🔜 Phase 5 — Platform expansion
 
 - [ ] **iOS / iPadOS target** (experimental)
-- [ ] **Android target** — 🚧 *in development* (`feat/android-mobile-app`): mobile SSH client with multi-tab terminal + accessory key bar, hosts/keys, cloud + P2P QR host import, single-panel SFTP, snippets, biometric app-lock, and TOFU. Not yet released.
+- [x] **Android target** — shipped as a **development preview** in 0.2.0: mobile SSH client with terminal + accessory key bar, hosts/keys, cloud + P2P QR host import, single-panel SFTP, snippets, port forwarding, biometric app-lock and TOFU. The APK is debug-signed, so a release keystore has to land before it can go to Play or be upgraded in place.
 
 ---
 

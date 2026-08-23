@@ -5,10 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] — 2026-08-23
+
+### Added
+- **Android app (development preview)** — YourSSH now targets Android as a focused mobile SSH client, sharing the platform-agnostic core with desktop. `main()` branches on `isMobilePlatform` and mounts a separate mobile UI, so no desktop code path changes. Hosts list with search / folder chips / tag grouping and live reachability probes; a `TerminalView` with an **accessory key bar** (sticky Ctrl/Alt, ^C/^D, arrows, special characters), pinch-to-zoom and long-press cursor drag; single-panel **SFTP** (browse / download / upload); **snippets** quick-run; **key** generation and import; **port forwarding** rules; host import from desktop over cloud Supabase pull or a **P2P QR camera scan**; biometric **app-lock** and the TOFU host-key dialog. The release ships an APK signed with the **debug key** — it installs and runs, but a real release keystore has to land before it can go to Play or be upgraded in place. RDP/VNC, plugins, recording and the audit log stay desktop-only.
+
+- **"YourSSH Dark" terminal theme** (catalog 44 → 45) — the app's own color scheme, first in the visual picker and the fallback an unknown theme name now resolves to: a neutral charcoal base with a deliberately desaturated ANSI set so long log output stays flat and readable, and azure/teal accents on the cursor, selection, and current search hit. The stored default for existing and new installs is unchanged (Dracula).
 
 ### Changed
-- **New app icon** — the launcher artwork is redrawn as a vector master instead of hand-exported bitmaps: an amber squircle (superellipse corners) with a chunky `>_` prompt glyph that stays legible down to 16 px. `tool/gen_app_icons.py` regenerates every platform target from `assets/branding/*.svg` — macOS iconset (inset to Apple's 824/1024 grid), a 16–256 px Windows `.ico`, Android adaptive layers (gradient background drawable, foreground inside the 66dp safe circle, plus an Android 13+ themed/monochrome layer), and the in-app / README logos
+- **New app icon** — the launcher artwork is redrawn from a vector master instead of hand-exported bitmaps: an amber squircle (superellipse corners) with a chunky `>_` prompt glyph that stays legible down to 16 px. `tool/gen_app_icons.py` regenerates every platform target from `assets/branding/*.svg` — macOS iconset (inset to Apple's 824/1024 grid), a 16–256 px Windows `.ico`, the Android adaptive layers (gradient background drawable, foreground inside the 66dp safe circle, plus an Android 13+ themed/monochrome layer), and the in-app / README logos. Measured: the glyph holds 6.4–12:1 contrast against the amber plate and the icon reads at 6.3–7.3:1 against every dark app surface.
 
 ---
 
