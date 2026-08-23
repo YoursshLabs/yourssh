@@ -78,6 +78,7 @@ sudo dpkg -r yourssh
 
 ### Terminal & Connectivity
 - **In-app RDP client** — connect to Windows, xrdp, and any RDP-compatible server directly from a tab alongside your SSH sessions; supports NLA, TLS, and auto security modes; optional SSH tunnel via a saved jump host; server-certificate TOFU with pre-auth pin enforcement (a changed certificate aborts before your credentials are sent); **fullscreen mode** with an mstsc-style hover bar at the top edge; full keyboard and mouse support (including Ctrl+Alt+Del); bidirectional clipboard; RDP tabs excluded from terminal-only features (recording, split view, input bar, snippets)
+- **In-app VNC client** — connect to Linux VNC servers (TigerVNC, x11vnc, TightVNC) as first-class tabs too; RFB with None / VNC-password auth, framebuffer rendering, full mouse + keyboard, bidirectional clipboard, server-driven auto-resize, optional SSH tunnel through a saved jump host, and the same fullscreen hover-bar UX as RDP
 - **Multi-tab SSH sessions** with named tabs, per-tab connection state, distro icons (detected via `/etc/os-release`), and middle-click to close
 - **Terminal sharing (multiplayer)** — share a live SSH session with a session code; guests join via the Command Palette and watch or interact in real time; built on Supabase Realtime
 - **Split terminal view** — horizontal/vertical pane splitting within a session
@@ -85,10 +86,14 @@ sudo dpkg -r yourssh
 - **Copy & paste that just works** — `Ctrl+C` copies when text is selected and stays SIGINT otherwise (Windows Terminal behavior); `Cmd+C/V` on macOS, `Ctrl(+Shift)+V` to paste, right-click Copy/Paste/Select All menu, and middle-click paste
 - **Shell integration (bash/zsh)** — injected OSC 7/133 prompt hooks surface the working directory on the session tab, a per-command status gutter (green = ok, red = failed), jump-to-prompt (Cmd/Ctrl+↑/↓), and cwd-aware path completion in the input bar; auto-on with per-host / global opt-out; the setup script is delivered invisibly (never echoed into your terminal or recordings)
 - **Port forwarding** — local, remote, and dynamic SOCKS5 tunnels with start/stop per rule, auto-start on launch, live connection counters, auto-reconnect with backoff when the SSH link drops (no terminal tab required — tunnels dial the host with stored credentials), and a right-click menu to duplicate rules
-- **Jump host / bastion proxy** — connect to internal servers via a bastion host; select any saved host as the jump hop in the host detail panel
+- **Jump host / bastion proxy (multi-hop)** — connect to internal servers through one or more bastions (bastion → bastion → target); a Termius-style visual Connection Chain editor in the host panel adds/removes hops, with per-hop host-key verification and loop protection
+- **Outbound connection proxy** — per-host HTTP CONNECT or SOCKS5 proxy for SSH connections on restricted networks, with optional username/password auth; composes with the multi-hop jump chain (the proxy password stays in secure storage, never in synced data)
 - **SSH agent forwarding** — per-host toggle (like `ssh -A`) to hop between servers with the keys on your local machine; serves your system agent, falling back to app-Keychain keys when no agent is running — private keys never leave your machine; a status line in the host panel and a per-session key icon show whether forwarding is ready, active, on Keychain fallback, or refused by the server
-- **Local shell** — spawn native macOS/Windows/Linux shell alongside SSH sessions
+- **Local shell** — spawn a native macOS/Windows/Linux shell as a first-class tab alongside SSH sessions, and pick which shell to run (PowerShell, cmd, PowerShell 7, Git Bash, WSL distros on Windows; `$SHELL` / `/etc/shells` / custom executables elsewhere)
 - **Keyword highlighting** — user-defined regex rules tint matching terminal output; ships with Error/Warning/Fail defaults (red/yellow/cyan); toggle, rule list, add/edit dialog, and per-rule color picker in Settings → Terminal and the terminal config side panel
+- **OSC 52 clipboard** — remote apps (tmux, vim) can copy to your local system clipboard via the OSC 52 escape sequence; write-only and per-host opt-in for safety
+- **Scrollback paging & Reset Terminal** — Shift+PageUp / Shift+PageDown page through scrollback, and a right-click **Reset Terminal** recovers a session stuck in the alternate screen after a TUI crashed (the local equivalent of `reset`)
+- **Session templates (per-host presets)** — per-host working directory, environment variables (delivered invisibly via the shell-integration handshake), a startup snippet, and per-host terminal theme / font / size / TERM / tmux overrides
 - **xterm-256color** terminal emulation with full PTY support
 
 ### File Management
@@ -102,6 +107,7 @@ sudo dpkg -r yourssh
 
 ### Credentials & Security
 - **4 auth methods**: password, SSH private key, SSH certificate (CA-signed), SSH agent (`SSH_AUTH_SOCK` on macOS/Linux; `\\.\pipe\openssh-ssh-agent` on Windows 10+)
+- **In-app SSH key generation** — generate Ed25519 / RSA-4096 / ECDSA-P256 keys from the Keychain screen (optional passphrase), then copy the public key or push it to a host with a built-in `ssh-copy-id`-style deploy dialog
 - **OS-level secure storage**: credentials encrypted in macOS Keychain / Windows Credential Manager via `flutter_secure_storage`
 - **Known hosts verification**: interactive fingerprint trust dialog on first connect; persistent known-hosts database
 - **Zero-knowledge cloud sync**: host configs encrypted client-side (AES-256-GCM) with a 12-character sync code that never leaves your devices — the Supabase anon key alone cannot decrypt anything
@@ -118,8 +124,11 @@ sudo dpkg -r yourssh
 - **Dashboard grid & list view** — switch between host cards and a compact list, with persistent sorting (name, creation date, or hostname)
 - **Broadcast mode** — send the same input to multiple sessions at once
 - **Code editor** — edit remote files inline with a Monaco-powered editor
-- **Session recording** — record terminal output to Asciinema v2 (`.cast`) files; per-host auto-record setting; manual start/stop from the toolbar; Recording Library with in-app playback (play/pause, speed control 0.5×–5×)
+- **Session recording** — record terminal output to Asciinema v2 (`.cast`) files; per-host auto-record setting; manual start/stop from the toolbar; Recording Library with in-app playback (play/pause, speed control 0.5×–5×); secrets are redacted before being written to the file (global + per-host opt-out)
 - **Notification bell** — a bell in the top tab bar collects in-app notifications (new release available with a one-click Update button, sessions that dropped unexpectedly) behind an unread badge; opening the panel marks them read, items can be dismissed individually or cleared all at once
+- **Internal audit log** — a local, searchable SQLite trail of connect / disconnect / exec / input events with per-caller source tagging and secret redaction before write; filter by host / type / time, with CSV / JSON export and configurable retention
+- **Network discovery** — scan the local network for SSH/RDP hosts (mDNS + TCP port scan) and add them with one tap, without typing an IP
+- **Import from anywhere** — bulk-import hosts from SSH config, JSON, CSV, PuTTY, MobaXterm, SecureCRT, Ansible inventory, WinSCP, Termius, or `ssh://` URIs; import known hosts from `~/.ssh/known_hosts`
 
 ### Design
 - Dark-only interface with a cohesive green-accent palette
@@ -129,7 +138,8 @@ sudo dpkg -r yourssh
 - Minimum window size enforced (800×600); fully resizable
 
 ### DevOps & Developer Tools
-- **Containers (Docker / Kubernetes)** — list running containers (`docker ps`) and pods (`kubectl get pods`) on the active SSH session, then **Exec** into any of them in a new terminal tab; namespace filter + all-namespaces toggle for Kubernetes, and an install/permission hint when the runtime is missing
+- **Containers (Docker / Compose / Kubernetes)** — dedicated tabs on the Containers screen. **Docker**: live `docker ps -a` list with per-container Start / Stop / Restart, one-click **Exec** into a new tab, and a follow-mode log viewer. **Compose**: stack discovery (`docker compose ls` + filesystem sweep), per-stack Up / Down, and per-service Start / Stop with follow-mode logs. **Kubernetes**: context switcher, streamed `kubectl logs -f`, and 1-click port-forward; namespace filter + all-namespaces toggle
+- **Server monitor** — per-host live dashboard (CPU / memory / disk / uptime / listening ports / firewall) in a draggable bottom sheet, polled over SSH; auto-detects ufw / iptables / nftables
 - **Network Tools** — ping, cURL, DNS lookup, traceroute, port scan, whois, netstat, disk usage, memory info, HTTP headers, SSL certificate inspection — all run on the active SSH session
 - **Cloudflare Tunnel manager** — start/stop quick tunnels via `cloudflared` on the remote host; public URL displayed instantly
 - **LAN Share** — serve any local file over HTTP for one-click download on the same network
@@ -539,6 +549,10 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 - [x] Multi-provider AI assistant (Claude, OpenAI, Gemini)
 - [x] P2P host sync via QR code (LAN / Tailscale, AES-256-GCM encrypted)
 - [x] **Script Engine** — disk-based JS plugins via QuickJS FFI; HookBus; SSH/SFTP/Storage/UI bridges; hot-reload; permission guard + circuit breaker; consent dialog, manager screen, console log viewer
+- [x] **In-app RDP client** — Windows / xrdp desktops as tabs (NLA/TLS, TOFU pin enforcement, SSH tunnel, fullscreen)
+- [x] **In-app VNC client** — Linux VNC servers (TigerVNC / x11vnc / TightVNC) as tabs
+- [x] **Internal audit log** — local SQLite trail of connect/exec/input with secret redaction, filters, and CSV/JSON export
+- [x] **Outbound connection proxy** — per-host HTTP CONNECT / SOCKS5 proxy for SSH on restricted networks
 
 ### ✅ Phase 1 — Quick wins
 
@@ -562,14 +576,14 @@ Include a short description of **what** changed and **why**. Screenshots for UI 
 
 ### 🔜 Phase 4 — DevOps tooling
 
-- [ ] **Docker / Kubernetes exec** — list containers/pods on the remote host and exec into them directly
+- [x] **Docker / Compose / Kubernetes** — list containers, Compose stacks, and pods; Start/Stop/Restart, exec into a new tab, follow-mode logs, and K8s port-forward
 - [ ] **Remote process manager** — `htop`-style process list with kill support
 - [ ] **Log tail viewer** — real-time `tail -f` panel with regex filter and highlight
 
 ### 🔜 Phase 5 — Platform expansion
 
 - [ ] **iOS / iPadOS target** (experimental)
-- [ ] **Android target** (experimental)
+- [ ] **Android target** — 🚧 *in development* (`feat/android-mobile-app`): mobile SSH client with multi-tab terminal + accessory key bar, hosts/keys, cloud + P2P QR host import, single-panel SFTP, snippets, biometric app-lock, and TOFU. Not yet released.
 
 ---
 

@@ -10,7 +10,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_rust_bridge: ^2.12.0
+  # Pinned, not ^: flutter_rust_bridge refuses to start when the Dart runtime
+  # version differs from the codegen version that produced
+  # lib/src/generated/, and rust/Cargo.toml pins the crate to =2.12.0 too.
+  # Bumping means regenerating the bridge and moving all three together.
+  flutter_rust_bridge: 2.12.0
   ffi: ^2.1.3
   freezed_annotation: ^2.0.0
 
