@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../models/sftp_entry.dart';
+import '../providers/host_provider.dart';
 import '../providers/sftp_panel_provider.dart';
 import '../services/app_discovery_service.dart';
 import '../services/external_edit_service.dart';
@@ -245,12 +246,26 @@ class _SftpPanelState extends State<SftpPanel> {
     if (widget.host == null) {
       return _buildEmptyState();
     }
+    // Resolved from HostProvider, not widget.host: the panel's snapshot
+    // predates any host edit, so a switch to Sudo/Custom mode never lit the
+    // badge (SshService.openSftp resolves the live mode the same way). Read
+    // here — `select` is only legal in a real build method, not in the
+    // Consumer builder below.
+    bool elevated;
+    try {
+      elevated = context.select<HostProvider, bool>((hp) =>
+          (hp.byId(widget.host!.id) ?? widget.host!).sftpMode !=
+          SftpMode.normal);
+    } on ProviderNotFoundException {
+      // Tests pump this panel without a HostProvider.
+      elevated = widget.host!.sftpMode != SftpMode.normal;
+    }
     return ChangeNotifierProvider.value(
       value: widget.provider,
       child: Consumer<SftpPanelProvider>(
         builder: (context, prov, _) => Column(
           children: [
-            _buildHeader(prov),
+            _buildHeader(prov, elevated: elevated),
             if (prov.filterVisible) _buildFilterBar(prov),
             _buildPathBar(prov),
             Expanded(child: _buildContent(prov)),
@@ -311,7 +326,8 @@ class _SftpPanelState extends State<SftpPanel> {
   }
 
   /// Header matching the local panel: source chip + Filter + Actions menu.
-  Widget _buildHeader(SftpPanelProvider prov) {
+  /// [elevated] comes from the live host (see [build]), not widget.host.
+  Widget _buildHeader(SftpPanelProvider prov, {required bool elevated}) {
     final canRename = prov.selectedEntries.length == 1;
     final canDelete = prov.selectedEntries.isNotEmpty;
     return Container(
@@ -356,7 +372,7 @@ class _SftpPanelState extends State<SftpPanel> {
                     ),
                   ),
                 ),
-                if (widget.host!.sftpMode != SftpMode.normal) ...[
+                if (elevated) ...[
                   const SizedBox(width: 4),
                   Tooltip(
                     message: 'SFTP runs elevated on this host',

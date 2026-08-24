@@ -88,6 +88,12 @@ class SshService {
   /// out — only interactive sessions (SessionProvider) resolved the jump.
   Host? Function(String jumpHostId)? defaultJumpHostLookup;
 
+  /// Resolves a host id to its saved [Host], so [openSftp] honours the host's
+  /// *current* SFTP mode instead of the snapshot its caller captured. Wired in
+  /// main.dart to HostProvider; null keeps the caller's snapshot. See
+  /// [resolveSftpHost].
+  Host? Function(String hostId)? defaultHostLookup;
+
   /// Loads app-Keychain keys served through a forwarded agent when no system
   /// agent is available. Set from main.dart (KeyProvider + stored
   /// passphrases); null means the fallback serves an empty identity list.
@@ -1152,7 +1158,10 @@ class SshService {
 
   // ── SFTP ───────────────────────────────────────────────
 
-  Future<SftpClient> openSftp(Host host, {bool interactive = true}) async {
+  Future<SftpClient> openSftp(Host snapshot, {bool interactive = true}) async {
+    // Callers pass a Host captured when their panel/tab was created; the SFTP
+    // mode must come from the live host or a mode switch never takes effect.
+    final host = resolveSftpHost(snapshot, defaultHostLookup);
     final client = await _ensureClient(host);
     if (host.sftpMode == SftpMode.normal) return client.sftp();
     return _openElevatedSftp(client, host, interactive: interactive);
