@@ -10,6 +10,21 @@ import '../models/host.dart';
 /// Pure policy — all IO is injected, so this is unit-testable without SSH.
 /// See docs/superpowers/specs/2026-06-03-sudo-sftp-design.md.
 
+/// Re-resolves the [Host] whose SFTP settings a session must honour.
+///
+/// Every SFTP entry point is handed a `Host` snapshot captured earlier (the
+/// dual-panel `HostSource`, a dashboard card, a session). Editing the host
+/// afterwards replaces the object in `HostProvider` but never the snapshot, so
+/// a host switched to Sudo/Custom mode kept listing through the plain `sftp`
+/// subsystem — unelevated, no password prompt, and the server answered
+/// `Permission denied (code 3)`. Looking the host up by id at call time is the
+/// same fix already used for `detectedOs` and the terminal appearance.
+///
+/// [lookup] returning null (host deleted, or no provider wired — tests) keeps
+/// the snapshot.
+Host resolveSftpHost(Host snapshot, Host? Function(String hostId)? lookup) =>
+    lookup?.call(snapshot.id) ?? snapshot;
+
 /// Common sftp-server locations across distros.
 const kSftpServerPaths = [
   '/usr/lib/openssh/sftp-server', // Debian / Ubuntu

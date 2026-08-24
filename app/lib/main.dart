@@ -308,6 +308,9 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _ssh.defaultKeyLookup = (id) => _keyProvider.findById(id);
     _ssh.defaultJumpHostLookup = (id) =>
         _hostProvider.allHosts.where((h) => h.id == id).firstOrNull;
+    // openSftp must read the host's live SFTP mode — its callers hold Host
+    // snapshots that go stale the moment the host is edited.
+    _ssh.defaultHostLookup = (id) => _hostProvider.byId(id);
     _ssh.keychainIdentitiesLoader = () =>
         loadKeychainKeyPairs(_keyProvider.keys, _storage.loadPassphrase);
     _portForwardProvider = PortForwardProvider();
