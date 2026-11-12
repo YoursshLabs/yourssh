@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/app_option.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 import 'package:yourssh/widgets/entry_context_menu.dart';
 
 const _apps = [
@@ -23,6 +24,7 @@ Widget _wrap({
   VoidCallback? onEditPermissions,
 }) {
   return MaterialApp(
+    builder: ysRootBuilder,
     home: Scaffold(
       body: EntryContextMenu(
         path: '/home/u/$label',
@@ -151,6 +153,8 @@ void main() {
     await gesture.addPointer(location: Offset.zero);
     addTearDown(gesture.removePointer);
     await gesture.moveTo(tester.getCenter(find.text('Open with')));
+    // forui opens a hovered submenu after a short hover delay.
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.pumpAndSettle();
 
     expect(find.text('VS Code'), findsOneWidget);

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// One clickable segment of a [PathBreadcrumb].
 typedef PathCrumb = ({String label, String path});
@@ -16,13 +16,16 @@ List<PathCrumb> posixCrumbs(String path) {
   ];
 }
 
-/// Horizontal, scrollable row of clickable path segments. The last crumb is
-/// highlighted as the current directory. Owns no navigation logic — panels
-/// supply [crumbs] and handle [onNavigate].
+/// Clickable path segments on an [FBreadcrumb]; the last crumb is the
+/// current directory. Scrolls horizontally when the path is longer than the
+/// row and starts scrolled to the end, so the current folder stays visible.
+/// Owns no navigation logic — panels supply [crumbs] and handle
+/// [onNavigate].
 ///
 /// When [editablePath] is non-null, a trailing edit affordance lets the user
 /// type an arbitrary path to jump to; the value seeds the inline editor and
-/// submitting it routes through [onNavigate] just like a crumb tap.
+/// submitting it routes through [onNavigate] just like a crumb tap. Escape
+/// or a tap outside cancels.
 class PathBreadcrumb extends StatefulWidget {
   final List<PathCrumb> crumbs;
   final ValueChanged<String> onNavigate;
@@ -71,91 +74,84 @@ class _PathBreadcrumbState extends State<PathBreadcrumb> {
   @override
   Widget build(BuildContext context) {
     if (_editing) return _buildEditor();
+    final last = widget.crumbs.length - 1;
     return Row(
       children: [
         Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (int i = 0; i < widget.crumbs.length; i++) ...[
-                  if (i > 0)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 2),
-                      child: Icon(Icons.chevron_right,
-                          size: 13, color: Color(0xFF444444)),
-                    ),
-                  GestureDetector(
-                    onTap: () => widget.onNavigate(widget.crumbs[i].path),
-                    child: Text(
-                      widget.crumbs[i].label,
-                      style: TextStyle(
-                        color: i == widget.crumbs.length - 1
-                            ? const Color(0xFFD4D4D4)
-                            : const Color(0xFF666666),
-                        fontSize: 12,
-                        fontWeight: i == widget.crumbs.length - 1
-                            ? FontWeight.w500
-                            : FontWeight.normal,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              // At least as wide as the row so a short path stays at the
+              // start instead of the reversed end.
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: _crumbs(last),
+                ),
+              ),
             ),
           ),
         ),
         if (widget.editablePath != null)
-          IconButton(
-            icon: const Icon(Icons.edit_outlined,
-                size: 13, color: Color(0xFF555555)),
-            onPressed: _startEditing,
-            tooltip: 'Go to path',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+          Tooltip(
+            message: 'Go to path',
+            excludeFromSemantics: true,
+            child: FButton.icon(
+              variant: .ghost,
+              size: .xs,
+              semanticsLabel: 'Go to path',
+              onPress: _startEditing,
+              child: const Icon(FLucideIcons.pencil),
+            ),
           ),
       ],
     );
   }
+
+  Widget _crumbs(int last) => FBreadcrumb(
+        children: [
+          for (int i = 0; i <= last; i++)
+            FBreadcrumbItem(
+              current: i == last,
+              onPress: () => widget.onNavigate(widget.crumbs[i].path),
+              child: Text(
+                widget.crumbs[i].label,
+                style: i == last
+                    ? const TextStyle(fontWeight: FontWeight.w500)
+                    : null,
+              ),
+            ),
+        ],
+      );
 
   Widget _buildEditor() {
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): _cancel,
       },
-      child: SizedBox(
-        height: 28,
-        child: TextField(
-          controller: _controller,
-          autofocus: true,
-          cursorColor: AppColors.accent,
-          style: const TextStyle(
-              color: Color(0xFFD4D4D4), fontSize: 12, fontFamily: 'monospace'),
-          decoration: InputDecoration(
-            isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            hintText: 'Enter a path and press Enter…',
-            hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 12),
-            filled: true,
-            fillColor: const Color(0xFF1E1E1E),
-            prefixIcon: const Icon(Icons.subdirectory_arrow_right,
-                size: 14, color: Color(0xFF555555)),
-            prefixIconConstraints:
-                const BoxConstraints(minWidth: 26, minHeight: 24),
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(5),
-                borderSide: const BorderSide(color: Color(0xFF2A2A2A))),
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(5),
-                borderSide: const BorderSide(color: Color(0xFF2A2A2A))),
-            focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(5),
-                borderSide: const BorderSide(color: AppColors.accent)),
-          ),
-          onSubmitted: (_) => _submit(),
-          onTapOutside: (_) => _cancel(),
+      child: FTextField(
+        key: const Key('path-breadcrumb-editor'),
+        control: FTextFieldControl.managed(controller: _controller),
+        autofocus: true,
+        size: .sm,
+        hint: 'Enter a path and press Enter…',
+        style: .delta(
+          contentTextStyle: .delta([
+            .base(
+              const .delta(
+                fontFamily: kYsMonoFontFamily,
+                fontFamilyFallback: kYsMonoFontFallback,
+              ),
+            ),
+          ]),
         ),
+        prefixBuilder: (context, style, variants) =>
+            FTextField.prefixIconBuilder(context, style, variants,
+                const Icon(FLucideIcons.cornerDownRight)),
+        onSubmit: (_) => _submit(),
+        onTapOutside: (_) => _cancel(),
       ),
     );
   }

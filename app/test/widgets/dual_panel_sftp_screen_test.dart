@@ -11,6 +11,10 @@ import 'package:yourssh/widgets/sftp_panel.dart';
 import 'package:yourssh/widgets/source_picker_dialog.dart';
 import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 
+/// forui buttons and checkboxes settle their press feedback 100 ms after a
+/// tap; pump past it so no timer outlives the test.
+const _pressFeedback = Duration(milliseconds: 200);
+
 void main() {
   late ValueNotifier<bool> notifier;
 
@@ -53,7 +57,7 @@ void main() {
 
     // Open the source picker from the unconnected right slot.
     await tester.tap(find.text('Select host'));
-    await tester.pump();
+    await tester.pump(_pressFeedback);
     expect(find.byType(SourcePickerDialog), findsOneWidget);
 
     await tester.tap(find.descendant(

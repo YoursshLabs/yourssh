@@ -12,8 +12,10 @@ import '../services/sftp_file_ops_service.dart';
 import '../util/app_launcher.dart';
 import '../util/file_mode.dart';
 import 'code_editor_screen.dart';
-import 'path_breadcrumb.dart';
+import '../util/entry_sort.dart';
 import 'entry_context_menu.dart';
+import 'file_panel_chrome.dart';
+import 'path_breadcrumb.dart';
 import 'permissions_dialog.dart';
 import 'package:yourssh/theme/app_theme.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
@@ -235,6 +237,44 @@ class _SftpPanelState extends State<SftpPanel> {
     }
   }
 
+  /// Columns of the file table. Built once so unchanged rows are reused
+  /// across selection changes; cells depend only on the entry.
+  late final List<YsColumn<SftpEntry>> _columns = [
+    YsColumn<SftpEntry>(
+      id: EntrySortColumn.name,
+      label: 'Name',
+      flex: 5,
+      sortable: true,
+      cell: (_, e) => FileNameCell(
+          name: e.name, isDirectory: e.isDirectory, extension: e.extension),
+    ),
+    YsColumn<SftpEntry>(
+      id: EntrySortColumn.modified,
+      label: 'Modified',
+      width: 120,
+      sortable: true,
+      minTableWidth: 400,
+      cell: (_, e) => FileMetaCell(formatEntryDate(e.modifiedAt)),
+    ),
+    YsColumn<SftpEntry>(
+      id: EntrySortColumn.size,
+      label: 'Size',
+      width: 70,
+      sortable: true,
+      numeric: true,
+      cell: (_, e) => FileMetaCell(e.formattedSize),
+    ),
+    YsColumn<SftpEntry>(
+      id: 'permissions',
+      label: 'Permissions',
+      width: 90,
+      minTableWidth: 500,
+      cell: (_, e) => FileMetaCell(
+          formatEntryMode(e.mode, isDirectory: e.isDirectory),
+          mono: true),
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     if (widget.host == null) {
@@ -258,11 +298,18 @@ class _SftpPanelState extends State<SftpPanel> {
       value: widget.provider,
       child: Consumer<SftpPanelProvider>(
         builder: (context, prov, _) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildHeader(prov, elevated: elevated),
-            if (prov.filterVisible) _buildFilterBar(prov),
+            if (prov.filterVisible)
+              FilePanelFilterBar(onChanged: prov.setFilterQuery),
             _buildPathBar(prov),
             Expanded(child: _buildContent(prov)),
+            if (prov.loadState == SftpPanelLoadState.loaded &&
+                prov.filteredEntries.isNotEmpty)
+              FilePanelFooter(prov.selectedEntries.isEmpty
+                  ? '${prov.filteredEntries.length} items'
+                  : '${prov.selectedEntries.length} selected'),
           ],
         ),
       ),
@@ -270,51 +317,17 @@ class _SftpPanelState extends State<SftpPanel> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
+    return YsEmptyState(
+      icon: FLucideIcons.folder,
+      title: 'Connect to host',
+      message:
+          'Start by connecting to a saved host\nto manage your files with SFTP.',
+      action: FButton(
+        variant: .outline,
+        size: .sm,
         mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.folder_outlined,
-                size: 32, color: Color(0xFF444444)),
-          ),
-          const SizedBox(height: 16),
-          const Text('Connect to host',
-              style: TextStyle(
-                  color: Color(0xFFD4D4D4),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          const Text(
-            'Start by connecting to a saved host\nto manage your files with SFTP.',
-            style: TextStyle(color: Color(0xFF555555), fontSize: 12),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-          GestureDetector(
-            onTap: widget.onChangeHost,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF2A2A2A)),
-              ),
-              child: const Text('Select host',
-                  style: TextStyle(
-                      color: Color(0xFFD4D4D4),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500)),
-            ),
-          ),
-        ],
+        onPress: widget.onChangeHost,
+        child: const Text('Select host'),
       ),
     );
   }
@@ -322,298 +335,91 @@ class _SftpPanelState extends State<SftpPanel> {
   /// Header matching the local panel: source chip + Filter + Actions menu.
   /// [elevated] comes from the live host (see [build]), not widget.host.
   Widget _buildHeader(SftpPanelProvider prov, {required bool elevated}) {
-    final canRename = prov.selectedEntries.length == 1;
-    final canDelete = prov.selectedEntries.isNotEmpty;
-    return Container(
-      height: 40,
-      color: const Color(0xFF161616),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          // The chip+badge group owns ALL free row space (Expanded) so
-          // Filter/Actions always hug the right edge; the chip itself is
-          // loose (Flexible) inside and ellipsizes when the label is long.
-          // (Flexible chip + Spacer split the free space instead, leaving a
-          // gap to the right of Actions on wide panels.)
-          Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: GestureDetector(
-                    onTap: widget.onChangeHost,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E1E1E),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: const Color(0xFF2A2A2A)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.dns, size: 11, color: AppColors.accent),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(widget.host!.label,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    color: AppColors.accent, fontSize: 12)),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.unfold_more, size: 11, color: Color(0xFF555555)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                if (elevated) ...[
-                  const SizedBox(width: 4),
-                  Tooltip(
-                    message: 'SFTP runs elevated on this host',
-                    child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: const Text('root',
-                          style: TextStyle(
-                              color: Color(0xFFEF4444),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              fontFamily: 'monospace')),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          _HeaderButton(
-            label: 'Filter',
-            active: prov.filterVisible,
-            onTap: prov.toggleFilterVisible,
-          ),
-          const SizedBox(width: 6),
-          PopupMenuButton<String>(
-            color: const Color(0xFF1E1E1E),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-                side: const BorderSide(color: Color(0xFF2A2A2A))),
-            tooltip: '',
-            offset: const Offset(0, 36),
-            onSelected: (v) {
-              if (v == 'new_file') _showNewFileDialog(prov);
-              if (v == 'new_folder') _showNewFolderDialog(prov);
-              if (v == 'rename') _showRenameDialog(prov, prov.selectedEntries.first);
-              if (v == 'delete') _showDeleteConfirm(prov, prov.selectedEntries.toList());
-            },
-            itemBuilder: (_) => [
-              _menuItem('new_file', Icons.note_add_outlined, 'New File'),
-              _menuItem('new_folder', Icons.create_new_folder_outlined, 'New Folder'),
-              _menuItem('rename', Icons.drive_file_rename_outline, 'Rename',
-                  enabled: canRename),
-              _menuItem('delete', Icons.delete_outline, 'Delete',
-                  enabled: canDelete, isDestructive: true),
-            ],
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E),
-                borderRadius: BorderRadius.circular(5),
-                border: Border.all(color: const Color(0xFF2A2A2A)),
-              ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: const [
-                Text('Actions',
-                    style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 12)),
-                SizedBox(width: 4),
-                Icon(Icons.keyboard_arrow_down, size: 14, color: Color(0xFF888888)),
-              ]),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  PopupMenuItem<String> _menuItem(String value, IconData icon, String label,
-      {bool enabled = true, bool isDestructive = false}) {
-    return PopupMenuItem<String>(
-      value: value,
-      enabled: enabled,
-      child: Row(children: [
-        Icon(icon,
-            size: 14,
-            color: isDestructive
-                ? Colors.red
-                : enabled
-                    ? const Color(0xFFD4D4D4)
-                    : const Color(0xFF444444)),
-        const SizedBox(width: 8),
-        Text(label,
-            style: TextStyle(
-                fontSize: 13,
-                color: isDestructive
-                    ? Colors.red
-                    : enabled
-                        ? const Color(0xFFD4D4D4)
-                        : const Color(0xFF444444))),
-      ]),
-    );
-  }
-
-  Widget _buildFilterBar(SftpPanelProvider prov) {
-    return Container(
-      color: const Color(0xFF161616),
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: TextField(
-        autofocus: true,
-        style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
-        decoration: InputDecoration(
-          hintText: 'Filter by name…',
-          hintStyle: const TextStyle(color: Color(0xFF444444), fontSize: 13),
-          prefixIcon:
-              const Icon(Icons.search, size: 15, color: Color(0xFF555555)),
-          filled: true,
-          fillColor: const Color(0xFF1E1E1E),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: Color(0xFF2A2A2A))),
-          enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: Color(0xFF2A2A2A))),
-          focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: AppColors.accent)),
-        ),
-        onChanged: prov.setFilterQuery,
-      ),
+    final selected = prov.selectedEntries;
+    return FilePanelHeader(
+      sourceIcon: FLucideIcons.server,
+      sourceLabel: widget.host!.label,
+      onChangeSource: widget.onChangeHost,
+      badge: elevated
+          ? const Tooltip(
+              message: 'SFTP runs elevated on this host',
+              child: YsStatusBadge('root', status: YsStatus.error),
+            )
+          : null,
+      filterActive: prov.filterVisible,
+      onToggleFilter: prov.toggleFilterVisible,
+      actions: [
+        FilePanelAction('New File', FLucideIcons.filePlus,
+            () => _showNewFileDialog(prov)),
+        FilePanelAction('New Folder', FLucideIcons.folderPlus,
+            () => _showNewFolderDialog(prov)),
+        FilePanelAction('Rename', FLucideIcons.pencilLine,
+            () => _showRenameDialog(prov, prov.selectedEntries.first),
+            enabled: selected.length == 1),
+        FilePanelAction('Delete', FLucideIcons.trash2,
+            () => _showDeleteConfirm(prov, prov.selectedEntries.toList()),
+            enabled: selected.isNotEmpty, destructive: true),
+      ],
     );
   }
 
   Widget _buildPathBar(SftpPanelProvider prov) {
-    return Container(
-      height: 34,
-      color: const Color(0xFF141414),
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(
-        children: [
-          IconButton(
-            icon: Icon(Icons.chevron_left,
-                size: 16,
-                color: prov.canGoBack
-                    ? const Color(0xFF888888)
-                    : const Color(0xFF333333)),
-            onPressed: prov.canGoBack
-                ? () {
-                    prov.goBack();
-                    _fetchEntries(prov.currentPath);
-                  }
-                : null,
-            tooltip: 'Back',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-          ),
-          IconButton(
-            icon: Icon(Icons.chevron_right,
-                size: 16,
-                color: prov.canGoForward
-                    ? const Color(0xFF888888)
-                    : const Color(0xFF333333)),
-            onPressed: prov.canGoForward
-                ? () {
-                    prov.goForward();
-                    _fetchEntries(prov.currentPath);
-                  }
-                : null,
-            tooltip: 'Forward',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-          ),
-          const SizedBox(width: 2),
-          // Breadcrumb gets the remaining row width (it was squeezed to zero
-          // when it shared the row with the host chip and toolbar buttons).
-          Expanded(
-            child: PathBreadcrumb(
-              crumbs: posixCrumbs(prov.currentPath),
-              onNavigate: _loadDirectory,
-              editablePath: prov.currentPath,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 13, color: Color(0xFF555555)),
-            onPressed: () => _loadDirectory(prov.currentPath),
-            tooltip: 'Refresh',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-          ),
-        ],
+    return FilePanelPathBar(
+      canGoBack: prov.canGoBack,
+      canGoForward: prov.canGoForward,
+      onBack: () {
+        prov.goBack();
+        _fetchEntries(prov.currentPath);
+      },
+      onForward: () {
+        prov.goForward();
+        _fetchEntries(prov.currentPath);
+      },
+      onRefresh: () => _loadDirectory(prov.currentPath),
+      breadcrumb: PathBreadcrumb(
+        crumbs: posixCrumbs(prov.currentPath),
+        onNavigate: _loadDirectory,
+        editablePath: prov.currentPath,
       ),
     );
   }
 
   Widget _buildContent(SftpPanelProvider prov) {
     if (prov.loadState == SftpPanelLoadState.loading) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+      return const Center(child: FCircularProgress());
     }
     if (prov.loadState == SftpPanelLoadState.error) {
-      return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.error_outline, color: Colors.red, size: 32),
-          const SizedBox(height: 8),
-          Text(prov.errorMessage ?? 'Error',
-              style: const TextStyle(color: Colors.red, fontSize: 12), textAlign: TextAlign.center),
-        ]),
-      );
+      return FilePanelError(prov.errorMessage ?? 'Error');
     }
     final entries = prov.filteredEntries;
     if (entries.isEmpty) {
       // Distinguish a genuinely empty directory from a filter with no hits
       // (mirrors LocalFilePanel).
-      return Center(
-        child: Text(
-          prov.filterQuery.isNotEmpty ? 'No matches' : 'Empty directory',
-          style: const TextStyle(color: Color(0xFF555555)),
-        ),
-      );
+      return FilePanelMessage(
+          prov.filterQuery.isNotEmpty ? 'No matches' : 'Empty directory');
     }
-    return Column(
-      children: [
-        Container(
-          color: const Color(0xFF141414),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: Row(
-            children: [
-              Checkbox(
-                value: prov.isAllSelected,
-                tristate: true,
-                onChanged: (_) => prov.isAllSelected ? prov.deselectAll() : prov.selectAll(),
-                side: const BorderSide(color: Color(0xFF444444)),
-                activeColor: AppColors.accent,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              ),
-              Text(
-                prov.selectedEntries.isEmpty ? '${entries.length} items' : '${prov.selectedEntries.length} selected',
-                style: const TextStyle(color: Color(0xFF555555), fontSize: 11),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: entries.length,
-            itemBuilder: (_, i) => _buildEntryTile(entries[i], prov),
-          ),
-        ),
-      ],
+    return YsFileTable<SftpEntry>(
+      rows: entries,
+      columns: _columns,
+      selected: prov.selectedEntries,
+      sort: YsSort(prov.sortColumn, ascending: prov.sortAscending),
+      onSort: (s) => prov.setSort(s.column, ascending: s.ascending),
+      onSelect: prov.select,
+      onSelectAll: (all) => all ? prov.selectAll() : prov.deselectAll(),
+      // A click opens (folders navigate in, files open in the editor);
+      // Cmd/Ctrl/Shift-click and the checkboxes select.
+      openOnTap: true,
+      onOpen: _onEntryTap,
+      onContextMenu: (entry, position) =>
+          _entryMenu(prov, entry).show(context, position),
+      checkboxes: true,
+      draggable: true,
+      rowLabel: (e) => e.name,
     );
   }
 
-  Widget _buildEntryTile(SftpEntry entry, SftpPanelProvider prov) {
-    final isSelected = prov.selectedEntries.contains(entry);
+  /// The shared entry context menu for [entry].
+  EntryContextMenu _entryMenu(SftpPanelProvider prov, SftpEntry entry) {
     return EntryContextMenu(
       path: entry.path,
       isDirectory: entry.isDirectory,
@@ -649,109 +455,13 @@ class _SftpPanelState extends State<SftpPanel> {
       onRefresh: () => _loadDirectory(prov.currentPath),
       onNewFolder: () => _showNewFolderDialog(prov),
       onEditPermissions: () => _showPermissionsDialog(prov, entry),
-      child: Draggable<SftpEntry>(
-        data: entry,
-        feedback: Material(
-          color: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(entry.name, style: const TextStyle(color: AppColors.accent, fontSize: 13)),
-          ),
-        ),
-        child: InkWell(
-          onTap: () => _onEntryTap(entry),
-          child: Container(
-            color: isSelected ? AppColors.accent.withValues(alpha: 0.1) : Colors.transparent,
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            child: Row(
-              children: [
-                Checkbox(
-                  value: isSelected,
-                  onChanged: (_) => prov.toggleSelection(entry),
-                  side: const BorderSide(color: Color(0xFF444444)),
-                  activeColor: AppColors.accent,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                ),
-                Icon(
-                  entry.isDirectory ? Icons.folder : _fileIcon(entry.extension),
-                  size: 16,
-                  color: entry.isDirectory ? const Color(0xFFFBBF24) : const Color(0xFF60A5FA),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(entry.name,
-                      style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
-                      overflow: TextOverflow.ellipsis),
-                ),
-                Text(entry.formattedSize,
-                    style: const TextStyle(color: Color(0xFF555555), fontSize: 11)),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
-  }
-
-  IconData _fileIcon(String ext) {
-    return switch (ext) {
-      'dart' ||
-      'py' ||
-      'js' ||
-      'ts' ||
-      'go' ||
-      'rs' ||
-      'c' ||
-      'cpp' =>
-        Icons.code,
-      'json' || 'yaml' || 'yml' || 'toml' || 'xml' => Icons.data_object,
-      'md' || 'txt' || 'log' => Icons.article,
-      'sh' || 'bash' || 'zsh' => Icons.terminal,
-      _ => Icons.insert_drive_file,
-    };
   }
 
   Future<void> _showNewFolderDialog(SftpPanelProvider prov) async {
-    final ctrl = TextEditingController();
-    final name = await showYsDialog<String>(
-      context,
-      builder: (ctx) => YsDialog(
-        title: 'New Folder',
-        body: TextField(
-          controller: ctrl,
-          autofocus: true,
-          style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
-          decoration: const InputDecoration(
-            hintText: 'Folder name',
-            hintStyle: TextStyle(color: Color(0xFF555555)),
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: Color(0xFF2A2A2A)),
-            ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: AppColors.accent),
-            ),
-          ),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          FButton(
-            variant: FButtonVariant.outline,
-            onPress: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FButton(
-            variant: FButtonVariant.primary,
-            onPress: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
+    final name = (await showFileNameDialog(context,
+            title: 'New Folder', hint: 'Folder name', confirmLabel: 'Create'))
+        ?.trim();
     if (name == null || name.isEmpty || !mounted) return;
     try {
       final newPath = prov.currentPath == '/' ? '/$name' : '${prov.currentPath}/$name';
@@ -765,41 +475,9 @@ class _SftpPanelState extends State<SftpPanel> {
   }
 
   Future<void> _showNewFileDialog(SftpPanelProvider prov) async {
-    final ctrl = TextEditingController();
-    final name = await showYsDialog<String>(
-      context,
-      builder: (ctx) => YsDialog(
-        title: 'New File',
-        body: TextField(
-          controller: ctrl,
-          autofocus: true,
-          style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
-          decoration: const InputDecoration(
-            hintText: 'File name',
-            hintStyle: TextStyle(color: Color(0xFF555555)),
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: Color(0xFF2A2A2A)),
-            ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: AppColors.accent),
-            ),
-          ),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          FButton(
-            variant: FButtonVariant.outline,
-            onPress: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FButton(
-            variant: FButtonVariant.primary,
-            onPress: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
+    final name = (await showFileNameDialog(context,
+            title: 'New File', hint: 'File name', confirmLabel: 'Create'))
+        ?.trim();
     if (name == null || name.isEmpty || !mounted) return;
     try {
       final remotePath = prov.currentPath == '/' ? '/$name' : '${prov.currentPath}/$name';
@@ -822,39 +500,9 @@ class _SftpPanelState extends State<SftpPanel> {
   }
 
   Future<void> _showRenameDialog(SftpPanelProvider prov, SftpEntry entry) async {
-    final ctrl = TextEditingController(text: entry.name);
-    final newName = await showYsDialog<String>(
-      context,
-      builder: (ctx) => YsDialog(
-        title: 'Rename',
-        body: TextField(
-          controller: ctrl,
-          autofocus: true,
-          style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
-          decoration: const InputDecoration(
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: Color(0xFF2A2A2A)),
-            ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: AppColors.accent),
-            ),
-          ),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          FButton(
-            variant: FButtonVariant.outline,
-            onPress: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FButton(
-            variant: FButtonVariant.primary,
-            onPress: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Rename'),
-          ),
-        ],
-      ),
-    );
+    final newName = (await showFileNameDialog(context,
+            title: 'Rename', initial: entry.name, confirmLabel: 'Rename'))
+        ?.trim();
     if (newName == null || newName.isEmpty || newName == entry.name || !mounted) return;
     final slash = entry.path.lastIndexOf('/');
     final parent = slash <= 0 ? '/' : entry.path.substring(0, slash);
@@ -943,42 +591,3 @@ class _SftpPanelState extends State<SftpPanel> {
     }
   }
 }
-
-class _HeaderButton extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _HeaderButton(
-      {required this.label, required this.active, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: active
-              ? AppColors.accent.withValues(alpha: 0.12)
-              : const Color(0xFF1E1E1E),
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(
-              color: active
-                  ? AppColors.accent.withValues(alpha: 0.4)
-                  : const Color(0xFF2A2A2A)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: active
-                ? AppColors.accent
-                : const Color(0xFFD4D4D4),
-            fontSize: 12,
-          ),
-        ),
-      ),
-    );
-  }
-}
-

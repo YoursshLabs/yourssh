@@ -10,7 +10,13 @@ import 'package:yourssh/services/external_edit_service.dart';
 import 'package:yourssh/services/sftp_transfer_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 import 'package:yourssh/widgets/sftp_panel.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show FButton;
+
+/// forui buttons and checkboxes settle their press feedback 100 ms after a
+/// tap; pump past it so no timer outlives the test.
+const _pressFeedback = Duration(milliseconds: 200);
 
 class _FakeTransferService extends SftpTransferService {
   _FakeTransferService() : super(SshService(StorageService()));
@@ -54,6 +60,7 @@ void main() {
           Provider<ExternalEditService>.value(value: ExternalEditService(fake)),
         ],
         child: MaterialApp(
+          builder: ysRootBuilder,
           home: Scaffold(
             body: SftpPanel(
               host: host,
@@ -71,22 +78,22 @@ void main() {
     return fake;
   }
 
-  // The breadcrumb separator also uses chevron_right, so target the
-  // IconButton ancestor — the separator icon sits outside any button.
-  final backButton = find.ancestor(
-      of: find.byIcon(Icons.chevron_left), matching: find.byType(IconButton));
-  final forwardButton = find.ancestor(
-      of: find.byIcon(Icons.chevron_right), matching: find.byType(IconButton));
+  // Back/forward are icon buttons found by their tooltips (the breadcrumb
+  // separator is a chevron too, outside any button).
+  final backButton = find.descendant(
+      of: find.byTooltip('Back'), matching: find.byType(FButton));
+  final forwardButton = find.descendant(
+      of: find.byTooltip('Forward'), matching: find.byType(FButton));
 
   testWidgets('chevrons are disabled before any navigation', (tester) async {
     final provider = SftpPanelProvider();
     await pumpPanel(tester, provider);
 
-    final back = tester.widget<IconButton>(backButton);
-    final forward = tester.widget<IconButton>(forwardButton);
-    expect(back.onPressed, isNull,
+    final back = tester.widget<FButton>(backButton);
+    final forward = tester.widget<FButton>(forwardButton);
+    expect(back.onPress, isNull,
         reason: 'nothing to go back to on the initial path');
-    expect(forward.onPressed, isNull);
+    expect(forward.onPress, isNull);
     expect(find.byIcon(Icons.arrow_upward), findsNothing,
         reason: 'the Up button is replaced by back/forward + breadcrumb');
   });
@@ -104,14 +111,14 @@ void main() {
 
     await tester.tap(backButton);
     await tester.pump();
-    await tester.pump();
+    await tester.pump(_pressFeedback);
     expect(provider.currentPath, '/a');
     expect(fake.listedPaths.last, '/a',
         reason: 'goBack must re-list the previous directory');
 
     await tester.tap(forwardButton);
     await tester.pump();
-    await tester.pump();
+    await tester.pump(_pressFeedback);
     expect(provider.currentPath, '/a/b');
     expect(fake.listedPaths.last, '/a/b');
     expect(provider.canGoForward, isFalse,

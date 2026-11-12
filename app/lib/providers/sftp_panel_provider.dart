@@ -1,6 +1,7 @@
 // app/lib/providers/sftp_panel_provider.dart
 import 'package:flutter/foundation.dart';
 import '../models/sftp_entry.dart';
+import '../util/entry_sort.dart';
 
 enum SftpPanelLoadState { idle, loading, loaded, error }
 
@@ -17,6 +18,10 @@ class SftpPanelProvider extends ChangeNotifier {
   int _historyIndex = -1;
   SftpPanelLoadState loadState = SftpPanelLoadState.idle;
   String? errorMessage;
+  String _sortColumn = EntrySortColumn.name;
+  bool _sortAscending = true;
+  SftpEntry? _anchor;
+  List<SftpEntry>? _filtered;
 
   String get currentPath => _currentPath;
   bool get canGoBack => _historyIndex > 0;
@@ -27,16 +32,45 @@ class SftpPanelProvider extends ChangeNotifier {
   bool get filterVisible => _filterVisible;
   String get filterQuery => _filterQuery;
 
-  /// Entries matching the filter query (all entries when the query is empty).
+  /// Column the listing is sorted by ([EntrySortColumn]); folders first.
+  String get sortColumn => _sortColumn;
+  bool get sortAscending => _sortAscending;
+
+  /// Entries matching the filter query (all entries when the query is
+  /// empty), in display order. Cached until the entries, filter or sort
+  /// change, so the file table sees the same list across selection changes.
   List<SftpEntry> get filteredEntries {
-    if (_filterQuery.isEmpty) return List.unmodifiable(_entries);
+    if (_filtered case final cached?) return cached;
     final q = _filterQuery.toLowerCase();
-    return _entries.where((e) => e.name.toLowerCase().contains(q)).toList();
+    return _filtered = List.unmodifiable(_filterQuery.isEmpty
+        ? _entries
+        : _entries.where((e) => e.name.toLowerCase().contains(q)));
+  }
+
+  Comparator<SftpEntry> get _comparator => entryComparator<SftpEntry>(
+        _sortColumn,
+        ascending: _sortAscending,
+        isDirectory: (e) => e.isDirectory,
+        name: (e) => e.name,
+        size: (e) => e.size,
+        modified: (e) => e.modifiedAt,
+        kind: (e) => e.kindLabel,
+      );
+
+  /// Re-sorts the listing by [column] (folders stay first).
+  void setSort(String column, {required bool ascending}) {
+    if (column == _sortColumn && ascending == _sortAscending) return;
+    _sortColumn = column;
+    _sortAscending = ascending;
+    _entries.sort(_comparator);
+    _filtered = null;
+    notifyListeners();
   }
 
   void setFilterQuery(String query) {
     if (_filterQuery == query) return;
     _filterQuery = query;
+    _filtered = null;
     // Selection must stay within what the user can see: anything the new
     // filter hides is dropped, so bulk actions (Delete/Rename) can never
     // touch entries that were selected and then filtered out of view.
@@ -50,6 +84,7 @@ class SftpPanelProvider extends ChangeNotifier {
   void toggleFilterVisible() {
     _filterVisible = !_filterVisible;
     if (!_filterVisible) _filterQuery = '';
+    _filtered = null;
     notifyListeners();
   }
 
@@ -64,6 +99,7 @@ class SftpPanelProvider extends ChangeNotifier {
     }
     _currentPath = path;
     _selected.clear();
+    _anchor = null;
     notifyListeners();
   }
 
@@ -72,6 +108,7 @@ class SftpPanelProvider extends ChangeNotifier {
     _historyIndex--;
     _currentPath = _history[_historyIndex];
     _selected.clear();
+    _anchor = null;
     notifyListeners();
   }
 
@@ -80,11 +117,13 @@ class SftpPanelProvider extends ChangeNotifier {
     _historyIndex++;
     _currentPath = _history[_historyIndex];
     _selected.clear();
+    _anchor = null;
     notifyListeners();
   }
 
   void setEntries(List<SftpEntry> entries) {
-    _entries = List.of(entries)..sort((a, b) => a.sortKey.compareTo(b.sortKey));
+    _entries = List.of(entries)..sort(_comparator);
+    _filtered = null;
     notifyListeners();
   }
 
@@ -99,6 +138,27 @@ class SftpPanelProvider extends ChangeNotifier {
 
   void clearSelection() {
     _selected.clear();
+    _anchor = null;
+    notifyListeners();
+  }
+
+  /// A file-table selection gesture on [entry]: plain selects only it,
+  /// [additive] toggles it, [range] selects the visible run from the last
+  /// anchor to it.
+  void select(SftpEntry entry, {bool additive = false, bool range = false}) {
+    final (next, anchor) = applyTableSelection<SftpEntry, SftpEntry>(
+      visible: filteredEntries,
+      keyOf: (e) => e,
+      selected: _selected,
+      anchor: _anchor,
+      entry: entry,
+      additive: additive,
+      range: range,
+    );
+    _selected
+      ..clear()
+      ..addAll(next);
+    _anchor = anchor;
     notifyListeners();
   }
 

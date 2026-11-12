@@ -10,6 +10,10 @@ import 'package:yourssh/widgets/dual_panel_sftp_screen.dart';
 import 'package:yourssh/widgets/path_breadcrumb.dart';
 import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 
+/// forui buttons and checkboxes settle their press feedback 100 ms after a
+/// tap; pump past it so no timer outlives the test.
+const _pressFeedback = Duration(milliseconds: 200);
+
 /// Repro for "breadcrumb not visible in the two-panel layout".
 void main() {
   testWidgets('connected remote slot shows the path breadcrumb',
@@ -48,7 +52,7 @@ void main() {
 
     // Connect the right slot to the host.
     await tester.tap(find.text('Select host'));
-    await tester.pump();
+    await tester.pump(_pressFeedback);
     await tester.tap(find.text('alpha'));
     await tester.pump();
 
