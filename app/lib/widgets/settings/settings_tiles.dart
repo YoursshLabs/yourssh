@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
+import '../switch_row_tile.dart';
+
 /// One Settings section: a title above its content, which is usually an
 /// [FTileGroup] built from [tiles].
 class SettingsSection extends StatelessWidget {
@@ -26,14 +28,12 @@ class SettingsSection extends StatelessWidget {
   );
 }
 
-/// [FTileGroup] for settings tiles. Slide-to-press between tiles is off:
-/// the [FTappableGroup] it adds swallows taps on buttons nested inside a
-/// tile (a password field's show/hide toggle, a row's icon buttons).
+/// [FTileGroup] for settings tiles. Slide-to-press between tiles is off
+/// app-wide in `ysThemeData()` (ruling P16: the group's [FTappableGroup]
+/// swallowed taps on buttons inside a text field's suffix, such as a
+/// password reveal toggle), so this is a plain alias.
 FTileGroup settingsTileGroup({required List<FTileMixin> children}) =>
-    FTileGroup(
-      style: .delta(slideableTiles: .delta([.all(false)])),
-      children: children,
-    );
+    FTileGroup(children: children);
 
 /// A card that looks like an [FTileGroup] for content that lays out its own
 /// rows (the shared terminal appearance controls, the sync forms).
@@ -134,23 +134,21 @@ FTile settingsRowTile({
   ),
 );
 
-/// A switch tile: label and description left, switch right. The whole row
-/// toggles; the switch is the single focus stop.
+/// A switch tile: label and description left, switch right. A press
+/// anywhere on the row toggles it; the switch is the single focus stop.
 FTile settingsSwitchTile({
   required Key key,
   required String label,
   String? description,
   required bool value,
   required ValueChanged<bool> onChange,
-}) => FTile.raw(
-  child: FSwitch(
-    key: key,
-    leadingLabel: true,
-    label: Text(label),
-    description: description == null ? null : Text(description),
-    value: value,
-    onChange: onChange,
-  ),
+}) => switchRowTile(
+  key: key,
+  leadingLabel: true,
+  label: Text(label),
+  description: description == null ? null : Text(description),
+  value: value,
+  onChange: onChange,
 );
 
 /// A tile holding free-form content (a form, a list of buttons).

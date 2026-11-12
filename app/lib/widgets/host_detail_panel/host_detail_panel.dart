@@ -19,6 +19,7 @@ import '../agent_status_line.dart';
 import '../host_chain_editor.dart';
 import '../network_discovery_sheet.dart';
 import '../protocol_badge.dart';
+import '../switch_row_tile.dart';
 import '../terminal_appearance_controls.dart' show kBundledTerminalFonts;
 
 part 'chain_section.dart';

@@ -33,7 +33,7 @@ FThemeData _build({required bool touch}) {
     fontFamily: kYsFontFamily,
   );
   final typography = FTypography(display: face, body: face);
-  return FThemeData(
+  final theme = FThemeData(
     colors: colors,
     touch: touch,
     typography: typography,
@@ -42,6 +42,17 @@ FThemeData _build({required bool touch}) {
       typography: typography,
       base: base,
       touch: touch,
+    ),
+  );
+  // App-wide tap guard (ruling P16): with slideable tiles/items (forui's
+  // default) the group's FTappableGroup swallows taps on buttons nested in
+  // a tile, e.g. a text field's suffix (password reveal toggle).
+  return theme.copyWith(
+    tileGroupStyle: theme.tileGroupStyle.copyWith(
+      slideableTiles: .delta([.all(false)]),
+    ),
+    itemGroupStyle: theme.itemGroupStyle.copyWith(
+      slideableItems: .delta([.all(false)]),
     ),
   );
 }

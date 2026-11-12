@@ -10,7 +10,7 @@ import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/agent_status_line.dart';
 import 'package:yourssh/widgets/host_detail_panel.dart';
-import 'package:yourssh_ui/yourssh_ui.dart' show FSwitch;
+import 'package:yourssh_ui/yourssh_ui.dart' show FSwitch, FTile;
 
 import '../helpers/ys_test_app.dart';
 
@@ -75,6 +75,32 @@ void main() {
 
     expect(saved, isNotNull);
     expect(saved!.agentForwarding, isTrue);
+  });
+
+  testWidgets('tapping the row gap toggles an option once', (tester) async {
+    await pumpPanel(tester, existing: existingHost());
+    final toggle = find.byKey(const ValueKey('agent-forwarding-switch'));
+    await tester.ensureVisible(toggle);
+    final tile = find.ancestor(of: toggle, matching: find.byType(FTile));
+    await tester.tapAt(
+      tester.getTopLeft(tile) + Offset(3, tester.getSize(tile).height / 2),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<FSwitch>(toggle).value, isTrue);
+  });
+
+  testWidgets('tapping the switch itself toggles an option once',
+      (tester) async {
+    await pumpPanel(tester, existing: existingHost());
+    final toggle = find.byKey(const ValueKey('agent-forwarding-switch'));
+    await tester.ensureVisible(toggle);
+    await tester.tap(find.descendant(
+      of: toggle,
+      matching: find.byWidgetPredicate(
+          (w) => w.runtimeType.toString() == 'CupertinoSwitch'),
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FSwitch>(toggle).value, isTrue);
   });
 
   testWidgets('editing a host with forwarding on shows the switch on',

@@ -186,21 +186,19 @@ class _Select<T> extends StatelessWidget {
   }
 }
 
-/// One option switch (label + description) for an [FTileGroup]. The whole
-/// row toggles; the switch is the single focus stop.
+/// One option switch (label + description) for an [FTileGroup]. A press
+/// anywhere on the row toggles it; the switch is the single focus stop.
 FTile _switchTile({
-  Key? key,
+  required Key key,
   required String title,
   Widget? titleWidget,
   required String description,
   required bool value,
   required ValueChanged<bool> onChange,
-}) => FTile.raw(
-  child: FSwitch(
-    key: key,
-    value: value,
-    onChange: onChange,
-    label: titleWidget ?? Text(title),
-    description: Text(description),
-  ),
+}) => switchRowTile(
+  key: key,
+  label: titleWidget ?? Text(title),
+  description: Text(description),
+  value: value,
+  onChange: onChange,
 );
