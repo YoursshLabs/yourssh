@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-11-12
+
+### Performance
+- **Terminal output is ~10× faster and never freezes the UI** — measured with vtebench-style corpora in a local shell (121×40, macOS): 40 MB of plain log output now takes 0.35 s (was ≈3.7 s with the window frozen), 20 MB of colored output 0.26 s, 8 MB of Unicode 0.13 s and 15 MB of full-screen TUI redraws 0.15 s — on par with Ghostty and 5–9× faster than Termius. During a flood the terminal keeps repainting at ~55 fps with no frame over 16.7 ms, and Ctrl+C stops the output in ~25 ms instead of letting a queued backlog print for seconds.
+  - Parser rewrite in the xterm fork (≈10× faster: bulk text runs, no per-chunk allocation, memoized accent composition, scrollback line reuse) with a byte entry point, so output goes from the PTY/SSH channel to the parser without string round-trips.
+  - Output is parsed in short time slices with repaints throttled to the display, with credit-based flow control on local PTYs (2 MiB window) and SSH (channel pause/resume) so the app never builds an unbounded backlog.
+  - New glyph-atlas renderer: each glyph is rasterized once and drawn from a GPU texture, cutting a full-screen frame from ~10 ms to ~2 ms; complex cells (emoji, underline, combining marks) keep the previous path. Pixel output matches the old renderer.
+  - DEC mode 2026 (synchronized output) for flicker-free full-screen redraws.
+
+### Security
+- **SSH agent forwarding:** forwarded agent channels are accepted only after the server accepted this client's forwarding request; the Keychain fallback serves only the host's own key; only identity-list and sign requests are relayed.
+- **SSH transport hardening:** bounded agent frames, channel window enforcement, malformed packets fail the connection instead of hanging it, and Diffie-Hellman group-exchange parameters are validated.
+- **Remote-controlled resource limits:** terminal window-resize requests are ignored, repeat counts and escape-sequence lengths are capped, RDP/VNC desktop sizes are capped at 8192 px per edge, and server clipboard text is capped at 1 MiB with a new per-host *Accept remote clipboard* switch (on by default).
+- **Files:** Windows *Open with* no longer goes through the command shell; *Open externally* refuses executable file types downloaded from a server; temporary copies live in private, random folders that are removed afterwards; generated keys are private before any key material is written and never overwrite an existing key; the sudo SFTP helper path must be a known `sftp-server`.
+- **Remote helpers:** kubectl arguments are shell-quoted and port-forwards bind to localhost on the remote host; MCP gateway / Cloudflare tunnel / mail catcher are stopped by PID with private temp files; HTTP/SOCKS proxy handshakes are size-limited; LAN (P2P) sync binds only the chosen interface and caps the transfer.
+- **JS plugins:** per-call time limits plus memory and stack caps, misbehaving plugins are unloaded, consent is tied to the plugin's file contents, `terminal.read` can no longer rewrite output, and plugin paths can't escape the plugin folder.
+- **Storage:** AI and S3 keys use the same macOS Keychain mode as host passwords, the Gemini key is sent in a header instead of the URL, recordings and the audit database are readable only by the user, and Android app backups are disabled.
+
+### Fixed
+- Terminal: no more exceptions from truncated color sequences or `ESC[1K`/`ESC[1J` at column 0; scrolling inside a scroll region and resizing after the scrollback filled up no longer corrupt the buffer (covered by a 50,000-case fuzz test).
+- `.bin` files can be opened externally on Linux again.
+- Code editor saves on Android no longer wrap the file in quotes.
+- Local shell: a failed `execvp` no longer leaves a duplicate process; Windows command lines are quoted correctly and support non-ASCII paths.
+- Mail catcher works on Python 3.12+ (falls back to `aiosmtpd`).
+
+---
+
 ## [0.2.1] — 2026-11-12
 
 ### Security
