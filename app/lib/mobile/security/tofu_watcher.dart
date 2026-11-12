@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/known_host.dart';
 import '../../providers/known_hosts_provider.dart';
 import '../../theme/app_theme.dart';
+
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Watches [KnownHostsProvider.pendingChallenge] and shows a single TOFU
@@ -41,41 +42,43 @@ class _TofuWatcherState extends State<TofuWatcher> {
       barrierDismissible: false,
       builder: (_) => YsDialog(
         title: c.isKeyTypeChange ? 'Host key type changed' : 'Host key changed',
-        body: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              c.isKeyTypeChange
-                  ? '${c.host}:${c.port} is trusted under a ${c.oldKeyType} '
-                        'key but now presents a ${c.keyType} key. This could be '
-                        'a server change — or a man-in-the-middle attack.'
-                  : 'The host key for ${c.host}:${c.port} has changed. This '
-                        'could be a server reinstall — or a man-in-the-middle '
-                        'attack.',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
+        body: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                c.isKeyTypeChange
+                    ? '${c.host}:${c.port} is trusted under a ${c.oldKeyType} '
+                          'key but now presents a ${c.keyType} key. This could be '
+                          'a server change — or a man-in-the-middle attack.'
+                    : 'The host key for ${c.host}:${c.port} has changed. This '
+                          'could be a server reinstall — or a man-in-the-middle '
+                          'attack.',
+                style: const TextStyle(
+                  color: YsColors.mutedForeground,
+                  fontSize: 13,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Old: ${c.oldFingerprint}',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 11,
-                fontFamily: 'monospace',
+              const SizedBox(height: 12),
+              Text(
+                'Old: ${c.oldFingerprint}',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                ),
               ),
-            ),
-            Text(
-              'New: ${c.newFingerprint}',
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 11,
-                fontFamily: 'monospace',
+              Text(
+                'New: ${c.newFingerprint}',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           FButton(

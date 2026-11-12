@@ -12,7 +12,7 @@ abstract final class MobileColors {
   static const borderSoft  = Color(0x14FFEBD2);
   static const textPrimary = YsColors.foreground;
   static const textMuted   = YsColors.mutedForeground;
-  static const textFaint   = Color(0xFF78716C);
+  static const textFaint   = Color(0xFF857E79);
   static const green       = YsColors.ok;
   static const red         = YsColors.error;
   static const blue        = Color(0xFF4DA3FF);

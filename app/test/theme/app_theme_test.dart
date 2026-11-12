@@ -45,7 +45,7 @@ void main() {
       expect(AppColors.accentDim, const Color(0xFFE87C08));
       expect(AppColors.textPrimary, YsColors.foreground);
       expect(AppColors.textSecondary, YsColors.mutedForeground);
-      expect(AppColors.textTertiary, const Color(0xFF78716C));
+      expect(AppColors.textTertiary, const Color(0xFF857E79));
       expect(AppColors.red, YsColors.error);
       expect(AppColors.success, YsColors.ok);
       expect(AppColors.warning, YsColors.warn);
@@ -62,7 +62,7 @@ void main() {
       expect(MobileColors.borderSoft, const Color(0x14FFEBD2));
       expect(MobileColors.textPrimary, YsColors.foreground);
       expect(MobileColors.textMuted, YsColors.mutedForeground);
-      expect(MobileColors.textFaint, const Color(0xFF78716C));
+      expect(MobileColors.textFaint, const Color(0xFF857E79));
       expect(MobileColors.green, YsColors.ok);
       expect(MobileColors.red, YsColors.error);
       expect(MobileColors.yellow, YsColors.warn);

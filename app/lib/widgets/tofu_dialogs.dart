@@ -45,22 +45,29 @@ class TofuDialog extends StatelessWidget {
           Flexible(child: Text(title)),
         ],
       ),
-      body: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            endpoint,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-          ),
-          const SizedBox(height: 12),
-          ...fingerprintRows,
-          const SizedBox(height: 12),
-          Text(
-            warning,
-            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
-          ),
-        ],
+      // Scrolls so the MITM warning never clips on small screens / large
+      // text; the action buttons stay pinned below.
+      body: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              endpoint,
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            ...fingerprintRows,
+            const SizedBox(height: 12),
+            Text(
+              warning,
+              style: const TextStyle(
+                color: YsColors.mutedForeground,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
       ),
       actions: [
         // Safe choice (reject) holds default focus: a stray Enter never

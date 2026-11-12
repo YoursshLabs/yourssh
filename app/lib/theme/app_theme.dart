@@ -11,7 +11,7 @@ class AppColors {
   static const accentDim = Color(0xFFE87C08);
   static const textPrimary = YsColors.foreground;
   static const textSecondary = YsColors.mutedForeground;
-  static const textTertiary = Color(0xFF78716C);
+  static const textTertiary = Color(0xFF857E79);
   static const red = YsColors.error;
   static const success = YsColors.ok;
   static const warning = YsColors.warn;

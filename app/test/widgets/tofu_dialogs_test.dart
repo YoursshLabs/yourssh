@@ -125,4 +125,58 @@ void main() {
       expect(result, [true]);
     });
   }
+
+  testWidgets('MITM warning is rendered in mutedForeground', (tester) async {
+    await _open(
+      tester,
+      _withCleanup(cases['host key changed']!.dialog()),
+    );
+    final text = tester.widget<Text>(find.textContaining('man-in-the-middle'));
+    expect(text.style!.color, YsColors.mutedForeground);
+  });
+
+  testWidgets('MITM warning stays reachable at 600x400 and text scale 1.3', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(600, 400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final dialog = _withCleanup(cases['host key type changed']!.dialog());
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (c, child) => MediaQuery(
+          data: MediaQuery.of(c).copyWith(textScaler: const TextScaler.linear(1.3)),
+          child: ysRootBuilder(c, child),
+        ),
+        home: Builder(
+          builder: (c) => TextButton(
+            onPressed: () => showYsDialog<bool>(
+              c,
+              barrierDismissible: false,
+              builder: (_) => dialog,
+            ),
+            child: const Text('go'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    final warning = find.textContaining('man-in-the-middle');
+    expect(warning, findsOneWidget);
+    expect(
+      find.ancestor(of: warning, matching: find.byType(SingleChildScrollView)),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(warning);
+    await tester.pumpAndSettle();
+    final screen = Offset.zero & const Size(600, 400);
+    expect(screen.contains(tester.getTopLeft(warning)), isTrue);
+    expect(screen.contains(tester.getBottomRight(warning)), isTrue);
+    // Buttons stay on screen.
+    expect(screen.contains(tester.getCenter(find.text('Trust new key'))), isTrue);
+    expect(screen.contains(tester.getCenter(find.text('Cancel'))), isTrue);
+  });
 }
