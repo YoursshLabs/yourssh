@@ -195,7 +195,11 @@ Future<void> prepareUnixRunDir(CliEndpoint ep) async {
       }
     }
   }
-  await _chmod('700', ep.runDir);
+  // Runs in main() before runApp: skip the chmod process when the mode is
+  // already right (every launch but the first).
+  if ((FileStat.statSync(ep.runDir).mode & 0x1FF) != 0x1C0) {
+    await _chmod('700', ep.runDir);
+  }
 }
 
 /// True when [dir] is a real directory (not a symlink) owned by us with
