@@ -41,11 +41,12 @@ class _ScriptPluginPanelScreenState extends State<ScriptPluginPanelScreen> {
     final home = Platform.isWindows
         ? Platform.environment['USERPROFILE']!
         : Platform.environment['HOME']!;
-    final htmlPath =
-        '$home/.yourssh/plugins/${widget.panel.pluginId}/${widget.panel.webviewEntry}';
-    final file = File(htmlPath);
-    if (!file.existsSync()) {
-      setState(() => _error = 'Panel file not found:\n$htmlPath');
+    final pluginDir = '$home/.yourssh/plugins/${widget.panel.pluginId}';
+    // Reject ../, absolute paths and symlinks that leave the plugin directory.
+    final file = resolvePluginFile(pluginDir, widget.panel.webviewEntry);
+    if (file == null) {
+      setState(() => _error =
+          'Panel file not found or outside the plugin directory:\n${widget.panel.webviewEntry}');
       return;
     }
     final html = await file.readAsString();

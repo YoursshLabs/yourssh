@@ -7,7 +7,12 @@ class PluginErrorTracker {
 
   PluginErrorTracker(this.pluginId);
 
-  void recordError() => _count++;
+  /// Records a failure. A timeout is heavier than an ordinary error because a
+  /// runaway hook freezes the UI isolate while it runs.
+  void recordError({int weight = 1}) => _count += weight;
+
+  /// Weight of one execution timeout.
+  static const int timeoutWeight = 5;
 
   void reset() => _count = 0;
 
