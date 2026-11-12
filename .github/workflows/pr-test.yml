@@ -19,6 +19,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# Flutter is pinned: the stable channel moved to 3.50, which deprecates
+# package:flutter/material.dart and requires Gradle >= 9.3.1 / AGP >= 9.1.1 /
+# Kotlin >= 2.4.10 for Android. Bump this together with that migration.
+env:
+  FLUTTER_VERSION: 3.47.1
+
 jobs:
   # The app suite needs no Rust at all: nothing under app/test loads the native
   # bridge, so this runs beside the crate jobs instead of behind them.
@@ -30,6 +36,7 @@ jobs:
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
 
       - name: Install Linux build dependencies
         run: |
@@ -73,6 +80,7 @@ jobs:
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
 
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
