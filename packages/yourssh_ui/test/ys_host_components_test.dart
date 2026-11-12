@@ -1,5 +1,8 @@
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
@@ -14,9 +17,11 @@ Widget _wrap(Widget child, {double w = 400}) => MaterialApp(
   ),
 );
 
-BoxDecoration _cardDeco(WidgetTester tester) => tester
-    .widget<Container>(find.byKey(const Key('ys-host-card-box')))
-    .decoration! as BoxDecoration;
+BoxDecoration _cardDeco(WidgetTester tester) =>
+    tester
+            .widget<Container>(find.byKey(const Key('ys-host-card-box')))
+            .decoration!
+        as BoxDecoration;
 
 void main() {
   testWidgets('host card shows title, subtitle, badges, tags, meta', (t) async {
@@ -199,5 +204,81 @@ void main() {
     expect(find.byType(FBadge), findsNWidgets(2));
     expect(find.text('prod'), findsOneWidget);
     expect(find.text('lag 4.2 s'), findsOneWidget);
+  });
+
+  testWidgets('subtitle uses mono font family and fallback', (t) async {
+    await t.pumpWidget(
+      _wrap(YsHostCard(leading: const SizedBox(), title: 'a', subtitle: 'sub')),
+    );
+    final style = t.widget<Text>(find.text('sub')).style!;
+    expect(style.fontFamily, kYsMonoFontFamily);
+    expect(style.fontFamilyFallback, kYsMonoFontFallback);
+  });
+
+  testWidgets('card is focusable, Enter and Space fire onTap', (t) async {
+    var tap = 0;
+    await t.pumpWidget(
+      _wrap(
+        YsHostCard(
+          leading: const SizedBox(),
+          title: 'a',
+          subtitle: 'b',
+          onTap: () => tap++,
+        ),
+      ),
+    );
+    final node = Focus.of(t.element(find.byKey(const Key('ys-host-card-box'))));
+    node.requestFocus();
+    await t.pump();
+    expect(node.hasFocus, isTrue);
+    expect((_cardDeco(t).border! as Border).top.width, 2, reason: 'focus ring');
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(tap, 2);
+  });
+
+  testWidgets('semantics label contains title', (t) async {
+    final h = t.ensureSemantics();
+    await t.pumpWidget(
+      _wrap(
+        YsHostCard(
+          leading: const SizedBox(),
+          title: 'prod-web-01',
+          subtitle: 'sub',
+          selected: true,
+          onTap: () {},
+        ),
+      ),
+    );
+    final d = t.getSemantics(
+      find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.button == true,
+      ),
+    );
+    expect(d.label, contains('prod-web-01'));
+    expect(d.flagsCollection.isSelected, Tristate.isTrue);
+    h.dispose();
+  });
+
+  testWidgets('240px card with 3 badges and 60-char title: no overflow', (
+    t,
+  ) async {
+    await t.pumpWidget(
+      _wrap(
+        w: 240,
+        YsHostCard(
+          leading: const YsOsTile(glyph: Icon(Icons.dns), color: Colors.red),
+          title: 'x' * 60,
+          subtitle: 'b',
+          statusDot: const SizedBox(width: 6, height: 6),
+          badges: const [
+            YsStatusBadge('RDP'),
+            YsStatusBadge('lag 4.2 s'),
+            YsStatusBadge('degraded'),
+          ],
+        ),
+      ),
+    );
+    expect(t.takeException(), isNull);
   });
 }

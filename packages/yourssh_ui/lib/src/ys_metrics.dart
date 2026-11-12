@@ -17,3 +17,14 @@ abstract final class YsRadius {
 
 /// Font family; files are bundled by the app.
 const String kYsFontFamily = 'Inter';
+
+/// Monospace font family (bundled by the app) for hostnames, paths and code.
+const String kYsMonoFontFamily = 'MesloLGS NF';
+
+/// Fallbacks when [kYsMonoFontFamily] is unavailable.
+const List<String> kYsMonoFontFallback = [
+  'Roboto Mono for Powerline',
+  'Menlo',
+  'Consolas',
+  'monospace',
+];
