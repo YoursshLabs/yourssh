@@ -19,6 +19,8 @@ import 'package:yourssh/services/tab_metadata_service.dart';
 import 'package:yourssh/theme/app_theme.dart';
 import 'package:yourssh/widgets/session_tab.dart';
 
+import '../helpers/ys_test_app.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -46,7 +48,7 @@ void main() {
                 connectedHostIds: () => const <String>[],
                 pollSeconds: () => 0)),
       ],
-      child: MaterialApp(home: Scaffold(body: Row(children: [tab]))),
+      child: ysTestApp(Row(children: [tab])),
     );
   }
 
