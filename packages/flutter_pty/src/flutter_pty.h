@@ -11,6 +11,8 @@
 #define _GNU_SOURCE /* GNU glibc grantpt() prototypes */
 #endif
 
+#include <stdint.h>
+
 #include "include/dart_api_dl.h"
 
 typedef struct PtyOptions
@@ -33,6 +35,11 @@ typedef struct PtyOptions
 
     bool ackRead;
 
+    // With ackRead: > 0 enables credit based flow control (the reader keeps
+    // posting until this many bytes are in flight and Dart returns credit with
+    // pty_ack_bytes); 0 keeps the one-chunk-then-wait pty_ack_read behaviour.
+    int64_t credit_bytes;
+
 } PtyOptions;
 
 typedef struct PtyHandle PtyHandle;
@@ -42,6 +49,8 @@ FFI_PLUGIN_EXPORT PtyHandle *pty_create(PtyOptions *options);
 FFI_PLUGIN_EXPORT void pty_write(PtyHandle *handle, char *buffer, int length);
 
 FFI_PLUGIN_EXPORT void pty_ack_read(PtyHandle *handle);
+
+FFI_PLUGIN_EXPORT void pty_ack_bytes(PtyHandle *handle, int64_t bytes);
 
 FFI_PLUGIN_EXPORT int pty_resize(PtyHandle *handle, int rows, int cols);
 

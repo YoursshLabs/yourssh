@@ -2,6 +2,7 @@
 #include <Windows.h>
 
 #include "flutter_pty.h"
+#include "pty_flow.h"
 
 #include "include/dart_api.h"
 #include "include/dart_api_dl.h"
@@ -267,9 +268,7 @@ typedef struct ReadLoopOptions
 
     Dart_Port port;
 
-    HANDLE hMutex;
-
-    BOOL ackRead;
+    PtyFlow *flow;
 
 } ReadLoopOptions;
 
@@ -283,10 +282,9 @@ static DWORD WINAPI read_loop(LPVOID arg)
     {
         DWORD readlen = 0;
 
-        if (options->ackRead)
-        {
-            WaitForSingleObject(options->hMutex, INFINITE);
-        }
+        // Flow control: blocks only once the in-flight budget is used up
+        // (one chunk in the legacy ackRead mode).
+        pty_flow_wait(options->flow);
 
         BOOL ok = ReadFile(options->fd, buffer, sizeof(buffer), &readlen, NULL);
 
@@ -300,26 +298,47 @@ static DWORD WINAPI read_loop(LPVOID arg)
             break;
         }
 
+        // Coalesce whatever is already waiting in the pipe (ReadFile with a
+        // size not above the available byte count never blocks).
+        for (;;)
+        {
+            DWORD avail = 0;
+            DWORD room = (DWORD)sizeof(buffer) - readlen;
+            if (room < 4096 ||
+                !PeekNamedPipe(options->fd, NULL, 0, NULL, &avail, NULL) ||
+                avail == 0)
+            {
+                break;
+            }
+            DWORD more = 0;
+            if (!ReadFile(options->fd, buffer + readlen, avail < room ? avail : room, &more, NULL) ||
+                more == 0)
+            {
+                break;
+            }
+            readlen += more;
+        }
+
         Dart_CObject result;
         result.type = Dart_CObject_kTypedData;
         result.value.as_typed_data.type = Dart_TypedData_kUint8;
         result.value.as_typed_data.length = readlen;
         result.value.as_typed_data.values = (uint8_t *)buffer;
 
+        pty_flow_posted(options->flow, (int64_t)readlen);
         Dart_PostCObject_DL(options->port, &result);
     }
 
     return 0;
 }
 
-static void start_read_thread(HANDLE fd, Dart_Port port, HANDLE mutex, BOOL ackRead)
+static void start_read_thread(HANDLE fd, Dart_Port port, PtyFlow *flow)
 {
     ReadLoopOptions *options = malloc(sizeof(ReadLoopOptions));
 
     options->fd = fd;
     options->port = port;
-    options->hMutex = mutex;
-    options->ackRead = ackRead;
+    options->flow = flow;
 
     DWORD thread_id;
 
@@ -337,7 +356,7 @@ typedef struct WaitExitOptions
 
     Dart_Port port;
 
-    HANDLE hMutex;
+    PtyFlow *flow;
 } WaitExitOptions;
 
 static DWORD WINAPI wait_exit_thread(LPVOID arg)
@@ -351,20 +370,23 @@ static DWORD WINAPI wait_exit_thread(LPVOID arg)
     GetExitCodeProcess(options->pid, &exit_code);
 
     CloseHandle(options->pid);
-    CloseHandle(options->hMutex);
+
+    // The producer is gone: let a reader that is waiting for credit drain the
+    // remaining output and finish instead of blocking forever.
+    pty_flow_close(options->flow);
 
     Dart_PostInteger_DL(options->port, exit_code);
 
     return 0;
 }
 
-static void start_wait_exit_thread(HANDLE pid, Dart_Port port, HANDLE mutex)
+static void start_wait_exit_thread(HANDLE pid, Dart_Port port, PtyFlow *flow)
 {
     WaitExitOptions *options = malloc(sizeof(WaitExitOptions));
 
     options->pid = pid;
     options->port = port;
-    options->hMutex = mutex;
+    options->flow = flow;
 
     DWORD thread_id;
 
@@ -386,9 +408,7 @@ typedef struct PtyHandle
 
     DWORD dwProcessId;
 
-    BOOL ackRead;
-
-    HANDLE hMutex;
+    PtyFlow *flow;
 
 } PtyHandle;
 
@@ -514,15 +534,19 @@ FFI_PLUGIN_EXPORT PtyHandle *pty_create(PtyOptions *options)
 
     // CloseHandle(processInfo.hThread);
 
-    HANDLE mutex = CreateSemaphore(
-        NULL, // default security attributes
-        1,    // initial count
-        1,    // maximum count
-        NULL);
+    PtyFlow *flow = malloc(sizeof(PtyFlow));
 
-    start_read_thread(outputReadSide, options->stdout_port, mutex, options->ackRead);
+    if (flow == NULL)
+    {
+        error_message = "Failed to allocate flow control state";
+        return NULL;
+    }
 
-    start_wait_exit_thread(processInfo.hProcess, options->exit_port, mutex);
+    pty_flow_init(flow, options->ackRead, options->credit_bytes);
+
+    start_read_thread(outputReadSide, options->stdout_port, flow);
+
+    start_wait_exit_thread(processInfo.hProcess, options->exit_port, flow);
 
     PtyHandle *pty = malloc(sizeof(PtyHandle));
 
@@ -536,8 +560,7 @@ FFI_PLUGIN_EXPORT PtyHandle *pty_create(PtyOptions *options)
     pty->outputReadSide = outputReadSide;
     pty->hPty = hPty;
     pty->dwProcessId = processInfo.dwProcessId;
-    pty->ackRead = options->ackRead;
-    pty->hMutex = mutex;
+    pty->flow = flow;
 
     return pty;
 }
@@ -555,10 +578,14 @@ FFI_PLUGIN_EXPORT void pty_write(PtyHandle *handle, char *buffer, int length)
 
 FFI_PLUGIN_EXPORT void pty_ack_read(PtyHandle *handle)
 {
-    if (handle->ackRead)
-    {
-        ReleaseSemaphore(handle->hMutex, 1, NULL);
-    }
+    // one chunk processed (legacy mode)
+    pty_flow_ack_chunk(handle->flow);
+}
+
+FFI_PLUGIN_EXPORT void pty_ack_bytes(PtyHandle *handle, int64_t bytes)
+{
+    // `bytes` processed: returns that much credit to the reader
+    pty_flow_ack_bytes(handle->flow, bytes);
 }
 
 FFI_PLUGIN_EXPORT int pty_resize(PtyHandle *handle, int rows, int cols)
