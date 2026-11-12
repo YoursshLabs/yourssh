@@ -44,6 +44,7 @@ dependencies:
 
   # UUID generation
   uuid: ^4.5.1
+  unorm_dart: ^0.3.0
 
   # Path utilities
   path: ^1.9.0
