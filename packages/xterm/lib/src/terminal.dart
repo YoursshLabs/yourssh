@@ -397,6 +397,17 @@ class Terminal
   @override
   int get writeCharsFailedAt => _writeCharsFailedAt;
 
+  /// Writes UTF-8 encoded data from the underlying program. Same as decoding
+  /// the byte stream with one chunked `Utf8Decoder(allowMalformed: true)` and
+  /// calling [write] with every string it produces (malformed bytes become
+  /// U+FFFD, a byte order mark at the start of the stream is dropped, a
+  /// sequence split across calls is joined), but decodes straight into the
+  /// parser without building strings. Use one or the other for a stream.
+  void writeBytes(Uint8List data) {
+    _parser.writeBytes(data);
+    notifyListeners();
+  }
+
   /// Bulk form of [writeChar] used by the parser for runs of text.
   @override
   int writeChars(Uint32List runes, int start, int end) {

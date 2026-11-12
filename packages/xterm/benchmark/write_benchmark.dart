@@ -12,10 +12,13 @@
 //   dart compile exe --packages=../../app/.dart_tool/package_config.json \
 //     benchmark/write_benchmark.dart -o /tmp/xterm_write_bench
 //   /tmp/xterm_write_bench --dir=<corpus dir> [--chunk=65536] [--reps=5] \
-//     [plain color unicode tui]
+//     [--bytes] [plain color unicode tui]
 //
-// Each corpus also prints a digest of the final screen + scrollback state so
-// two builds can be compared for identical behavior.
+// `--bytes` also measures the whole pipeline from raw bytes: chunked
+// Utf8Decoder + Terminal.write (what the app does today) and
+// Terminal.writeBytes (decoding inside the terminal). Each corpus also
+// prints a digest of the final screen + scrollback state so two builds can
+// be compared for identical behavior.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -28,6 +31,7 @@ void main(List<String> args) {
   var chunk = 65536;
   var reps = 5;
   var maxBytes = 1 << 62;
+  var bytesMode = false;
   final corpora = <String>[];
   for (final a in args) {
     if (a.startsWith('--dir=')) {
@@ -38,6 +42,8 @@ void main(List<String> args) {
       reps = int.parse(a.substring(7));
     } else if (a.startsWith('--max=')) {
       maxBytes = int.parse(a.substring(6));
+    } else if (a == '--bytes') {
+      bytesMode = true;
     } else {
       corpora.add(a);
     }
@@ -71,7 +77,46 @@ void main(List<String> args) {
       digest = terminalDigest(t);
     }
     report('write', name, mb, times, digest);
+
+    if (bytesMode) {
+      final ptimes = <double>[];
+      final btimes = <double>[];
+      var pdigest = 0;
+      var bdigest = 0;
+      for (var r = 0; r < reps; r++) {
+        final t = newTerminal();
+        final sw = Stopwatch()..start();
+        final sink = const Utf8Decoder(allowMalformed: true)
+            .startChunkedConversion(_WriteSink(t));
+        for (final c in byteChunks) {
+          sink.add(c);
+        }
+        sw.stop();
+        ptimes.add(sw.elapsedMicroseconds / 1e6);
+        pdigest = terminalDigest(t);
+
+        final t2 = newTerminal();
+        final sw2 = Stopwatch()..start();
+        for (final c in byteChunks) {
+          t2.writeBytes(c);
+        }
+        sw2.stop();
+        btimes.add(sw2.elapsedMicroseconds / 1e6);
+        bdigest = terminalDigest(t2);
+      }
+      report('decode+wr', name, mb, ptimes, pdigest);
+      report('writeBytes', name, mb, btimes, bdigest);
+    }
   }
+}
+
+class _WriteSink implements Sink<String> {
+  _WriteSink(this.terminal);
+  final Terminal terminal;
+  @override
+  void add(String data) => terminal.write(data);
+  @override
+  void close() {}
 }
 
 Terminal newTerminal() {

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:xterm/src/core/color.dart';
@@ -69,6 +70,142 @@ class EscapeParser {
         }
       }
       buf[w++] = c;
+    }
+    _process(w);
+  }
+
+  /// Up to three bytes of a UTF-8 sequence cut short by the end of the last
+  /// [writeBytes] chunk.
+  final _carry = Uint8List(4);
+
+  var _carryLength = 0;
+
+  /// Whether [writeBytes] has decoded any byte yet (a byte order mark is only
+  /// dropped at the very start of the byte stream).
+  var _bytesStarted = false;
+
+  static const _utf8 = Utf8Decoder(allowMalformed: true);
+
+  /// Writes UTF-8 encoded input. Equivalent to feeding the byte stream to one
+  /// chunked `Utf8Decoder(allowMalformed: true)` and calling [write] with
+  /// every string it produces — malformed bytes become U+FFFD exactly as
+  /// that decoder reports them, a byte order mark at the start of the stream
+  /// is dropped, and a sequence split across chunks is joined — but without
+  /// building the intermediate strings.
+  void writeBytes(Uint8List bytes) {
+    var data = bytes;
+    var end = bytes.length;
+    if (_carryLength > 0) {
+      data = Uint8List(_carryLength + end)
+        ..setRange(0, _carryLength, _carry)
+        ..setRange(_carryLength, _carryLength + end, bytes);
+      end = data.length;
+      _carryLength = 0;
+    }
+
+    // Hold back a sequence that the end of this chunk cut short.
+    var stop = end;
+    for (var k = end - 1; k >= 0 && k >= end - 3; k--) {
+      final b = data[k];
+      if (b < 0x80) break;
+      if (b >= 0xC0) {
+        final need = b >= 0xF0 ? 4 : (b >= 0xE0 ? 3 : 2);
+        if (b >= 0xC2 && b <= 0xF4 && end - k < need) stop = k;
+        break;
+      }
+    }
+    for (var k = stop; k < end; k++) {
+      _carry[_carryLength++] = data[k];
+    }
+
+    var i = 0;
+    if (!_bytesStarted && stop > 0) {
+      _bytesStarted = true;
+      if (stop >= 3 &&
+          data[0] == 0xEF &&
+          data[1] == 0xBB &&
+          data[2] == 0xBF) {
+        i = 3;
+      }
+    }
+
+    var w = _length;
+    if (w + (stop - i) > _buf.length) {
+      _grow(w + (stop - i));
+    }
+    final buf = _buf;
+
+    while (i < stop) {
+      var b0 = data[i];
+      if (b0 < 0x80) {
+        do {
+          buf[w++] = b0;
+          if (++i == stop) break;
+          b0 = data[i];
+        } while (b0 < 0x80);
+        continue;
+      }
+      if (b0 >= 0xC2) {
+        if (b0 < 0xE0) {
+          if (i + 1 < stop) {
+            final b1 = data[i + 1];
+            if (b1 & 0xC0 == 0x80) {
+              buf[w++] = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
+              i += 2;
+              continue;
+            }
+          }
+        } else if (b0 < 0xF0) {
+          if (i + 2 < stop) {
+            final b1 = data[i + 1];
+            final b2 = data[i + 2];
+            if (b1 >= (b0 == 0xE0 ? 0xA0 : 0x80) &&
+                b1 <= (b0 == 0xED ? 0x9F : 0xBF) &&
+                b2 & 0xC0 == 0x80) {
+              buf[w++] = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
+              i += 3;
+              continue;
+            }
+          }
+        } else if (b0 <= 0xF4) {
+          if (i + 3 < stop) {
+            final b1 = data[i + 1];
+            final b2 = data[i + 2];
+            final b3 = data[i + 3];
+            if (b1 >= (b0 == 0xF0 ? 0x90 : 0x80) &&
+                b1 <= (b0 == 0xF4 ? 0x8F : 0xBF) &&
+                b2 & 0xC0 == 0x80 &&
+                b3 & 0xC0 == 0x80) {
+              buf[w++] = ((b0 & 0x07) << 18) |
+                  ((b1 & 0x3F) << 12) |
+                  ((b2 & 0x3F) << 6) |
+                  (b3 & 0x3F);
+              i += 4;
+              continue;
+            }
+          }
+        }
+      }
+      // Malformed: let the platform decoder report the bytes up to the next
+      // ASCII byte (always a sequence boundary for it), so replacement
+      // characters match it exactly.
+      var k = i + 1;
+      while (k < stop && data[k] >= 0x80) {
+        k++;
+      }
+      final text = _utf8.convert(data, i, k);
+      for (var j = 0; j < text.length; j++) {
+        var c = text.codeUnitAt(j);
+        if (c >= 0xD800 && c <= 0xDBFF && j + 1 < text.length) {
+          final d = text.codeUnitAt(j + 1);
+          if (d >= 0xDC00 && d <= 0xDFFF) {
+            c = 0x10000 + ((c - 0xD800) << 10) + (d - 0xDC00);
+            j++;
+          }
+        }
+        buf[w++] = c;
+      }
+      i = k;
     }
     _process(w);
   }
