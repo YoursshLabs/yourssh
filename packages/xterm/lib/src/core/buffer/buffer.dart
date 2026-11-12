@@ -1,4 +1,5 @@
 import 'dart:math' show max, min;
+import 'dart:typed_data';
 
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 import 'package:xterm/src/core/buffer/cell_offset.dart';
@@ -146,6 +147,125 @@ class Buffer {
     if (cellWidth == 2) {
       writeChar(0);
     }
+  }
+
+  /// Index (into the code points given to [writeChars]) of the one that was
+  /// being written when [writeChars] threw.
+  int writeCharsFailedAt = 0;
+
+  /// Writes `runes[start, end)` with exactly the effect of calling
+  /// [writeChar] for each of them in order, but without the per-character
+  /// overhead: runs of printable ASCII go straight into the line's cell
+  /// storage, and the cursor line is looked up once per line instead of
+  /// once per character.
+  void writeChars(Uint32List runes, int start, int end) {
+    final width = terminal.viewWidth;
+    final cursor = terminal.cursor;
+    final fg = cursor.foreground;
+    final bg = cursor.background;
+    final attrs = cursor.attrs;
+    final identity = charset.isIdentity;
+    final widths = unicodeV11Table;
+
+    // The cursor line while it is known to be valid and big enough for the
+    // fast paths; null when it must be looked up (again).
+    BufferLine? line;
+    var x = _cursorX;
+    var i = start;
+    writeCharsFailedAt = start;
+
+    while (i < end) {
+      var codePoint = runes[i];
+
+      if (line != null &&
+          identity &&
+          codePoint >= 0x20 &&
+          codePoint <= 0x7e &&
+          x < width) {
+        // Printable ASCII: width 1, never translated or composed, and no
+        // wrap before the end of the line.
+        final limit = end - i <= width - x ? end : i + (width - x);
+        final written = line.writeAsciiRun(x, runes, i, limit, fg, bg, attrs);
+        x += written;
+        i += written;
+        continue;
+      }
+
+      // Everything else follows writeChar step by step.
+      writeCharsFailedAt = i;
+      if (!identity) {
+        codePoint = charset.translate(codePoint);
+      }
+      final cellWidth =
+          codePoint < 0x10000 ? widths[codePoint] : unicodeV11.wcwidth(codePoint);
+
+      if (cellWidth == 0 && codePoint >= 0x0300) {
+        _cursorX = x;
+        if (_tryComposeMark(codePoint)) {
+          i++;
+          continue;
+        }
+      }
+
+      if (x >= width) {
+        _cursorX = x;
+        index();
+        setCursorX(0);
+        if (terminal.autoWrapMode) {
+          currentLine.isWrapped = true;
+        }
+        x = _cursorX;
+        line = null;
+      }
+
+      if (line == null) {
+        final current = currentLine;
+        if (current.capacity < width) {
+          // Not expected (lines are as wide as the view); keep writeChar's
+          // exact behavior, including any range error.
+          _cursorX = x;
+          current.setCell(_cursorX, codePoint, cellWidth, cursor);
+          if (_cursorX < width) {
+            _cursorX++;
+          }
+          if (cellWidth == 2) {
+            writeChar(0);
+          }
+          x = _cursorX;
+          i++;
+          continue;
+        }
+        line = current;
+      }
+
+      line.setCell(x, codePoint, cellWidth, cursor);
+      x++;
+
+      if (cellWidth == 2) {
+        // writeChar(0): the continuation cell of a wide character.
+        if (x >= width) {
+          _cursorX = x;
+          index();
+          setCursorX(0);
+          if (terminal.autoWrapMode) {
+            currentLine.isWrapped = true;
+          }
+          x = _cursorX;
+          line = currentLine;
+          line.setCell(x, 0, 0, cursor);
+          if (line.capacity < width) {
+            line = null;
+          }
+        } else {
+          line.setCell(x, 0, 0, cursor);
+        }
+        x++;
+      }
+
+      i++;
+    }
+
+    _cursorX = x;
   }
 
   /// Tries to canonically compose the combining [mark] with the codepoint in

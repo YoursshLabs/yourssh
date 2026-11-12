@@ -1,4 +1,5 @@
 import 'dart:math' show max;
+import 'dart:typed_data';
 
 import 'package:xterm/src/base/observable.dart';
 import 'package:xterm/src/core/buffer/buffer.dart';
@@ -25,7 +26,9 @@ import 'package:xterm/src/utils/circular_buffer.dart';
 /// [buffer] and events such as [onTitleChange] or [onBell], as well as
 /// translating user input into escape sequences that the application can
 /// understand.
-class Terminal with Observable implements TerminalState, EscapeHandler {
+class Terminal
+    with Observable
+    implements TerminalState, EscapeHandler, EscapeTextSink {
   /// The number of lines that the scrollback buffer can hold. If the buffer
   /// exceeds this size, the lines at the top of the buffer will be removed.
   final int maxLines;
@@ -387,6 +390,25 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
   void writeChar(int char) {
     _precedingCodepoint = char;
     _buffer.writeChar(char);
+  }
+
+  var _writeCharsFailedAt = 0;
+
+  @override
+  int get writeCharsFailedAt => _writeCharsFailedAt;
+
+  /// Bulk form of [writeChar] used by the parser for runs of text.
+  @override
+  void writeChars(Uint32List runes, int start, int end) {
+    try {
+      _buffer.writeChars(runes, start, end);
+    } catch (_) {
+      // Same state as a writeChar loop that threw on this code point.
+      _writeCharsFailedAt = _buffer.writeCharsFailedAt;
+      _precedingCodepoint = runes[_writeCharsFailedAt];
+      rethrow;
+    }
+    _precedingCodepoint = runes[end - 1];
   }
 
   /* SBC */

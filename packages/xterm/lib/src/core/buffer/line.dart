@@ -121,6 +121,41 @@ class BufferLine with IndexedItem {
     _data[offset + _cellContent] = char | (witdh << CellContent.widthShift);
   }
 
+  /// Number of cells the backing store can hold without growing.
+  int get capacity => _data.length ~/ _cellSize;
+
+  /// Writes the printable ASCII code points (0x20..0x7e) of
+  /// `runes[start, end)` into consecutive cells from [x], each with width 1
+  /// and the given style words, stopping at the first other code point.
+  /// Returns the number of cells written. The caller guarantees the cells
+  /// fit in [capacity].
+  int writeAsciiRun(
+    int x,
+    Uint32List runes,
+    int start,
+    int end,
+    int fg,
+    int bg,
+    int attrs,
+  ) {
+    final data = _data;
+    var o = x * _cellSize;
+    var j = start;
+    while (j < end) {
+      final c = runes[j];
+      if (c < 0x20 || c > 0x7e) break;
+      data[o + _cellForeground] = fg;
+      data[o + _cellBackground] = bg;
+      data[o + _cellAttributes] = attrs;
+      data[o + _cellContent] = c | (1 << CellContent.widthShift);
+      o += _cellSize;
+      j++;
+    }
+    final written = j - start;
+    if (written > 0) _version++;
+    return written;
+  }
+
   void setCellData(int index, CellData cellData) {
     _version++;
     final offset = index * _cellSize;

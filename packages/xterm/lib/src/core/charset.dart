@@ -14,8 +14,14 @@ class Charset {
 
   var _cached = asciiTranslator;
 
+  var _isIdentity = true;
+
+  /// Whether [translate] currently returns every code point unchanged.
+  bool get isIdentity => _isIdentity;
+
   void _updateCache() {
     _cached = _charsetMap[_currentIndex] ?? asciiTranslator;
+    _isIdentity = identical(_cached, asciiTranslator);
   }
 
   int translate(int codePoint) {
