@@ -46,7 +46,10 @@ jobs:
 
       - name: Analyze
         working-directory: app
-        run: flutter analyze
+        # Infos stay visible but non-fatal: Flutter >= 3.47 deprecates
+        # package:flutter/material.dart (migration to material_ui is separate);
+        # warnings and errors still fail the job.
+        run: flutter analyze --no-fatal-infos
 
       - name: Test (app)
         working-directory: app
