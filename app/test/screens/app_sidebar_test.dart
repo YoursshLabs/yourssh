@@ -54,6 +54,7 @@ void main() {
     ValueChanged<String>? onSelectPlugin,
     ValueChanged<String>? onSelectScriptPanel,
     VoidCallback? onOpenLocalTerminal,
+    double textScale = 1.0,
   }) async {
     tester.view.physicalSize = const Size(1000, 1600);
     tester.view.devicePixelRatio = 1.0;
@@ -79,14 +80,20 @@ void main() {
           ChangeNotifierProvider<UpdateProvider>.value(value: update),
         ],
         child: ysTestApp(
-          AppSidebar(
-            selected: selected,
-            activePluginId: activePluginId,
-            activeScriptPanel: activeScriptPanel,
-            onSelect: onSelect ?? (_) {},
-            onSelectPlugin: onSelectPlugin ?? (_) {},
-            onSelectScriptPanel: onSelectScriptPanel ?? (_) {},
-            onOpenLocalTerminal: onOpenLocalTerminal ?? () {},
+          Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(textScale)),
+              child: AppSidebar(
+                selected: selected,
+                activePluginId: activePluginId,
+                activeScriptPanel: activeScriptPanel,
+                onSelect: onSelect ?? (_) {},
+                onSelectPlugin: onSelectPlugin ?? (_) {},
+                onSelectScriptPanel: onSelectScriptPanel ?? (_) {},
+                onOpenLocalTerminal: onOpenLocalTerminal ?? () {},
+              ),
+            ),
           ),
         ),
       ),
@@ -218,5 +225,18 @@ void main() {
   testWidgets('sidebar renders 200 px wide', (tester) async {
     await pump(tester);
     expect(tester.getSize(find.byType(FSidebar)).width, 200);
+  });
+
+  testWidgets('brand header does not overflow at text scale 2.0', (
+    tester,
+  ) async {
+    await pump(tester, textScale: 2.0);
+    expect(tester.takeException(), isNull);
+    final brand = find.text('YourSSH');
+    expect(brand, findsOneWidget);
+    expect(
+      tester.getBottomRight(brand).dx,
+      lessThanOrEqualTo(tester.getSize(find.byType(FSidebar)).width),
+    );
   });
 }

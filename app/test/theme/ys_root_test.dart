@@ -37,13 +37,17 @@ void main() {
   });
 
   testWidgets('dialog on the root navigator inherits FTheme', (tester) async {
+    late BuildContext dialogCtx;
     await tester.pumpWidget(
       ysTestApp(
         Builder(
           builder: (context) => TextButton(
             onPressed: () => showDialog<void>(
               context: context,
-              builder: (_) => const FCard(child: Text('in dialog')),
+              builder: (c) {
+                dialogCtx = c;
+                return const FCard(child: Text('in dialog'));
+              },
             ),
             child: const Text('open'),
           ),
@@ -54,6 +58,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('in dialog'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    // FTheme.of falls back silently, so assert the actual token.
+    expect(FTheme.of(dialogCtx).colors.primary, YsColors.primary);
   });
 
   testWidgets('showFToast works under the root', (tester) async {

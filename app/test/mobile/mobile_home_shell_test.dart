@@ -17,8 +17,10 @@ import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/sync_service.dart';
 import 'package:yourssh/services/tab_metadata_service.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilderTouch;
+import 'package:yourssh_ui/yourssh_ui.dart';
 
-Widget _wrap(Widget child) {
+Widget _wrap(Widget child, {bool withRoot = false}) {
   final storage = StorageService();
   final sync = SyncProvider();
   return MultiProvider(
@@ -49,6 +51,7 @@ Widget _wrap(Widget child) {
     ],
     child: MaterialApp(
       theme: buildMobileTheme(),
+      builder: withRoot ? ysRootBuilderTouch : null,
       home: child,
     ),
   );
@@ -69,6 +72,32 @@ void main() {
         findsOneWidget,
       );
     }
+  });
+
+  testWidgets('a toast does not cover the MobileTabBar', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.padding = const FakeViewPadding(bottom: 34);
+    tester.view.viewPadding = const FakeViewPadding(bottom: 34);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_wrap(const MobileHomeShell(), withRoot: true));
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.byType(MobileHomeShell));
+    showYsToast(context, 'Saved');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    final toast = find.ancestor(
+      of: find.text('Saved'),
+      matching: find.byType(FToast),
+    );
+    expect(toast, findsOneWidget);
+    final toastRect = tester.getRect(toast);
+    final barRect = tester.getRect(find.byType(MobileTabBar));
+    expect(toastRect.overlaps(barRect), isFalse);
+    expect(toastRect.bottom, lessThanOrEqualTo(barRect.top));
+    await tester.pumpAndSettle(const Duration(seconds: 6));
   });
 
   testWidgets('Settings tab is reachable', (tester) async {

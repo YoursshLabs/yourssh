@@ -173,11 +173,15 @@ class _BrandHeader extends StatelessWidget {
               ),
             ),
           ),
-          Text(
-            'YourSSH',
-            style: theme.typography.body.sm.copyWith(
-              color: theme.colors.foreground,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              'YourSSH',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.typography.body.sm.copyWith(
+                color: theme.colors.foreground,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],

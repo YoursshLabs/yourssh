@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
+import '../mobile/theme/mobile_tokens.dart';
+
 class AppColors {
   static const bg = YsColors.background;
   static const sidebar = YsColors.sidebar;
@@ -87,9 +89,28 @@ ThemeData buildAppTheme() => ysMaterialTheme();
 Widget ysRootBuilder(BuildContext context, Widget? child) =>
     _wrap(ysThemeData(), child);
 
-/// Same as [ysRootBuilder] with touch sizing, for the mobile app.
-Widget ysRootBuilderTouch(BuildContext context, Widget? child) =>
-    _wrap(ysThemeDataTouch(), child);
+/// Same as [ysRootBuilder] with touch sizing, for the mobile app. The toaster
+/// is lifted by the bottom tab bar's height so toasts never cover it (the
+/// toaster already adds the bottom safe-area inset, which the tab bar also
+/// grows by).
+Widget ysRootBuilderTouch(BuildContext context, Widget? child) => _wrap(
+  ysThemeDataTouch(),
+  child,
+  toasterStyle: const FToasterStyleDelta.delta(
+    padding: EdgeInsetsGeometryDelta.add(
+      EdgeInsets.only(bottom: MobileTokens.tabBarHeight),
+    ),
+  ),
+);
 
-Widget _wrap(FThemeData data, Widget? child) =>
-    FTheme(data: data, child: FToaster(child: child ?? const SizedBox.shrink()));
+Widget _wrap(
+  FThemeData data,
+  Widget? child, {
+  FToasterStyleDelta toasterStyle = const FToasterStyleDelta.context(),
+}) => FTheme(
+  data: data,
+  child: FToaster(
+    style: toasterStyle,
+    child: child ?? const SizedBox.shrink(),
+  ),
+);
