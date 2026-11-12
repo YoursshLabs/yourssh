@@ -144,6 +144,64 @@ void main() {
   });
 
   group('YsDialog layout', () {
+    Future<List<Rect>> openWith(WidgetTester tester, List<String> labels) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _host(
+          (c) => showYsDialog<void>(
+            c,
+            builder: (ctx) => YsDialog(
+              title: 'T',
+              body: const Text('x'),
+              actions: [
+                for (final l in labels)
+                  FButton(onPress: () => Navigator.pop(ctx), child: Text(l)),
+              ],
+            ),
+          ),
+        ),
+      );
+      await _open(tester);
+      return [
+        for (final l in labels)
+          tester.getRect(
+            find.ancestor(of: find.text(l), matching: find.byType(FButton)),
+          ),
+      ];
+    }
+
+    testWidgets('three short actions share one row', (tester) async {
+      final r = await openWith(tester, ['Cancel', 'Discard', 'Save all']);
+      expect(r[1].top, r[0].top);
+      expect(r[2].top, r[0].top);
+    });
+
+    testWidgets('long labels wrap but stay content-sized and inside', (
+      tester,
+    ) async {
+      final labels = [
+        'Long label one',
+        'Long label two',
+        'Long label three',
+      ];
+      final r = await openWith(tester, labels);
+      final dialog = tester.getRect(
+        find
+            .descendant(
+              of: find.byType(FDialog),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+      expect({for (final b in r) b.top}.length, greaterThan(1));
+      for (final b in r) {
+        expect(b.left, greaterThanOrEqualTo(dialog.left));
+        expect(b.right, lessThanOrEqualTo(dialog.right));
+        expect(b.width, lessThan(dialog.width));
+      }
+    });
+
     testWidgets('actions share one row and are content-sized', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -178,6 +236,39 @@ void main() {
       expect(del.right, lessThanOrEqualTo(dialog.right));
       expect(dialog.width, lessThan(560));
     });
+  });
+
+  testWidgets('tall scrollable body fits the dialog (no overflow)', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      _host(
+        (c) => showYsDialog<void>(
+          c,
+          builder: (ctx) => YsDialog(
+            title: 'Pick',
+            body: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 360),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < 40; i++)
+                      ListTile(dense: true, title: Text('item $i')),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _open(tester);
+    expect(find.text('item 0'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   group('showYsDialog', () {

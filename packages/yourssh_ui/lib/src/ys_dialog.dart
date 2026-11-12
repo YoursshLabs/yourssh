@@ -27,7 +27,7 @@ Future<T?> showYsDialog<T>(
 );
 
 /// A forui dialog with a title, optional body and a row of [actions]
-/// (right-aligned, wrapping when narrow).
+/// (right-aligned; stacked when they do not fit in one row).
 ///
 /// Build the buttons with `FButton` (`FButtonVariant.primary` for the
 /// affirmative action, `outline`/`ghost` for cancel, `destructive` for
@@ -96,14 +96,14 @@ class YsDialog extends StatelessWidget {
                   const SizedBox(height: YsSpace.s5),
                   Align(
                     alignment: AlignmentDirectional.centerEnd,
-                    child: Wrap(
-                      alignment: WrapAlignment.end,
-                      crossAxisAlignment: WrapCrossAlignment.center,
+                    child: OverflowBar(
+                      alignment: MainAxisAlignment.end,
                       spacing: YsSpace.s2,
-                      runSpacing: YsSpace.s2,
+                      overflowSpacing: YsSpace.s2,
+                      overflowAlignment: OverflowBarAlignment.end,
                       // FButton fills the width by default; give each action
-                      // its intrinsic width so the row is content-sized and
-                      // only wraps when the buttons really do not fit.
+                      // its intrinsic width so the row is content-sized. When
+                      // the buttons do not fit side by side they stack.
                       children: [
                         for (final a in actions) IntrinsicWidth(child: a),
                       ],

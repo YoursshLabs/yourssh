@@ -272,19 +272,24 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
     if (names.length > 1 && mounted) {
       container = await showYsDialog<String>(
         context,
-        builder: (_) => YsDialog(
+        builder: (ctx) => YsDialog(
           title: 'Select container',
-          body: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final n in names)
-                ListTile(
-                  dense: true,
-                  title: Text(n),
-                  onTap: () => Navigator.pop(context, n),
-                ),
-            ],
+          body: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 360),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final n in names)
+                    ListTile(
+                      dense: true,
+                      title: Text(n),
+                      onTap: () => Navigator.pop(ctx, n),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       );
@@ -309,19 +314,24 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
     if (names.length > 1 && mounted) {
       container = await showYsDialog<String>(
         context,
-        builder: (_) => YsDialog(
+        builder: (ctx) => YsDialog(
           title: 'Select container',
-          body: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final n in names)
-                ListTile(
-                  dense: true,
-                  title: Text(n),
-                  onTap: () => Navigator.pop(context, n),
-                ),
-            ],
+          body: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 360),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final n in names)
+                    ListTile(
+                      dense: true,
+                      title: Text(n),
+                      onTap: () => Navigator.pop(ctx, n),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       );

@@ -148,7 +148,6 @@ class RdpCertDialog extends StatelessWidget {
   }
 }
 
-
 class FpRow extends StatelessWidget {
   final String label;
   final String fp;
