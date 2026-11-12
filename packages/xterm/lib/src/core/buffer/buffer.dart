@@ -1,4 +1,5 @@
 import 'dart:math' show max, min;
+import 'dart:typed_data';
 
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 import 'package:xterm/src/core/buffer/cell_offset.dart';
@@ -148,6 +149,138 @@ class Buffer {
     }
   }
 
+  /// Index (into the code points given to [writeChars]) of the one that was
+  /// being written when [writeChars] threw.
+  int writeCharsFailedAt = 0;
+
+  /// Writes `runes[start]`, `runes[start + 1]`, ... up to (not including) the
+  /// first code point below 0x10 or ESC (0x1b), or [end], with exactly the
+  /// effect of calling [writeChar] for each of them in order, and returns
+  /// the index where it stopped. Avoids the per-character overhead: runs of
+  /// printable ASCII go straight into the line's cell storage, and the
+  /// cursor line is looked up once per line instead of once per character.
+  int writeChars(Uint32List runes, int start, int end) {
+    final width = terminal.viewWidth;
+    final cursor = terminal.cursor;
+    final fg = cursor.foreground;
+    final bg = cursor.background;
+    final attrs = cursor.attrs;
+    final identity = charset.isIdentity;
+    final widths = unicodeV11Table;
+
+    // The cursor line while it is known to be valid and big enough for the
+    // fast paths; null when it must be looked up (again).
+    BufferLine? line;
+    var x = _cursorX;
+    var i = start;
+    writeCharsFailedAt = start;
+
+    while (i < end) {
+      var codePoint = runes[i];
+
+      if (line != null &&
+          identity &&
+          codePoint >= 0x20 &&
+          codePoint <= 0x7e &&
+          x < width) {
+        // Printable ASCII: width 1, never translated or composed, and no
+        // wrap before the end of the line.
+        final limit = end - i <= width - x ? end : i + (width - x);
+        final written = line.writeAsciiRun(x, runes, i, limit, fg, bg, attrs);
+        x += written;
+        i += written;
+        continue;
+      }
+
+      if (codePoint < 0x10 || codePoint == 0x1b) {
+        break; // C0 control or ESC: back to the parser
+      }
+
+      // Everything else follows writeChar step by step.
+      writeCharsFailedAt = i;
+      if (!identity) {
+        codePoint = charset.translate(codePoint);
+      }
+      final cellWidth =
+          codePoint < 0x10000 ? widths[codePoint] : unicodeV11.wcwidth(codePoint);
+
+      if (cellWidth == 0 && codePoint >= 0x0300) {
+        _cursorX = x;
+        if (_tryComposeMark(codePoint)) {
+          i++;
+          continue;
+        }
+      }
+
+      if (x >= width) {
+        _cursorX = x;
+        index();
+        setCursorX(0);
+        if (terminal.autoWrapMode) {
+          currentLine.isWrapped = true;
+        }
+        x = _cursorX;
+        line = null;
+      }
+
+      if (line == null) {
+        final current = currentLine;
+        if (current.capacity < width) {
+          // Not expected (lines are as wide as the view); keep writeChar's
+          // exact behavior, including any range error.
+          _cursorX = x;
+          current.setCell(_cursorX, codePoint, cellWidth, cursor);
+          if (_cursorX < width) {
+            _cursorX++;
+          }
+          if (cellWidth == 2) {
+            writeChar(0);
+          }
+          x = _cursorX;
+          i++;
+          continue;
+        }
+        line = current;
+      }
+
+      line.setCell(x, codePoint, cellWidth, cursor);
+      x++;
+
+      if (cellWidth == 2) {
+        // writeChar(0): the continuation cell of a wide character.
+        if (x >= width) {
+          _cursorX = x;
+          index();
+          setCursorX(0);
+          if (terminal.autoWrapMode) {
+            currentLine.isWrapped = true;
+          }
+          x = _cursorX;
+          line = currentLine;
+          line.setCell(x, 0, 0, cursor);
+          if (line.capacity < width) {
+            line = null;
+          }
+        } else {
+          line.setCell(x, 0, 0, cursor);
+        }
+        x++;
+      }
+
+      i++;
+    }
+
+    _cursorX = x;
+    return i;
+  }
+
+  /// Results of NFC-composing a (base, mark) pair: the precomposed code point,
+  /// or -1 when there is none. Composition is a pure function of the pair, so
+  /// caching it only skips the string allocations and unorm work.
+  static final _composeCache = <int, int>{};
+
+  static const _composeCacheLimit = 4096;
+
   /// Tries to canonically compose the combining [mark] with the codepoint in
   /// the cell preceding the cursor. Returns true when the cell was rewritten
   /// with the precomposed character (the mark must then NOT be written).
@@ -166,15 +299,22 @@ class Buffer {
     if (base == 0) {
       return false;
     }
-    final composed =
-        unorm.nfc(String.fromCharCode(base) + String.fromCharCode(mark));
-    final runes = composed.runes;
-    if (runes.length != 1) {
+    final key = (base << 21) | mark;
+    var composed = _composeCache[key];
+    if (composed == null) {
+      final runes =
+          unorm.nfc(String.fromCharCode(base) + String.fromCharCode(mark)).runes;
+      composed = runes.length == 1 ? runes.first : -1;
+      if (_composeCache.length < _composeCacheLimit) {
+        _composeCache[key] = composed;
+      }
+    }
+    if (composed < 0) {
       return false; // no precomposed form exists
     }
     // setCodePoint preserves the cell's own fg/bg/attrs — the mark belongs
     // to the base character's style, not the current cursor style.
-    line.setCodePoint(x, runes.first);
+    line.setCodePoint(x, composed);
     return true;
   }
 
@@ -284,7 +424,8 @@ class Buffer {
     if (isInVerticalMargin) {
       if (_cursorY == _marginBottom) {
         if (marginTop == 0 && !isAltBuffer) {
-          lines.insert(absoluteMarginBottom + 1, _newEmptyLine());
+          final at = absoluteMarginBottom + 1;
+          lines.insert(at, at == lines.length ? _lineForPush() : _newEmptyLine());
         } else {
           scrollUp(1);
         }
@@ -300,7 +441,7 @@ class Buffer {
       if (isAltBuffer) {
         scrollUp(1);
       } else {
-        lines.push(_newEmptyLine());
+        lines.push(_lineForPush());
       }
     } else {
       // there're still lines so we simply move cursor down.
@@ -543,6 +684,18 @@ class Buffer {
   BufferLine _newEmptyLine([int? width]) {
     final line = BufferLine(width ?? viewWidth);
     return line;
+  }
+
+  /// An empty line for [IndexAwareCircularBuffer.push]. Once the scrollback
+  /// is full every push trims the oldest line; that line is reset and reused
+  /// (when nothing else can observe it, see [BufferLine.tryRecycle]) instead
+  /// of allocating a new one per line feed.
+  BufferLine _lineForPush() {
+    final victim = lines.pushVictim;
+    if (victim != null && victim.tryRecycle(viewWidth)) {
+      return victim;
+    }
+    return _newEmptyLine();
   }
 
   static final defaultWordSeparators = <int>{
