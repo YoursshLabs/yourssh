@@ -148,7 +148,9 @@ void main() {
         agentForwarding: true,
         termType: 'screen-256color',
       );
-      s.agentForwardingState = AgentForwardingState.active;
+      s
+        ..agentForwardingState = AgentForwardingState.active
+        ..termType = 'screen-256color';
       recording
         ..elapsed = const Duration(minutes: 4, seconds: 12)
         ..setRecording(s.id, true);
@@ -173,9 +175,9 @@ void main() {
       expect(fieldText(tester, 'status-rec'), 'REC 00:04:12');
     });
 
-    testWidgets('direct session without recording: no via, no REC; TERM from '
-        'Settings', (tester) async {
-      final s = sshSession();
+    testWidgets('direct session without recording: no via, no REC',
+        (tester) async {
+      final s = sshSession()..termType = 'xterm-256color';
       await tester.pumpWidget(harness(s));
 
       expect(fieldKeys(tester), {
@@ -186,7 +188,25 @@ void main() {
         'status-size',
       });
       expect(fieldText(tester, 'status-agent'), 'Agent forwarding off');
-      expect(fieldText(tester, 'status-term'), settings.terminalType);
+      expect(fieldText(tester, 'status-term'), 'xterm-256color');
+    });
+
+    testWidgets('TERM is the value the session connected with: a later '
+        'Settings change does not alter it', (tester) async {
+      final s = sshSession()..termType = 'xterm-256color';
+      await tester.pumpWidget(harness(s));
+      expect(fieldText(tester, 'status-term'), 'xterm-256color');
+
+      await settings.save(terminalType: 'vt100');
+      await tester.pump();
+      expect(settings.terminalType, 'vt100');
+      expect(fieldText(tester, 'status-term'), 'xterm-256color');
+    });
+
+    testWidgets('no TERM before the provider resolved one', (tester) async {
+      final s = sshSession(status: SessionStatus.connecting);
+      await tester.pumpWidget(harness(s));
+      expect(fieldKeys(tester), isNot(contains('status-term')));
     });
 
     testWidgets('connecting / error: status text, no cols×rows', (
@@ -315,7 +335,8 @@ void main() {
       await tester.pumpWidget(harness(s));
       expect(fieldKeys(tester), {'status-connection', 'status-resolution'});
       expect(fieldText(tester, 'status-connection'), 'Connecting…');
-      expect(fieldText(tester, 'status-resolution'), '1280×800');
+      // Not negotiated yet: the requested size is marked as such.
+      expect(fieldText(tester, 'status-resolution'), '1280×800 (requested)');
 
       events.add(
         rdp.RdpEvent.connected(
@@ -334,6 +355,13 @@ void main() {
       s.notifyListeners();
       await tester.pump();
       expect(SessionStatusBar.debugBuildCount, builds);
+
+      // No live desktop, no resolution.
+      events.add(const rdp.RdpEvent.disconnected(reason: 'bye'));
+      await tester.pump(); // deliver the event
+      await tester.pump(); // rebuild
+      expect(fieldText(tester, 'status-connection'), 'Disconnected');
+      expect(fieldKeys(tester), {'status-connection'});
     });
 
     testWidgets('VNC shows status, and resolution once known', (tester) async {

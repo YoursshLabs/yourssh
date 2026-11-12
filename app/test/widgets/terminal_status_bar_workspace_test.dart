@@ -86,16 +86,19 @@ void main() {
   });
 
   SshSession connected(String label, {String? hostname}) {
-    final s = SshSession(
-      host: Host(
-        label: label,
-        host: hostname ?? 'prod.example.com',
-        username: 'deploy',
-        jumpHostIds: const ['b1', 'b2'],
-        agentForwarding: true,
-      ),
-      status: SessionStatus.connected,
-    )..agentForwardingState = AgentForwardingState.active;
+    final s =
+        SshSession(
+            host: Host(
+              label: label,
+              host: hostname ?? 'prod.example.com',
+              username: 'deploy',
+              jumpHostIds: const ['b1', 'b2'],
+              agentForwarding: true,
+            ),
+            status: SessionStatus.connected,
+          )
+          ..agentForwardingState = AgentForwardingState.active
+          ..termType = 'xterm-256color';
     sessions.sessions.add(s);
     sessions.setActive(s.id);
     return s;

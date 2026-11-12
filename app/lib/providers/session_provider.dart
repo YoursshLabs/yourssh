@@ -504,6 +504,10 @@ class SessionProvider extends ChangeNotifier {
 
   Future<void> _doConnect(SshSession session, Host host,
       {required int attempt, String auditSource = 'app'}) async {
+    // Snapshot per attempt: this is the TERM the shell is opened with and
+    // the one the status bar shows, whatever Settings says later.
+    session.termType =
+        host.termType ?? terminalType?.call() ?? 'xterm-256color';
     try {
       final keyEntry = host.keyId != null ? keyLookup?.call(host.keyId!) : null;
       final jumpChain = SshService.resolveJumpChain(
@@ -558,7 +562,7 @@ class SessionProvider extends ChangeNotifier {
       await _ssh.openShell(
         session,
         useTmux: host.tmuxOverride ?? tmuxEnabled?.call() ?? false,
-        termType: host.termType ?? terminalType?.call() ?? 'xterm-256color',
+        termType: session.termType!,
       );
       _safeNotify();
 

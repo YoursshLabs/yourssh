@@ -21,7 +21,7 @@ import '../widgets/keychain_screen.dart';
 import '../widgets/known_hosts_screen.dart';
 import '../widgets/port_forwarding_screen.dart';
 import '../widgets/settings_screen.dart';
-import '../widgets/network_stats_overlay.dart';
+import '../widgets/terminal_header_actions.dart';
 import '../widgets/dual_panel_sftp_screen.dart';
 import '../widgets/keep_alive_offstage.dart';
 import '../widgets/split_terminal_view.dart';
@@ -46,7 +46,6 @@ import '../services/hotkey_service.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
 import '../widgets/script_plugin_panel_screen.dart';
 import '../providers/share_provider.dart';
-import '../widgets/share_session_dialog.dart';
 import '../widgets/join_share_dialog.dart';
 import '../widgets/update_banner.dart';
 import '../models/rdp_session.dart';
@@ -829,23 +828,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               }),
               // In the workspace header, not floated over it: a floating row
               // covered the header's right-aligned layout/panel buttons.
-              toolbarTrailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const NetworkStatsOverlay(),
-                  if (active is SshSession) ...[
-                    const SizedBox(width: 8),
-                    _ShareButton(session: active),
-                  ],
-                  if (aiConfigured) ...[
-                    const SizedBox(width: 8),
-                    _AiChatToggle(
-                      active: showAiChat,
-                      onToggle: () =>
-                          setState(() => _showAiChat = !_showAiChat),
-                    ),
-                  ],
-                ],
+              toolbarTrailing: TerminalHeaderActions(
+                active: active,
+                aiConfigured: aiConfigured,
+                aiOpen: showAiChat,
+                onToggleAi: () => setState(() => _showAiChat = !_showAiChat),
               ),
             ),
           ),
@@ -943,54 +930,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
 // ── AI Chat Toggle Button ─────────────────────────────────
 
-class _AiChatToggle extends StatelessWidget {
-  final bool active;
-  final VoidCallback onToggle;
-
-  const _AiChatToggle({required this.active, required this.onToggle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: active ? 'Close AI Chat' : 'Open AI Chat',
-      child: GestureDetector(
-        onTap: onToggle,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: active
-                ? AppColors.accent.withValues(alpha: 0.15)
-                : AppColors.card.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: active ? AppColors.accent : AppColors.border,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.smart_toy_outlined,
-                size: 14,
-                color: active ? AppColors.accent : AppColors.textSecondary,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                'AI',
-                style: TextStyle(
-                  color: active ? AppColors.accent : AppColors.textSecondary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ── Plugin Error Boundary ─────────────────────────────────
 
 class _PluginErrorBoundary extends StatefulWidget {
@@ -1040,46 +979,6 @@ class _PluginErrorBoundaryState extends State<_PluginErrorBoundary> {
   void didUpdateWidget(_PluginErrorBoundary oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.plugin.id != widget.plugin.id) _error = null;
-  }
-}
-
-class _ShareButton extends StatelessWidget {
-  final SshSession session;
-  const _ShareButton({required this.session});
-
-  @override
-  Widget build(BuildContext context) {
-    final share = context.watch<ShareProvider>();
-    if (!share.canShare || session.isWatch) return const SizedBox.shrink();
-    if (session.status != SessionStatus.connected) return const SizedBox.shrink();
-
-    final isActive = share.isSharing;
-    return Tooltip(
-      message: isActive ? 'Sharing active' : 'Share this terminal',
-      child: GestureDetector(
-        onTap: () => showYsDialog(
-          context,
-          builder: (_) => ShareSessionDialog(sessionId: session.id),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: isActive
-                ? AppColors.accent.withValues(alpha: 0.2)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: isActive ? AppColors.accent : const Color(0xFF2A2A2A),
-            ),
-          ),
-          child: Icon(
-            Icons.screen_share_outlined,
-            size: 14,
-            color: isActive ? AppColors.accent : const Color(0xFF555555),
-          ),
-        ),
-      ),
-    );
   }
 }
 

@@ -15,7 +15,6 @@ import '../models/vnc_session.dart';
 import '../providers/host_provider.dart';
 import '../providers/recording_provider.dart';
 import '../providers/session_provider.dart';
-import '../providers/settings_provider.dart';
 import '../services/local_shell_service.dart';
 import 'session_tab.dart' show agentForwardingTooltip;
 
@@ -34,8 +33,9 @@ import 'session_tab.dart' show agentForwardingTooltip;
 /// Rebuilds only on events, never on terminal output: SSH and local fields
 /// `select` the session's status / agent-forwarding state on
 /// [SessionProvider], the recording flag on [RecordingProvider], the jump
-/// labels on [HostProvider] and the global TERM on [SettingsProvider]; RDP and
-/// VNC listen to `stateChanges` (not the per-frame notifier). The two live
+/// labels on [HostProvider]; TERM is the session's own connect-time snapshot
+/// ([SshSession.termType]). RDP and VNC listen to `stateChanges` (not the
+/// per-frame notifier). The two live
 /// values have their own small widgets: [TerminalSizeText] (changes only when
 /// the terminal is resized) and [RecElapsedText] (ticks once a second).
 /// [debugBuildCount] counts bar builds so tests can assert that.
@@ -54,14 +54,30 @@ class SessionStatusBar extends StatelessWidget {
       listenable: s.stateChanges,
       builder: (_, _) => _bar(
         leading: [_remoteStatus(_rdpStatus(s.status), s.lastMessage)],
-        trailing: [?_resolution(s.width, s.height)],
+        trailing: [
+          // RDP starts at the requested size and only learns the real one
+          // from the server's Connected event; no live desktop, no size.
+          ?switch (s.status) {
+            RdpSessionStatus.connected => _resolution(s.width, s.height),
+            RdpSessionStatus.connecting => _resolution(
+              s.width,
+              s.height,
+              requested: true,
+            ),
+            _ => null,
+          },
+        ],
       ),
     ),
     VncSession s => ListenableBuilder(
       listenable: s.stateChanges,
       builder: (_, _) => _bar(
         leading: [_remoteStatus(_vncStatus(s.status), s.lastMessage)],
-        trailing: [?_resolution(s.width, s.height)],
+        trailing: [
+          // VNC knows no size before the server's first framebuffer.
+          if (s.status == VncSessionStatus.connected)
+            ?_resolution(s.width, s.height),
+        ],
       ),
     ),
     _ => _bar(leading: const []),
@@ -79,15 +95,19 @@ class SessionStatusBar extends StatelessWidget {
   }
 
   Widget _ssh(BuildContext context, SshSession s) {
-    final (status, agent, error) =
-        _selectOr<
-          SessionProvider,
-          (SessionStatus, AgentForwardingState, String?)
-        >(
-          context,
-          (_) => (s.status, s.agentForwardingState, s.errorMessage),
-          fallback: (s.status, s.agentForwardingState, s.errorMessage),
-        );
+    final (
+      status,
+      agent,
+      error,
+      term,
+    ) = _selectOr<
+      SessionProvider,
+      (SessionStatus, AgentForwardingState, String?, String?)
+    >(
+      context,
+      (_) => (s.status, s.agentForwardingState, s.errorMessage, s.termType),
+      fallback: (s.status, s.agentForwardingState, s.errorMessage, s.termType),
+    );
     final recording =
         !s.isWatch &&
         _selectOr<RecordingProvider, bool>(
@@ -120,13 +140,6 @@ class SessionStatusBar extends StatelessWidget {
                 .join(' → '),
             fallback: '${hops.length} hop${hops.length == 1 ? '' : 's'}',
           );
-    final term =
-        s.host.termType ??
-        _selectOr<SettingsProvider, String>(
-          context,
-          (p) => p.terminalType,
-          fallback: 'xterm-256color',
-        );
     final recorder = recording ? context.read<RecordingProvider>() : null;
 
     return _bar(
@@ -146,11 +159,12 @@ class SessionStatusBar extends StatelessWidget {
           ),
       ],
       trailing: [
-        YsStatusItem(
-          key: const ValueKey('status-term'),
-          label: term,
-          tooltip: 'TERM',
-        ),
+        if (term != null)
+          YsStatusItem(
+            key: const ValueKey('status-term'),
+            label: term,
+            tooltip: 'TERM requested when the session connected',
+          ),
         ?size,
         if (recorder != null)
           RecElapsedText(
@@ -229,11 +243,15 @@ Widget _remoteStatus(StatusLook look, String? message) => YsStatusItem(
   tooltip: look.label == 'Connected' ? null : message,
 );
 
-Widget? _resolution(int width, int height) => width > 0 && height > 0
+/// `W×H`, or `W×H (requested)` before the server negotiated the size.
+Widget? _resolution(int width, int height, {bool requested = false}) =>
+    width > 0 && height > 0
     ? YsStatusItem(
         key: const ValueKey('status-resolution'),
-        label: '$width×$height',
-        tooltip: 'Desktop resolution',
+        label: requested ? '$width×$height (requested)' : '$width×$height',
+        tooltip: requested
+            ? 'Requested desktop size; the server may change it'
+            : 'Desktop resolution',
       )
     : null;
 

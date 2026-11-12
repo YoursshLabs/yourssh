@@ -38,6 +38,8 @@ class TerminalInputBar extends StatefulWidget {
 
 class _TerminalInputBarState extends State<TerminalInputBar> {
   final _controller = TextEditingController();
+  /// The text field's own node: focusing it opens the text-input
+  /// connection, so typing right after the bar opens lands in the field.
   final _focus = FocusNode();
   List<String> _suggestions = [];
   int _selectedIndex = -1;
@@ -186,12 +188,16 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
               ),
               const SizedBox(height: YsSpace.s1),
             ],
+            // Key handler only: never focusable itself. Keys from the
+            // focused field bubble up to it (Tab, ↑/↓, Enter, Escape).
             Focus(
-              focusNode: _focus,
+              canRequestFocus: false,
+              skipTraversal: true,
               onKeyEvent: _handleKey,
               child: FTextField(
                 key: const Key('terminal-input-field'),
                 control: FTextFieldControl.managed(controller: _controller),
+                focusNode: _focus,
                 size: .sm,
                 hint:
                     'Type command… (↑↓ history/suggestions, Tab complete, Esc dismiss)',
@@ -214,6 +220,9 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
                   const Icon(FLucideIcons.terminal, color: YsColors.primary),
                 ),
                 onSubmit: _submit,
+                // Non-null so Enter does not unfocus the field (the default
+                // for a "done" action): the next command can be typed at once.
+                onEditingComplete: () {},
               ),
             ),
           ],

@@ -107,33 +107,62 @@ void main() {
     expect(inputText(tester), isNotEmpty);
   });
 
-  testWidgets('keyboard flow: focused on open, Escape dismisses',
-      (tester) async {
+  testWidgets(
+      'keyboard flow: typing right after opening lands in the field, '
+      'Escape then dismisses', (tester) async {
     var dismissed = 0;
     await tester.pumpWidget(
         wrap(onSubmit: (_) {}, onDismiss: () => dismissed++));
     await tester.pump();
 
-    expect(
-        FocusManager.instance.primaryFocus?.context
-            ?.findAncestorWidgetOfExactType<TerminalInputBar>(),
-        isNotNull,
-        reason: 'the bar takes focus when it opens');
+    // No tap: the field itself must hold focus with an open text-input
+    // connection, or keystrokes are lost until the user clicks it.
+    expect(tester.testTextInput.hasAnyClients, isTrue,
+        reason: 'the field is the text-input client on open');
+    tester.testTextInput.enterText('uptime');
+    await tester.pump();
+    expect(inputText(tester), 'uptime');
+
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     expect(dismissed, 1);
   });
 
-  testWidgets('keyboard flow: Enter submits the typed command and clears it',
-      (tester) async {
-    String? submitted;
-    await tester.pumpWidget(wrap(onSubmit: (cmd) => submitted = cmd));
+  testWidgets(
+      'keyboard flow: Enter submits and clears, and the field keeps taking '
+      'typing for the next command', (tester) async {
+    final submitted = <String>[];
+    await tester.pumpWidget(wrap(onSubmit: submitted.add));
+    await tester.pump();
 
-    await tester.enterText(inputField, 'uptime');
+    tester.testTextInput.enterText('uptime');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
-    expect(submitted, 'uptime\n');
+    expect(submitted, ['uptime\n']);
     expect(inputText(tester), isEmpty);
+
+    tester.testTextInput.enterText('df -h');
+    await tester.pump();
+    expect(inputText(tester), 'df -h');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(submitted, ['uptime\n', 'df -h\n']);
     await tester.pump(const Duration(seconds: 1)); // history persist debounce
+  });
+
+  testWidgets('keyboard flow: Tab and arrows still reach the bar from the '
+      'focused field', (tester) async {
+    await tester.pumpWidget(wrap(onSubmit: (_) {}));
+    await tester.pump();
+
+    tester.testTextInput.enterText('git');
+    await tester.pump();
+    expect(find.byType(SuggestionPopup), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(inputText(tester).startsWith('git'), isTrue);
+    expect(inputText(tester).length, greaterThan(3));
   });
 }
