@@ -121,6 +121,17 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
     _adoptChild(index, value);
   }
 
+  /// Moves the element at [from] to [to], dropping the element that was at
+  /// [to]. The slot at [from] is left empty and must be refilled by the
+  /// caller before the list is read again. Unlike `this[to] = this[from]`,
+  /// the moved element stays attached once [from] is refilled.
+  void move(int from, int to) {
+    RangeError.checkValueInInterval(from, 0, length - 1, 'from');
+    RangeError.checkValueInInterval(to, 0, length - 1, 'to');
+    if (from == to) return;
+    _moveChild(from, to);
+  }
+
   /// Removes all elements from the list.
   void clear() {
     for (var i = 0; i < _length; i++) {
