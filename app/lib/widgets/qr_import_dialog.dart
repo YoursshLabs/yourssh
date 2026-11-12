@@ -98,32 +98,30 @@ class _QrImportDialogState extends State<QrImportDialog> {
             children: [
               const Text(
                 'Paste the transfer code from the exporting device.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                style: TextStyle(color: YsColors.mutedForeground, fontSize: 13),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _controller,
+              const SizedBox(height: YsSpace.s3),
+              FTextField(
+                key: const Key('qr-import-code'),
+                control: FTextFieldControl.managed(controller: _controller),
                 autofocus: true,
-                style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                decoration: InputDecoration(
-                  hintText: '{"u":"http://...","k":"..."}',
-                  hintStyle: const TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 12,
-                  ),
-                  filled: true,
-                  fillColor: AppColors.card,
-                  border: const OutlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.border),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  errorText: _error,
+                autocorrect: false,
+                enableSuggestions: false,
+                hint: '{"u":"http://...","k":"..."}',
+                error: _error == null ? null : Text(_error!),
+                style: .delta(
+                  contentTextStyle: .delta([
+                    .base(
+                      const .delta(
+                        fontFamily: kYsMonoFontFamily,
+                        fontFamilyFallback: kYsMonoFontFallback,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ]),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: YsSpace.s2),
               FButton(
                 variant: FButtonVariant.ghost,
                 mainAxisSize: MainAxisSize.min,
@@ -132,8 +130,8 @@ class _QrImportDialogState extends State<QrImportDialog> {
                 child: const Text('Load from file'),
               ),
               if (_processing) ...[
-                const SizedBox(height: 8),
-                const LinearProgressIndicator(),
+                const SizedBox(height: YsSpace.s2),
+                const FProgress(),
               ],
             ],
           ),

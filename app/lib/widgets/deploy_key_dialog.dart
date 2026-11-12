@@ -71,34 +71,41 @@ class _DeployKeyDialogState extends State<DeployKeyDialog> {
         width: 380,
         height: 360,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
+            FTextField(
+              key: const Key('deploy-key-search'),
               autofocus: true,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-              decoration: const InputDecoration(
-                hintText: 'Search hosts…',
-                hintStyle: TextStyle(color: AppColors.textTertiary, fontSize: 13),
-                prefixIcon: Icon(Icons.search, size: 16),
-                isDense: true,
+              hint: 'Search hosts…',
+              autocorrect: false,
+              enableSuggestions: false,
+              control: FTextFieldControl.managed(
+                onChange: (v) => setState(() => _search = v.text),
               ),
-              onChanged: (v) => setState(() => _search = v),
+              prefixBuilder: (context, style, variants) =>
+                  FTextField.prefixIconBuilder(
+                    context,
+                    style,
+                    variants,
+                    const Icon(FLucideIcons.search),
+                  ),
             ),
             if (_error != null)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.only(top: YsSpace.s2),
                 child: Text(
                   _error!,
-                  style: const TextStyle(color: AppColors.red, fontSize: 12),
+                  style: const TextStyle(color: YsColors.error, fontSize: 12),
                 ),
               ),
-            const SizedBox(height: 8),
+            const SizedBox(height: YsSpace.s2),
             Expanded(
               child: hosts.isEmpty
                   ? const Center(
                       child: Text(
                         'No hosts',
                         style: TextStyle(
-                          color: AppColors.textTertiary,
+                          color: YsColors.mutedForeground,
                           fontSize: 13,
                         ),
                       ),
@@ -108,38 +115,23 @@ class _DeployKeyDialogState extends State<DeployKeyDialog> {
                       itemBuilder: (_, i) {
                         final h = hosts[i];
                         final busy = _busyHostId == h.id;
-                        return ListTile(
-                          dense: true,
+                        return FTile(
                           enabled: _busyHostId == null,
-                          leading: const Icon(
-                            Icons.dns_outlined,
-                            size: 16,
-                            color: AppColors.textSecondary,
-                          ),
+                          prefix: const Icon(FLucideIcons.server),
                           title: Text(
                             h.label,
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 13,
-                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
                             '${h.username}@${h.host}',
-                            style: const TextStyle(
-                              color: AppColors.textTertiary,
-                              fontSize: 11,
-                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          trailing: busy
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 1.5,
-                                  ),
-                                )
+                          suffix: busy
+                              ? const FCircularProgress(size: .sm)
                               : null,
-                          onTap: () => _deploy(h),
+                          onPress: () => _deploy(h),
                         );
                       },
                     ),
@@ -151,7 +143,7 @@ class _DeployKeyDialogState extends State<DeployKeyDialog> {
         FButton(
           variant: FButtonVariant.outline,
           onPress: () => Navigator.pop(context),
-          child: Text('Close'),
+          child: const Text('Close'),
         ),
       ],
     );

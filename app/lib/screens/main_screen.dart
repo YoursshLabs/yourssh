@@ -1011,12 +1011,14 @@ class _RdpPasswordDialogState extends State<_RdpPasswordDialog> {
   Widget build(BuildContext context) {
     return YsDialog(
       title: 'Password for ${widget.host.label}',
-      body: TextField(
-        controller: _ctrl,
-        obscureText: true,
+      body: FTextField.password(
+        key: const Key('rdp-password'),
+        control: FTextFieldControl.managed(controller: _ctrl),
+        label: const Text('Password'),
         autofocus: true,
-        decoration: const InputDecoration(labelText: 'Password'),
-        onSubmitted: (_) => Navigator.pop(context, _ctrl.text),
+        autofillHints: const [],
+        textInputAction: TextInputAction.done,
+        onSubmit: (_) => Navigator.pop(context, _ctrl.text),
       ),
       actions: [
         FButton(

@@ -275,8 +275,8 @@ class _NotificationTile extends StatelessWidget {
       AppNotificationType.update => YsColors.primary,
     };
 
-    return InkWell(
-      onTap: item.sessionId != null
+    return FTappable(
+      onPress: item.sessionId != null
           ? () {
               onClose();
               onOpenSession?.call(item.sessionId!);

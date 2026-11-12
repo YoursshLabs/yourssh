@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/widgets/command_palette.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+
+import '../helpers/ys_test_app.dart';
 
 void main() {
   group('CommandPaletteSearcher.score', () {
@@ -124,16 +127,14 @@ void main() {
       ];
     });
 
-    Widget makeDialog(List<CommandItem> items) => MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (ctx) => TextButton(
-                onPressed: () => showDialog(
-                  context: ctx,
-                  builder: (_) => CommandPaletteDialog(items: items),
-                ),
-                child: const Text('open'),
+    Widget makeDialog(List<CommandItem> items) => ysTestApp(
+          Builder(
+            builder: (ctx) => FButton(
+              onPress: () => showYsDialog(
+                ctx,
+                builder: (_) => CommandPaletteDialog(items: items),
               ),
+              child: const Text('open'),
             ),
           ),
         );
@@ -142,7 +143,7 @@ void main() {
       await tester.pumpWidget(makeDialog(hosts));
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
-      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byType(FTextField), findsOneWidget);
       // Titles are rendered as RichText; check subtitles (plain Text widgets) instead
       expect(find.text('root@prod-db:22'), findsOneWidget);
       expect(find.text('root@staging:22'), findsOneWidget);
@@ -152,7 +153,7 @@ void main() {
       await tester.pumpWidget(makeDialog(hosts));
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'prod');
+      await tester.enterText(find.byType(FTextField), 'prod');
       await tester.pump();
       expect(find.text('root@prod-db:22'), findsOneWidget);
       expect(find.text('root@staging:22'), findsNothing);
@@ -175,6 +176,39 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(connected, true);
+    });
+
+    testWidgets('search field has focus on open; typing needs no tap',
+        (tester) async {
+      await tester.pumpWidget(makeDialog(hosts));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(EditableText), 'stag');
+      await tester.pump();
+      expect(find.text('root@staging:22'), findsOneWidget);
+      expect(find.text('root@prod-db:22'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.byType(CommandPaletteDialog), findsNothing);
+    });
+
+    testWidgets('60-char title at 900x600 does not overflow', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(900, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(makeDialog([
+        CommandItem(
+          id: 'long',
+          title: 'x' * 60,
+          subtitle: 'y' * 60,
+          icon: FLucideIcons.server,
+          type: CommandType.host,
+          execute: () {},
+        ),
+      ]));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
     });
   });
 }

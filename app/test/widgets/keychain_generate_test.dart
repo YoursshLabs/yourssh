@@ -5,6 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/providers/key_provider.dart';
 import 'package:yourssh/services/key_gen_service.dart';
 import 'package:yourssh/widgets/keychain_screen.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+
+import '../helpers/ys_test_app.dart';
 
 class _FakeKeyGen extends KeyGenService {
   _FakeKeyGen({required this.sshKeygenAvailable});
@@ -24,8 +27,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => KeyProvider())],
-      child:
-          MaterialApp(home: Scaffold(body: KeychainScreen(keyGen: keyGen))),
+      child: ysTestApp(KeychainScreen(keyGen: keyGen)),
     ));
     await tester.pumpAndSettle();
   }
@@ -39,7 +41,7 @@ void main() {
 
     expect(find.textContaining('require OpenSSH client'), findsOneWidget);
     // Tapping a disabled item must not change the selection.
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.text('Ed25519 (recommended)'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('RSA 4096').last, warnIfMissed: false);
     await tester.pumpAndSettle();

@@ -1,7 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../theme/app_theme.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 // ---------------------------------------------------------------------------
@@ -212,7 +211,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                   onSubmitted: (_) => _executeSelected(),
                 ),
                 if (_results.isNotEmpty) ...[
-                  const Divider(height: 1, color: AppColors.border),
+                  const FDivider(),
                   Flexible(
                     child: ListView.builder(
                       controller: _scrollController,
@@ -256,27 +255,26 @@ class _SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          const Icon(Icons.search, size: 16, color: AppColors.textSecondary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              autofocus: true,
-              onSubmitted: onSubmitted,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
-              decoration: const InputDecoration(
-                hintText: 'Search hosts, actions, snippets...',
-                hintStyle: TextStyle(color: AppColors.textTertiary, fontSize: 14),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: YsSpace.s4,
+        vertical: YsSpace.s3,
+      ),
+      child: FTextField(
+        key: const Key('command-palette-search'),
+        control: FTextFieldControl.managed(controller: controller),
+        autofocus: true,
+        hint: 'Search hosts, actions, snippets...',
+        autocorrect: false,
+        enableSuggestions: false,
+        textInputAction: TextInputAction.go,
+        onSubmit: onSubmitted,
+        prefixBuilder: (context, style, variants) =>
+            FTextField.prefixIconBuilder(
+              context,
+              style,
+              variants,
+              const Icon(FLucideIcons.search),
             ),
-          ),
-        ],
       ),
     );
   }
@@ -307,14 +305,14 @@ class _CommandRow extends StatelessWidget {
           height: _CommandPaletteDialogState._itemHeight,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           color: selected
-              ? AppColors.accent.withValues(alpha: 0.12)
+              ? YsColors.primary.withValues(alpha: 0.12)
               : Colors.transparent,
           child: Row(
             children: [
               Icon(
                 item.icon,
                 size: 15,
-                color: selected ? AppColors.accent : AppColors.textSecondary,
+                color: selected ? YsColors.accentText : YsColors.mutedForeground,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -331,7 +329,7 @@ class _CommandRow extends StatelessWidget {
                       Text(
                         item.subtitle,
                         style: const TextStyle(
-                          color: AppColors.textTertiary,
+                          color: YsColors.mutedForeground,
                           fontSize: 11,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -369,7 +367,7 @@ class _HighlightedText extends StatelessWidget {
             .map((s) => TextSpan(
                   text: s.$1,
                   style: TextStyle(
-                    color: s.$2 ? AppColors.accent : AppColors.textPrimary,
+                    color: s.$2 ? YsColors.accentText : YsColors.foreground,
                     fontWeight: s.$2 ? FontWeight.w600 : FontWeight.normal,
                     fontSize: 13,
                   ),
@@ -394,18 +392,7 @@ class _TypeBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Text(
-        _labels[type] ?? '',
-        style: const TextStyle(color: AppColors.textTertiary, fontSize: 10),
-      ),
-    );
+    return YsTag(_labels[type] ?? '');
   }
 }
 
@@ -417,8 +404,8 @@ class _HintBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.border)),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(10)),
+        border: Border(top: BorderSide(color: YsColors.border)),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(YsRadius.card)),
       ),
       child: const Row(
         children: [
@@ -447,23 +434,24 @@ class _HintChip extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
           decoration: BoxDecoration(
-            color: AppColors.card,
+            color: YsColors.card,
             borderRadius: BorderRadius.circular(3),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: YsColors.border),
           ),
           child: Text(
             keyLabel,
             style: const TextStyle(
-              color: AppColors.textSecondary,
+              color: YsColors.mutedForeground,
               fontSize: 10,
-              fontFamily: 'monospace',
+              fontFamily: kYsMonoFontFamily,
+              fontFamilyFallback: kYsMonoFontFallback,
             ),
           ),
         ),
         const SizedBox(width: 4),
         Text(
           description,
-          style: const TextStyle(color: AppColors.textTertiary, fontSize: 10),
+          style: const TextStyle(color: YsColors.mutedForeground, fontSize: 10),
         ),
       ],
     );

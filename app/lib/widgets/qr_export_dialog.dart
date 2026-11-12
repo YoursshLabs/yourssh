@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../services/p2p_sync_encryption.dart';
 import '../services/p2p_sync_service.dart';
-import '../theme/app_theme.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 class QrExportDialog extends StatefulWidget {
@@ -117,41 +116,29 @@ class _QrExportDialogState extends State<QrExportDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (_interfaces.length > 1) ...[
-              DropdownButtonFormField<NetworkInterfaceInfo>(
-                initialValue: _selectedInterface,
-                decoration: const InputDecoration(labelText: 'Network interface'),
-                items: _interfaces
-                    .map(
-                      (i) => DropdownMenuItem(
-                        value: i,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              i.displayName,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              i.address,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Color(0xFF888888),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) async {
-                  if (v == null) return;
-                  setState(() => _selectedInterface = v);
-                  await _service.stop();
-                  await _startServer();
-                },
+              FSelect<NetworkInterfaceInfo>.rich(
+                key: const Key('qr-export-interface'),
+                control: .lifted(
+                  value: _selectedInterface,
+                  onChange: (v) async {
+                    if (v == null) return;
+                    setState(() => _selectedInterface = v);
+                    await _service.stop();
+                    await _startServer();
+                  },
+                ),
+                format: (i) => '${i.displayName}  ${i.address}',
+                label: const Text('Network interface'),
+                children: [
+                  for (final i in _interfaces)
+                    FSelectItem<NetworkInterfaceInfo>(
+                      title: Text(i.displayName),
+                      subtitle: Text(i.address),
+                      value: i,
+                    ),
+                ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: YsSpace.s4),
             ],
             if (_qrData != null) ...[
               QrImageView(
@@ -168,13 +155,13 @@ class _QrExportDialogState extends State<QrExportDialog> {
             ] else
               const SizedBox(
                 height: 240,
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(child: FCircularProgress()),
               ),
             const SizedBox(height: 8),
             Text(
               _status,
               style: const TextStyle(
-                color: AppColors.textSecondary,
+                color: YsColors.mutedForeground,
                 fontSize: 13,
               ),
               textAlign: TextAlign.center,
@@ -204,7 +191,7 @@ class _QrExportDialogState extends State<QrExportDialog> {
             _service.stop();
             Navigator.of(context).pop();
           },
-          child: Text('Cancel'),
+          child: const Text('Cancel'),
         ),
       ],
     );
