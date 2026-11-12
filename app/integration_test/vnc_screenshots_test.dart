@@ -122,13 +122,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       final panel = find.byType(HostDetailPanel);
       await tester.tap(find.descendant(
-          of: find.byType(SegmentedButton<HostProtocol>),
+          of: find.byKey(const ValueKey('host-protocol-tabs')),
           matching: find.text('VNC')));
       await tester.pump(const Duration(milliseconds: 400));
       await _snap(tester, '02-host-editor-vnc-form');
       // Close the panel via its header X.
       await tester.tap(
-          find.descendant(of: panel, matching: find.byIcon(Icons.close)).first);
+          find.descendant(of: panel, matching: find.byTooltip('Close')).first);
       await tester.pump(const Duration(milliseconds: 400));
 
       // 3. Connect (double-tap the card) → VNC has no TOFU/cert dialog;

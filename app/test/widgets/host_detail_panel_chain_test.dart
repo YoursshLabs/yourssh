@@ -86,7 +86,7 @@ void main() {
     await tester.tap(find.text('bastion').last);
     await tester.pumpAndSettle();
 
-    final save = find.text('SAVE ONLY');
+    final save = find.byKey(const ValueKey('host-save-button'));
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();

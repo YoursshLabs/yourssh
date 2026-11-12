@@ -10,6 +10,9 @@ import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/agent_status_line.dart';
 import 'package:yourssh/widgets/host_detail_panel.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show FSwitch;
+
+import '../helpers/ys_test_app.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -34,14 +37,12 @@ void main() {
               create: (_) => HostProvider(StorageService())),
           Provider<SshService>(create: (_) => SshService(StorageService())),
         ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: HostDetailPanel(
-              existing: existing,
-              agentProbe: agentProbe ?? () async => const AgentProbeSystem(1),
-              onClose: () {},
-              onSave: (host, _) async => saved = host,
-            ),
+        child: ysTestApp(
+          HostDetailPanel(
+            existing: existing,
+            agentProbe: agentProbe ?? () async => const AgentProbeSystem(1),
+            onClose: () {},
+            onSave: (host, _) async => saved = host,
           ),
         ),
       ),
@@ -60,14 +61,14 @@ void main() {
       (tester) async {
     await pumpPanel(tester, existing: existingHost());
 
-    final toggle = find.widgetWithText(SwitchListTile, 'Agent forwarding');
+    final toggle = find.byKey(const ValueKey('agent-forwarding-switch'));
     await tester.ensureVisible(toggle);
-    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+    expect(tester.widget<FSwitch>(toggle).value, isFalse);
 
     await tester.tap(toggle);
     await tester.pumpAndSettle();
 
-    final save = find.text('SAVE ONLY');
+    final save = find.byKey(const ValueKey('host-save-button'));
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();
@@ -80,9 +81,9 @@ void main() {
       (tester) async {
     await pumpPanel(tester, existing: existingHost(agentForwarding: true));
 
-    final toggle = find.widgetWithText(SwitchListTile, 'Agent forwarding');
+    final toggle = find.byKey(const ValueKey('agent-forwarding-switch'));
     await tester.ensureVisible(toggle);
-    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    expect(tester.widget<FSwitch>(toggle).value, isTrue);
   });
 
   testWidgets('status line appears when the toggle is switched on',
@@ -92,7 +93,7 @@ void main() {
         agentProbe: () async => const AgentProbeKeychain(2));
     expect(find.byType(AgentStatusLine), findsNothing);
 
-    final toggle = find.widgetWithText(SwitchListTile, 'Agent forwarding');
+    final toggle = find.byKey(const ValueKey('agent-forwarding-switch'));
     await tester.ensureVisible(toggle);
     await tester.tap(toggle);
     await tester.pumpAndSettle();
@@ -109,7 +110,7 @@ void main() {
     await pumpPanel(tester, existing: existingHost(agentForwarding: true));
     expect(find.byType(AgentStatusLine), findsOneWidget);
 
-    final dropdown = find.byType(DropdownButton<AuthType>);
+    final dropdown = find.byKey(const ValueKey('auth-method-select'));
     await tester.ensureVisible(dropdown);
     await tester.tap(dropdown);
     await tester.pumpAndSettle();
