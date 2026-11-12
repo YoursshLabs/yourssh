@@ -389,6 +389,14 @@ void main() {
     expect(await run(['ls'], t), 1);
   });
 
+  test('server code 3 passes through as exit 3', () async {
+    final t = FakeTransport((r) => CliResponse.failure(
+            r['id'] as String, CliExit.unreachable, 'not ready')
+        .encode());
+    expect(await run(['ls'], t), 3);
+    expect(err.toString(), contains('not ready'));
+  });
+
   test('unreachable: launches once then retries until up, exit 0', () async {
     final t = FakeTransport((r) => ok(r, {'host': {'label': 'web'}}))..up = false;
     final l = FakeLauncher();
@@ -499,6 +507,207 @@ void main() {
     expect(await run(['open', 'YourSSH://connect/web'], t), 0);
     expect(t.requests.single['cmd'], 'open');
     expect(t.requests.single['args'], {'url': 'YourSSH://connect/web'});
+  });
+
+  test('version never launches the app: CLI version, app not running, exit 3',
+      () async {
+    for (final noToken in [false, true]) {
+      if (noToken) await File(ep.tokenPath).delete();
+      out = Sink();
+      final t = FakeTransport((r) => ok(r, {}))..up = false;
+      final l = FakeLauncher();
+      expect(await run(['version'], t, l: l), 3, reason: 'noToken=$noToken');
+      expect(l.calls, 0);
+      expect(out.toString(), contains('yourssh CLI $kCliVersion'));
+      expect(out.toString(), contains('YourSSH app: not running'));
+    }
+  });
+
+  group('MacAppLauncher', () {
+    test('runs /usr/bin/open -b com.thangnm.yourssh by absolute path',
+        () async {
+      final calls = <String>[];
+      await MacAppLauncher(run: (exe, args) async {
+        calls.add('$exe ${args.join(' ')}');
+        return ProcessResult(1, 0, '', '');
+      }).launch(ep);
+      expect(calls, ['/usr/bin/open -b com.thangnm.yourssh']);
+    });
+
+    test('a failing open is unreachable with a hint', () async {
+      await expectLater(
+          MacAppLauncher(
+                  run: (exe, args) async => ProcessResult(
+                      1, 1, '', 'Unable to find application \x1b[31m'))
+              .launch(ep),
+          throwsA(isA<CliUnreachable>().having(
+              (e) => e.message, 'message', contains('Install YourSSH'))));
+    });
+
+    test('runCli exits 3 at once when the launch fails', () async {
+      final t = FakeTransport((r) => ok(r, {}))..up = false;
+      var runs = 0;
+      var clock = DateTime(2026);
+      final code = await runCli(['ls'],
+          transport: t,
+          launcher: MacAppLauncher(run: (exe, args) async {
+            runs++;
+            return ProcessResult(1, 1, '', 'nope');
+          }),
+          endpoint: ep,
+          out: out,
+          err: err,
+          isTty: false,
+          env: const {},
+          now: () => clock,
+          delay: (d) async => clock = clock.add(d));
+      expect(code, 3);
+      expect(runs, 1);
+      expect(clock, DateTime(2026)); // no waiting for an app that won't come
+      expect(err.toString(), contains('open -b com.thangnm.yourssh'));
+      expect(err.toString(), isNot(contains('\x1b')));
+    });
+  });
+
+  test('YOURSSH_DEV=1 never launches the installed app', () async {
+    await expectLater(
+        DevBuildLauncher().launch(ep),
+        throwsA(isA<CliUnreachable>()
+            .having((e) => e.message, 'message', contains('flutter run'))));
+  });
+
+  test('SystemPathInspector reads owner, mode and type without following links',
+      skip: Platform.isWindows ? 'POSIX only' : null, () async {
+    final d = Directory('${dir.path}/insp')..createSync();
+    await Process.run('/bin/chmod', ['700', d.path]);
+    final f = File('${d.path}/f')..writeAsStringSync('x');
+    await Process.run('/bin/chmod', ['640', f.path]);
+    Link('${d.path}/l').createSync(d.path);
+    final server = await ServerSocket.bind(
+        InternetAddress('${d.path}/s', type: InternetAddressType.unix), 0);
+    addTearDown(server.close);
+    final i = SystemPathInspector();
+    final uid = currentUid();
+
+    final ds = (await i.lstat(d.path))!;
+    expect([ds.uid, ds.mode, ds.isDirectory, ds.isSocket], [uid, 448, true, false]);
+    final fs = (await i.lstat(f.path))!;
+    expect([fs.mode, fs.isRegularFile, fs.isDirectory], [416, true, false]);
+    final ls = (await i.lstat('${d.path}/l'))!;
+    expect([ls.isDirectory, ls.isRegularFile, ls.isSocket], [false, false, false]);
+    final ss = (await i.lstat('${d.path}/s'))!;
+    expect([ss.uid, ss.isSocket], [uid, true]);
+    expect(await i.lstat('${d.path}/missing'), isNull);
+  });
+
+  group('shared-temp run dir is checked before the token is read', () {
+    const ours = 1000;
+    late CliEndpoint sep;
+    setUp(() async {
+      sep = CliEndpoint.resolve(
+          os: 'macos', env: {'TMPDIR': dir.path}, home: '/Users/${'x' * 60}');
+      expect(sep.inSharedTemp, isTrue);
+      await writeToken(sep.runDir, token: 'shared');
+    });
+
+    const goodDir = PathStat(
+        uid: ours, mode: 448, isRegularFile: false, isDirectory: true);
+    const goodSock =
+        PathStat(uid: ours, mode: 384, isRegularFile: false, isSocket: true);
+
+    Future<int> runShared(Map<String, PathStat?> stats, FakeTransport t,
+            {FakeLauncher? l}) =>
+        runCli(['ls'],
+            transport: t,
+            launcher: l ?? FakeLauncher(),
+            endpoint: sep,
+            out: out,
+            err: err,
+            isTty: false,
+            env: const {},
+            uid: ours,
+            inspector: FakeInspector(stats, true));
+
+    test('our own private dir and socket: the request goes through', () async {
+      final t = FakeTransport((r) => ok(r, {'hosts': []}));
+      expect(
+          await runShared(
+              {sep.runDir: goodDir, sep.address: goodSock}, t),
+          0);
+      expect(t.requests.single['token'], 'shared');
+    });
+
+    test('no socket yet is fine (the transport decides)', () async {
+      final t = FakeTransport((r) => ok(r, {'hosts': []}));
+      expect(await runShared({sep.runDir: goodDir}, t), 0);
+    });
+
+    final bad = <String, Map<String, PathStat>>{
+      'dir owned by another user': {
+        'RUN': const PathStat(
+            uid: 0, mode: 448, isRegularFile: false, isDirectory: true),
+      },
+      'dir mode 0755': {
+        'RUN': const PathStat(
+            uid: ours, mode: 493, isRegularFile: false, isDirectory: true),
+      },
+      'dir is a symlink': {
+        'RUN': const PathStat(uid: ours, mode: 511, isRegularFile: false),
+      },
+      'socket owned by another user': {
+        'RUN': goodDir,
+        'SOCK': const PathStat(
+            uid: 0, mode: 384, isRegularFile: false, isSocket: true),
+      },
+      'socket mode 0666': {
+        'RUN': goodDir,
+        'SOCK': const PathStat(
+            uid: ours, mode: 438, isRegularFile: false, isSocket: true),
+      },
+      'socket path is a regular file': {
+        'RUN': goodDir,
+        'SOCK': const PathStat(uid: ours, mode: 384, isRegularFile: true),
+      },
+    };
+    for (final c in bad.entries) {
+      test('refuses (exit 4, nothing sent): ${c.key}', () async {
+        final t = FakeTransport((r) => ok(r, {'hosts': []}));
+        final l = FakeLauncher();
+        final code = await runShared({
+          sep.runDir: c.value['RUN'],
+          if (c.value['SOCK'] != null) sep.address: c.value['SOCK'],
+        }, t, l: l);
+        expect(code, 4);
+        expect(t.attempts, 0);
+        expect(l.calls, 0);
+        expect(err.toString(), contains('not private'));
+      });
+    }
+
+    test('a missing run dir means not running: launch, then go through',
+        () async {
+      final stats = <String, PathStat?>{};
+      final t = FakeTransport((r) => ok(r, {'hosts': []}));
+      final l = FakeLauncher(() {
+        stats[sep.runDir] = goodDir;
+        stats[sep.address] = goodSock;
+      });
+      var clock = DateTime(2026);
+      final code = await runCli(['ls'],
+          transport: t,
+          launcher: l,
+          endpoint: sep,
+          out: out,
+          err: err,
+          isTty: false,
+          env: const {},
+          uid: ours,
+          inspector: FakeInspector(stats, true),
+          now: () => clock,
+          delay: (d) async => clock = clock.add(d));
+      expect(code, 0);
+      expect(l.calls, 1);
+    });
   });
 }
 

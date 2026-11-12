@@ -14,29 +14,24 @@ Future<void> main(List<String> argv) async {
       stderr.writeln('yourssh: cannot determine the current Windows user: $e');
       exit(CliExit.runtime.code);
     }
-    // Same resolve() call as the app: %LOCALAPPDATA%\YourSSH\run and
-    // \\.\pipe\yourssh-cli-<SID>.
-    ep = CliEndpoint.resolve(
-      os: 'windows',
-      env: env,
-      home: env['USERPROFILE'] ?? '',
-      userSid: sid,
-    );
+    // Same resolve() as the app: %LOCALAPPDATA%\YourSSH\run and
+    // \\.\pipe\yourssh-cli-<SID> (the -dev variant with YOURSSH_DEV=1).
+    ep = CliEndpoint.forCli(os: 'windows', env: env, userSid: sid);
     transport = WindowsPipeTransport();
   } else {
     // R10: the app resolves with the same uid, so a fallback dir matches.
-    ep = CliEndpoint.resolve(
-      os: Platform.isMacOS ? 'macos' : 'linux',
-      env: env,
-      home: env['HOME'] ?? '',
-      uid: currentUid(),
-    );
+    // YOURSSH_DEV=1 targets a non-release app build (flutter run).
+    ep = CliEndpoint.forCli(
+        os: Platform.isMacOS ? 'macos' : 'linux', env: env, uid: currentUid());
     transport = UnixSocketTransport();
   }
   final code = await runCli(
     argv,
     transport: transport,
-    launcher: SystemAppLauncher(),
+    // A debug build is started with flutter run, never by launching the
+    // installed app.
+    launcher:
+        CliEndpoint.isDevEnv(env) ? DevBuildLauncher() : SystemAppLauncher(),
     endpoint: ep,
     out: stdout,
     err: stderr,

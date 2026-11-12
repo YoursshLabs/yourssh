@@ -131,6 +131,7 @@ final class _SecurityAttributes extends Struct {
 final DynamicLibrary _kernel32 = DynamicLibrary.open('kernel32.dll');
 final DynamicLibrary _advapi32 = DynamicLibrary.open('advapi32.dll');
 final DynamicLibrary _ntdll = DynamicLibrary.open('ntdll.dll');
+final DynamicLibrary _user32 = DynamicLibrary.open('user32.dll');
 
 // Message text only (R25).
 final _getLastError = _kernel32.lookupFunction<Uint32 Function(), int Function()>(
@@ -189,6 +190,11 @@ final _getNamedPipeClientProcessId = _kernel32.lookupFunction<
 final _getNamedPipeServerProcessId = _kernel32.lookupFunction<
     Int32 Function(IntPtr, Pointer<Uint32>),
     int Function(int, Pointer<Uint32>)>('GetNamedPipeServerProcessId');
+
+// BOOL AllowSetForegroundWindow(DWORD dwProcessId) — user32.
+final _allowSetForegroundWindow =
+    _user32.lookupFunction<Int32 Function(Uint32), int Function(int)>(
+        'AllowSetForegroundWindow');
 
 final _getCurrentProcess =
     _kernel32.lookupFunction<IntPtr Function(), int Function()>(
@@ -642,6 +648,20 @@ bool pipeClientIsCurrentUser(int pipe) {
 bool pipeServerIsCurrentUser(int pipe) {
   final pid = _peerPid(pipe, _getNamedPipeServerProcessId);
   return pid != null && processRunsAsCurrentUser(pid);
+}
+
+/// Client side: the pid of the process serving [pipe], or null.
+int? pipeServerProcessId(int pipe) =>
+    _peerPid(pipe, _getNamedPipeServerProcessId);
+
+/// Client side, best effort: lets the app serving [pipe] take the
+/// foreground (`AllowSetForegroundWindow`), so its focus() for a CLI request
+/// or a forwarded launch is not turned into a taskbar flash. Works only
+/// when this process may set the foreground itself. False on any failure.
+bool allowPipeServerForeground(int pipe) {
+  final pid = pipeServerProcessId(pipe);
+  if (pid == null) return false;
+  return _allowSetForegroundWindow(pid) != 0;
 }
 
 /// Reads one request on a connected server [pipe]: [peerCheck] (the client

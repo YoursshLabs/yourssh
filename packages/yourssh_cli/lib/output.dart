@@ -53,4 +53,20 @@ String renderHostTable(List<Object?> hosts, {required bool color}) {
   return b.toString();
 }
 
-String jsonHosts(List<Object?> hosts) => jsonEncode(hosts);
+/// `ls --json` output. jsonEncode escapes C0 controls but leaves DEL and
+/// C1 (U+007F–U+009F) raw, and some terminals act on C1; escape them too.
+/// They can only occur inside strings, so the result is the same JSON value.
+String jsonHosts(List<Object?> hosts) => escapeJsonC1(jsonEncode(hosts));
+
+/// Replaces U+007F–U+009F in encoded JSON with `\u00XX` escapes.
+String escapeJsonC1(String json) {
+  final b = StringBuffer();
+  for (final r in json.runes) {
+    if (r >= 0x7f && r <= 0x9f) {
+      b.write('\\u00${r.toRadixString(16)}');
+    } else {
+      b.writeCharCode(r);
+    }
+  }
+  return b.toString();
+}

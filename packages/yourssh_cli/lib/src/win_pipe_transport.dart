@@ -79,17 +79,22 @@ Future<String> _roundTripInIsolate(
         debugName: 'yourssh-pipe');
 
 /// Blocking request/response over pipe [address]: open, check the server
-/// with [peerCheck], write the line, read one line back.
+/// with [peerCheck], run [beforeSend] (grant the verified server foreground
+/// rights), write the line, read one line back.
 String pipeRoundTrip(String address, String requestLine,
     {required int timeoutMs,
     required int maxResponseBytes,
     required int busyWaitMs,
-    bool Function(int pipe) peerCheck = pipeServerIsCurrentUser}) {
+    bool Function(int pipe) peerCheck = pipeServerIsCurrentUser,
+    void Function(int pipe) beforeSend = _allowForeground}) {
   final pipe = openPipeForClient(address, busyWaitMs: busyWaitMs);
   try {
     // R22: the pipe namespace is global and another user could have taken
     // the name first. Check the server before the token leaves this process.
     if (!peerCheck(pipe)) throw CliPermissionDenied(kPipeOwnedByAnotherUser);
+    // The app raises its window for most requests; Windows only lets it
+    // take the foreground if we pass on our right to do so.
+    beforeSend(pipe);
     final sw = Stopwatch()..start();
     switch (writePipeAll(pipe, utf8.encode('$requestLine\n'),
         timeoutMs: timeoutMs)) {
@@ -120,6 +125,8 @@ String pipeRoundTrip(String address, String requestLine,
     closeWinHandle(pipe);
   }
 }
+
+void _allowForeground(int pipe) => allowPipeServerForeground(pipe);
 
 /// Open phase (R25: decided by listing `\\.\pipe\`, not by the last error):
 /// - opens → the handle;

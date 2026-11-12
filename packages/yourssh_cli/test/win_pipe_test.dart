@@ -21,6 +21,7 @@ CliEndpoint testEndpoint() => CliEndpoint.resolve(
 String? echoReply(String line) => 'echo:$line \u00e9\u{1F600}';
 String? noReply(String line) => null;
 bool rejectPeer(int pipe) => false;
+void refuseSend(int pipe) => throw StateError('beforeSend ran');
 
 /// Retries [attempt] while the server isolate has not created its pipe yet
 /// (CliUnreachable), for up to 3 s. A failed open consumes nothing.
@@ -240,6 +241,48 @@ void main() {
           WindowsPipeTransport(peerCheck: rejectPeer).probe(ep),
           throwsA(isA<CliPermissionDenied>().having(
               (e) => e.message, 'message', kPipeOwnedByAnotherUser)));
+    });
+
+    test('the server pid is ours and foreground rights can be passed to it',
+        () {
+      final ep = testEndpoint();
+      final server = createPipeServerInstance(ep.address,
+          sid: currentUserSid(), first: true);
+      addTearDown(() => closeWinHandle(server));
+      final client = openPipeClient(ep.address);
+      addTearDown(() => closeWinHandle(client));
+      expect(pipeServerProcessId(client), pid);
+      // Best effort: a CI session has no foreground window, so the result
+      // may be false; it must not throw.
+      expect(allowPipeServerForeground(client), isA<bool>());
+    });
+
+    test('foreground rights are granted after the peer check, before the '
+        'request is written', () async {
+      final ep = testEndpoint();
+      final server = recordOnce(ep.address, currentUserSid());
+      await expectLater(
+          whenUp(() async => pipeRoundTrip(ep.address, 'x',
+              timeoutMs: 5000,
+              maxResponseBytes: 1000,
+              busyWaitMs: 1000,
+              beforeSend: refuseSend)),
+          throwsA(isA<StateError>()));
+      final (bytes, _) = await server;
+      expect(bytes, 0); // nothing written before beforeSend
+
+      // A foreign server never gets as far as beforeSend.
+      final ep2 = testEndpoint();
+      final server2 = recordOnce(ep2.address, currentUserSid());
+      await expectLater(
+          whenUp(() async => pipeRoundTrip(ep2.address, 'x',
+              timeoutMs: 5000,
+              maxResponseBytes: 1000,
+              busyWaitMs: 1000,
+              peerCheck: rejectPeer,
+              beforeSend: refuseSend)),
+          throwsA(isA<CliPermissionDenied>()));
+      await server2;
     });
 
     test('the server sees its client as the current user', () {

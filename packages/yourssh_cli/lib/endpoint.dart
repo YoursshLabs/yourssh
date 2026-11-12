@@ -23,42 +23,50 @@ class CliEndpoint {
   /// listener must then refuse a pre-existing dir that is not ours / not 0700.
   final bool inSharedTemp;
 
+  /// [dev] selects the endpoint of a non-release (debug/profile) app build,
+  /// so a `flutter run` copy never shares the installed app's endpoint, lock
+  /// or token: run dir `YourSSH-dev` (macOS, Windows) / `yourssh-dev`
+  /// (Linux), short fallbacks `yourssh-dev-run` / `/tmp/yourssh-dev-<uid>`,
+  /// pipe `\\.\pipe\yourssh-cli-dev-<SID>`.
   static CliEndpoint resolve({
     required String os,
     required Map<String, String> env,
     required String home,
     String? userSid,
     int? uid,
+    bool dev = false,
   }) {
+    final suffix = dev ? '-dev' : '';
     switch (os) {
       case 'macos':
         return _posixOrFallback(
-          p.posix.join(home, 'Library', 'Application Support', 'YourSSH', 'run'),
+          p.posix.join(
+              home, 'Library', 'Application Support', 'YourSSH$suffix', 'run'),
           () {
             final tmp = env['TMPDIR'];
             return (tmp != null && tmp.isNotEmpty)
-                ? p.posix.join(tmp, 'yourssh-run')
-                : _tmpFallback(env, uid);
+                ? p.posix.join(tmp, 'yourssh$suffix-run')
+                : _tmpFallback(env, uid, suffix);
           },
         );
       case 'linux':
         final xdg = env['XDG_RUNTIME_DIR'];
         if (xdg != null && xdg.isNotEmpty) {
-          return _posixOrFallback(
-              p.posix.join(xdg, 'yourssh'), () => _tmpFallback(env, uid));
+          return _posixOrFallback(p.posix.join(xdg, 'yourssh$suffix'),
+              () => _tmpFallback(env, uid, suffix));
         }
         return _posixOrFallback(
-            p.posix.join(home, '.local', 'state', 'yourssh', 'run'),
-            () => _tmpFallback(env, uid));
+            p.posix.join(home, '.local', 'state', 'yourssh$suffix', 'run'),
+            () => _tmpFallback(env, uid, suffix));
       case 'windows':
         if (userSid == null || userSid.isEmpty) {
           throw ArgumentError('userSid is required on Windows');
         }
         final base = env['LOCALAPPDATA'] ?? p.windows.join(home, 'AppData', 'Local');
-        final dir = p.windows.join(base, 'YourSSH', 'run');
+        final dir = p.windows.join(base, 'YourSSH$suffix', 'run');
         return CliEndpoint._(
           dir,
-          r'\\.\pipe\yourssh-cli-' + userSid,
+          r'\\.\pipe\yourssh-cli' + suffix + '-' + userSid,
           p.windows.join(dir, 'cli.token'),
         );
       default:
@@ -66,8 +74,30 @@ class CliEndpoint {
     }
   }
 
-  static String _tmpFallback(Map<String, String> env, int? uid) =>
-      '/tmp/yourssh-${uid ?? env['USER'] ?? 'user'}';
+  /// The endpoint the `yourssh` binary talks to: home from `HOME`
+  /// (`USERPROFILE` on Windows), and the dev variant when `YOURSSH_DEV=1`
+  /// (to reach an app started with `flutter run`).
+  static CliEndpoint forCli({
+    required String os,
+    required Map<String, String> env,
+    int? uid,
+    String? userSid,
+  }) =>
+      resolve(
+        os: os,
+        env: env,
+        home: (os == 'windows' ? env['USERPROFILE'] : env['HOME']) ?? '',
+        uid: uid,
+        userSid: userSid,
+        dev: isDevEnv(env),
+      );
+
+  /// `YOURSSH_DEV=1`: talk to a non-release app build.
+  static bool isDevEnv(Map<String, String> env) => env['YOURSSH_DEV'] == '1';
+
+  static String _tmpFallback(
+          Map<String, String> env, int? uid, String suffix) =>
+      '/tmp/yourssh$suffix-${uid ?? env['USER'] ?? 'user'}';
 
   static CliEndpoint _posixOrFallback(
       String dir, String Function() fallbackDir) {

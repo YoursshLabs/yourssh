@@ -96,6 +96,8 @@ Future<int> runCli(
   DateTime Function()? now,
   Future<void> Function(Duration)? delay,
   Duration launchWait = const Duration(seconds: 15),
+  int? uid,
+  PathInspector? inspector,
 }) async {
   now ??= DateTime.now;
   delay ??= (d) => Future<void>.delayed(d);
@@ -153,6 +155,12 @@ Future<int> runCli(
   final id = _randomId();
 
   Future<CliResponse> attempt() async {
+    if (endpoint.inSharedTemp) {
+      // A temp location another user could have prepared: trust it (and
+      // read the token in it) only when it is ours and private.
+      await checkSharedRunDir(endpoint,
+          uid: uid ?? currentUid(), inspector: inspector ?? SystemPathInspector());
+    }
     String? token;
     try {
       token = await readTokenStrict(endpoint.tokenPath);
@@ -199,6 +207,12 @@ Future<int> runCli(
         }
         await delay(const Duration(milliseconds: 200));
       } on CliUnreachable catch (e) {
+        if (cmd == 'version') {
+          // `version` only reports; it never starts the app.
+          out.writeln('yourssh CLI $kCliVersion (protocol $kCliProtocolVersion)');
+          out.writeln('YourSSH app: not running');
+          return CliExit.unreachable.code;
+        }
         if (!launched) {
           launched = true;
           await launcher.launch(endpoint);
@@ -254,6 +268,7 @@ Future<int> runCli(
     }
     return switch (resp.code) {
       CliExit.usage => CliExit.usage.code,
+      CliExit.unreachable => CliExit.unreachable.code,
       CliExit.denied => CliExit.denied.code,
       _ => CliExit.runtime.code,
     };
@@ -376,12 +391,39 @@ class UnixSocketTransport implements CliTransport {
 /// What the launcher needs to know about a path (no symlink following).
 class PathStat {
   const PathStat(
-      {required this.uid, required this.mode, required this.isRegularFile});
+      {required this.uid,
+      required this.mode,
+      required this.isRegularFile,
+      this.isDirectory = false,
+      this.isSocket = false});
   final int uid;
 
   /// Permission bits (e.g. 0o700 = 448).
   final int mode;
   final bool isRegularFile;
+  final bool isDirectory;
+  final bool isSocket;
+}
+
+/// For a run dir in a shared temp location (the short fallback): the dir
+/// must be a real directory owned by [uid] with mode 0700, and the socket,
+/// if present, a socket owned by [uid] that nobody else can use. Anything
+/// else is [CliPermissionDenied] (exit 4) — checked before the token is read
+/// or anything is sent. A missing dir is [CliUnreachable] (app not running).
+Future<void> checkSharedRunDir(CliEndpoint ep,
+    {required int uid, required PathInspector inspector}) async {
+  final dir = await inspector.lstat(ep.runDir);
+  if (dir == null) throw CliUnreachable('no run dir');
+  if (!dir.isDirectory || dir.uid != uid || (dir.mode & 511) != 448) {
+    throw CliPermissionDenied('the YourSSH run dir (${ep.runDir}) is not '
+        'private: it must be your own directory with mode 0700');
+  }
+  final sock = await inspector.lstat(ep.address);
+  if (sock != null &&
+      (!sock.isSocket || sock.uid != uid || (sock.mode & 63) != 0)) {
+    throw CliPermissionDenied('the YourSSH socket (${ep.address}) is not '
+        'private: it must be your own socket with no group/other access');
+  }
 }
 
 /// Test seam for the Linux launch checks.
@@ -394,20 +436,31 @@ abstract class PathInspector {
   Future<bool> isExistingRegularFile(String path);
 }
 
+/// `/usr/bin/stat` (absolute, no PATH lookup; never follows a symlink):
+/// BSD `-f '%u %Lp %HT'` on macOS, GNU `-c '%u %a %F'` on Linux. A missing
+/// binary or path reads as null.
 class SystemPathInspector implements PathInspector {
   @override
   Future<PathStat?> lstat(String path) async {
     try {
-      final r = await Process.run('stat', ['-c', '%u %a %F', path]);
+      final r = await Process.run(
+          '/usr/bin/stat',
+          Platform.isMacOS
+              ? ['-f', '%u %Lp %HT', path]
+              : ['-c', '%u %a %F', path]);
       if (r.exitCode != 0) return null;
       final parts = r.stdout.toString().trim().split(' ');
       if (parts.length < 3) return null;
       final uid = int.tryParse(parts[0]);
       final mode = int.tryParse(parts[1], radix: 8);
       if (uid == null || mode == null) return null;
-      final type = parts.sublist(2).join(' ');
+      final type = parts.sublist(2).join(' ').toLowerCase();
       return PathStat(
-          uid: uid, mode: mode, isRegularFile: type.startsWith('regular'));
+          uid: uid,
+          mode: mode,
+          isRegularFile: type.startsWith('regular'),
+          isDirectory: type == 'directory',
+          isSocket: type == 'socket');
     } on ProcessException {
       return null;
     }
@@ -516,7 +569,44 @@ class WindowsAppLauncher implements AppLauncher {
   }
 }
 
-/// Starts the app: `open -b` on macOS, [LinuxAppLauncher] on Linux,
+/// macOS: `/usr/bin/open -b com.thangnm.yourssh` (absolute path). A
+/// non-zero exit (app not installed, LaunchServices refused) is
+/// [CliUnreachable], so the CLI exits 3 at once instead of waiting 15 s.
+class MacAppLauncher implements AppLauncher {
+  MacAppLauncher(
+      {Future<ProcessResult> Function(String exe, List<String> args)? run})
+      : run = run ?? ((exe, args) => Process.run(exe, args));
+
+  final Future<ProcessResult> Function(String exe, List<String> args) run;
+
+  static const bundleId = 'com.thangnm.yourssh';
+
+  @override
+  Future<void> launch(CliEndpoint ep) async {
+    ProcessResult r;
+    try {
+      r = await run('/usr/bin/open', ['-b', bundleId]);
+    } on ProcessException catch (e) {
+      throw CliUnreachable('cannot run /usr/bin/open: ${e.message}');
+    }
+    if (r.exitCode != 0) {
+      final detail = r.stderr.toString().trim();
+      throw CliUnreachable('"open -b $bundleId" failed (exit ${r.exitCode}'
+          '${detail.isEmpty ? '' : ': $detail'}). Install YourSSH in '
+          '/Applications or start it once');
+    }
+  }
+}
+
+/// `YOURSSH_DEV=1`: the target is a debug build started with `flutter run`;
+/// the installed app must not be launched in its place.
+class DevBuildLauncher implements AppLauncher {
+  @override
+  Future<void> launch(CliEndpoint ep) async => throw CliUnreachable(
+      'YOURSSH_DEV=1 targets a debug build; start it with flutter run');
+}
+
+/// Starts the app: [MacAppLauncher] on macOS, [LinuxAppLauncher] on Linux,
 /// [WindowsAppLauncher] on Windows.
 class SystemAppLauncher implements AppLauncher {
   @override
@@ -526,7 +616,7 @@ class SystemAppLauncher implements AppLauncher {
       return;
     }
     if (Platform.isMacOS) {
-      await Process.run('open', ['-b', 'com.thangnm.yourssh']);
+      await MacAppLauncher().launch(ep);
       return;
     }
     await LinuxAppLauncher(uid: currentUid()).launch(ep);
