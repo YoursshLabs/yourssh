@@ -41,12 +41,28 @@ void main() {
     expect(find.text('Terminal font'), findsOneWidget);
   });
 
+  // The thumb sits at (size - 10) / 14 of the track; 13pt -> 3/14.
+  Offset thumbOf(WidgetTester tester) {
+    final r = tester.getRect(find.byType(FSlider));
+    return Offset(r.left + r.width * 3 / 14, r.center.dy);
+  }
+
   testWidgets('dragging slider updates fontSize', (tester) async {
     final settings = SettingsProvider();
     await tester.pumpWidget(wrap(settings));
-    await tester.drag(find.byType(FSlider), const Offset(100, 0));
+    await tester.dragFrom(thumbOf(tester), const Offset(100, 0));
     await tester.pump();
     expect(settings.fontSize, greaterThan(13));
+  });
+
+  testWidgets('tapping the track at ~80% jumps to a larger font size',
+      (tester) async {
+    final settings = SettingsProvider();
+    await tester.pumpWidget(wrap(settings));
+    final r = tester.getRect(find.byType(FSlider));
+    await tester.tapAt(Offset(r.left + r.width * 0.8, r.center.dy));
+    await tester.pumpAndSettle();
+    expect(settings.fontSize, greaterThanOrEqualTo(20));
   });
 
   testWidgets(

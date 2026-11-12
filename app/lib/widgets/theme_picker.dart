@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 import '../theme/terminal_themes.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
@@ -102,7 +101,7 @@ class _ThemePickerDialogState extends State<_ThemePickerDialog> {
           const Text(
             'Terminal Theme',
             style: TextStyle(
-              color: AppColors.textPrimary,
+              color: YsColors.foreground,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -110,7 +109,7 @@ class _ThemePickerDialogState extends State<_ThemePickerDialog> {
           const Spacer(),
           Text(
             '${kTerminalThemes.length} themes',
-            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+            style: const TextStyle(color: YsColors.mutedForeground, fontSize: 11),
           ),
           const SizedBox(width: 8),
           Tooltip(
@@ -146,10 +145,10 @@ class _ThemeCard extends StatelessWidget {
       child: Container(
         width: 160,
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.accent.withValues(alpha: 0.12) : AppColors.card,
+          color: isSelected ? YsColors.primary.withValues(alpha: 0.12) : YsColors.card,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? AppColors.accent : AppColors.border,
+            color: isSelected ? YsColors.primary : YsColors.border,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -165,7 +164,7 @@ class _ThemeCard extends StatelessWidget {
                     child: Text(
                       entry.name,
                       style: TextStyle(
-                        color: isSelected ? AppColors.accent : AppColors.textPrimary,
+                        color: isSelected ? YsColors.accentText : YsColors.foreground,
                         fontSize: 11,
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                       ),
@@ -173,7 +172,7 @@ class _ThemeCard extends StatelessWidget {
                     ),
                   ),
                   if (isSelected)
-                    const Icon(FLucideIcons.circleCheck, size: 12, color: AppColors.accent),
+                    const Icon(FLucideIcons.circleCheck, size: 12, color: YsColors.primary),
                 ],
               ),
             ),

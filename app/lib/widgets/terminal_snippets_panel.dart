@@ -29,16 +29,16 @@ class _TerminalSnippetsPanelState extends State<TerminalSnippetsPanel> {
     final snippets = context.watch<SnippetProvider>().snippets;
     final filtered = filterSnippets(snippets, _query);
 
-    // Group by tag (untagged last), preserving the provider's order.
+    // Group by tag. Groups appear in first-seen order (the provider's order),
+    // untagged snippets last; the provider's order is kept inside a group.
     final groups = <String, List<Snippet>>{};
     for (final s in filtered) {
       groups.putIfAbsent(s.tag, () => []).add(s);
     }
-    final tags = groups.keys.toList()
-      ..sort((a, b) {
-        if (a.isEmpty != b.isEmpty) return a.isEmpty ? 1 : -1;
-        return 0;
-      });
+    final tags = [
+      ...groups.keys.where((t) => t.isNotEmpty),
+      if (groups.containsKey('')) '',
+    ];
 
     return WorkspaceSidePanel(
       title: 'Snippets',
@@ -74,25 +74,29 @@ class _TerminalSnippetsPanelState extends State<TerminalSnippetsPanel> {
                         ? 'No snippets yet'
                         : 'No snippets match "$_query"',
                   )
-                : ListView(
+                : ListView.builder(
                     padding: const EdgeInsets.all(YsSpace.s3),
-                    children: [
-                      for (final tag in tags) ...[
-                        if (tag.isNotEmpty)
-                          YsSectionHeader(title: tag),
-                        FTileGroup(
-                          children: [
-                            for (final snippet in groups[tag]!)
-                              _snippetTile(
-                                snippet,
-                                canRun: widget.canRun,
-                                onRun: () => widget.onRunSnippet(snippet),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: YsSpace.s3),
-                      ],
-                    ],
+                    itemCount: tags.length,
+                    itemBuilder: (context, i) {
+                      final tag = tags[i];
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (tag.isNotEmpty) YsSectionHeader(title: tag),
+                          FTileGroup(
+                            children: [
+                              for (final snippet in groups[tag]!)
+                                _snippetTile(
+                                  snippet,
+                                  canRun: widget.canRun,
+                                  onRun: () => widget.onRunSnippet(snippet),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: YsSpace.s3),
+                        ],
+                      );
+                    },
                   ),
           ),
         ],
@@ -130,29 +134,34 @@ FTile _snippetTile(
                   color: YsColors.mutedForeground, fontSize: 11),
             ),
           ),
-      ],
-    ),
-    suffix: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Tooltip(
-          message: 'Run snippet',
-          child: FButton.icon(
-            variant: .ghost,
-            size: .sm,
-            onPress: canRun ? onRun : null,
-            child: const Icon(FLucideIcons.play),
-          ),
-        ),
-        Tooltip(
-          message: 'Copy snippet',
-          child: FButton.icon(
-            variant: .ghost,
-            size: .sm,
-            onPress: () =>
-                Clipboard.setData(ClipboardData(text: snippet.command)),
-            child: const Icon(FLucideIcons.copy),
-          ),
+        const SizedBox(height: YsSpace.s2),
+        Wrap(
+          spacing: YsSpace.s2,
+          children: [
+            Tooltip(
+              message: 'Run snippet',
+              child: FButton(
+                variant: .ghost,
+                size: .sm,
+                mainAxisSize: MainAxisSize.min,
+                onPress: canRun ? onRun : null,
+                prefix: const Icon(FLucideIcons.play),
+                child: const Text('Run'),
+              ),
+            ),
+            Tooltip(
+              message: 'Copy snippet',
+              child: FButton(
+                variant: .ghost,
+                size: .sm,
+                mainAxisSize: MainAxisSize.min,
+                onPress: () =>
+                    Clipboard.setData(ClipboardData(text: snippet.command)),
+                prefix: const Icon(FLucideIcons.copy),
+                child: const Text('Copy'),
+              ),
+            ),
+          ],
         ),
       ],
     ),

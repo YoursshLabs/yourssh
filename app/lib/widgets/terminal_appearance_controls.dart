@@ -99,7 +99,6 @@ class _TerminalAppearanceControlsState
           child: FSlider(
             control: .liftedContinuous(
               value: FSliderValue(max: fraction),
-              interaction: FSliderInteraction.slide,
               // Preview while dragging (no prefs write per tick); persist
               // once when the drag ends.
               onChange: (v) =>

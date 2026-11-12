@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -105,6 +107,58 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(command, 'df -h');
+  });
+
+  testWidgets('Run and Copy keep their text labels', (tester) async {
+    await tester.pumpWidget(wrap(canRun: true, onRunSnippet: (_) {}));
+    await tester.pumpAndSettle();
+    expect(find.text('Run'), findsWidgets);
+    expect(find.text('Copy'), findsWidgets);
+  });
+
+  testWidgets('groups follow first-seen tag order, untagged last, 40 tags',
+      (tester) async {
+    tester.view.physicalSize = const Size(600, 40000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Descending tag names, so alphabetical order would differ from
+    // first-seen order; an untagged snippet comes first in the input.
+    final seeded = <Snippet>[
+      Snippet(label: 'plain', command: 'echo plain'),
+      for (var i = 39; i >= 0; i--)
+        for (final p in ['a', 'b'])
+          Snippet(
+            label: '$p-tag${i.toString().padLeft(2, '0')}',
+            command: 'c',
+            tag: 'tag${i.toString().padLeft(2, '0')}',
+          ),
+    ];
+    SharedPreferences.setMockInitialValues({
+      'yourssh.snippets': jsonEncode(seeded.map((e) => e.toJson()).toList()),
+    });
+    final provider = SnippetProvider();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+      value: provider,
+      child: ysTestApp(
+          TerminalSnippetsPanel(canRun: true, onRunSnippet: (_) {})),
+    ));
+    await tester.pumpAndSettle();
+
+    final tagTexts = tester
+        .widgetList<Text>(find.byWidgetPredicate(
+            (w) => w is Text && (w.data ?? '').startsWith('tag')))
+        .map((t) => t.data!)
+        .toList();
+    expect(tagTexts, [
+      for (var i = 39; i >= 0; i--) 'tag${i.toString().padLeft(2, '0')}',
+    ]);
+    // Provider order preserved inside a group, untagged group last.
+    final ys = (String l) => tester.getTopLeft(find.text(l)).dy;
+    expect(ys('a-tag39'), lessThan(ys('b-tag39')));
+    expect(ys('plain'), greaterThan(ys('b-tag00')));
   });
 
   testWidgets('toolbar toggle controls snippets panel visibility', (tester) async {
