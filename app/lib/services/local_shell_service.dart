@@ -1,7 +1,6 @@
 // app/lib/services/local_shell_service.dart
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';

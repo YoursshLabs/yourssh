@@ -8,7 +8,6 @@
 //     --target=integration_test/terminal_perf_test.dart
 //
 // Env (via --dart-define): BENCH_DIR, PERF_OUT, PHASE_CAP_S (default 300).
-import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show FramePhase;
 
@@ -141,7 +140,7 @@ void main() {
     await sleep(1500);
     term.removeListener(onChange);
     final ctrlCStopMs = lastChange - ctrlCAt;
-    stdout.writeln('CTRLC output stopped ${ctrlCStopMs} ms after ^C');
+    stdout.writeln('CTRLC output stopped $ctrlCStopMs ms after ^C');
 
     final json = StringBuffer('{"grid":"$grid","window":"${winSize.width}x${winSize.height}",'
         '"completedLines":${lines()},"lineTimesMs":{${lineTimes.entries.map((e) => '"${e.key}":${e.value}').join(',')}},"writeBuckets50ms":{${writeBuckets.entries.map((e) => '"${e.key}":${e.value}').join(',')}},"capped":${capped.map((e) => '"$e"').toList()},"ctrlCStopMs":$ctrlCStopMs,"phases":{');

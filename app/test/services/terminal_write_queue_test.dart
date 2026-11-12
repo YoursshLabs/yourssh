@@ -125,7 +125,7 @@ void main() {
     q.add('two');
     q.add('three' * 10);
     q.flush();
-    expect(written.join(), 'one' 'two' + 'three' * 10);
+    expect(written.join(), 'onetwo${'three' * 10}');
     expect(commits, 1);
     expect(q.pendingChars, 0);
     // the scheduled slice is invalidated
