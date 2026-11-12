@@ -9,7 +9,8 @@ import 'package:yourssh/services/bulk_action_service.dart';
 import 'package:yourssh/widgets/bulk/bulk_run_dialog.dart';
 import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 import 'package:yourssh_snippets/yourssh_snippets.dart';
-import 'package:yourssh_ui/yourssh_ui.dart' show showYsDialog, YsDialogFrame;
+import 'package:yourssh_ui/yourssh_ui.dart'
+    show FButton, FLucideIcons, showYsDialog, YsDialogFrame;
 
 import '../helpers/ys_test_app.dart';
 
@@ -156,5 +157,40 @@ dialogCtx, barrierDismissible: false, builder: (_) => BulkRunDialog(
     await tester.tap(find.text('DIFF'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  group('snippet button', () {
+    final host = Host(label: 'a', host: 'a.x', username: 'u');
+    final svc = BulkActionService(
+        exec: (h, c) async => (stdout: '', stderr: '', exitCode: 0));
+    final snippetBtn = find.ancestor(
+        of: find.byIcon(FLucideIcons.braces), matching: find.byType(FButton));
+
+    testWidgets('is disabled with a tooltip when no snippets exist',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({'yourssh.snippets': '[]'});
+      await tester.pumpWidget(wrap(BulkRunDialog(hosts: [host], serviceOverride: svc)));
+      await tester.pumpAndSettle();
+      expect(tester.widget<FButton>(snippetBtn).onPress, isNull);
+      expect(find.byTooltip('No snippets saved'), findsOneWidget);
+    });
+
+    testWidgets('picking a snippet fills the command field', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(wrap(BulkRunDialog(hosts: [host], serviceOverride: svc)));
+      await tester.pumpAndSettle();
+      expect(tester.widget<FButton>(snippetBtn).onPress, isNotNull);
+      expect(find.byTooltip('Insert snippet'), findsOneWidget);
+
+      await tester.tap(snippetBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Disk usage'));
+      await tester.pumpAndSettle();
+
+      final field = tester.widget<EditableText>(find.descendant(
+          of: find.byKey(const Key('bulk-command-field')),
+          matching: find.byType(EditableText)));
+      expect(field.controller.text, 'df -h');
+    });
   });
 }

@@ -71,4 +71,32 @@ void main() {
     expect(find.byKey(const ValueKey('bulk-compare-b')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('picking two hosts shows both outputs side by side',
+      (tester) async {
+    await tester.pumpWidget(_wrap(BulkDiffView(results: [
+      _ok('alpha', 'out-from-alpha'),
+      _ok('beta', 'out-from-beta'),
+    ])));
+    await tester.tap(find.text('COMPARE TWO HOSTS'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pick two hosts to compare.'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('bulk-compare-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('alpha').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Pick two hosts to compare.'), findsOneWidget,
+        reason: 'one pick is not enough');
+
+    await tester.tap(find.byKey(const ValueKey('bulk-compare-b')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('beta').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pick two hosts to compare.'), findsNothing);
+    expect(find.text('out-from-alpha'), findsOneWidget);
+    expect(find.text('out-from-beta'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

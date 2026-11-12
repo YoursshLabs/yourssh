@@ -276,8 +276,9 @@ class _HostCompare extends StatelessWidget {
     Widget picker(String? value, bool isA) => SizedBox(
           width: 200,
           child: FSelect<String>.rich(
-            // Re-created when the options change so a stale pick never
-            // lingers (a re-run can drop hosts).
+            // Stable key per side. The select is NOT re-created when the
+            // options change; a stale pick (a re-run can drop hosts) is
+            // handled by the `ok.any(...)` guard on `value` below.
             key: ValueKey(isA ? 'bulk-compare-a' : 'bulk-compare-b'),
             control: .lifted(
               value: ok.any((r) => r.host.id == value) ? value : null,

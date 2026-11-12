@@ -23,7 +23,13 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 class BulkPushDialog extends StatefulWidget {
   final List<Host> hosts;
   final BulkActionService? serviceOverride; // tests
-  const BulkPushDialog({super.key, required this.hosts, this.serviceOverride});
+  final List<BulkPushSource> initialSources; // tests
+  const BulkPushDialog({
+    super.key,
+    required this.hosts,
+    this.serviceOverride,
+    this.initialSources = const [],
+  });
 
   @override
   State<BulkPushDialog> createState() => _BulkPushDialogState();
@@ -37,6 +43,7 @@ class _BulkPushDialogState extends State<BulkPushDialog> {
   @override
   void initState() {
     super.initState();
+    _sources.addAll(widget.initialSources);
     _controller =
         BulkRunController(service: _buildService(), hosts: widget.hosts)
           ..addListener(_onChanged);

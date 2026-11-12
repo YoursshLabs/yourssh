@@ -241,7 +241,7 @@ class _SnippetMenu extends StatelessWidget {
       ),
     ],
     builder: (context, controller, _) => Tooltip(
-      message: 'Insert snippet',
+      message: snippets.isEmpty ? 'No snippets saved' : 'Insert snippet',
       excludeFromSemantics: true,
       child: FButton.icon(
         variant: .outline,
