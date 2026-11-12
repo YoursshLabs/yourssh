@@ -370,6 +370,10 @@ jobs:
           $iss += "`r`n[Icons]`r`n"
           $iss += "Name: `"{group}\YourSSH`"; Filename: `"{app}\yourssh.exe`"`r`n"
           $iss += "Name: `"{commondesktop}\YourSSH`"; Filename: `"{app}\yourssh.exe`"`r`n"
+          $iss += "`r`n[Registry]`r`n"
+          $iss += "Root: HKCU; Subkey: `"Software\Classes\yourssh`"; ValueType: string; ValueData: `"URL:YourSSH`"; Flags: uninsdeletekey`r`n"
+          $iss += "Root: HKCU; Subkey: `"Software\Classes\yourssh`"; ValueType: string; ValueName: `"URL Protocol`"; ValueData: `"`"`r`n"
+          $iss += "Root: HKCU; Subkey: `"Software\Classes\yourssh\shell\open\command`"; ValueType: string; ValueData: `"`"`"{app}\yourssh.exe`"`" `"`"%1`"`"`"`r`n"
           $iss += "`r`n[Run]`r`n"
           $iss += "Filename: `"{app}\yourssh.exe`"; Description: `"Launch YourSSH`"; Flags: nowait postinstall skipifsilent`r`n"
           $iss | Out-File -FilePath "installer.iss" -Encoding UTF8
@@ -488,10 +492,11 @@ jobs:
           cat > "$PKG/usr/share/applications/yourssh.desktop" << 'DESKTOP'
           [Desktop Entry]
           Name=YourSSH
-          Exec=/usr/share/yourssh/yourssh
+          Exec=/usr/share/yourssh/yourssh %u
           Icon=yourssh
           Type=Application
           Categories=Network;
+          MimeType=x-scheme-handler/yourssh;
           DESKTOP
 
           cat > "$PKG/DEBIAN/control" << CTRL

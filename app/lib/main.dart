@@ -7,8 +7,11 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
+import 'package:yourssh_cli/yourssh_cli.dart' show generateToken;
 import 'services/cli/app_cli_handlers.dart';
+import 'services/cli/cli_server.dart';
 import 'services/cli/single_instance.dart';
+import 'services/cli/url_channel.dart';
 import 'platform/runtime_platform.dart';
 import 'mobile/mobile_app.dart';
 import 'utils/bundled_plugin_installer.dart';
@@ -546,8 +549,6 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   /// crashes start-up: failures (and Windows, for now) just mean no CLI.
   Future<void> _startCliEndpoint() async {
     try {
-      final ep = resolveCliEndpoint();
-      if (ep == null) return;
       final handlers = AppCliHandlers(
         sessions: _sessionProvider,
         hostProvider: _hostProvider,
@@ -557,15 +558,29 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         },
         appVersion: kAppVersion,
       );
-      final owner = await startCliEndpoint(ep, handlers, _launchArgs);
-      if (owner == null) {
-        exit(0); // another instance owns the endpoint and got the request
+      // yourssh:// URLs: macOS events over the `yourssh/url` channel and
+      // this launch's own argv (cold start; no endpoint needed, so Windows
+      // works too). Opens wait until the saved hosts are loaded.
+      final urls = UrlChannel(
+        server: CliServer(handlers: handlers, token: generateToken()),
+        ready: _hostProvider.ready,
+      );
+      final ep = resolveCliEndpoint();
+      if (ep != null) {
+        final owner = await startCliEndpoint(ep, handlers, _launchArgs);
+        if (owner == null) {
+          exit(0); // another instance owns the endpoint and got the request
+        }
+        if (!mounted) {
+          await owner.stop();
+          return;
+        }
+        _cliOwner = owner;
       }
-      if (!mounted) {
-        await owner.stop();
-        return;
-      }
-      _cliOwner = owner;
+      // Only the owner listens, so a lost start-up race never swallows the
+      // queued macOS URL events.
+      urls.attach();
+      unawaited(urls.openLaunchUrl(_launchArgs));
     } on UnsupportedError catch (e) {
       debugPrint('[main] CLI endpoint unsupported here: $e');
     } catch (e) {
