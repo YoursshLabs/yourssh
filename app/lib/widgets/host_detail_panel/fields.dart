@@ -87,6 +87,9 @@ class _Field extends StatelessWidget {
     autocorrect: false,
     enableSuggestions: false,
     validator: validator,
+    // Keep the caret in the field (no unfocus) when Enter hits an invalid
+    // form; a valid save closes the panel anyway.
+    onEditingComplete: onSubmit == null ? null : controller.clearComposing,
     onSubmit: onSubmit == null ? null : (_) => onSubmit!(),
     prefixBuilder: _prefixIcon(icon),
   );
@@ -115,6 +118,7 @@ class _PasswordField extends StatelessWidget {
     hint: 'Password',
     textInputAction: TextInputAction.done,
     autofillHints: const [],
+    onEditingComplete: onSubmit == null ? null : controller.clearComposing,
     onSubmit: onSubmit == null ? null : (_) => onSubmit!(),
     prefixBuilder: icon == null
         ? null

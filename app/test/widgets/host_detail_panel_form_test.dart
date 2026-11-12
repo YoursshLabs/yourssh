@@ -145,6 +145,11 @@ void main() {
 
       expect(saved, isNull, reason: 'hostname is required');
       expect(find.text('Required'), findsOneWidget);
+      expect(
+        focused(tester, 'host-label-field'),
+        isTrue,
+        reason: 'the caret stays in the field when validation fails',
+      );
     });
 
     testWidgets('Tab order runs label → hostname → port → username', (
@@ -284,6 +289,94 @@ void main() {
       await tester.pumpAndSettle();
       expect(editable(tester, 'host-password-field').obscureText, isFalse);
       expect(find.byTooltip('Hide password'), findsOneWidget);
+    });
+  });
+
+  group('validation', () {
+    // Sections scrolled out of view must still validate: Save and Enter sit
+    // far from the session template at 900x600.
+    for (final via in ['Save', 'Enter in the label']) {
+      testWidgets('$via at 900x600 validates the off-screen template', (
+        tester,
+      ) async {
+        await pumpPanel(
+          tester,
+          existing: Host(
+            id: 'target-id',
+            label: 'srv',
+            host: '1.2.3.4',
+            username: 'root',
+            envVars: {'FOO': 'bar'},
+          ),
+          size: const Size(900, 600),
+          asApp: true,
+        );
+        final list = find
+            .descendant(
+              of: find.byType(Form),
+              matching: find.byType(Scrollable),
+            )
+            .first;
+        await tester.scrollUntilVisible(
+          field('template-font-size-field'),
+          300,
+          scrollable: list,
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(field('env-key-0'), 'BAD-NAME');
+        await tester.enterText(field('template-font-size-field'), '200');
+        await tester.pumpAndSettle();
+
+        // Back to the top: the template is far out of view.
+        await tester.drag(list, const Offset(0, 5000));
+        await tester.pumpAndSettle();
+        expect(field('host-label-field').hitTestable(), findsOneWidget);
+
+        await tester.tap(field('host-label-field'));
+        await tester.pump();
+        if (via == 'Save') {
+          await tester.tap(field('host-save-button'));
+        } else {
+          await tester.testTextInput.receiveAction(TextInputAction.done);
+        }
+        await tester.pumpAndSettle();
+
+        expect(saved, isNull, reason: 'invalid env key and font size');
+        expect(closed, 0);
+        expect(find.text('A–Z, 0–9, _ only'), findsOneWidget);
+        expect(find.text('6–40'), findsOneWidget);
+        expect(
+          find.text('A–Z, 0–9, _ only').hitTestable(),
+          findsOneWidget,
+          reason: 'the first error is scrolled into view',
+        );
+      });
+    }
+
+    testWidgets('a private key that no longer exists shows the hint', (
+      tester,
+    ) async {
+      await pumpPanel(
+        tester,
+        existing: Host(
+          id: 'target-id',
+          label: 'srv',
+          host: '1.2.3.4',
+          username: 'root',
+          authType: AuthType.privateKey,
+          keyId: 'deleted-key',
+        ),
+      );
+      expect(tester.takeException(), isNull, reason: 'no select assert');
+      expect(field('auth-key-select'), findsOneWidget);
+      expect(editable(tester, 'auth-key-select').controller.text, isEmpty);
+      expect(
+        find.descendant(
+          of: field('auth-key-select'),
+          matching: find.text('Select key'),
+        ),
+        findsOneWidget,
+      );
     });
   });
 

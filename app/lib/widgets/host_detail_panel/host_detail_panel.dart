@@ -44,7 +44,6 @@ class HostDetailPanel extends StatefulWidget {
   final HostProtocol? initialProtocol;
   final VoidCallback onClose;
   final Future<void> Function(Host host, String password) onSave;
-  final Future<void> Function(Host host)? onConnect;
 
   /// Test seam for the agent status line; defaults to the real probe using
   /// SshService's Keychain loader.
@@ -60,7 +59,6 @@ class HostDetailPanel extends StatefulWidget {
     this.initialProtocol,
     required this.onClose,
     required this.onSave,
-    this.onConnect,
     this.agentProbe,
   });
 
@@ -292,7 +290,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_validate()) return;
     setState(() => _saving = true);
     final tags = _tagsCtrl.text
         .split(',')
@@ -371,6 +369,28 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     }
   }
 
+  /// Validates every section (they are all built — see [build]) and, when
+  /// something is wrong, scrolls the topmost invalid field into view: Save and
+  /// Enter can sit far from it (pinned footer, Enter in the label).
+  bool _validate() {
+    final invalid = _formKey.currentState?.validateGranularly() ?? const {};
+    if (invalid.isEmpty) return true;
+    double top(FormFieldState<Object?> f) {
+      final box = f.context.findRenderObject();
+      return box is RenderBox && box.attached
+          ? box.localToGlobal(Offset.zero).dy
+          : double.infinity;
+    }
+
+    final first = invalid.reduce((a, b) => top(b) < top(a) ? b : a);
+    Scrollable.ensureVisible(
+      first.context,
+      alignment: 0.2,
+      duration: const Duration(milliseconds: 200),
+    );
+    return false;
+  }
+
   /// Enter in a single-line field: same as Save (validates first).
   void _submit() {
     if (!_saving) _save();
@@ -394,7 +414,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   }
 
   Future<void> _test() async {
-    if (_formKey.currentState?.validate() != true) return;
+    if (!_validate()) return;
     setState(() {
       _testing = true;
       _testResult = null;
@@ -462,29 +482,35 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
           Expanded(
             child: Form(
               key: _formKey,
-              child: ListView(
+              // Not a lazy ListView: every section stays built, so every
+              // FormField is registered and Save / Enter validate the whole
+              // form, not just the part on screen.
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(
                   YsSpace.s4,
                   YsSpace.s4,
                   YsSpace.s4,
                   YsSpace.s5,
                 ),
-                children: [
-                  _ProtocolSwitch(form: this),
-                  _GeneralSection(form: this),
-                  _CredentialsSection(form: this),
-                  if (_isRdp) _RdpSection(form: this),
-                  if (!_isGraphical) _AuthMethodSection(form: this),
-                  _GroupTagsSection(form: this),
-                  if (_isGraphical) _RemoteDesktopSection(form: this),
-                  if (!_isGraphical) ...[
-                    _ChainSection(form: this),
-                    _ProxySection(form: this),
-                    _SftpSection(form: this),
-                    _OptionsSection(form: this),
-                    _TemplateSection(form: this),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _ProtocolSwitch(form: this),
+                    _GeneralSection(form: this),
+                    _CredentialsSection(form: this),
+                    if (_isRdp) _RdpSection(form: this),
+                    if (!_isGraphical) _AuthMethodSection(form: this),
+                    _GroupTagsSection(form: this),
+                    if (_isGraphical) _RemoteDesktopSection(form: this),
+                    if (!_isGraphical) ...[
+                      _ChainSection(form: this),
+                      _ProxySection(form: this),
+                      _SftpSection(form: this),
+                      _OptionsSection(form: this),
+                      _TemplateSection(form: this),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

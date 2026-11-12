@@ -729,10 +729,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                           await hp.addHost(host, password: password);
                         }
                       },
-                      onConnect: (host) async {
-                        setState(() => _viewingTerminal = true);
-                        await context.read<SessionProvider>().connectAny(host);
-                      },
                     ),
                   if (_sidePanel == _SidePanel.newGroup)
                     NewGroupPanel(onClose: _closePanel),
