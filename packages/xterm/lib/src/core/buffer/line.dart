@@ -156,6 +156,9 @@ class BufferLine with IndexedItem {
     return written;
   }
 
+  /// Shared all-zero block used to clear recycled lines.
+  static var _zeroes = Uint32List(0);
+
   /// Turns this line back into the exact state of a new `BufferLine(length)`
   /// (all cells zero, not wrapped) so a line that scrolled out of the buffer
   /// can be reused instead of allocated. Returns false and leaves the line
@@ -168,7 +171,12 @@ class BufferLine with IndexedItem {
         _data.length != _calcCapacity(length) * _cellSize) {
       return false;
     }
-    _data.fillRange(0, _data.length, 0);
+    final size = _data.length;
+    if (_zeroes.length < size) {
+      _zeroes = Uint32List(size);
+    }
+    // setRange copies with memmove; fillRange is an element-by-element loop.
+    _data.setRange(0, size, _zeroes);
     _length = length;
     isWrapped = false;
     _version++;
