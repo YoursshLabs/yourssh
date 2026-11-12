@@ -29,6 +29,18 @@ class CliEndpointInUse implements Exception {
   String toString() => 'CliEndpointInUse: $address';
 }
 
+/// Creates (and on macOS/Linux checks and restricts) the run dir. Runs in
+/// main() before the single-instance lock is taken; the listeners call it
+/// again from [CliListener.prepare].
+Future<void> prepareCliRunDir(CliEndpoint ep) async {
+  if (Platform.isWindows) {
+    // %LOCALAPPDATA% is per user; no mode bits to set on Windows.
+    await Directory(ep.runDir).create(recursive: true);
+    return;
+  }
+  await prepareUnixRunDir(ep);
+}
+
 /// Unix socket on macOS/Linux, named pipe on Windows.
 CliListener createCliListener(CliEndpoint ep, CliServer server) =>
     Platform.isWindows

@@ -74,7 +74,9 @@ class MainFlutterWindow: NSWindow {
   private var urlDartReady = false
   private var pendingUrls: [String] = []
 
-  /// Registers the `yourssh/url` channel and the Apple Event handler for
+  /// Registers the `yourssh/url` channel (Dart → native: `ready` flushes
+  /// queued URLs, `activate` brings the app to the front for a CLI / URL
+  /// request; native → Dart: `open`) and the Apple Event handler for
   /// `yourssh://` URLs. Lives here (not AppDelegate) for the same reason as
   /// the app_discovery channel. The handler is installed in awakeFromNib,
   /// before the app finishes launching, so a cold-launch URL event is not
@@ -85,15 +87,26 @@ class MainFlutterWindow: NSWindow {
       binaryMessenger: messenger)
     urlChannel = channel
     channel.setMethodCallHandler { [weak self] call, result in
-      guard let self = self, call.method == "ready" else {
+      guard let self = self else {
         result(FlutterMethodNotImplemented)
         return
       }
-      self.urlDartReady = true
-      let queued = self.pendingUrls
-      self.pendingUrls.removeAll()
-      for url in queued { channel.invokeMethod("open", arguments: url) }
-      result(nil)
+      switch call.method {
+      case "ready":
+        self.urlDartReady = true
+        let queued = self.pendingUrls
+        self.pendingUrls.removeAll()
+        for url in queued { channel.invokeMethod("open", arguments: url) }
+        result(nil)
+      case "activate":
+        // A CLI request or a link arrives while another app is frontmost;
+        // window_manager's focus() alone leaves YourSSH in the background.
+        NSApp.activate(ignoringOtherApps: true)
+        self.makeKeyAndOrderFront(nil)
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
     }
     // NSApplication installs its own kAEGetURL handler while it finishes
     // launching, replacing one set earlier. Install ours from the will-finish

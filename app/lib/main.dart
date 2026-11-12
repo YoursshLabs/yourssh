@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform, exit;
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -7,9 +7,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
-import 'package:yourssh_cli/yourssh_cli.dart' show generateToken;
+import 'package:yourssh_cli/yourssh_cli.dart' show CliEndpoint, generateToken;
 import 'services/cli/app_cli_handlers.dart';
 import 'services/cli/cli_server.dart';
+import 'services/cli/link_refused.dart';
 import 'services/cli/single_instance.dart';
 import 'services/cli/url_channel.dart';
 import 'platform/runtime_platform.dart';
@@ -119,6 +120,11 @@ class _SshBridgeAdapter implements SshBridgeDelegate {
 /// argv of this launch (a `yourssh://` URL or nothing); see single_instance.
 List<String> _launchArgs = const [];
 
+/// The CLI endpoint and the single-instance lock, taken in main() before any
+/// start-up work and held for the app's lifetime (null: no CLI this run).
+CliEndpoint? _cliEndpoint;
+InstanceLock? _instanceLock;
+
 void main(List<String> args) async {
   _launchArgs = args;
   WidgetsFlutterBinding.ensureInitialized();
@@ -132,13 +138,13 @@ void main(List<String> args) async {
     return;
   }
 
-  // A second launch hands its request (open URL / just focus) to the running
-  // instance and exits. Fail-soft: never keep the app from starting.
-  try {
-    if (await forwardToRunningInstance(args, resolveCliEndpoint())) exit(0);
-  } catch (e) {
-    debugPrint('[main] single-instance forward failed: $e');
-  }
+  // Single instance, before any start-up work: a second launch hands its
+  // request (open URL / just focus) to the running instance and exits here,
+  // so it never starts port forwards, plugins, migrations, the update check
+  // or sync. Fail-soft: without an endpoint the app still starts.
+  final claim = await claimSingleInstance(args);
+  _cliEndpoint = claim?.endpoint;
+  _instanceLock = claim?.lock;
 
   // Before any provider reads prefs: carry data over from the old sandboxed
   // container, which a previous release stored everything in.
@@ -521,8 +527,18 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   /// Normal quit: remove the CLI socket/token and release the instance lock.
   /// Not preventClose — this only observes the close.
   @override
-  void onWindowClose() {
-    unawaited(_cliOwner?.stop());
+  void onWindowClose() => _releaseCli();
+
+  /// Once an endpoint owner exists it owns the lock and releases it after
+  /// its listener stopped (stop() is idempotent, so close + dispose is
+  /// fine); without an endpoint the lock is released directly.
+  void _releaseCli() {
+    final owner = _cliOwner;
+    if (owner != null) {
+      unawaited(owner.stop());
+    } else {
+      _instanceLock?.release();
+    }
   }
 
   @override
@@ -544,46 +560,53 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     NotificationService.instance.onWindowBlur();
   }
 
-  /// Opens the local CLI endpoint after the first frame. Never blocks or
-  /// crashes start-up: a failure just means no CLI.
+  /// Opens the local CLI endpoint after the first frame (the lock was taken
+  /// in main()). Never blocks or crashes start-up: a failure just means no
+  /// CLI.
   Future<void> _startCliEndpoint() async {
     try {
       final handlers = AppCliHandlers(
         sessions: _sessionProvider,
         hostProvider: _hostProvider,
-        focus: () async {
-          await windowManager.show();
-          await windowManager.focus();
-        },
+        focus: () => raiseWindowForCli(
+          isMacOS: Platform.isMacOS,
+          show: windowManager.show,
+          focus: windowManager.focus,
+        ),
         appVersion: kAppVersion,
       );
-      // yourssh:// URLs: macOS events over the `yourssh/url` channel and
-      // this launch's own argv (cold start; works even when the endpoint
-      // fails to start). Opens wait until the saved hosts are loaded.
-      final urls = UrlChannel(
-        server: CliServer(handlers: handlers, token: generateToken()),
+      // One server for every path (socket/pipe, macOS URL events, this
+      // launch's own URL): they share the wait for hosts/known hosts/keys
+      // and the same-URL debounce. A refused link lands in the bell.
+      final server = CliServer(
+        handlers: handlers,
+        token: generateToken(),
         ready: Future.wait<void>([
           _hostProvider.ready,
           _knownHostsProvider.ready,
           _keyProvider.ready,
         ]),
+        onUrlRefused: (url, reason) =>
+            _notificationCenter.add(linkRefusedNotification(url, reason)),
       );
-      try {
-        final owner = await startCliEndpoint(
-            resolveCliEndpoint(), handlers, _launchArgs);
-        if (owner == null) {
-          exit(0); // another instance owns the endpoint and got the request
+      final urls = UrlChannel(server: server);
+      final ep = _cliEndpoint;
+      final lock = _instanceLock;
+      if (ep != null && lock != null) {
+        try {
+          final owner = await startCliEndpoint(ep, server, lock: lock);
+          if (!mounted) {
+            await owner.stop();
+          } else {
+            _cliOwner = owner;
+          }
+        } catch (e) {
+          // Still the single instance (the lock stays held): only the CLI
+          // endpoint is missing.
+          debugPrint('[main] CLI endpoint failed to start: $e');
         }
-        if (!mounted) {
-          await owner.stop();
-        } else {
-          _cliOwner = owner;
-        }
-      } catch (e) {
-        debugPrint('[main] CLI endpoint failed to start: $e');
       }
-      // The trusted URL path needs no endpoint. Reached only when this
-      // process stays alive (a lost single-instance race exits above).
+      // The trusted URL path needs no endpoint.
       urls.attach();
       unawaited(urls.openLaunchUrl(_launchArgs));
     } catch (e) {
@@ -593,8 +616,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
 
   @override
   void dispose() {
-    unawaited(_cliOwner?.stop());
-    _cliOwner = null;
+    _releaseCli();
     _settingsProvider.removeListener(_syncNotificationSetting);
     _updateProvider.removeListener(_pushUpdateNotification);
     // A queued reconnect timer may still fire onSessionDropped during

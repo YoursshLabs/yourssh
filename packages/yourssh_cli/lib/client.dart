@@ -69,11 +69,16 @@ abstract class AppLauncher {
 const String kUsage = '''Usage: yourssh <command> [options]
 
 Commands:
-  connect <host>   Open a saved host (or user@host[:port]) in YourSSH
+  connect <host>   Open a saved host (id or label) in YourSSH. An unsaved
+                   user@host[:port] signs in with your SSH agent's keys;
+                   a password-only server needs a saved host
   ls               List saved hosts [--json] [--tag T] [--filter Q]
-  version          Show CLI and app versions
+  version          Show CLI and app versions (never starts the app)
   open <url>       Open a yourssh://connect/<host> URL
   help             Show this help
+
+Environment:
+  YOURSSH_DEV=1    Talk to a debug build of the app (flutter run)
 ''';
 
 String _randomId() {

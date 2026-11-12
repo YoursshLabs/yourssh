@@ -11,27 +11,16 @@ import 'cli_server.dart';
 /// and queues any that arrive before Dart listens — [attach] sends `ready`
 /// to flush that queue. On Windows/Linux the URL is argv of a new process:
 /// a second launch is forwarded by single_instance, a cold launch calls
-/// [openLaunchUrl].
+/// [openLaunchUrl]. The providers-ready wait and the same-URL debounce live
+/// in [CliServer], shared with the socket/pipe path.
 class UrlChannel {
   UrlChannel({
     required this.server,
-    this.channel = const MethodChannel('yourssh/url'),
-    Future<void>? ready,
-    this.now = DateTime.now,
-  }) : _ready = ready ?? Future<void>.value();
+    this.channel = kUrlMethodChannel,
+  });
 
   final CliServer server;
   final MethodChannel channel;
-  
-  /// Clock, injectable for tests.
-  final DateTime Function() now;
-
-  /// A repeat of the same URL inside this window is dropped (drive-by flood).
-  static const dedupeWindow = Duration(seconds: 2);
-  final Map<String, DateTime> _recent = {};
-
-  /// Completes when saved hosts are loaded; opens wait for it.
-  final Future<void> _ready;
 
   void attach() {
     channel.setMethodCallHandler((call) async {
@@ -47,13 +36,7 @@ class UrlChannel {
   /// Opens [url] (saved hosts only; the server rejects everything else).
   /// Never throws.
   Future<void> open(String url) async {
-    final key = url.toLowerCase();
-    final t = now();
-    _recent.removeWhere((_, at) => t.difference(at) >= dedupeWindow);
-    if (_recent.containsKey(key)) return;
-    _recent[key] = t;
     try {
-      await _ready;
       final line = CliRequest(
               id: 'url', token: '', cmd: 'open', args: {'url': url})
           .encode();
@@ -70,5 +53,33 @@ class UrlChannel {
     for (final a in args) {
       if (a.toLowerCase().startsWith('yourssh://')) return open(a);
     }
+  }
+}
+
+/// The `yourssh/url` method channel (MainFlutterWindow.swift on macOS).
+const MethodChannel kUrlMethodChannel = MethodChannel('yourssh/url');
+
+/// Brings the window forward for a CLI / URL request (the `focus` of
+/// AppCliHandlers). window_manager's show()/focus() do not activate an app
+/// that is in the background on macOS, so there the native side also runs
+/// `NSApp.activate(ignoringOtherApps: true)` + `makeKeyAndOrderFront`
+/// (method `activate`). Windows relies on the client granting
+/// AllowSetForegroundWindow before it sends the request; Linux is
+/// unchanged. Never throws for a missing native handler.
+Future<void> raiseWindowForCli({
+  required bool isMacOS,
+  required Future<void> Function() show,
+  required Future<void> Function() focus,
+  MethodChannel channel = kUrlMethodChannel,
+}) async {
+  await show();
+  await focus();
+  if (!isMacOS) return;
+  try {
+    await channel.invokeMethod<void>('activate');
+  } on MissingPluginException {
+    // No native handler (tests, older runner): window_manager's focus only.
+  } on PlatformException catch (e) {
+    debugPrint('[url] native activate failed: $e');
   }
 }

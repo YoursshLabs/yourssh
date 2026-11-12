@@ -59,12 +59,11 @@ void main() {
     expect(fake.calls, isEmpty);
   });
 
-  test('opens wait for the ready gate (hosts loaded)', () async {
+  test('opens wait for the server ready gate (hosts loaded)', () async {
     final gate = Completer<void>();
     final u = UrlChannel(
-        server: CliServer(handlers: fake, token: 't'),
-        channel: ch,
-        ready: gate.future);
+        server: CliServer(handlers: fake, token: 't', ready: gate.future),
+        channel: ch);
     u.attach();
     final sent = send('yourssh://connect/web-1');
     await pumpEventQueue();
@@ -97,12 +96,15 @@ void main() {
   });
 
   group('hardening', () {
+    // The gate and the debounce live in CliServer, shared with the socket.
     UrlChannel mk({Future<void>? ready, DateTime Function()? now}) =>
         UrlChannel(
-            server: CliServer(handlers: fake, token: 't'),
-            channel: ch,
-            ready: ready,
-            now: now ?? DateTime.now);
+            server: CliServer(
+                handlers: fake,
+                token: 't',
+                ready: ready,
+                now: now ?? DateTime.now),
+            channel: ch);
 
     test('hostile and unknown URLs open nothing; scheme is case-insensitive',
         () async {
@@ -138,6 +140,44 @@ void main() {
       final u = mk(ready: Future<void>.error(StateError('load failed')));
       await u.open('yourssh://connect/web-1');
       expect(fake.calls, isEmpty);
+    });
+  });
+
+  group('I5: raising the window for a CLI / URL request', () {
+    test('macOS also activates the app natively, after show and focus',
+        () async {
+      final order = <String>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(ch, (c) async {
+        order.add('native:${c.method}');
+        return null;
+      });
+      await raiseWindowForCli(
+          isMacOS: true,
+          show: () async => order.add('show'),
+          focus: () async => order.add('focus'),
+          channel: ch);
+      expect(order, ['show', 'focus', 'native:activate']);
+    });
+
+    test('other platforms only show and focus', () async {
+      final order = <String>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(ch, (c) async {
+        order.add('native:${c.method}');
+        return null;
+      });
+      await raiseWindowForCli(
+          isMacOS: false,
+          show: () async => order.add('show'),
+          focus: () async => order.add('focus'),
+          channel: ch);
+      expect(order, ['show', 'focus']);
+    });
+
+    test('a missing native handler is ignored', () async {
+      await raiseWindowForCli(
+          isMacOS: true, show: () async {}, focus: () async {}, channel: ch);
     });
   });
 }

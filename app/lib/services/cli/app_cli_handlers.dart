@@ -37,6 +37,10 @@ class AppCliHandlers implements CliHandlers {
     await focus();
   }
 
+  /// An ad-hoc `user@host[:port]` is never saved, so it has no stored
+  /// password and the app has no interactive SSH password prompt: it
+  /// authenticates with the system SSH agent's identities (a password-only
+  /// server needs a saved host).
   @override
   Future<void> connectAdHoc(AdHocTarget target) async {
     final host = Host(
@@ -44,6 +48,7 @@ class AppCliHandlers implements CliHandlers {
       host: target.hostname,
       port: target.port,
       username: target.user,
+      authType: AuthType.agent,
     );
     await _open(host, 'cli');
     await focus();

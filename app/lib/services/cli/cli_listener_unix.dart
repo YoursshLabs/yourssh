@@ -62,28 +62,7 @@ class UnixCliListener implements CliListener {
   }
 
   @override
-  Future<void> prepare() async {
-    final dir = Directory(_ep.runDir);
-    final existed = dir.existsSync();
-    if (!existed) await dir.create(recursive: true);
-    if (_ep.inSharedTemp) {
-      // A temp location another user could have pre-created: trust it only
-      // when it is a real directory that is ours and 0700.
-      final type = FileSystemEntity.typeSync(_ep.runDir, followLinks: false);
-      final owner = await _ownerUid(_ep.runDir);
-      final mode = FileStat.statSync(_ep.runDir).mode & 0xFFF;
-      if (type != FileSystemEntityType.directory ||
-          owner != currentUid() ||
-          mode != 0x1C0 /* 0700 */) {
-        if (existed || type != FileSystemEntityType.directory) {
-          throw FileSystemException(
-              'refusing run dir (must be our own directory, mode 0700)',
-              _ep.runDir);
-        }
-      }
-    }
-    await _chmod('700', _ep.runDir);
-  }
+  Future<void> prepare() => prepareUnixRunDir(_ep);
 
   Future<bool> _isLive() async {
     try {
@@ -193,6 +172,41 @@ class UnixCliListener implements CliListener {
       // Already gone.
     }
   }
+}
+
+/// Creates the run dir and makes it 0700. A shared-temp location another
+/// user could have pre-created is trusted only when it is a real directory
+/// that is ours and 0700; anything else throws.
+Future<void> prepareUnixRunDir(CliEndpoint ep) async {
+  final dir = Directory(ep.runDir);
+  final existed = dir.existsSync();
+  if (!existed) await dir.create(recursive: true);
+  if (ep.inSharedTemp) {
+    final type = FileSystemEntity.typeSync(ep.runDir, followLinks: false);
+    final owner = await _ownerUid(ep.runDir);
+    final mode = FileStat.statSync(ep.runDir).mode & 0xFFF;
+    if (type != FileSystemEntityType.directory ||
+        owner != currentUid() ||
+        mode != 0x1C0 /* 0700 */) {
+      if (existed || type != FileSystemEntityType.directory) {
+        throw FileSystemException(
+            'refusing run dir (must be our own directory, mode 0700)',
+            ep.runDir);
+      }
+    }
+  }
+  await _chmod('700', ep.runDir);
+}
+
+/// True when [dir] is a real directory (not a symlink) owned by us with
+/// mode 0700 — the condition for trusting a shared-temp run dir.
+Future<bool> isPrivateRunDir(String dir) async {
+  if (FileSystemEntity.typeSync(dir, followLinks: false) !=
+      FileSystemEntityType.directory) {
+    return false;
+  }
+  return await _ownerUid(dir) == currentUid() &&
+      (FileStat.statSync(dir).mode & 0x1FF) == 0x1C0;
 }
 
 Future<int?> _ownerUid(String path) async {

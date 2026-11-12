@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:yourssh_cli/yourssh_cli.dart';
 
@@ -8,11 +10,46 @@ import 'host_summary.dart';
 
 /// Transport-independent request handling for the `yourssh` CLI and
 /// `yourssh://` URLs. One request line in, one encoded response line out.
+///
+/// Every path goes through one instance — the socket/pipe listener (CLI and
+/// forwarded launches) and the in-process URL channel (macOS events, a cold
+/// launch's own URL) — so they share:
+/// - the providers-ready gate: `ls`, `connect` and `open` wait for [ready]
+///   (hosts, known hosts and keys loaded), at most [readyTimeout];
+/// - the same-URL debounce: an `open` of a URL (any case) seen within
+///   [dedupeWindow] is answered but opens nothing (drive-by flood).
 class CliServer {
-  CliServer({required this.handlers, required String token}) : _token = token;
+  CliServer({
+    required this.handlers,
+    required String token,
+    Future<void>? ready,
+    this.now = DateTime.now,
+    this.readyTimeout = const Duration(seconds: 15),
+    this.onUrlRefused,
+  })  : _token = token,
+        _ready = ready ?? Future<void>.value() {
+    // A failing gate is reported per request; never as an unhandled error.
+    _ready.catchError((Object _) {});
+  }
 
   final CliHandlers handlers;
   final String _token;
+  final Future<void> _ready;
+
+  /// Clock for the URL debounce, injectable for tests.
+  final DateTime Function() now;
+  final Duration readyTimeout;
+
+  /// Called when an `open` names no saved host or has an unsupported shape
+  /// (the app shows it in the notification bell).
+  final void Function(String url, String reason)? onUrlRefused;
+
+  /// A repeat of the same URL inside this window is dropped.
+  static const dedupeWindow = Duration(seconds: 2);
+  final Map<String, DateTime> _recentUrls = {};
+
+  /// The token the CLI must present; written to `cli.token` by the owner.
+  String get token => _token;
 
   /// [trusted] skips the token check (in-process URL events). Never throws.
   Future<String> handleLine(
@@ -36,9 +73,18 @@ class CliServer {
         return CliResponse.failure(req.id, CliExit.denied, 'denied').encode();
       }
       validateArgs(req.cmd, req.args);
+      if (req.cmd == 'open' && _isRepeatUrl(req.args['url'] as String)) {
+        return CliResponse.success(req.id, {'ignored': 'repeat'}).encode();
+      }
+      if (const {'ls', 'connect', 'open'}.contains(req.cmd)) {
+        await _waitReady();
+      }
       final result = await _dispatch(req, source);
       return CliResponse.success(req.id, result).encode();
     } on _Failure catch (f) {
+      if (req.cmd == 'open' && f.code == CliExit.usage) {
+        _reportRefused(req.args['url'], f.message);
+      }
       return CliResponse.failure(req.id, f.code, f.message,
               candidates: f.candidates)
           .encode();
@@ -49,6 +95,33 @@ class CliServer {
       debugPrint('CliServer: ${req.cmd} failed: $e');
       return CliResponse.failure(req.id, CliExit.runtime, 'internal error')
           .encode();
+    }
+  }
+
+  bool _isRepeatUrl(String url) {
+    final key = url.toLowerCase();
+    final t = now();
+    _recentUrls.removeWhere((_, at) => t.difference(at) >= dedupeWindow);
+    if (_recentUrls.containsKey(key)) return true;
+    _recentUrls[key] = t;
+    return false;
+  }
+
+  Future<void> _waitReady() async {
+    try {
+      await _ready.timeout(readyTimeout);
+    } on TimeoutException {
+      throw _Failure(CliExit.unreachable, 'YourSSH is still starting; retry');
+    }
+    // Any other gate error falls through to the generic internal error.
+  }
+
+  void _reportRefused(Object? url, String reason) {
+    if (url is! String) return;
+    try {
+      onUrlRefused?.call(url, reason);
+    } catch (e) {
+      debugPrint('CliServer: onUrlRefused failed: $e');
     }
   }
 

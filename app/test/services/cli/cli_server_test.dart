@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -234,4 +235,136 @@ void main() {
       expect(fake.calls, isEmpty);
     });
   }
+
+  group('I3: providers-ready gate (every path)', () {
+    test('ls, connect and open wait for it; version and activate do not',
+        () async {
+      final gate = Completer<void>();
+      final server =
+          CliServer(handlers: fake, token: tok, ready: gate.future);
+      Future<CliResponse> send(String line, {bool trusted = false}) async =>
+          CliResponse.decode(
+              await server.handleLine(line, trusted: trusted));
+
+      expect((await send(req('version', {}))).ok, isTrue);
+      expect((await send(req('activate', {}))).ok, isTrue);
+      expect(fake.calls, ['focus']);
+
+      var lsDone = false;
+      final ls = send(req('ls', {})).then((r) {
+        lsDone = true;
+        return r;
+      });
+      final connect = send(req('connect', {'host': 'web-1'}));
+      final open = send(req('open', {'url': 'yourssh://connect/db'}),
+          trusted: true);
+      await pumpEventQueue();
+      expect(lsDone, isFalse);
+      expect(fake.calls, ['focus']);
+
+      gate.complete();
+      expect(((await ls).result as Map)['hosts'], hasLength(4));
+      expect((await connect).ok, isTrue);
+      expect((await open).ok, isTrue);
+      expect(fake.calls, ['focus', 'connect:web-1:cli', 'connect:db:url']);
+    });
+
+    test('never ready within readyTimeout: code 3 (app not ready), nothing runs',
+        () async {
+      final server = CliServer(
+          handlers: fake,
+          token: tok,
+          ready: Completer<void>().future,
+          readyTimeout: const Duration(milliseconds: 50));
+      final r = CliResponse.decode(await server.handleLine(
+          req('connect', {'host': 'web-1'}),
+          trusted: false));
+      expect(r.code, CliExit.unreachable);
+      expect(fake.calls, isEmpty);
+    });
+
+    test('a failing gate is a runtime error and opens nothing', () async {
+      final server = CliServer(
+          handlers: fake,
+          token: tok,
+          ready: Future<void>.error(StateError('load failed')));
+      final r = CliResponse.decode(await server.handleLine(
+          req('open', {'url': 'yourssh://connect/web-1'}),
+          trusted: true));
+      expect(r.code, CliExit.runtime);
+      expect(r.error, isNot(contains('load failed')));
+      expect(fake.calls, isEmpty);
+    });
+  });
+
+  group('I3: same-URL debounce (every path)', () {
+    test('a repeat open within 2 s is dropped on any path, then allowed',
+        () async {
+      var t = DateTime(2026, 1, 1);
+      final server = CliServer(handlers: fake, token: tok, now: () => t);
+      Future<CliResponse> open(String url, {bool trusted = false}) async =>
+          CliResponse.decode(await server.handleLine(
+              req('open', {'url': url}, token: trusted ? '' : tok),
+              trusted: trusted));
+
+      expect((await open('yourssh://connect/web-1', trusted: true)).ok,
+          isTrue);
+      t = t.add(const Duration(seconds: 1));
+      // Same URL (any case) over the socket: answered, nothing opened.
+      final again = await open('YOURSSH://connect/web-1');
+      expect(again.ok, isTrue);
+      expect(fake.calls, ['connect:web-1:url']);
+      // Another URL is not affected.
+      await open('yourssh://connect/db');
+      expect(fake.calls, ['connect:web-1:url', 'connect:db:url']);
+      t = t.add(const Duration(seconds: 2));
+      await open('yourssh://connect/web-1');
+      expect(fake.calls.where((c) => c == 'connect:web-1:url'), hasLength(2));
+    });
+
+    test('CLI connect is never debounced', () async {
+      await call(req('connect', {'host': 'web-1'}));
+      await call(req('connect', {'host': 'web-1'}));
+      expect(fake.calls, ['connect:web-1:cli', 'connect:web-1:cli']);
+    });
+  });
+
+  group('M6: refused links are reported', () {
+    test('unknown host and bad shape are reported with the URL; '
+        'a successful open is not', () async {
+      final refused = <String>[];
+      final server = CliServer(
+          handlers: fake,
+          token: tok,
+          onUrlRefused: (url, reason) => refused.add('$url | $reason'));
+      Future<void> open(String url) =>
+          server.handleLine(req('open', {'url': url}, token: ''),
+              trusted: true);
+
+      await open('yourssh://connect/web-1');
+      await open('yourssh://connect/nope');
+      await open('yourssh://exec/rm');
+      await open('yourssh://connect/dup');
+      expect(refused, [
+        'yourssh://connect/nope | unknown host: nope',
+        'yourssh://exec/rm | unsupported URL (only yourssh://connect/<host>)',
+        'yourssh://connect/dup | ambiguous host: dup',
+      ]);
+    });
+
+    test('CLI connect failures and handler errors are not link refusals',
+        () async {
+      final refused = <String>[];
+      final server = CliServer(
+          handlers: fake,
+          token: tok,
+          onUrlRefused: (url, reason) => refused.add(url));
+      await server.handleLine(req('connect', {'host': 'nope'}),
+          trusted: false);
+      fake.connectError = StateError('boom');
+      await server.handleLine(req('open', {'url': 'yourssh://connect/web-1'}),
+          trusted: false);
+      expect(refused, isEmpty);
+    });
+  });
 }
