@@ -16,6 +16,7 @@ class SyncPayload {
 
 class SyncService {
   static const _lastPushKey = 'sync_last_push_at';
+  static const _lastAppliedKey = 'sync_last_applied_at';
   static const _pendingPushKey = 'sync_pending_push';
 
   final SyncProvider _syncProvider;
@@ -163,6 +164,22 @@ class SyncService {
         _syncProvider.syncCode,
       );
       final result = parsePayload(decrypted);
+      // Anti-rollback: the server-supplied updated_at is attacker-controllable,
+      // so also require the authenticated inner timestamp to be strictly newer
+      // than anything we pushed or applied before.
+      final lastAppliedStr = prefs.getString(_lastAppliedKey);
+      final lastApplied =
+          lastAppliedStr != null ? DateTime.parse(lastAppliedStr) : null;
+      DateTime? floor = lastPushAt;
+      if (lastApplied != null && (floor == null || lastApplied.isAfter(floor))) {
+        floor = lastApplied;
+      }
+      if (floor != null && !result.updatedAt.isAfter(floor)) {
+        _syncProvider.setStatus(SyncStatus.synced);
+        return null;
+      }
+      await prefs.setString(
+          _lastAppliedKey, result.updatedAt.toUtc().toIso8601String());
       await prefs.setBool(_pendingPushKey, false);
       _syncProvider.setStatus(SyncStatus.synced);
       return result;
@@ -224,6 +241,7 @@ class SyncService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_pendingPushKey);
     await prefs.remove(_lastPushKey);
+    await prefs.remove(_lastAppliedKey);
     await _syncProvider.clearSupabaseConfig();
     return remoteError;
   }
