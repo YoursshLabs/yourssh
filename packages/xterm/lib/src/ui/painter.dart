@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+import 'package:quiver/collection.dart';
 
 import 'package:xterm/src/ui/glyph_atlas.dart';
 import 'package:xterm/src/ui/keyword_highlight.dart';
@@ -88,6 +89,7 @@ class TerminalPainter {
     _textStyle = value;
     _cellSize = _measureCharSize();
     _paragraphCache.clear();
+    _keywordParagraphs.clear();
     _resetGlyphAtlas();
     _invalidateLinePictures();
   }
@@ -99,6 +101,7 @@ class TerminalPainter {
     _textScaler = value;
     _cellSize = _measureCharSize();
     _paragraphCache.clear();
+    _keywordParagraphs.clear();
     _resetGlyphAtlas();
     _invalidateLinePictures();
   }
@@ -113,6 +116,7 @@ class TerminalPainter {
     _themeForegroundArgb = value.foreground.toARGB32();
     _themeBackgroundArgb = value.background.toARGB32();
     _paragraphCache.clear();
+    _keywordParagraphs.clear();
     // Atlas tiles are keyed by their final color: they stay valid.
     _invalidateLinePictures();
   }
@@ -186,6 +190,7 @@ class TerminalPainter {
   void clearFontCache() {
     _cellSize = _measureCharSize();
     _paragraphCache.clear();
+    _keywordParagraphs.clear();
     _resetGlyphAtlas();
     _invalidateLinePictures();
   }
@@ -788,6 +793,7 @@ class TerminalPainter {
   ) {
     final cellData = CellData.empty();
     final cellWidth = _cellSize.width;
+    final colorKey = fgColor.toARGB32() << 21;
 
     for (var i = startCol; i < endCol && i < line.length; i++) {
       line.getCellData(i, cellData);
@@ -795,19 +801,31 @@ class TerminalPainter {
       final charWidth = cellData.content >> CellContent.widthShift;
 
       if (charCode != 0) {
-        final style = _textStyle.toTextStyle(color: fgColor);
-        final builder = ParagraphBuilder(style.getParagraphStyle())
-          ..pushStyle(style.getTextStyle(textScaler: _textScaler))
-          ..addText(String.fromCharCode(charCode));
-        final para = builder.build()
-          ..layout(ParagraphConstraints(width: cellWidth * 2));
-        canvas.drawParagraph(para, lineOffset.translate(i * cellWidth, 0));
-        para.dispose();
+        // Laid out once per (char, color): matches of a rule like "info" hit
+        // most lines of a log flood.
+        final key = charCode | colorKey;
+        var cached = _keywordParagraphs[key];
+        if (cached == null || cached.color != fgColor) {
+          final style = _textStyle.toTextStyle(color: fgColor);
+          final builder = ParagraphBuilder(style.getParagraphStyle())
+            ..pushStyle(style.getTextStyle(textScaler: _textScaler))
+            ..addText(String.fromCharCode(charCode));
+          final para = builder.build()
+            ..layout(ParagraphConstraints(width: cellWidth * 2));
+          cached = _keywordParagraphs[key] = (color: fgColor, paragraph: para);
+        }
+        canvas.drawParagraph(
+            cached.paragraph, lineOffset.translate(i * cellWidth, 0));
       }
 
       if (charWidth == 2) i++;
     }
   }
+
+  /// Keyword foreground paragraphs by (char, color). Cleared with
+  /// [_paragraphCache] (style, scale and font changes).
+  final _keywordParagraphs =
+      LruMap<int, ({Color color, Paragraph paragraph})>(maximumSize: 1024);
 
   /// Paints [line] to [canvas] at [offset]. The x offset of [offset] is usually
   /// 0, and the y offset is the top of the line.
