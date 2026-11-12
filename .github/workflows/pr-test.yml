@@ -19,11 +19,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# Flutter is pinned: the stable channel moved to 3.50, which deprecates
-# package:flutter/material.dart and requires Gradle >= 9.3.1 / AGP >= 9.1.1 /
-# Kotlin >= 2.4.10 for Android. Bump this together with that migration.
+# Flutter is pinned so a new stable release never changes CI under an open PR.
+# Bump it together with release.yml and with the Android toolchain in
+# app/android (Gradle wrapper, AGP and Kotlin in settings.gradle.kts): each
+# Flutter release raises the minimum versions its Gradle plugin accepts, and
+# the `android` job below is what proves the pair still builds.
 env:
-  FLUTTER_VERSION: 3.47.1
+  FLUTTER_VERSION: 3.50.0
 
 jobs:
   # The app suite needs no Rust at all: nothing under app/test loads the native
