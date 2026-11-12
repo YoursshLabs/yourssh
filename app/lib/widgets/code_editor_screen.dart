@@ -13,6 +13,7 @@ import '../services/external_edit_service.dart';
 import '../services/sftp_file_inspector.dart';
 import '../services/sftp_transfer_service.dart';
 import '../util/safe_local_path.dart';
+import '../util/webview_result.dart';
 
 class CodeEditorScreen extends StatefulWidget {
   final Host host;
@@ -194,7 +195,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
     if (_useWebView) {
       final content =
           await _controller!.runJavaScriptReturningResult('getContent()');
-      await _saveFile(content.toString());
+      await _saveFile(decodeWebViewString(content));
     } else {
       await _saveFile(_textController.text);
     }

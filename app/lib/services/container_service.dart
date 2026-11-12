@@ -62,8 +62,8 @@ class ContainerService {
     bool allNamespaces = false,
     String? context,
   }) async {
-    final scope = allNamespaces ? '-A' : '-n $namespace';
-    final ctxFlag = context != null ? ' --context=$context' : '';
+    final scope = allNamespaces ? '-A' : '-n ${_shq(namespace)}';
+    final ctxFlag = context != null ? ' --context=${_shq(context)}' : '';
     final r = await ssh.exec(host, 'kubectl get pods $scope$ctxFlag',
         auditSource: 'devops');
     if (r.exitCode != 0) {
@@ -74,7 +74,7 @@ class ContainerService {
 
   Future<List<String>> podContainers(Host host, String pod, String namespace) async {
     final r = await ssh.exec(host,
-        "kubectl get pod $pod -n $namespace -o jsonpath='{.spec.containers[*].name}'",
+        "kubectl get pod ${_shq(pod)} -n ${_shq(namespace)} -o jsonpath='{.spec.containers[*].name}'",
         auditSource: 'devops');
     if (r.exitCode != 0) return const [];
     return parseContainerNames(r.stdout);
@@ -117,10 +117,10 @@ class ContainerService {
     String? container,
     int tail = 100,
   }) {
-    final ctxFlag = context != null ? ' --context=$context' : '';
-    final cFlag = container != null ? ' -c $container' : '';
+    final ctxFlag = context != null ? ' --context=${_shq(context)}' : '';
+    final cFlag = container != null ? ' -c ${_shq(container)}' : '';
     final cmd =
-        'kubectl logs -f $pod -n $namespace --tail=$tail$ctxFlag$cFlag';
+        'kubectl logs -f ${_shq(pod)} -n ${_shq(namespace)} --tail=$tail$ctxFlag$cFlag';
     return ssh.execStream(host, cmd, auditSource: 'devops');
   }
 
@@ -140,9 +140,9 @@ class ContainerService {
     int localPort,
   ) async {
     final remotePfPort = 40000 + Random().nextInt(10000);
-    final ctxFlag = context != null ? ' --context=$context' : '';
-    final cmd = 'kubectl port-forward --address 0.0.0.0 pod/$pod '
-        '$remotePfPort:$podPort -n $namespace$ctxFlag';
+    final ctxFlag = context != null ? ' --context=${_shq(context)}' : '';
+    final cmd = 'kubectl port-forward --address 127.0.0.1 pod/${_shq(pod)} '
+        '$remotePfPort:$podPort -n ${_shq(namespace)}$ctxFlag';
 
     final ready = Completer<void>();
     final lines = <String>[];
@@ -330,8 +330,8 @@ class ContainerService {
 
   static String kubectlExecCommand(
       String pod, String namespace, String? container) {
-    final containerFlag = container == null ? '' : '-c $container ';
-    return 'kubectl exec -it $pod -n $namespace $containerFlag-- $_shFallback';
+    final containerFlag = container == null ? '' : '-c ${_shq(container)} ';
+    return 'kubectl exec -it ${_shq(pod)} -n ${_shq(namespace)} $containerFlag-- $_shFallback';
   }
 
   // ── Install / fix hints ───────────────────────────────

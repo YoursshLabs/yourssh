@@ -95,3 +95,27 @@ final QjsCallFnFn qjsCallFn =
 
 // Note: qjs_register_host_fn takes a C function-pointer callback and is looked
 // up lazily inside QuickJsRuntime where the NativeCallable type is available.
+
+typedef _SetTimeoutNative = Void Function(QjsContextPtr, Int32);
+typedef _TimedOutNative = Int32 Function(QjsContextPtr);
+typedef _AllocNative = Pointer<Void> Function(IntPtr);
+typedef _FreeNative = Void Function(Pointer<Void>);
+
+/// Sets the per-call wall-clock budget (ms) for eval / call_fn.
+final void Function(QjsContextPtr, int) qjsSetTimeoutMs =
+    lib.lookupFunction<_SetTimeoutNative, void Function(QjsContextPtr, int)>(
+        'qjs_set_timeout_ms');
+
+/// Non-zero when the last eval / call_fn was aborted by the deadline.
+final int Function(QjsContextPtr) qjsTimedOut =
+    lib.lookupFunction<_TimedOutNative, int Function(QjsContextPtr)>(
+        'qjs_timed_out');
+
+/// Allocator owned by the bridge library. Buffers returned from host
+/// callbacks must come from here because the C side releases them with the
+/// matching free (package:ffi malloc is CoTaskMemAlloc on Windows).
+final Pointer<Void> Function(int) qjsAlloc =
+    lib.lookupFunction<_AllocNative, Pointer<Void> Function(int)>('qjs_alloc');
+
+final void Function(Pointer<Void>) qjsFree =
+    lib.lookupFunction<_FreeNative, void Function(Pointer<Void>)>('qjs_free');

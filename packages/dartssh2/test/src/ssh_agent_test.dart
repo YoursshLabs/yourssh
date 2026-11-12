@@ -24,6 +24,7 @@ class _RecordingAgentHandler implements SSHAgentHandler {
 }
 
 void main() {
+  agentLimitTests();
   final rsaPrivate = fixture('ssh-rsa/id_rsa');
 
   SSHKeyPair rsaIdentity() {
@@ -289,5 +290,74 @@ void main() {
     expect(dataMessages, isEmpty);
 
     controller.destroy();
+  });
+}
+
+class _ChannelFixture {
+  _ChannelFixture({int window = 1024}) {
+    controller = SSHChannelController(
+      localId: 1,
+      localMaximumPacketSize: 1024,
+      localInitialWindowSize: window,
+      remoteId: 2,
+      remoteMaximumPacketSize: 1024,
+      remoteInitialWindowSize: 1024,
+      sendMessage: sent.add,
+    );
+  }
+
+  late final SSHChannelController controller;
+  final sent = <SSHMessage>[];
+
+  bool get closeSent => sent.whereType<SSH_Message_Channel_Close>().isNotEmpty;
+
+  void feed(Uint8List data) => controller.handleMessage(
+        SSH_Message_Channel_Data(
+          recipientChannel: controller.localId,
+          data: data,
+        ),
+      );
+}
+
+void agentLimitTests() {
+  test('SSHAgentChannel closes the channel when a frame exceeds 256 KiB',
+      () async {
+    final handler = _RecordingAgentHandler(Uint8List.fromList([1]));
+    final fixture = _ChannelFixture();
+    SSHAgentChannel(fixture.controller.channel, handler);
+
+    final header = ByteData(4)..setUint32(0, 256 * 1024 + 1);
+    fixture.feed(header.buffer.asUint8List());
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    expect(fixture.closeSent, isTrue);
+    expect(handler.requests, isEmpty);
+  });
+
+  test('SSHAgentChannel still serves a frame of exactly 256 KiB', () async {
+    final handler = _RecordingAgentHandler(Uint8List.fromList([1]));
+    final fixture = _ChannelFixture(window: 1 << 20);
+    SSHAgentChannel(fixture.controller.channel, handler);
+
+    final frame = Uint8List(4 + 256 * 1024);
+    ByteData.sublistView(frame).setUint32(0, 256 * 1024);
+    frame[4] = SSHAgentProtocol.requestIdentities;
+    fixture.feed(frame);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    expect(fixture.closeSent, isFalse);
+    expect(handler.requests, hasLength(1));
+  });
+
+  test('SSHChannel closes when the peer overruns the local window', () async {
+    final fixture = _ChannelFixture(window: 10);
+    final received = <SSHChannelData>[];
+    fixture.controller.channel.stream.listen(received.add);
+
+    fixture.feed(Uint8List(11));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(fixture.closeSent, isTrue);
+    expect(received, isEmpty);
   });
 }

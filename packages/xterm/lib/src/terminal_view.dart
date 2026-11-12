@@ -244,6 +244,7 @@ class TerminalViewState extends State<TerminalView> {
           onEditableRect: _onEditableRect,
           composingText: _composingText,
           keywordRules: widget.keywordRules,
+          devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
         );
       },
     );
@@ -511,6 +512,7 @@ class _TerminalView extends LeafRenderObjectWidget {
     this.onEditableRect,
     this.composingText,
     required this.keywordRules,
+    required this.devicePixelRatio,
   });
 
   final Terminal terminal;
@@ -541,6 +543,8 @@ class _TerminalView extends LeafRenderObjectWidget {
 
   final List<KeywordHighlightRule> keywordRules;
 
+  final double devicePixelRatio;
+
   @override
   RenderTerminal createRenderObject(BuildContext context) {
     final renderObject = RenderTerminal(
@@ -555,6 +559,7 @@ class _TerminalView extends LeafRenderObjectWidget {
       focusNode: focusNode,
       cursorType: cursorType,
       alwaysShowCursor: alwaysShowCursor,
+      devicePixelRatio: devicePixelRatio,
       onEditableRect: onEditableRect,
       composingText: composingText,
     );
@@ -578,6 +583,7 @@ class _TerminalView extends LeafRenderObjectWidget {
       ..alwaysShowCursor = alwaysShowCursor
       ..onEditableRect = onEditableRect
       ..composingText = composingText
-      ..keywordRules = keywordRules;
+      ..keywordRules = keywordRules
+      ..devicePixelRatio = devicePixelRatio;
   }
 }

@@ -108,6 +108,29 @@ void main() {
       await proxy.close();
     });
 
+    test('roundtrip answers non-allowlisted message types with FAILURE '
+        'without writing to the agent', () async {
+      final received = <int>[];
+      unawaited(server.first.then((client) {
+        client.listen((data) {
+          received.addAll(data);
+          client.add(agentMsg([12, 0, 0, 0, 0]));
+        });
+      }));
+
+      final proxy = await SystemAgentProxy.connectTo(socketPath);
+      for (final type in [17, 18, 19, 20, 21, 27]) {
+        final response =
+            await proxy.roundtrip(Uint8List.fromList([type, 9, 9]));
+        expect(response, equals([5]), reason: 'type $type');
+      }
+      expect(await proxy.roundtrip(Uint8List(0)), equals([5]));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(received, isEmpty);
+
+      await proxy.close();
+    });
+
     test('_AgentKeyPair.signAsync sends type 13 and receives type 14', () async {
       final algName = utf8.encode('ssh-ed25519');
       final keyBlob = Uint8List.fromList([

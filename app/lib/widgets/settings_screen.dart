@@ -1025,10 +1025,17 @@ class _AiProvidersSectionState extends State<_AiProvidersSection> {
     super.dispose();
   }
 
-  void _saveKey(AiProvider p) {
+  Future<void> _saveKey(AiProvider p) async {
     final key = _controllers[p]!.text.trim();
     if (key.isEmpty) return;
-    context.read<AiChatProvider>().setProviderConfig(p, apiKey: key);
+    final ai = context.read<AiChatProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    await ai.setProviderConfig(p, apiKey: key);
+    final err = ai.lastError;
+    if (err != null) {
+      ai.clearError();
+      messenger.showSnackBar(SnackBar(content: Text(err)));
+    }
   }
 
   String _label(AiProvider p) => switch (p) {

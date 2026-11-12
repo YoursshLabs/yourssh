@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert' show utf8;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -123,7 +124,11 @@ class RdpSession extends ChangeNotifier implements AppSession {
           :final desktopHeight
         ):
         certFingerprint = cert.sha256Fingerprint;
-        _applyDesktopSize(desktopWidth, desktopHeight);
+        if (!_applyDesktopSize(desktopWidth, desktopHeight)) {
+          unawaited(client.disconnect());
+          notifyListeners();
+          return;
+        }
         final fp = certFingerprint;
         final cb = certCheckCallback;
         if (cb != null && fp != null && fp.isNotEmpty) {
@@ -168,7 +173,7 @@ class RdpSession extends ChangeNotifier implements AppSession {
         ):
         _patch(x, y, width, height, rgba);
       case frb.RdpEvent_ClipboardText(:final text):
-        onRemoteClipboardText?.call(text);
+        _deliverClipboard(text);
         return; // no repaint needed
       case frb.RdpEvent_Disconnected(:final reason):
         status = RdpSessionStatus.disconnected;
@@ -180,11 +185,43 @@ class RdpSession extends ChangeNotifier implements AppSession {
     notifyListeners();
   }
 
-  void _applyDesktopSize(int w, int h) {
-    if (w == _width && h == _height) return;
+  /// Largest remote clipboard text accepted (UTF-8 bytes).
+  static const int maxClipboardBytes = 1024 * 1024;
+
+  void _deliverClipboard(String text) {
+    if (!host.remoteClipboard) return;
+    // Cheap upper bound first: a UTF-16 unit is at most 3 UTF-8 bytes.
+    if (text.length > maxClipboardBytes) return;
+    if (text.length * 3 > maxClipboardBytes &&
+        utf8.encode(text).length > maxClipboardBytes) {
+      return;
+    }
+    onRemoteClipboardText?.call(text);
+  }
+
+  /// Largest desktop a server may negotiate (edge and total pixels); the
+  /// framebuffer is allocated eagerly, so an unbounded size is a DoS.
+  static const int maxDesktopEdge = 8192;
+
+  static bool _desktopSizeOk(int w, int h) =>
+      w > 0 &&
+      h > 0 &&
+      w <= maxDesktopEdge &&
+      h <= maxDesktopEdge &&
+      w * h <= maxDesktopEdge * maxDesktopEdge;
+
+  /// Returns false (after flagging an error) when the size is rejected.
+  bool _applyDesktopSize(int w, int h) {
+    if (!_desktopSizeOk(w, h)) {
+      status = RdpSessionStatus.error;
+      lastMessage = 'Server requested an unsupported desktop size ${w}x$h';
+      return false;
+    }
+    if (w == _width && h == _height) return true;
     _width = w;
     _height = h;
     framebuffer = Uint8List(w * h * 4);
+    return true;
   }
 
   void _patch(int x, int y, int w, int h, Uint8List rgba) {

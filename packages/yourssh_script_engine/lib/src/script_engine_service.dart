@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'native/quickjs_runtime.dart';
 import 'hook_bus.dart';
 import 'plugin_manifest.dart';
+import 'plugin_paths.dart';
 import 'permission_guard.dart';
 import 'plugin_error_tracker.dart';
 import 'plugin_ui_registry.dart';
@@ -71,13 +73,18 @@ var console = {
 };
 ''';
 
+/// The only plugin allowed to read/clear the legacy snippets preferences.
+const kSnippetsPluginId = 'dev.yourssh.snippets';
+
 class _LoadedPlugin {
   final String id;
   final PluginManifest manifest;
   final QuickJsRuntime runtime;
+  final Set<String> granted;
   final PluginErrorTracker errorTracker;
+  bool disabled = false;
 
-  _LoadedPlugin(this.id, this.manifest, this.runtime)
+  _LoadedPlugin(this.id, this.manifest, this.runtime, this.granted)
       : errorTracker = PluginErrorTracker(id);
 
   void dispose() => runtime.dispose();
@@ -97,6 +104,12 @@ class ScriptEngineService {
 
   final _plugins = <String, _LoadedPlugin>{};
 
+  /// Permissions the plugin was actually loaded with, or `null` if not loaded.
+  Set<String>? grantedPermissionsFor(String pluginId) =>
+      _plugins[pluginId] == null
+          ? null
+          : Set.unmodifiable(_plugins[pluginId]!.granted);
+
   ScriptEngineService({
     required this.hookBus,
     required this.uiRegistry,
@@ -112,20 +125,28 @@ class ScriptEngineService {
     final manifest = PluginManifest.fromJson(
         await File('$pluginDir/plugin.json').readAsString());
 
-    final guard =
-        PermissionGuard(pluginId: manifest.id, granted: grantedPermissions);
+    // Only permissions the manifest still declares can be in force.
+    final granted = grantedPermissions.intersection(manifest.permissions);
+
+    final entryFile = resolvePluginFile(pluginDir, manifest.entry);
+    if (entryFile == null) {
+      throw ManifestException(
+          'Entry "${manifest.entry}" is missing or outside the plugin directory');
+    }
+
+    final guard = PermissionGuard(pluginId: manifest.id, granted: granted);
     final rt = QuickJsRuntime();
 
     try {
       // Inject plugin bootstrap (plugin.on / plugin._dispatch / console)
-      rt.eval(_kBootstrap, filename: '<bootstrap>');
+      rt.eval(_kBootstrap, filename: '<bootstrap>', timeout: kLoadTimeout);
 
       // Register console bridge (always available — no permission required)
       _registerConsole(manifest.id, rt);
 
       // Register bridges based on permissions
       StorageBridge(manifest.id).register(rt);
-      MigrationBridge().register(rt);
+      if (manifest.id == kSnippetsPluginId) MigrationBridge().register(rt);
       if (sshDelegate != null) {
         SshBridge(guard, sshDelegate!).register(rt);
         TerminalInjectBridge(guard, _TerminalInjectAdapter(sshDelegate!)).register(rt);
@@ -200,23 +221,30 @@ class ScriptEngineService {
           }
 
           // Default: route to JS plugin's panel message handler
+          final loaded = _plugins[manifest.id];
+          if (loaded == null || loaded.disabled) {
+            return json.encode(
+                {'type': 'error', 'message': 'Plugin is disabled'});
+          }
           try {
             final result = rt.callPanelMessage(msg);
+            loaded.errorTracker.reset();
             return result;
           } catch (e) {
+            _recordFailure(manifest.id, 'panel message', e);
             return json.encode({'type': 'error', 'message': e.toString()});
           }
         }).register(rt);
       }
 
       // Execute plugin entry point
-      final src = await File('$pluginDir/${manifest.entry}').readAsString();
-      rt.eval(src, filename: manifest.entry);
+      final src = await entryFile.readAsString();
+      rt.eval(src, filename: manifest.entry, timeout: kLoadTimeout);
 
       // Wire JS dispatch into HookBus
-      _wireHooks(manifest.id, rt, grantedPermissions);
+      _wireHooks(manifest.id, rt, granted);
 
-      _plugins[manifest.id] = _LoadedPlugin(manifest.id, manifest, rt);
+      _plugins[manifest.id] = _LoadedPlugin(manifest.id, manifest, rt, granted);
       onChange?.call();
     } catch (e) {
       rt.dispose();
@@ -226,10 +254,16 @@ class ScriptEngineService {
 
   void _wireHooks(
       String pluginId, QuickJsRuntime rt, Set<String> perms) {
-    // Transform hooks: terminal.output requires terminal.transform or terminal.read
-    if (perms.contains('terminal.transform') || perms.contains('terminal.read')) {
+    // terminal.output: terminal.transform may rewrite the data; terminal.read
+    // only observes it (the hook runs but its return value is discarded).
+    if (perms.contains('terminal.transform')) {
       hookBus.register('terminal.output', pluginId, (e) {
         return _dispatch(rt, 'terminal.output', e, pluginId);
+      });
+    } else if (perms.contains('terminal.read')) {
+      hookBus.register('terminal.output', pluginId, (e) {
+        _dispatch(rt, 'terminal.output', e, pluginId);
+        return null;
       });
     }
 
@@ -268,27 +302,52 @@ class ScriptEngineService {
 
   dynamic _dispatch(
       QuickJsRuntime rt, String event, TransformEvent e, String pluginId) {
+    final loaded = _plugins[pluginId];
+    if (loaded == null || loaded.disabled) return null;
     try {
       final resultJson =
           rt.callDispatch(event, {'sessionId': e.sessionId, 'data': e.data});
+      loaded.errorTracker.reset();
       if (resultJson == null) return null;
       final decoded = json.decode(resultJson) as Map<String, dynamic>;
       if (decoded['cancelled'] == true) return false;
       return decoded['data'];
     } catch (err) {
-      final loaded = _plugins[pluginId];
-      loaded?.errorTracker.recordError();
-      debugPrint('[ScriptEngine] $pluginId error in $event: $err');
+      _recordFailure(pluginId, event, err);
       return null; // pass-through
     }
   }
 
   void _dispatchObserve(
       QuickJsRuntime rt, String event, ObserveEvent e, String pluginId) {
+    final loaded = _plugins[pluginId];
+    if (loaded == null || loaded.disabled) return;
     try {
       rt.callDispatch(event, {'sessionId': e.sessionId, ...e.payload});
+      loaded.errorTracker.reset();
     } catch (err) {
-      debugPrint('[ScriptEngine] $pluginId observer error in $event: $err');
+      _recordFailure(pluginId, event, err);
+    }
+  }
+
+  /// Counts a hook failure; once the circuit breaker trips the plugin stops
+  /// receiving events and is unloaded (deferred, since hooks run while the
+  /// HookBus is iterating its handler list).
+  void _recordFailure(String pluginId, String where, Object err) {
+    final loaded = _plugins[pluginId];
+    if (loaded == null || loaded.disabled) return;
+    loaded.errorTracker.recordError(
+        weight: err is QuickJsTimeoutException
+            ? PluginErrorTracker.timeoutWeight
+            : 1);
+    onLog?.call(pluginId, 'error', 'Error in $where: $err');
+    if (loaded.errorTracker.isDisabled) {
+      loaded.disabled = true;
+      onLog?.call(pluginId, 'error',
+          'Plugin disabled after repeated errors or timeouts');
+      scheduleMicrotask(() {
+        if (identical(_plugins[pluginId], loaded)) unloadPlugin(pluginId);
+      });
     }
   }
 

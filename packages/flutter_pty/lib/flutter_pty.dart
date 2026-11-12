@@ -45,6 +45,12 @@ class Pty {
   /// Spawns a process in a pseudo-terminal. The arguments have the same meaning
   /// as in [Process.start].
   /// [ackRead] indicates if the pty should wait for a call to [Pty.ackRead] before sending the next data.
+  ///
+  /// [creditBytes] (only with [ackRead]) switches to credit based flow
+  /// control: the reader thread keeps posting output until that many bytes are
+  /// in flight and blocks only then; call [Pty.ackBytes] with the number of
+  /// bytes processed to return credit. With 0 (default) the original
+  /// one-chunk-then-wait [Pty.ackRead] behaviour applies.
   Pty.start(
     this.executable, {
     this.arguments = const [],
@@ -53,6 +59,7 @@ class Pty {
     int rows = 25,
     int columns = 80,
     bool ackRead = false,
+    int creditBytes = 0,
   }) {
     _ensureInitialized();
 
@@ -108,6 +115,7 @@ class Pty {
     options.ref.stdout_port = _stdoutPort.sendPort.nativePort;
     options.ref.exit_port = _exitPort.sendPort.nativePort;
     options.ref.ackRead = ackRead;
+    options.ref.credit_bytes = creditBytes;
 
     if (workingDirectory != null) {
       options.ref.working_directory = workingDirectory.toNativeUtf8().cast();
@@ -196,6 +204,12 @@ class Pty {
   /// before any additional data is sent.
   void ackRead() {
     _bindings.pty_ack_read(_handle);
+  }
+
+  /// Returns [bytes] of read credit (see `creditBytes` in [Pty.start]).
+  /// Batch calls: one per processed slice is plenty.
+  void ackBytes(int bytes) {
+    _bindings.pty_ack_bytes(_handle, bytes);
   }
 
   void _onExitCode(dynamic exitCode) {

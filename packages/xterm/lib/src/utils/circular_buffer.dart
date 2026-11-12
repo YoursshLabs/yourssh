@@ -121,6 +121,17 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
     _adoptChild(index, value);
   }
 
+  /// Moves the element at [from] to [to], dropping the element that was at
+  /// [to]. The slot at [from] is left empty and must be refilled by the
+  /// caller before the list is read again. Unlike `this[to] = this[from]`,
+  /// the moved element stays attached once [from] is refilled.
+  void move(int from, int to) {
+    RangeError.checkValueInInterval(from, 0, length - 1, 'from');
+    RangeError.checkValueInInterval(to, 0, length - 1, 'to');
+    if (from == to) return;
+    _moveChild(from, to);
+  }
+
   /// Removes all elements from the list.
   void clear() {
     for (var i = 0; i < _length; i++) {
@@ -205,7 +216,7 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
     _adoptChild(index, item);
 
     if (_length >= _array.length) {
-      _startIndex += 1;
+      _startIndex = (_startIndex + 1) % _array.length;
       _absoluteStartIndex += 1;
       _droppedLines += 1;
     } else {
@@ -238,6 +249,7 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
     _startIndex += count;
     _startIndex %= _array.length;
     _length -= count;
+    _absoluteStartIndex += count;
     _droppedLines += count;
   }
 
@@ -247,13 +259,13 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
       _dropChild(i);
     }
 
+    // Adopt from slot 0: the old start index would scramble the order (or
+    // leave empty slots) once the list has wrapped.
+    _startIndex = 0;
+
     var copyStart = 0;
     if (replacement.length > maxLength) {
       copyStart = replacement.length - maxLength;
-    }
-
-    for (var i = 0; i < copyStart; i++) {
-      _dropChild(i);
     }
 
     final copyLength = replacement.length - copyStart;
@@ -261,7 +273,6 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
       _adoptChild(i, replacement[copyStart + i]);
     }
 
-    _startIndex = 0;
     _length = copyLength;
   }
 
@@ -276,6 +287,10 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
   /// Whether adding another element would cause the first element to be
   /// trimmed.
   bool get isFull => length == maxLength;
+
+  /// The element the next [push] will trim (the first one when the list is
+  /// full), or null. Never throws, even on a slot left empty.
+  T? get pushVictim => _length == _array.length ? _array[_startIndex] : null;
 
   /// Returns a list containing all elements in the list.
   List<T> toList() {

@@ -18,7 +18,14 @@ class S3BrowserScreen extends StatefulWidget {
 }
 
 class _S3BrowserScreenState extends State<S3BrowserScreen> {
-  static const _storage = FlutterSecureStorage();
+  // Mirrors the app's StorageService.macOsKeychainOptions: the default
+  // data-protection Keychain fails with -34018 on ad-hoc-signed macOS builds.
+  static const _storage = FlutterSecureStorage(
+    mOptions: MacOsOptions(
+      accountName: 'yourssh',
+      useDataProtectionKeyChain: false,
+    ),
+  );
 
   List<S3BucketConfig> _configs = [];
   int _activeIndex = -1;
@@ -37,6 +44,16 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
   }
 
   Future<void> _loadConfigs() async {
+    try {
+      await _loadConfigsUnsafe();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = 'Could not read saved S3 configs from secure storage: $e');
+      }
+    }
+  }
+
+  Future<void> _loadConfigsUnsafe() async {
     final oldEndpoint = await _storage.read(key: 's3_endpoint');
     if (oldEndpoint != null) {
       final id = DateTime.now().millisecondsSinceEpoch.toString();
@@ -50,9 +67,11 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
         accessKey: await _storage.read(key: 's3_access_key') ?? '',
         secretKey: await _storage.read(key: 's3_secret_key') ?? '',
       );
-      await _saveConfigs([config]);
-      for (final k in ['s3_endpoint', 's3_bucket', 's3_region', 's3_access_key', 's3_secret_key']) {
-        await _storage.delete(key: k);
+      // Keep the legacy keys if the new copy could not be stored.
+      if (await _saveConfigs([config])) {
+        for (final k in ['s3_endpoint', 's3_bucket', 's3_region', 's3_access_key', 's3_secret_key']) {
+          await _storage.delete(key: k);
+        }
       }
       if (!mounted) return;
       setState(() { _configs = [config]; _activeIndex = 0; });
@@ -80,13 +99,23 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
     if (configs.isNotEmpty) _activateConfig(0);
   }
 
-  Future<void> _saveConfigs(List<S3BucketConfig> configs) async {
-    await _storage.write(
-      key: 's3_configs',
-      value: jsonEncode(configs.map((c) => c.toJson()).toList()),
-    );
-    for (final c in configs) {
-      await _storage.write(key: 's3_secret_${c.id}', value: c.secretKey);
+  /// Persists the configs; on failure shows an error and returns false
+  /// instead of throwing.
+  Future<bool> _saveConfigs(List<S3BucketConfig> configs) async {
+    try {
+      await _storage.write(
+        key: 's3_configs',
+        value: jsonEncode(configs.map((c) => c.toJson()).toList()),
+      );
+      for (final c in configs) {
+        await _storage.write(key: 's3_secret_${c.id}', value: c.secretKey);
+      }
+      return true;
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = 'Could not save S3 configs to secure storage: $e');
+      }
+      return false;
     }
   }
 
@@ -173,9 +202,13 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       } else {
         newConfigs.add(config);
       }
-      await _saveConfigs(newConfigs);
+      final saved = await _saveConfigs(newConfigs);
+      if (!mounted) return;
+      final saveError = _error;
       setState(() => _configs = newConfigs);
       _activateConfig(newActive);
+      // _activateConfig clears _error; keep the save failure visible.
+      if (!saved && mounted) setState(() => _error = saveError);
     } finally {
       nameCtrl.dispose(); endpointCtrl.dispose(); bucketCtrl.dispose();
       regionCtrl.dispose(); accessCtrl.dispose(); secretCtrl.dispose();
@@ -206,7 +239,13 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await _storage.delete(key: 's3_secret_${_configs[index].id}');
+    try {
+      await _storage.delete(key: 's3_secret_${_configs[index].id}');
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = 'Could not remove the S3 secret from secure storage: $e');
+      }
+    }
     final newConfigs = List<S3BucketConfig>.from(_configs)..removeAt(index);
     await _saveConfigs(newConfigs);
     if (newConfigs.isEmpty) {

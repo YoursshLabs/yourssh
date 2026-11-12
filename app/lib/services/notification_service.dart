@@ -48,11 +48,36 @@ class NotificationService {
     required String sessionLabel,
   }) {
     if (!enabled) return;
-    _debounceTimers[sessionId]?.cancel();
-    _debounceTimers[sessionId] = Timer(
-      _debounce,
-      () => _checkPrompt(data, sessionId: sessionId, sessionLabel: sessionLabel),
-    );
+    // Only the last line matters; keep a bounded tail of the newest data and
+    // re-arm lazily instead of cancelling/creating a Timer per chunk.
+    _latest[sessionId] = data.length > _tailLimit
+        ? data.substring(data.length - _tailLimit)
+        : data;
+    _lastDataAt[sessionId] = DateTime.now();
+    if (_debounceTimers.containsKey(sessionId)) return;
+    _armDebounce(sessionId, sessionLabel, _debounce);
+  }
+
+  static const _tailLimit = 2048;
+  final Map<String, String> _latest = {};
+  final Map<String, DateTime> _lastDataAt = {};
+
+  void _armDebounce(String sessionId, String sessionLabel, Duration delay) {
+    _debounceTimers[sessionId] = Timer(delay, () {
+      final last = _lastDataAt[sessionId];
+      if (last != null) {
+        final remaining = _debounce - DateTime.now().difference(last);
+        if (remaining > Duration.zero) {
+          _armDebounce(sessionId, sessionLabel, remaining);
+          return;
+        }
+      }
+      _debounceTimers.remove(sessionId);
+      final data = _latest.remove(sessionId);
+      _lastDataAt.remove(sessionId);
+      if (data == null) return;
+      _checkPrompt(data, sessionId: sessionId, sessionLabel: sessionLabel);
+    });
   }
 
   void _checkPrompt(
@@ -91,6 +116,8 @@ class NotificationService {
   void removeSession(String sessionId) {
     _debounceTimers[sessionId]?.cancel();
     _debounceTimers.remove(sessionId);
+    _latest.remove(sessionId);
+    _lastDataAt.remove(sessionId);
     _lastNotified.remove(sessionId);
   }
 
@@ -99,6 +126,8 @@ class NotificationService {
       timer.cancel();
     }
     _debounceTimers.clear();
+    _latest.clear();
+    _lastDataAt.clear();
     _lastNotified.clear();
   }
 }

@@ -26,6 +26,7 @@ import 'os_detection.dart';
 import 'storage_service.dart';
 import 'sudo_sftp.dart';
 import 'system_agent_proxy.dart';
+import 'terminal_write_queue.dart';
 
 /// One hop in a jump chain: the bastion host plus its resolved key.
 typedef JumpHop = ({Host host, SshKeyEntry? keyEntry});
@@ -55,6 +56,12 @@ class SshService {
   final Map<String, SSHClient> _clients = {};
   final Map<String, SSHSession> _shells = {};
   final Map<String, String> _shellToHost = {}; // sessionId → hostId
+  final Map<String, TerminalWriteQueue> _outQueues = {};
+
+  /// Synchronously drains pending shell output of [sessionId] into its
+  /// terminal (ordering barrier; used by tests).
+  @visibleForTesting
+  void flushShellOutput(String sessionId) => _outQueues[sessionId]?.flush();
   final Map<String, SystemAgentProxy> _agentProxies = {};
   // Keyed by chain-prefix ('a' for hop0, 'a>b' for hop1 through a, …): a
   // client to B *through A* is distinct from a direct client to B. Proxies
@@ -94,10 +101,12 @@ class SshService {
   /// [resolveSftpHost].
   Host? Function(String hostId)? defaultHostLookup;
 
-  /// Loads app-Keychain keys served through a forwarded agent when no system
-  /// agent is available. Set from main.dart (KeyProvider + stored
-  /// passphrases); null means the fallback serves an empty identity list.
-  Future<List<SSHKeyPair>> Function()? keychainIdentitiesLoader;
+  /// Loads the app-Keychain key served through a forwarded agent when no
+  /// system agent is available. Receives the connecting host's `keyId` and
+  /// must return only that key (nothing when null) — never the whole
+  /// Keychain. Set from main.dart (KeyProvider + stored passphrases); null
+  /// means the fallback serves an empty identity list.
+  Future<List<SSHKeyPair>> Function(String? keyId)? keychainIdentitiesLoader;
 
   /// Live agent-forwarding events for the session UI (key icon on the tab,
   /// refusal notification). Host-scoped events (sessionId == null) come from
@@ -317,8 +326,9 @@ class SshService {
         // or testConnection.
         agentHandler: host.agentForwarding
             ? AgentForwardingHandler(
-                loadKeychainIdentities:
-                    keychainIdentitiesLoader ?? () async => const <SSHKeyPair>[],
+                loadKeychainIdentities: () async =>
+                    await keychainIdentitiesLoader?.call(host.keyId) ??
+                    const <SSHKeyPair>[],
                 onRequestServed: (usedFallback) =>
                     onAgentForwardingEvent?.call(
                         host.id,
@@ -791,6 +801,42 @@ class SshService {
     // (bash ≤ 5.0) get a bare-\n probe answered by a prompt-like tail. If
     // readiness is never confirmed the injection is skipped entirely — a
     // missing integration beats junk typed into a half-initialized session.
+    final sessionLabel =
+        '${session.host.label} (${session.host.username}@${session.host.host})';
+    // Time-sliced, backpressured path to the terminal: see
+    // TerminalWriteQueue. Pausing the stdout subscription stops dartssh2 from
+    // replenishing the channel window, so the server stops sending.
+    StreamSubscription<List<int>>? stdoutSub;
+    final outQueue = TerminalWriteQueue(
+      write: session.terminal.writeNoNotify,
+      writeBytes: session.terminal.writeBytesNoNotify,
+      commit: session.terminal.flushWrites,
+      onBatch: (batch) {
+        _recording?.writeOutput(session.id, batch);
+        try {
+          NotificationService.instance.onTerminalData(
+            batch,
+            sessionId: session.id,
+            sessionLabel: sessionLabel,
+          );
+        } catch (e) {
+          // Notifications must never break TTY output — log and move on.
+          debugPrint('[SshService] notification handler threw: $e');
+        }
+      },
+      onPressure: (paused) {
+        final sub = stdoutSub;
+        if (sub == null) return;
+        if (paused) {
+          sub.pause();
+        } else {
+          sub.resume();
+        }
+      },
+    );
+    _outQueues[session.id]?.dispose();
+    _outQueues[session.id] = outQueue;
+
     InjectionGate? gate;
     final readiness = InjectionReadiness();
     Timer? settleTimer;
@@ -826,7 +872,7 @@ class SshService {
         final g = gate;
         if (g == null || !g.isHolding) return;
         final out = g.flush(); // degrade: show as-is
-        if (out.isNotEmpty) session.terminal.write(out);
+        if (out.isNotEmpty) outQueue.add(out);
       });
     }
 
@@ -873,10 +919,18 @@ class SshService {
     const utf8 = Utf8Decoder(allowMalformed: true);
 
     // Pipe SSH output → xterm terminal; complete when shell closes
-    final sessionLabel =
-        '${session.host.label} (${session.host.username}@${session.host.host})';
-    shell.stdout.cast<List<int>>().listen(
+    stdoutSub = shell.stdout.cast<List<int>>().listen(
       (data) {
+        // Fast path: when nothing needs the text (no plugin transform, no
+        // readiness scan, the gate - if any - is past its handshake and just
+        // passes text through) the bytes go to the parser as they are.
+        final g0 = gate;
+        if ((hookBus == null || !hookBus!.hasTransform('terminal.output')) &&
+            (g0 == null ? (!injectOn || injectionAborted) : !g0.isHolding)) {
+          outQueue.addBytes(
+              data is Uint8List ? data : Uint8List.fromList(data));
+          return;
+        }
         var text = utf8.convert(data);
         if (hookBus != null) {
           text = hookBus!.fireTransform(
@@ -936,18 +990,7 @@ class SshService {
           text = r.emit!;
           if (text.isEmpty) return; // echo head discarded, nothing to show
         }
-        session.terminal.write(text);
-        _recording?.writeOutput(session.id, text);
-        try {
-          NotificationService.instance.onTerminalData(
-            text,
-            sessionId: session.id,
-            sessionLabel: sessionLabel,
-          );
-        } catch (e) {
-          // Notifications must never break TTY output — log and move on.
-          debugPrint('[SshService] notification handler threw: $e');
-        }
+        outQueue.add(text);
       },
       onDone: () {
         cancelReadinessTimers();
@@ -955,7 +998,7 @@ class SshService {
         final g = gate;
         if (g != null && g.isHolding) {
           final out = g.flush();
-          if (out.isNotEmpty) session.terminal.write(out);
+          if (out.isNotEmpty) outQueue.add(out);
         }
         _onShellClosed(session);
         if (!done.isCompleted) done.complete();
@@ -966,7 +1009,7 @@ class SshService {
       cancelOnError: true,
     );
     shell.stderr.cast<List<int>>().listen(
-      (data) => session.terminal.write(utf8.convert(data)),
+      (data) => outQueue.add(utf8.convert(data)),
     );
 
     // Pipe xterm input → SSH shell
@@ -1014,6 +1057,7 @@ class SshService {
         ObserveEvent(sessionId: session.id, payload: {}));
     _shells.remove(session.id);
     _shellToHost.remove(session.id);
+    _outQueues.remove(session.id)?.flush();
     session.terminal.write('\r\n\x1b[31m[Connection closed]\x1b[0m\r\n');
     // Drop the closures that pin the closed shell — otherwise it lingers in
     // memory until the widget tree releases the terminal.
