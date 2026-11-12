@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../models/container_entry.dart';
 import '../models/host.dart';
 import '../providers/session_provider.dart';
 import '../services/container_service.dart';
 import '../theme/app_theme.dart';
+import 'container_widgets.dart';
 
 class DockerPanel extends StatefulWidget {
   const DockerPanel({super.key, required this.host, required this.service});
@@ -165,30 +167,23 @@ class _DockerPanelState extends State<DockerPanel> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const Center(child: FCircularProgress());
     if (_error != null) {
-      return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.error_outline, size: 36, color: AppColors.textTertiary),
-          const SizedBox(height: 8),
-          Text(_error!, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          FilledButton(onPressed: _refresh, child: const Text('Retry')),
-        ]),
+      return YsEmptyState(
+        icon: FLucideIcons.circleAlert,
+        title: _error!,
+        action: FButton(onPress: _refresh, child: const Text('Retry')),
       );
     }
     if (_containers.isEmpty) {
-      return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.inbox, size: 36, color: AppColors.textTertiary),
-          const SizedBox(height: 8),
-          const Text('No containers found.'),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Refresh'),
-              onPressed: _refresh),
-        ]),
+      return YsEmptyState(
+        icon: FLucideIcons.inbox,
+        title: 'No containers found.',
+        action: FButton(
+          prefix: const Icon(FLucideIcons.refreshCw),
+          onPress: _refresh,
+          child: const Text('Refresh'),
+        ),
       );
     }
 
@@ -197,17 +192,24 @@ class _DockerPanelState extends State<DockerPanel> {
       children: [
         // Header row
         Padding(
-          padding: const EdgeInsets.fromLTRB(0, 0, 0, 4),
+          padding: const EdgeInsets.only(bottom: YsSpace.s1),
           child: Row(
             children: [
-              Text('${_containers.length} container${_containers.length == 1 ? '' : 's'}',
+              Expanded(
+                child: Text(
+                  '${_containers.length} container${_containers.length == 1 ? '' : 's'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      color: AppColors.textSecondary, fontSize: 12)),
-              const Spacer(),
-              IconButton(
+                    color: YsColors.mutedForeground,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              ContainerIconAction(
+                icon: FLucideIcons.refreshCw,
                 tooltip: 'Refresh',
-                icon: const Icon(Icons.refresh, size: 16),
-                onPressed: _refresh,
+                onPress: _refresh,
               ),
             ],
           ),
@@ -215,17 +217,24 @@ class _DockerPanelState extends State<DockerPanel> {
         // Container list
         Expanded(
           flex: hasLogs ? 1 : 2,
-          child: ListView.separated(
+          child: ListView.builder(
             itemCount: _containers.length,
-            separatorBuilder: (_, _) =>
-                const Divider(height: 1, color: AppColors.border),
             itemBuilder: (_, i) => _containerTile(_containers[i]),
           ),
         ),
         // Log panel
         if (hasLogs) ...[
-          const Divider(height: 1, color: AppColors.border),
-          _logPanel(),
+          const FDivider(),
+          Expanded(
+            flex: 2,
+            child: ContainerLogPanel(
+              title: 'Logs: ${_logContainer!.name}',
+              lines: _logLines,
+              controller: _logScroll,
+              onClear: () => setState(() => _logLines.clear()),
+              onClose: _closeLogs,
+            ),
+          ),
         ],
       ],
     );
@@ -234,112 +243,53 @@ class _DockerPanelState extends State<DockerPanel> {
   Widget _containerTile(ContainerEntry c) {
     final running = _isRunning(c);
     final loading = _actionLoading[c.id] == true;
-    final isLogTarget = _logContainer?.id == c.id;
-
-    return Container(
-      decoration: isLogTarget
-          ? BoxDecoration(
-              border: Border(
-                left: BorderSide(color: AppColors.accent, width: 3),
-              ),
-            )
-          : null,
-      child: ListTile(
-        dense: true,
-        title: Text(c.name,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-        subtitle: Text('${c.image}  •  ${c.status}',
-            style:
-                const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-        trailing: loading
-            ? const SizedBox(
-                width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-            : _actionButtons(c, running),
-      ),
+    return ContainerRow(
+      key: ValueKey('container-${c.id}'),
+      title: c.name,
+      subtitle: '${c.image}  •  ${c.status}',
+      highlighted: _logContainer?.id == c.id,
+      trailing: loading
+          ? const ContainerSpinner()
+          : _actionButtons(c, running),
     );
   }
 
   Widget _actionButtons(ContainerEntry c, bool running) {
     return Row(mainAxisSize: MainAxisSize.min, children: [
       if (running)
-        _iconBtn(Icons.stop_circle_outlined, 'Stop',
-            () => _runAction(c, () => widget.service.stopContainer(widget.host, c.id))),
+        ContainerIconAction(
+          icon: FLucideIcons.circleStop,
+          tooltip: 'Stop',
+          onPress: () => _runAction(
+              c, () => widget.service.stopContainer(widget.host, c.id)),
+        ),
       if (running)
-        _iconBtn(Icons.replay, 'Restart',
-            () => _runAction(c, () => widget.service.restartContainer(widget.host, c.id))),
+        ContainerIconAction(
+          icon: FLucideIcons.rotateCw,
+          tooltip: 'Restart',
+          onPress: () => _runAction(
+              c, () => widget.service.restartContainer(widget.host, c.id)),
+        ),
       if (!running)
-        _iconBtn(Icons.play_circle_outline, 'Start',
-            () => _runAction(c, () => widget.service.startContainer(widget.host, c.id))),
-      _iconBtn(Icons.terminal, 'Exec', () => _execContainer(c)),
+        ContainerIconAction(
+          icon: FLucideIcons.circlePlay,
+          tooltip: 'Start',
+          onPress: () => _runAction(
+              c, () => widget.service.startContainer(widget.host, c.id)),
+        ),
+      ContainerIconAction(
+        icon: FLucideIcons.terminal,
+        tooltip: 'Exec',
+        onPress: () => _execContainer(c),
+      ),
       if (running)
-        _iconBtn(
-          Icons.article_outlined,
-          'Logs',
-          () => _logContainer?.id == c.id ? _closeLogs() : _openLogs(c),
+        ContainerIconAction(
+          icon: FLucideIcons.fileText,
+          tooltip: 'Logs',
           active: _logContainer?.id == c.id,
+          onPress: () =>
+              _logContainer?.id == c.id ? _closeLogs() : _openLogs(c),
         ),
     ]);
-  }
-
-  Widget _iconBtn(IconData icon, String tooltip, VoidCallback onTap,
-      {bool active = false}) {
-    return IconButton(
-      tooltip: tooltip,
-      icon: Icon(icon, size: 16),
-      color: active ? AppColors.accent : null,
-      onPressed: onTap,
-      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-      padding: EdgeInsets.zero,
-    );
-  }
-
-  Widget _logPanel() {
-    return Expanded(
-      flex: 2,
-      child: Column(
-        children: [
-          // Log panel header
-          Container(
-            color: AppColors.card,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(children: [
-              const Icon(Icons.article_outlined, size: 14, color: AppColors.textSecondary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text('Logs: ${_logContainer!.name}',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppColors.textSecondary),
-                    overflow: TextOverflow.ellipsis),
-              ),
-              TextButton(
-                onPressed: () => setState(() => _logLines.clear()),
-                child: const Text('Clear', style: TextStyle(fontSize: 11)),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, size: 14),
-                onPressed: _closeLogs,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                padding: EdgeInsets.zero,
-              ),
-            ]),
-          ),
-          // Log lines
-          Expanded(
-            child: ListView.builder(
-              controller: _logScroll,
-              padding: const EdgeInsets.all(8),
-              itemCount: _logLines.length,
-              itemBuilder: (_, i) => Text(
-                _logLines[i],
-                style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 11,
-                    color: AppColors.textPrimary),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

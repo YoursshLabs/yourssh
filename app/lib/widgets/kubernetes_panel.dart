@@ -10,6 +10,8 @@ import '../services/container_service.dart';
 import '../services/ssh_service.dart';
 import '../theme/app_theme.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
+import 'container_widgets.dart';
+import 'settings/settings_tiles.dart';
 
 class KubernetesPanel extends StatefulWidget {
   const KubernetesPanel({
@@ -138,37 +140,39 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
 
   Widget _headerRow() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+      padding: const EdgeInsets.only(bottom: YsSpace.s2),
       child: Wrap(
-        spacing: 12,
-        runSpacing: 8,
+        spacing: YsSpace.s3,
+        runSpacing: YsSpace.s2,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           if (_contexts.isNotEmpty) _contextDropdown(),
           SizedBox(
             width: 180,
-            child: TextField(
+            child: FTextField(
+              key: const ValueKey('k8s-namespace'),
               enabled: !_allNamespaces,
-              decoration: const InputDecoration(
-                  labelText: 'Namespace', isDense: true),
-              controller: _nsCtrl,
-              onSubmitted: (_) => _refresh(),
+              label: const Text('Namespace'),
+              control: .managed(controller: _nsCtrl),
+              autocorrect: false,
+              enableSuggestions: false,
+              textInputAction: TextInputAction.done,
+              onSubmit: (_) => _refresh(),
             ),
           ),
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            Checkbox(
-              value: _allNamespaces,
-              onChanged: (v) => setState(() {
-                _allNamespaces = v ?? false;
-                _refresh();
-              }),
-            ),
-            const Text('All namespaces'),
-          ]),
-          IconButton(
+          FCheckbox(
+            key: const ValueKey('k8s-all-namespaces'),
+            value: _allNamespaces,
+            onChange: (v) => setState(() {
+              _allNamespaces = v;
+              _refresh();
+            }),
+            label: const Text('All namespaces'),
+          ),
+          ContainerIconAction(
+            icon: FLucideIcons.refreshCw,
             tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _refresh,
+            onPress: _loading ? null : _refresh,
           ),
         ],
       ),
@@ -176,16 +180,13 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
   }
 
   Widget _contextDropdown() {
-    return DropdownButton<String?>(
+    return SettingsSelect<String?>(
+      key: const ValueKey('k8s-context'),
+      hint: 'Context',
       value: _context,
-      hint: const Text('Context'),
-      items: [
-        const DropdownMenuItem<String?>(
-          value: null,
-          child: Text('(default context)'),
-        ),
-        for (final c in _contexts)
-          DropdownMenuItem<String?>(value: c, child: Text(c)),
+      options: [
+        (null, '(default context)'),
+        for (final c in _contexts) (c, c),
       ],
       onChanged: (v) => setState(() {
         _context = v;
@@ -197,31 +198,18 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
   // ── Body ─────────────────────────────────────────────
 
   Widget _body() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const Center(child: FCircularProgress());
     if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline,
-                size: 40, color: AppColors.textTertiary),
-            const SizedBox(height: 12),
-            Text(_error!, textAlign: TextAlign.center),
-          ],
-        ),
-      );
+      return YsEmptyState(icon: FLucideIcons.circleAlert, title: _error!);
     }
     if (_pods.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.inbox, size: 40, color: AppColors.textTertiary),
-            const SizedBox(height: 12),
-            const Text('No pods. Tap refresh to scan.'),
-            const SizedBox(height: 12),
-            FilledButton(onPressed: _refresh, child: const Text('Scan')),
-          ],
+      return YsEmptyState(
+        icon: FLucideIcons.inbox,
+        title: 'No pods. Tap refresh to scan.',
+        action: FButton(
+          autofocus: true,
+          onPress: _refresh,
+          child: const Text('Scan'),
         ),
       );
     }
@@ -229,32 +217,31 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
   }
 
   Widget _podList() {
-    return ListView.separated(
+    return ListView.builder(
       itemCount: _pods.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (_, i) {
         final p = _pods[i];
-        return ListTile(
-          title: Text(p.name),
-          subtitle:
-              Text('${p.namespace}  •  ${p.ready}  •  ${p.status}'),
+        return ContainerRow(
+          key: ValueKey('pod-${p.namespace}-${p.name}'),
+          title: p.name,
+          subtitle: '${p.namespace}  •  ${p.ready}  •  ${p.status}',
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                icon: const Icon(Icons.terminal, size: 18),
+              ContainerIconAction(
+                icon: FLucideIcons.terminal,
                 tooltip: 'Exec',
-                onPressed: () => _execPod(p),
+                onPress: () => _execPod(p),
               ),
-              IconButton(
-                icon: const Icon(Icons.article_outlined, size: 18),
+              ContainerIconAction(
+                icon: FLucideIcons.fileText,
                 tooltip: 'Logs',
-                onPressed: () => _openLogs(p),
+                onPress: () => _openLogs(p),
               ),
-              IconButton(
-                icon: const Icon(Icons.swap_horiz, size: 18),
+              ContainerIconAction(
+                icon: FLucideIcons.arrowLeftRight,
                 tooltip: 'Forward port',
-                onPressed: () => _showForwardDialog(p),
+                onPress: () => _showForwardDialog(p),
               ),
             ],
           ),
@@ -263,14 +250,14 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
     );
   }
 
-  // ── Exec ─────────────────────────────────────────────
-
-  Future<void> _execPod(PodEntry p) async {
-    String? container;
+  /// Asks which container to target when the pod has several. Returns null
+  /// when the dialog is dismissed; the sole container name for a single-
+  /// container pod; null names for none.
+  Future<(bool, String?)> _pickContainer(PodEntry p) async {
     final names =
         await _service().podContainers(widget.host, p.name, p.namespace);
     if (names.length > 1 && mounted) {
-      container = await showYsDialog<String>(
+      final picked = await showYsDialog<String>(
         context,
         builder: (ctx) => YsDialog(
           title: 'Select container',
@@ -281,11 +268,12 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final n in names)
-                    ListTile(
-                      dense: true,
-                      title: Text(n),
-                      onTap: () => Navigator.pop(ctx, n),
+                  for (final (i, n) in names.indexed)
+                    FTile(
+                      autofocus: i == 0,
+                      title: Text(n,
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      onPress: () => Navigator.pop(ctx, n),
                     ),
                 ],
               ),
@@ -293,10 +281,16 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
           ),
         ),
       );
-      if (container == null) return;
-    } else if (names.length == 1) {
-      container = names.first;
+      return (picked != null, picked);
     }
+    return (true, names.length == 1 ? names.first : null);
+  }
+
+  // ── Exec ─────────────────────────────────────────────
+
+  Future<void> _execPod(PodEntry p) async {
+    final (ok, container) = await _pickContainer(p);
+    if (!ok) return;
     if (!mounted) return;
     await context.read<SessionProvider>().connect(
           widget.host,
@@ -308,37 +302,8 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
   // ── Log panel ────────────────────────────────────────
 
   Future<void> _openLogs(PodEntry p) async {
-    String? container;
-    final names =
-        await _service().podContainers(widget.host, p.name, p.namespace);
-    if (names.length > 1 && mounted) {
-      container = await showYsDialog<String>(
-        context,
-        builder: (ctx) => YsDialog(
-          title: 'Select container',
-          body: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 360),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final n in names)
-                    ListTile(
-                      dense: true,
-                      title: Text(n),
-                      onTap: () => Navigator.pop(ctx, n),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-      if (container == null) return;
-    } else if (names.length == 1) {
-      container = names.first;
-    }
+    final (ok, container) = await _pickContainer(p);
+    if (!ok) return;
     if (!mounted) return;
     _closeLogPanel();
     setState(() {
@@ -387,61 +352,16 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
     final pod = _logPod!;
     return Container(
       height: 240,
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor),
-        ),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: YsColors.border)),
       ),
-      child: Column(
-        children: [
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(
-              children: [
-                Icon(Icons.article_outlined,
-                    size: 14, color: AppColors.textSecondary),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'pod/${pod.name}'
-                    '${_logContainer != null ? '  •  $_logContainer' : ''}',
-                    style: const TextStyle(fontSize: 12),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 16),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  tooltip: 'Close logs',
-                  onPressed: _closeLogPanel,
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: _logLines.isEmpty
-                ? const Center(
-                    child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child:
-                            CircularProgressIndicator(strokeWidth: 2)))
-                : ListView.builder(
-                    controller: _logScroll,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 4),
-                    itemCount: _logLines.length,
-                    itemBuilder: (_, i) => Text(
-                      _logLines[i],
-                      style: const TextStyle(
-                          fontFamily: 'monospace', fontSize: 11),
-                    ),
-                  ),
-          ),
-        ],
+      child: ContainerLogPanel(
+        title: 'pod/${pod.name}'
+            '${_logContainer != null ? '  •  $_logContainer' : ''}',
+        lines: _logLines,
+        controller: _logScroll,
+        spinnerWhenEmpty: true,
+        onClose: _closeLogPanel,
       ),
     );
   }
@@ -491,59 +411,44 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
 
   Widget _activeForwardsBar() {
     return Container(
-      color: AppColors.card,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      color: YsColors.card,
+      padding: const EdgeInsets.symmetric(
+          horizontal: YsSpace.s3, vertical: YsSpace.s1 + 2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'ACTIVE FORWARDS',
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: AppColors.textTertiary,
+              color: YsColors.mutedForeground,
               letterSpacing: 0.8,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: YsSpace.s1),
           for (final f in _forwards)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'pod/${f.pod}  :${f.podPort} → localhost:${f.localPort}',
-                      style: const TextStyle(fontSize: 12),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'pod/${f.pod}  :${f.podPort} → localhost:${f.localPort}',
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (widget.onOpenBrowser != null)
-                    TextButton(
-                      onPressed: () => widget.onOpenBrowser!(
-                          'http://localhost:${f.localPort}'),
-                      style: TextButton.styleFrom(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text('Open ↗',
-                          style: TextStyle(fontSize: 12)),
-                    ),
-                  TextButton(
-                    onPressed: () => _stopForward(f),
-                    style: TextButton.styleFrom(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text('■ Stop',
-                        style: TextStyle(fontSize: 12)),
+                ),
+                if (widget.onOpenBrowser != null)
+                  ContainerTextAction(
+                    label: 'Open ↗',
+                    onPress: () => widget
+                        .onOpenBrowser!('http://localhost:${f.localPort}'),
                   ),
-                ],
-              ),
+                ContainerTextAction(
+                  label: '■ Stop',
+                  onPress: () => _stopForward(f),
+                ),
+              ],
             ),
         ],
       ),
@@ -564,9 +469,10 @@ class _PortForwardDialog extends StatefulWidget {
 }
 
 class _PortForwardDialogState extends State<_PortForwardDialog> {
-  final _formKey = GlobalKey<FormState>();
   final _podPortCtrl = TextEditingController();
   final _localPortCtrl = TextEditingController();
+  String? _podPortError;
+  String? _localPortError;
 
   @override
   void dispose() {
@@ -581,45 +487,72 @@ class _PortForwardDialogState extends State<_PortForwardDialog> {
     return null;
   }
 
+  void _submit() {
+    final podErr = _validatePort(_podPortCtrl.text);
+    final localErr = _validatePort(_localPortCtrl.text);
+    if (podErr != null || localErr != null) {
+      setState(() {
+        _podPortError = podErr;
+        _localPortError = localErr;
+      });
+      return;
+    }
+    final podPort = int.parse(_podPortCtrl.text);
+    final localPort = int.parse(_localPortCtrl.text);
+    Navigator.pop(context);
+    widget.onConfirm(podPort, localPort);
+  }
+
   @override
   Widget build(BuildContext context) {
     return YsDialog(
       title: 'Forward port',
-      body: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('pod/${widget.pod.name}', style: const TextStyle(fontSize: 12)),
-            const SizedBox(height: 12),
-            TextFormField(
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'pod/${widget.pod.name}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12),
+          ),
+          const SizedBox(height: YsSpace.s3),
+          FTextField(
+            key: const ValueKey('k8s-pod-port'),
+            control: .managed(
               controller: _podPortCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Pod port',
-                isDense: true,
-              ),
-              keyboardType: TextInputType.number,
-              autofocus: true,
-              validator: _validatePort,
-              onChanged: (v) {
+              onChange: (v) {
+                if (_podPortError != null) setState(() => _podPortError = null);
                 if (_localPortCtrl.text.isEmpty) {
-                  _localPortCtrl.text = v;
+                  _localPortCtrl.text = v.text;
                 }
               },
             ),
-            const SizedBox(height: 8),
-            TextFormField(
+            label: const Text('Pod port'),
+            keyboardType: TextInputType.number,
+            autofocus: true,
+            textInputAction: TextInputAction.next,
+            error: _podPortError == null ? null : Text(_podPortError!),
+          ),
+          const SizedBox(height: YsSpace.s2),
+          FTextField(
+            key: const ValueKey('k8s-local-port'),
+            control: .managed(
               controller: _localPortCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Local port',
-                isDense: true,
-              ),
-              keyboardType: TextInputType.number,
-              validator: _validatePort,
+              onChange: (_) {
+                if (_localPortError != null) {
+                  setState(() => _localPortError = null);
+                }
+              },
             ),
-          ],
-        ),
+            label: const Text('Local port'),
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            onSubmit: (_) => _submit(),
+            error: _localPortError == null ? null : Text(_localPortError!),
+          ),
+        ],
       ),
       actions: [
         FButton(
@@ -629,14 +562,8 @@ class _PortForwardDialogState extends State<_PortForwardDialog> {
         ),
         FButton(
           variant: FButtonVariant.primary,
-          onPress: () {
-            if (!_formKey.currentState!.validate()) return;
-            final podPort = int.parse(_podPortCtrl.text);
-            final localPort = int.parse(_localPortCtrl.text);
-            Navigator.pop(context);
-            widget.onConfirm(podPort, localPort);
-          },
-          child: Text('Start Forward'),
+          onPress: _submit,
+          child: const Text('Start Forward'),
         ),
       ],
     );

@@ -6,7 +6,10 @@ import 'package:yourssh/services/container_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/compose_panel.dart';
-import 'package:yourssh/theme/app_theme.dart';
+import 'package:flutter/services.dart';
+
+import '../helpers/ys_test_app.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class _FakeSshService extends SshService {
   _FakeSshService() : super(StorageService());
@@ -23,8 +26,7 @@ class _FakeSshService extends SshService {
       const Stream.empty();
 }
 
-Widget _wrap(Widget child) =>
-    MaterialApp(builder: ysRootBuilder, home: Scaffold(body: child));
+Widget _wrap(Widget child) => ysTestApp(child);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -150,8 +152,9 @@ void main() {
     await tester.tap(find.byTooltip('Add path manually'));
     await tester.pump();
 
-    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(FTextField), findsOneWidget);
     expect(find.text('Add'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 200)); // tappable timer
   });
 
   testWidgets('entering a non-absolute manual path shows error snackbar and does not add a stack', (tester) async {
@@ -171,7 +174,7 @@ void main() {
     await tester.pump();
 
     // Enter a relative (non-absolute) path
-    await tester.enterText(find.byType(TextField), 'relative/path/compose.yml');
+    await tester.enterText(find.byType(FTextField), 'relative/path/compose.yml');
     await tester.tap(find.text('Add'));
     await tester.pump();
 
@@ -203,7 +206,7 @@ void main() {
     await tester.tap(find.byTooltip('Add path manually'));
     await tester.pump();
     await tester.enterText(
-        find.byType(TextField), '/data/app/docker-compose.yml');
+        find.byType(FTextField), '/data/app/docker-compose.yml');
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
     expect(find.text('app'), findsOneWidget);
@@ -247,5 +250,77 @@ void main() {
     expect(find.text('web'), findsOneWidget);
     expect(find.byTooltip('Stop service'), findsOneWidget);
     expect(find.byTooltip('Start service'), findsNothing);
+  });
+
+  testWidgets('900x600 with a 60-char stack and service name does not overflow',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final stack = 's' * 60;
+    final service = 'v' * 60;
+    final fake = _FakeSshService();
+    fake.execStub = (cmd) {
+      if (cmd.contains('docker compose ls')) {
+        return (
+          stdout:
+              '[{"Name":"$stack","Status":"running(1)","ConfigFiles":"/opt/$stack/compose.yml"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      if (cmd.contains('docker compose ps --format json')) {
+        return (
+          stdout:
+              '[{"Name":"$stack-$service-1","Service":"$service","State":"running","Image":"${'i' * 60}"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      return (stdout: '', stderr: '', exitCode: 0);
+    };
+    await tester.pumpWidget(
+        _wrap(ComposePanel(host: host, service: ContainerService(fake))));
+    await tester.pump();
+    await tester.tap(find.text(stack));
+    await tester.pumpAndSettle();
+    expect(find.text(service), findsOneWidget);
+    await tester.tap(find.byTooltip('Logs'));
+    await tester.pumpAndSettle();
+    expect(find.text('Logs: $service'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('keyboard: Enter on a focused stack row selects it',
+      (tester) async {
+    final fake = _FakeSshService();
+    fake.execStub = (cmd) {
+      if (cmd.contains('docker compose ls')) {
+        return (
+          stdout:
+              '[{"Name":"myapp","Status":"running(1)","ConfigFiles":"/opt/myapp/compose.yml"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      if (cmd.contains('docker compose ps --format json')) {
+        return (
+          stdout:
+              '[{"Name":"myapp-web-1","Service":"web","State":"running","Image":"nginx"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      return (stdout: '', stderr: '', exitCode: 0);
+    };
+    await tester.pumpWidget(
+        _wrap(ComposePanel(host: host, service: ContainerService(fake))));
+    await tester.pump();
+
+    Focus.of(tester.element(find.text('myapp'))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Services in myapp'), findsOneWidget);
   });
 }
