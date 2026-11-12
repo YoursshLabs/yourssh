@@ -1,5 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yourssh/models/host.dart';
 import 'package:yourssh/services/mail_catcher_service.dart';
+
+import '../helpers/fake_devops_ssh.dart';
 
 // Fixtures follow the CPython `Lib/smtpd.py` DebuggingServer output
 // (Python 3 prints bytes lines as their repr, the X-Peer line as plain text,
@@ -92,5 +95,36 @@ From: nobody
   test('empty log and unrelated text yield nothing', () {
     expect(MailCatcherService.parseLog(''), isEmpty);
     expect(MailCatcherService.parseLog('Server started\n'), isEmpty);
+  });
+
+  test('a NUL-prefixed MESSAGE FOLLOWS block still parses', () {
+    final e = MailCatcherService.parseLog(
+        '\u0000\u0000\u0000\u0000---------- MESSAGE FOLLOWS ----------\n'
+        'Subject: After clear\nFrom: a@b.c\nTo: d@e.f\n\nbody\n'
+        '------------ END MESSAGE ------------\n');
+    expect(e.single.subject, 'After clear');
+    expect(e.single.body, 'body');
+  });
+
+  test('start runs both servers unbuffered and in append mode', () async {
+    final fake = FakeDevopsSsh(
+      reply: (_) => (stdout: 'started:/tmp/mcx', stderr: '', exitCode: 0),
+    );
+    final host = Host(label: 'h', host: 'srv', port: 22, username: 'u');
+    expect(await MailCatcherService(fake).start(host), isTrue);
+    final cmd = fake.cmds.firstWhere((c) => c.contains('mktemp'));
+    expect(
+      cmd,
+      contains('nohup python3 -u -m smtpd -n -c DebuggingServer localhost:1025 '
+          '>> "\$d/log" 2>&1 &'),
+    );
+    expect(
+      cmd,
+      contains('nohup python3 -u -m aiosmtpd -n -l localhost:1025 '
+          '>> "\$d/log" 2>&1 &'),
+    );
+    expect(cmd, contains("python3 -c 'import smtpd'"));
+    expect(cmd, contains("python3 -c 'import aiosmtpd'"));
+    expect(cmd, isNot(contains(' > "\$d/log"')));
   });
 }

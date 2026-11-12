@@ -62,7 +62,16 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
   Future<void> _clearAll() async {
     final session = context.read<SessionProvider>().activeSshSession;
     // Clear the remote log too, otherwise the next poll brings the mails back.
-    if (session != null) await _service.clearLog(session.host);
+    if (session != null) {
+      try {
+        await _service.clearLog(session.host);
+      } catch (e) {
+        if (!mounted) return;
+        final msg = e.toString().split('\n').first;
+        AppSnack.error(context, "Couldn't clear the mail log: $msg");
+        return;
+      }
+    }
     if (!mounted) return;
     setState(() {
       _emails = [];

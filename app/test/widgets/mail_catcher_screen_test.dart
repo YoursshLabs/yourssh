@@ -123,6 +123,28 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('Clear all failure shows a toast and keeps the list',
+      (tester) async {
+    final fake = await pump(tester);
+    await tester.tap(find.byTooltip('Start on port 1025'));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(find.text('Welcome'), findsOneWidget);
+    final inner = fake.reply!;
+    fake.reply = (cmd) {
+      if (cmd.startsWith('> ')) throw StateError('ssh down');
+      return inner(cmd);
+    };
+    await tester.tap(find.byTooltip('Clear all'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining("Couldn't clear the mail log:"), findsOneWidget);
+    expect(find.text('Welcome'), findsOneWidget);
+    await stopAndDispose(tester);
+  });
+
   testWidgets('failed start shows the error toast', (tester) async {
     await pump(tester, startOk: false);
     await tester.tap(find.byTooltip('Start on port 1025'));

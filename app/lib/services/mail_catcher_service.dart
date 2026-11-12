@@ -41,9 +41,9 @@ class MailCatcherService {
     const cmd = '''
       d=\$(mktemp -d) || exit 1
       if python3 -c 'import smtpd' 2>/dev/null; then
-        nohup python3 -m smtpd -n -c DebuggingServer localhost:$_smtpPort > "\$d/log" 2>&1 &
+        nohup python3 -u -m smtpd -n -c DebuggingServer localhost:$_smtpPort >> "\$d/log" 2>&1 &
       elif python3 -c 'import aiosmtpd' 2>/dev/null; then
-        nohup python3 -m aiosmtpd -n -l localhost:$_smtpPort > "\$d/log" 2>&1 &
+        nohup python3 -u -m aiosmtpd -n -l localhost:$_smtpPort >> "\$d/log" 2>&1 &
       else
         rm -rf "\$d"
         echo "ERR:no-smtp-server"
@@ -109,7 +109,9 @@ class MailCatcherService {
   /// header/body separator as `b''`) and of `python3 -m aiosmtpd -n` (plain
   /// text). The first blank line ends the headers; everything up to the END
   /// MESSAGE marker is the body.
-  static List<CaughtEmail> parseLog(String log) {
+  static List<CaughtEmail> parseLog(String rawLog) {
+    // A truncate-while-open can leave NUL padding before the next write.
+    final log = rawLog.replaceAll('\u0000', '');
     final emails = <CaughtEmail>[];
     String from = '', to = '', subject = '';
     var inMessage = false;
