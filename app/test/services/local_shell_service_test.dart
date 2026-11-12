@@ -10,12 +10,16 @@ import 'package:yourssh/services/local_shell_service.dart';
 import 'package:yourssh/services/pty_runner.dart';
 import 'package:yourssh/services/recording_service.dart';
 
-class FakePtyRunner implements PtyRunner {
+class FakePtyRunner implements PtyRunner, AckablePty {
   final _outputController = StreamController<List<int>>.broadcast();
   final _exitCompleter = Completer<int>();
   final List<Uint8List> written = [];
   final List<({int rows, int cols})> resizes = [];
   bool killed = false;
+  int acks = 0;
+
+  @override
+  void ackRead() => acks++;
 
   @override
   Stream<List<int>> get output => _outputController.stream;
@@ -37,6 +41,30 @@ class FakePtyRunner implements PtyRunner {
   void dispose() => _outputController.close();
 }
 
+class _AckGatedPty extends FakePtyRunner {
+  _AckGatedPty({required this.chunks, required this.chunkBytes});
+  final int chunks;
+  final int chunkBytes;
+  int sent = 0;
+  late final List<int> _bytes =
+      utf8.encode('${'x' * (chunkBytes - 2)}\r\n');
+
+  void start() => _next();
+
+  void _next() {
+    if (sent >= chunks) return;
+    sent++;
+    // Delivered from a timer like a native port message.
+    Timer.run(() => emitOutput(_bytes));
+  }
+
+  @override
+  void ackRead() {
+    super.ackRead();
+    _next();
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -51,6 +79,88 @@ void main() {
   });
 
   tearDown(() => fakePty.dispose());
+
+  group('ack-gated flood throughput', () {
+    test('small PTY reads gated by ackRead still drain at full speed',
+        () async {
+      // Models the native reader: one chunk in flight, the next is only read
+      // after ackRead. macOS ptys hand out ~1-4 KB reads, so acking at slice
+      // cadence (one frame per chunk) collapses throughput to ~100 KB/s.
+      final gated = _AckGatedPty(chunks: 1500, chunkBytes: 4096);
+      final svc = LocalShellService(
+          ptyFactory: (shell, args, cols, rows, env) => gated);
+      final session = await svc.openShell();
+      final sw = Stopwatch()..start();
+      gated.start();
+      while (gated.acks < gated.chunks &&
+          sw.elapsed < const Duration(seconds: 25)) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(gated.acks, gated.chunks,
+          reason: 'only ${gated.acks} chunks acked in ${sw.elapsed}');
+      svc.flushOutput(session.id);
+      gated.dispose();
+    }, timeout: const Timeout(Duration(seconds: 60)));
+  });
+
+  group('output pipeline', () {
+    test('every chunk is acked once (ackRead backpressure)', () async {
+      final session = await service.openShell();
+      for (var i = 0; i < 5; i++) {
+        fakePty.emitOutput(utf8.encode('line $i\r\n' * 50));
+      }
+      await Future<void>.delayed(Duration.zero);
+      service.flushOutput(session.id);
+      await Future<void>.delayed(Duration.zero);
+      expect(fakePty.acks, 5);
+    });
+
+    test('chunks are acked on arrival while the backlog is small', () async {
+      await service.openShell();
+      fakePty.emitOutput(utf8.encode('a' * 100));
+      fakePty.emitOutput(utf8.encode('b' * 100));
+      fakePty.emitOutput(utf8.encode('c' * 100));
+      await Future<void>.delayed(Duration.zero);
+      expect(fakePty.acks, 3);
+    });
+
+    test('ack is withheld above the high-water mark and released once drained',
+        () async {
+      final session = await service.openShell();
+      fakePty.emitOutput(utf8.encode('a' * 100)); // inline
+      fakePty.emitOutput(utf8.encode('b' * 400000)); // backlog > high water
+      await Future<void>.delayed(Duration.zero);
+      expect(fakePty.acks, 1, reason: 'shell must stall while UI is behind');
+      await Future<void>.delayed(Duration.zero);
+      service.flushOutput(session.id);
+      await Future<void>.delayed(Duration.zero);
+      expect(fakePty.acks, 2);
+    });
+
+    test('output reaches the terminal in order after flush', () async {
+      final session = await service.openShell();
+      fakePty.emitOutput(utf8.encode('one '));
+      fakePty.emitOutput(utf8.encode('two '));
+      fakePty.emitOutput(utf8.encode('three'));
+      await Future<void>.delayed(Duration.zero);
+      service.flushOutput(session.id);
+      expect(session.terminal.buffer.lines[0].toString().trimRight(),
+          'one two three');
+    });
+
+    test('a multi-byte character split across chunks decodes intact',
+        () async {
+      final session = await service.openShell();
+      final bytes = utf8.encode('xé');
+      fakePty.emitOutput(bytes.sublist(0, 2));
+      fakePty.emitOutput(bytes.sublist(2));
+      await Future<void>.delayed(Duration.zero);
+      service.flushOutput(session.id);
+      expect(session.terminal.buffer.lines[0].toString().trimRight(), 'xé');
+      await Future<void>.delayed(Duration.zero);
+      expect(fakePty.acks, 2);
+    });
+  });
 
   group('LocalShellService', () {
     test('openShell returns a running session', () async {

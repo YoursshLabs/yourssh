@@ -105,7 +105,19 @@ class LocalShellService {
       session.attachPty(pty);
 
       _queues.remove(session.id)?.dispose();
+      final ackable = pty is AckablePty ? pty as AckablePty : null;
+      var ackWithheld = false;
       final queue = TerminalWriteQueue(
+        // Small high-water: the kernel pty buffer plus this is all that can
+        // pile up after Ctrl+C, and the shell stalls as soon as it is hit.
+        highWater: 256 * 1024,
+        lowWater: 64 * 1024,
+        onPressure: (paused) {
+          if (!paused && ackWithheld) {
+            ackWithheld = false;
+            ackable?.ackRead();
+          }
+        },
         write: terminal.writeNoNotify,
         commit: terminal.flushWrites,
         onBatch: (batch) {
@@ -123,10 +135,11 @@ class LocalShellService {
       );
       _queues[session.id] = queue;
 
-      // With ackRead the native reader blocks until each chunk is acked; ack
-      // as soon as the queue starts consuming the chunk (one chunk of
-      // read-ahead), so the shell stalls when the UI is behind.
-      final ackable = pty is AckablePty ? pty as AckablePty : null;
+      // With ackRead the native reader blocks until each chunk is acked. Ack
+      // on arrival (acking at slice cadence would cap throughput at one
+      // chunk per frame) but withhold the ack while the backlog is above the
+      // high-water mark: the shell then blocks in write(2) until the UI has
+      // drained below the low-water mark.
       final decoder = const Utf8Decoder(allowMalformed: true);
       var decoded = '';
       // Stateful decoding (multi-byte sequences may straddle chunks).
@@ -135,10 +148,11 @@ class LocalShellService {
       pty.output.listen((bytes) {
         decoded = '';
         byteSink.add(bytes);
-        if (decoded.isEmpty) {
-          ackable?.ackRead();
+        if (decoded.isNotEmpty) queue.add(decoded);
+        if (queue.isPaused) {
+          ackWithheld = true;
         } else {
-          queue.add(decoded, onTaken: ackable?.ackRead);
+          ackable?.ackRead();
         }
       });
 
