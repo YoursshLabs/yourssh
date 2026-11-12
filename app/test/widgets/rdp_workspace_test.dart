@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import '../helpers/ys_test_app.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/rdp_session.dart';
 import 'package:yourssh/widgets/rdp_workspace.dart';
@@ -10,7 +9,10 @@ import 'package:yourssh_rdp/yourssh_rdp.dart' show RdpClient, RdpConfig;
 // ignore: implementation_imports
 import 'package:yourssh_rdp/src/generated/api.dart' as frb;
 
-RdpClient _client() => RdpClient(RdpConfig(
+import '../helpers/ys_test_app.dart';
+
+RdpClient _client() => RdpClient(
+  RdpConfig(
     targetHost: 'x',
     targetPort: 3389,
     username: 'u',
@@ -18,34 +20,51 @@ RdpClient _client() => RdpClient(RdpConfig(
     domain: null,
     width: 800,
     height: 600,
-    security: 'auto'));
+    security: 'auto',
+  ),
+);
 
 RdpSession _session() => RdpSession(
-    host: Host(
-        id: 'h',
-        label: 'w',
-        host: 'x',
-        port: 3389,
-        username: 'u',
-        authType: AuthType.password,
-        protocol: HostProtocol.rdp),
-    client: _client(),
-    width: 800,
-    height: 600);
+  host: Host(
+    id: 'h',
+    label: 'w',
+    host: 'x',
+    port: 3389,
+    username: 'u',
+    authType: AuthType.password,
+    protocol: HostProtocol.rdp,
+  ),
+  client: _client(),
+  width: 800,
+  height: 600,
+);
 
 void main() {
-  testWidgets('shows connecting overlay, then error overlay with retry',
-      (tester) async {
+  testWidgets('shows connecting overlay, then error overlay with retry', (
+    tester,
+  ) async {
     final events = StreamController<frb.RdpEvent>();
     final session = _session();
     session.attach(events.stream);
 
     await tester.pumpWidget(ysTestApp(RdpWorkspace(session: session)));
-    expect(find.descendant(of: find.byType(RemoteStatusOverlay), matching: find.textContaining('Connecting')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(RemoteStatusOverlay),
+        matching: find.textContaining('Connecting'),
+      ),
+      findsOneWidget,
+    );
 
     events.add(const frb.RdpEvent.error(message: 'auth failed'));
     await tester.pump();
-    expect(find.descendant(of: find.byType(RemoteStatusOverlay), matching: find.textContaining('auth failed')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(RemoteStatusOverlay),
+        matching: find.textContaining('auth failed'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Retry'), findsOneWidget);
   });
 
@@ -56,8 +75,11 @@ void main() {
     session.attach(events.stream);
     bool? changed;
 
-    await tester.pumpWidget(ysTestApp(RdpWorkspace(
-            session: session, onFullscreenChanged: (v) => changed = v)));
+    await tester.pumpWidget(
+      ysTestApp(
+        RdpWorkspace(session: session, onFullscreenChanged: (v) => changed = v),
+      ),
+    );
 
     // Still connecting — button rendered but disabled.
     final btn = find.byTooltip('Fullscreen');
@@ -67,12 +89,20 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(changed, isNull);
 
-    events.add(frb.RdpEvent.connected(
+    events.add(
+      frb.RdpEvent.connected(
         cert: const frb.RdpCertInfo(sha256Fingerprint: '', subject: 's'),
         desktopWidth: 800,
-        desktopHeight: 600));
+        desktopHeight: 600,
+      ),
+    );
     await tester.pump();
-    await tester.pump(); // let the toolbar settle after the status change
+    // Harness artefact, not an app delay: because the previous step advanced
+    // fake time with pump(200ms), the stream event (and the workspace's
+    // setState) is delivered after that pump's build phase, so the toolbar
+    // only re-enables on the NEXT frame. Without the earlier timed pump the
+    // button is enabled after a single pump. A real app renders continuously.
+    await tester.pump();
 
     await tester.tap(find.byTooltip('Fullscreen'));
     // forui buttons keep a short tap-feedback timer.
@@ -80,28 +110,38 @@ void main() {
     expect(changed, isTrue);
   });
 
-  testWidgets('no fullscreen button without an onFullscreenChanged handler',
-      (tester) async {
+  testWidgets('no fullscreen button without an onFullscreenChanged handler', (
+    tester,
+  ) async {
     final session = _session();
     await tester.pumpWidget(ysTestApp(RdpWorkspace(session: session)));
     expect(find.byTooltip('Fullscreen'), findsNothing);
   });
 
-  testWidgets('fullscreen hides the toolbar; pill exit fires false',
-      (tester) async {
+  testWidgets('fullscreen hides the toolbar; pill exit fires false', (
+    tester,
+  ) async {
     final events = StreamController<frb.RdpEvent>();
     final session = _session();
     session.attach(events.stream);
 
     bool? changed;
-    await tester.pumpWidget(ysTestApp(RdpWorkspace(
-            session: session,
-            isFullscreen: true,
-            onFullscreenChanged: (v) => changed = v)));
-    events.add(frb.RdpEvent.connected(
+    await tester.pumpWidget(
+      ysTestApp(
+        RdpWorkspace(
+          session: session,
+          isFullscreen: true,
+          onFullscreenChanged: (v) => changed = v,
+        ),
+      ),
+    );
+    events.add(
+      frb.RdpEvent.connected(
         cert: const frb.RdpCertInfo(sha256Fingerprint: '', subject: 's'),
         desktopWidth: 800,
-        desktopHeight: 600));
+        desktopHeight: 600,
+      ),
+    );
     await tester.pump();
 
     // Toolbar gone, pill present (flashed visible on entering fullscreen).
@@ -119,21 +159,30 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
   });
 
-  testWidgets('leaving connected while fullscreen requests windowed mode',
-      (tester) async {
+  testWidgets('leaving connected while fullscreen requests windowed mode', (
+    tester,
+  ) async {
     final events = StreamController<frb.RdpEvent>();
     final session = _session();
     session.attach(events.stream);
 
     bool? changed;
-    await tester.pumpWidget(ysTestApp(RdpWorkspace(
-            session: session,
-            isFullscreen: true,
-            onFullscreenChanged: (v) => changed = v)));
-    events.add(frb.RdpEvent.connected(
+    await tester.pumpWidget(
+      ysTestApp(
+        RdpWorkspace(
+          session: session,
+          isFullscreen: true,
+          onFullscreenChanged: (v) => changed = v,
+        ),
+      ),
+    );
+    events.add(
+      frb.RdpEvent.connected(
         cert: const frb.RdpCertInfo(sha256Fingerprint: '', subject: 's'),
         desktopWidth: 800,
-        desktopHeight: 600));
+        desktopHeight: 600,
+      ),
+    );
     await tester.pump();
     expect(changed, isNull); // entering connected must not toggle anything
 

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/rdp_session.dart';
@@ -35,6 +36,24 @@ class _SpyRdpClient extends RdpClient {
         ),
       );
   final moves = <(int, int)>[];
+  final keys = <int>[]; // scancodes of key-down events
+  final clips = <String>[];
+  int disconnects = 0;
+  @override
+  void sendKey({
+    required int scancode,
+    required bool extended,
+    required bool down,
+  }) {
+    if (down) keys.add(scancode);
+  }
+
+  @override
+  void sendClipboardText(String text) => clips.add(text);
+
+  @override
+  Future<void> disconnect() async => disconnects++;
+
   @override
   void sendMouse({
     required int x,
@@ -55,6 +74,20 @@ class _SpyVncClient extends VncClient {
         ),
       );
   final points = <(int, int)>[];
+  final keys = <int>[]; // keysyms of key-down events
+  final clips = <String>[];
+  int disconnects = 0;
+  @override
+  void sendKey({required int keysym, required bool down}) {
+    if (down) keys.add(keysym);
+  }
+
+  @override
+  void sendClipboardText(String text) => clips.add(text);
+
+  @override
+  Future<void> disconnect() async => disconnects++;
+
   @override
   void sendPointer({required int x, required int y, required int buttonMask}) =>
       points.add((x, y));
@@ -158,7 +191,6 @@ void main() {
       expect(s.image, isNotNull);
       final builds = SessionStatusBar.debugBuildCount;
       expect(builds, greaterThan(0));
-      expect(builds, greaterThan(0));
       for (var i = 0; i < 20; i++) {
         await frame();
       }
@@ -250,7 +282,6 @@ void main() {
       expect(s.image, isNotNull);
       final builds = SessionStatusBar.debugBuildCount;
       expect(builds, greaterThan(0));
-      expect(builds, greaterThan(0));
       for (var i = 0; i < 20; i++) {
         await frame();
       }
@@ -291,5 +322,104 @@ void main() {
       await tester.pump();
       expect(tester.takeException(), isNull);
     });
+  });
+
+  group('toolbar and pill keep keyboard focus on the canvas', () {
+    setUp(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'Clipboard.getData') return {'text': 'clip'};
+            return null;
+          });
+    });
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+
+    bool canvasHasFocus(WidgetTester tester, Type workspace) => Focus.of(
+      tester.element(
+        find
+            .descendant(
+              of: find.byType(workspace),
+              matching: find.byType(CustomPaint),
+            )
+            .last,
+      ),
+    ).hasPrimaryFocus;
+
+    for (final fullscreen in [false, true]) {
+      final where = fullscreen ? 'pill' : 'toolbar';
+
+      testWidgets('RDP $where: Push clipboard / Ctrl+Alt+Del, then typing '
+          'still reaches the canvas', (tester) async {
+        final spy = _SpyRdpClient();
+        final events = StreamController<rdpApi.RdpEvent>();
+        final s = _rdp(client: spy)..attach(events.stream);
+        await tester.pumpWidget(
+          ysTestApp(RdpWorkspace(session: s, isFullscreen: fullscreen)),
+        );
+        events.add(_rdpConnected);
+        await tester.pump();
+        await tester.pump();
+        expect(canvasHasFocus(tester, RdpWorkspace), isTrue);
+
+        for (final tip in ['Push clipboard to remote', 'Send Ctrl+Alt+Del']) {
+          final clipsPre = spy.clips.length;
+          spy.keys.clear();
+          await tester.tap(find.byTooltip(tip));
+          await tester.pump(const Duration(milliseconds: 200));
+          // The tap really activated the button (not a vacuous test).
+          if (tip.startsWith('Push')) {
+            expect(spy.clips.length, clipsPre + 1);
+          } else {
+            expect(spy.keys.length, 3);
+          }
+          final clipsBefore = spy.clips.length;
+          spy.keys.clear();
+          await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+          await tester.sendKeyEvent(LogicalKeyboardKey.space);
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          expect(
+            canvasHasFocus(tester, RdpWorkspace),
+            isTrue,
+            reason: 'after $tip',
+          );
+          expect(spy.keys, [0x1E, 0x39, 0x1C], reason: 'after $tip');
+          expect(spy.clips.length, clipsBefore, reason: 'button re-fired');
+          expect(spy.disconnects, 0);
+        }
+        await tester.pump(const Duration(seconds: 3));
+      });
+
+      testWidgets('VNC $where: Push clipboard, then typing still reaches '
+          'the canvas', (tester) async {
+        final spy = _SpyVncClient();
+        final events = StreamController<vncApi.VncEvent>();
+        final s = _vnc(client: spy)..attach(events.stream);
+        await tester.pumpWidget(
+          ysTestApp(VncWorkspace(session: s, isFullscreen: fullscreen)),
+        );
+        events.add(_vncConnected);
+        await tester.pump();
+        await tester.pump();
+        expect(canvasHasFocus(tester, VncWorkspace), isTrue);
+
+        final clipsPre = spy.clips.length;
+        await tester.tap(find.byTooltip('Push clipboard to remote'));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(spy.clips.length, clipsPre + 1); // the tap activated it
+        final clipsBefore = spy.clips.length;
+        spy.keys.clear();
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+        await tester.sendKeyEvent(LogicalKeyboardKey.space);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        expect(canvasHasFocus(tester, VncWorkspace), isTrue);
+        expect(spy.keys, [0x61, 0x20, 0xff0d]);
+        expect(spy.clips.length, clipsBefore, reason: 'button re-fired');
+        expect(spy.disconnects, 0);
+        await tester.pump(const Duration(seconds: 3));
+      });
+    }
   });
 }
