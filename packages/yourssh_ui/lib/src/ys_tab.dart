@@ -58,7 +58,7 @@ class _YsTabState extends State<YsTab> {
         ? YsColors.secondary
         : YsColors.chrome;
     final fg = active ? YsColors.foreground : YsColors.mutedForeground;
-    final showClose = widget.onClose != null && (_hovered || active);
+    final showClose = _hovered || active;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -104,11 +104,18 @@ class _YsTabState extends State<YsTab> {
                           ),
                         widget.label,
                         for (final t in widget.trailing) t,
-                        if (showClose) ...[
+                        // Space is always reserved so hover never resizes the tab.
+                        if (widget.onClose != null) ...[
                           const SizedBox(width: 4),
-                          _CloseButton(
-                            onClose: widget.onClose!,
-                            tooltip: widget.closeTooltip,
+                          Visibility(
+                            visible: showClose,
+                            maintainSize: true,
+                            maintainAnimation: true,
+                            maintainState: true,
+                            child: _CloseButton(
+                              onClose: widget.onClose!,
+                              tooltip: widget.closeTooltip,
+                            ),
                           ),
                         ],
                       ],

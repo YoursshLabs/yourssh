@@ -63,14 +63,14 @@ void main() {
         ),
       ),
     );
-    expect(find.byType(FButton), findsNothing);
+    expect(find.byType(FButton).hitTestable(), findsNothing);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
     await mouse.moveTo(tester.getCenter(find.text('prod')));
     await tester.pump();
 
-    expect(find.byType(FButton), findsOneWidget);
+    expect(find.byType(FButton).hitTestable(), findsOneWidget);
     expect(find.byTooltip('Close tab'), findsOneWidget);
     await tester.tap(find.byType(FButton));
     await tester.pump();
@@ -93,5 +93,28 @@ void main() {
       ),
     );
     expect(find.byType(FButton), findsOneWidget);
+  });
+
+  testWidgets('inactive tab width is identical before and after hover', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        YsTab(
+          label: const Text('prod'),
+          active: false,
+          onClose: () {},
+          closeTooltip: 'Close tab',
+        ),
+      ),
+    );
+    final before = tester.getSize(find.byType(YsTab));
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.text('prod')));
+    await tester.pump();
+    expect(tester.getSize(find.byType(YsTab)), before);
+    await mouse.moveTo(const Offset(900, 700));
+    await tester.pump(const Duration(seconds: 1));
   });
 }
