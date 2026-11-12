@@ -519,8 +519,9 @@ class Buffer {
 
   /// Restore cursor position, charmap and text attributes.
   void restoreCursor() {
-    _cursorX = _savedCursorX;
-    _cursorY = _savedCursorY;
+    // The screen may have shrunk since the cursor was saved.
+    _cursorX = _savedCursorX.clamp(0, viewWidth - 1);
+    _cursorY = _savedCursorY.clamp(0, viewHeight - 1);
     terminal.cursor.foreground = _savedCursorStyle.foreground;
     terminal.cursor.background = _savedCursorStyle.background;
     terminal.cursor.attrs = _savedCursorStyle.attrs;
@@ -548,6 +549,8 @@ class Buffer {
   void deleteChars(int count) {
     final start = _cursorX.clamp(0, viewWidth);
     count = min(count, viewWidth - start);
+    // The cursor may sit past the last column (pending wrap): nothing to do.
+    if (start >= viewWidth || count <= 0) return;
     currentLine.removeCells(start, count, terminal.cursor);
   }
 
@@ -629,7 +632,9 @@ class Buffer {
       // Grow larger
       for (var i = 0; i < newHeight - oldHeight; i++) {
         if (newHeight > lines.length) {
-          lines.push(_newEmptyLine(newWidth));
+          // Still [oldWidth] wide: the width pass below resizes or reflows
+          // every line from [oldWidth].
+          lines.push(_newEmptyLine(oldWidth));
         } else {
           _cursorY++;
         }

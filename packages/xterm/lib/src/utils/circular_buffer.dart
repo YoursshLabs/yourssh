@@ -216,7 +216,7 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
     _adoptChild(index, item);
 
     if (_length >= _array.length) {
-      _startIndex += 1;
+      _startIndex = (_startIndex + 1) % _array.length;
       _absoluteStartIndex += 1;
       _droppedLines += 1;
     } else {
@@ -249,6 +249,7 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
     _startIndex += count;
     _startIndex %= _array.length;
     _length -= count;
+    _absoluteStartIndex += count;
     _droppedLines += count;
   }
 
@@ -258,13 +259,13 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
       _dropChild(i);
     }
 
+    // Adopt from slot 0: the old start index would scramble the order (or
+    // leave empty slots) once the list has wrapped.
+    _startIndex = 0;
+
     var copyStart = 0;
     if (replacement.length > maxLength) {
       copyStart = replacement.length - maxLength;
-    }
-
-    for (var i = 0; i < copyStart; i++) {
-      _dropChild(i);
     }
 
     final copyLength = replacement.length - copyStart;
@@ -272,7 +273,6 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
       _adoptChild(i, replacement[copyStart + i]);
     }
 
-    _startIndex = 0;
     _length = copyLength;
   }
 
