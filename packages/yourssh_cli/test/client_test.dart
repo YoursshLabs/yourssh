@@ -10,16 +10,32 @@ class FakeTransport implements CliTransport {
   String Function(Map<String, Object?> req)? handler;
   final requests = <Map<String, Object?>>[];
   bool up = true;
+  bool listening = false; // socket accepts although round trips are not made
+  Object? failWith;
   int attempts = 0;
+
+  @override
+  Future<bool> probe(CliEndpoint ep) async => up || listening;
 
   @override
   Future<String> roundTrip(CliEndpoint ep, String line) async {
     attempts++;
     if (!up) throw CliUnreachable('refused');
+    if (failWith != null) throw failWith!;
     final req = jsonDecode(line) as Map<String, Object?>;
     requests.add(req);
     return handler!(req);
   }
+}
+
+class FakeInspector implements PathInspector {
+  FakeInspector(this.stats, this.targetOk);
+  final Map<String, PathStat?> stats;
+  final bool targetOk;
+  @override
+  Future<PathStat?> lstat(String path) async => stats[path];
+  @override
+  Future<bool> isExistingRegularFile(String path) async => targetOk;
 }
 
 class FakeLauncher implements AppLauncher {
@@ -88,6 +104,168 @@ void main() {
         now: now,
         delay: delay);
   }
+
+  test('(b) socket up but token missing: waits without launching', () async {
+    await File(ep.tokenPath).delete();
+    final t = FakeTransport((r) => ok(r, {'hosts': []}))..listening = true;
+    final l = FakeLauncher();
+    var clock = DateTime(2026);
+    var n = 0;
+    final code = await run(['ls'], t,
+        l: l,
+        now: () => clock,
+        delay: (d) async {
+          clock = clock.add(d);
+          if (++n == 3) {
+            await writeToken(ep.runDir, token: 'late');
+            t.up = true;
+          }
+        });
+    expect(code, 0);
+    expect(l.calls, 0);
+    expect(t.requests.single['token'], 'late');
+  });
+
+  test('(b) token never appears within 15s: exit 3, never launched', () async {
+    await File(ep.tokenPath).delete();
+    final t = FakeTransport((r) => ok(r, {}))..listening = true;
+    final l = FakeLauncher();
+    var clock = DateTime(2026);
+    final code = await run(['ls'], t,
+        l: l,
+        now: () => clock,
+        delay: (d) async => clock = clock.add(d));
+    expect(code, 3);
+    expect(l.calls, 0);
+  });
+
+  test('(c) unreadable token: exit 4, no launch', () async {
+    if (Platform.isWindows || Process.runSync('id', ['-u']).stdout.toString().trim() == '0') {
+      return;
+    }
+    await Process.run('chmod', ['000', ep.tokenPath]);
+    final t = FakeTransport((r) => ok(r, {}));
+    final l = FakeLauncher();
+    expect(await run(['ls'], t, l: l), 4);
+    expect(l.calls, 0);
+    expect(t.attempts, 0);
+    expect(err.toString(), contains('cannot read the YourSSH token file'));
+    expect(err.toString(), contains('permission denied'));
+  });
+
+  test('mid-request failure sends exactly once and exits 1', () async {
+    final t = FakeTransport((r) => ok(r, {}))..failWith = CliConnectionLost();
+    final l = FakeLauncher();
+    expect(await run(['connect', 'web'], t, l: l), 1);
+    expect(t.attempts, 1);
+    expect(l.calls, 0);
+    expect(err.toString(), contains('lost connection to YourSSH'));
+  });
+
+  test('permission denied on socket exits 4', () async {
+    final t = FakeTransport((r) => ok(r, {}))..failWith = CliPermissionDenied();
+    expect(await run(['ls'], t), 4);
+    expect(err.toString(), contains('permission denied on the YourSSH socket'));
+  });
+
+  test('response timeout message', () async {
+    final t = FakeTransport((r) => ok(r, {}))..failWith = CliTimeout(30);
+    expect(await run(['ls'], t), 1);
+    expect(err.toString(), contains('YourSSH did not respond within 30 s'));
+    expect(err.toString(), isNot(contains('TimeoutException')));
+  });
+
+  test('empty server error prints unknown error', () async {
+    final t = FakeTransport((r) =>
+        CliResponse.failure(r['id'] as String, CliExit.runtime, '').encode());
+    expect(await run(['ls'], t), 1);
+    expect(err.toString(), contains('unknown error'));
+  });
+
+  test('token rotated by the launch is picked up', () async {
+    final t = FakeTransport((r) => ok(r, {'hosts': []}))..up = false;
+    final l = FakeLauncher(() {
+      File(ep.tokenPath).writeAsStringSync('rotated');
+      t.up = true;
+    });
+    expect(await run(['ls'], t, l: l), 0);
+    expect(t.requests.single['token'], 'rotated');
+  });
+
+  group('LinuxAppLauncher guards', () {
+    late Directory d;
+    late CliEndpoint lep;
+    setUp(() async {
+      d = await Directory.systemTemp.createTemp('lg');
+      lep = CliEndpoint.resolve(
+          os: 'linux', env: {'XDG_RUNTIME_DIR': d.path}, home: d.path, uid: 1);
+      await Directory(lep.runDir).create(recursive: true);
+      await File('${lep.runDir}/app.path').writeAsString('/opt/ys/app');
+    });
+    tearDown(() => d.delete(recursive: true));
+
+    final good = <String, PathStat>{
+      'RUN': const PathStat(uid: 1000, mode: 448, isRegularFile: false),
+      'APP': const PathStat(uid: 1000, mode: 420, isRegularFile: true),
+    };
+
+    Future<(Object?, List<String>)> attemptLaunch(
+        Map<String, PathStat?> stats, {bool targetOk = true}) async {
+      final spawned = <String>[];
+      final launcher = LinuxAppLauncher(
+        uid: 1000,
+        inspector: FakeInspector({
+          lep.runDir: stats['RUN'],
+          '${lep.runDir}/app.path': stats['APP'],
+        }, targetOk),
+        spawn: (p) async => spawned.add(p),
+      );
+      try {
+        await launcher.launch(lep);
+        return (null, spawned);
+      } catch (e) {
+        return (e, spawned);
+      }
+    }
+
+    test('passes with good ownership and modes', () async {
+      final (e, spawned) = await attemptLaunch(good);
+      expect(e, isNull);
+      expect(spawned, ['/opt/ys/app']);
+    });
+
+    for (final c in {
+      'run dir owned by another uid': {'RUN': const PathStat(uid: 0, mode: 448, isRegularFile: false)},
+      'run dir group-writable': {'RUN': const PathStat(uid: 1000, mode: 504, isRegularFile: false)},
+      'run dir world-writable': {'RUN': const PathStat(uid: 1000, mode: 447, isRegularFile: false)},
+      'run dir missing': {'RUN': null},
+      'app.path owned by another uid': {'APP': const PathStat(uid: 0, mode: 420, isRegularFile: true)},
+      'app.path group-writable': {'APP': const PathStat(uid: 1000, mode: 436, isRegularFile: true)},
+      'app.path world-writable': {'APP': const PathStat(uid: 1000, mode: 422, isRegularFile: true)},
+      'app.path not a regular file': {'APP': const PathStat(uid: 1000, mode: 420, isRegularFile: false)},
+      'app.path missing': {'APP': null},
+    }.entries) {
+      test('refuses: ${c.key}', () async {
+        final (e, spawned) = await attemptLaunch({...good, ...c.value});
+        expect(e, isA<CliUnreachable>());
+        expect((e as CliUnreachable).message, contains('start YourSSH once from your launcher'));
+        expect(spawned, isEmpty);
+      });
+    }
+
+    test('refuses relative path content', () async {
+      await File('${lep.runDir}/app.path').writeAsString('relative/app');
+      final (e, spawned) = await attemptLaunch(good);
+      expect(e, isA<CliUnreachable>());
+      expect(spawned, isEmpty);
+    });
+
+    test('refuses target that is not an existing regular file', () async {
+      final (e, spawned) = await attemptLaunch(good, targetOk: false);
+      expect(e, isA<CliUnreachable>());
+      expect(spawned, isEmpty);
+    });
+  });
 
   test('connect sends token and host, exits 0', () async {
     final t = FakeTransport((r) => ok(r, {'host': {'label': 'web'}}));
@@ -232,6 +410,67 @@ void main() {
 }
 
 void unixTransportTests() {
+  Future<(CliEndpoint, ServerSocket)> serve(
+      void Function(Socket) onClient) async {
+    final d = await Directory.systemTemp.createTemp('ys');
+    addTearDown(() => d.delete(recursive: true));
+    final ep = CliEndpoint.resolve(
+        os: 'linux', env: {'XDG_RUNTIME_DIR': d.path}, home: d.path, uid: 1);
+    await Directory(ep.runDir).create(recursive: true);
+    final server = await ServerSocket.bind(
+        InternetAddress(ep.address, type: InternetAddressType.unix), 0);
+    addTearDown(server.close);
+    server.listen(onClient);
+    return (ep, server);
+  }
+
+  test('oversized response is a protocol error', () async {
+    final (ep, _) = await serve((s) {
+      s.add(List.filled(5000, 65));
+      s.flush();
+    });
+    await expectLater(
+        UnixSocketTransport(maxResponseBytes: 1000).roundTrip(ep, 'x'),
+        throwsA(isA<CliProtocolException>()));
+  });
+
+  test('no newline before timeout raises CliTimeout', () async {
+    final (ep, _) = await serve((s) => s.write('partial'));
+    await expectLater(
+        UnixSocketTransport(timeout: const Duration(milliseconds: 200))
+            .roundTrip(ep, 'x'),
+        throwsA(isA<CliTimeout>()));
+  });
+
+  test('multibyte UTF-8 split across writes decodes intact', () async {
+    final bytes = utf8.encode('h\u00e9llo \u{1F600}\n');
+    final (ep, _) = await serve((s) async {
+      s.add(bytes.sublist(0, 2)); // splits the e-acute
+      await s.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      s.add(bytes.sublist(2, 9)); // splits the emoji
+      await s.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      s.add(bytes.sublist(9));
+      await s.flush();
+    });
+    expect(await UnixSocketTransport().roundTrip(ep, 'x'), 'h\u00e9llo \u{1F600}');
+  });
+
+  test('peer closing before any reply is a lost connection', () async {
+    final (ep, _) = await serve((s) => s.destroy());
+    await expectLater(UnixSocketTransport().roundTrip(ep, 'x'),
+        throwsA(isA<CliConnectionLost>()));
+  });
+
+  test('probe: true when listening, false when absent', () async {
+    final (ep, _) = await serve((s) => s.destroy());
+    expect(await UnixSocketTransport().probe(ep), isTrue);
+    final missing = CliEndpoint.resolve(
+        os: 'linux', env: {'XDG_RUNTIME_DIR': '/nonexistent-ys'}, home: '/x', uid: 1);
+    expect(await UnixSocketTransport().probe(missing), isFalse);
+  });
+
   test('UnixSocketTransport round-trips a line; missing socket is unreachable',
       () async {
     if (Platform.isWindows) return;

@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'endpoint.dart';
 import 'output.dart';
 import 'protocol.dart';
+import 'uid.dart';
 
 const String kCliVersion = '0.1.0';
 
@@ -18,7 +19,31 @@ class CliUnreachable implements Exception {
   String toString() => 'CliUnreachable: $message';
 }
 
+/// The socket was reached but the connection broke mid-request. The request
+/// may have been delivered, so it is never resent.
+class CliConnectionLost implements Exception {}
+
+/// connect() was refused with EACCES.
+class CliPermissionDenied implements Exception {}
+
+/// No complete response within the transport timeout.
+class CliTimeout implements Exception {
+  CliTimeout(this.seconds);
+  final int seconds;
+}
+
+class _TokenUnreadable implements Exception {
+  _TokenUnreadable(this.path, this.reason);
+  final String path;
+  final String reason;
+}
+
+class _Starting implements Exception {}
+
 abstract class CliTransport {
+  /// True when something accepts connections on the endpoint.
+  Future<bool> probe(CliEndpoint ep) async => false;
+
   /// Sends one request line, returns one response line. Throws
   /// [CliUnreachable] on a refused / missing endpoint.
   Future<String> roundTrip(CliEndpoint ep, String requestLine);
@@ -76,7 +101,6 @@ Future<int> runCli(
     return 0;
   }
 
-  String request;
   var json = false;
   var requestCmd = cmd;
   final args = <String, Object?>{};
@@ -116,10 +140,24 @@ Future<int> runCli(
   final id = _randomId();
 
   Future<CliResponse> attempt() async {
-    final token = await readToken(endpoint.tokenPath);
-    if (token == null) throw CliUnreachable('no token');
-    request = CliRequest(id: id, token: token, cmd: requestCmd, args: args)
-        .encode();
+    String? token;
+    try {
+      token = await readTokenStrict(endpoint.tokenPath);
+    } on FileSystemException catch (e) {
+      final code = e.osError?.errorCode;
+      throw _TokenUnreadable(
+          endpoint.tokenPath,
+          code == 13 || code == 1
+              ? 'permission denied'
+              : (e.osError?.message ?? e.message));
+    }
+    if (token == null) {
+      // No token: either nobody is running, or the app is still starting.
+      if (await transport.probe(endpoint)) throw _Starting();
+      throw CliUnreachable('no token');
+    }
+    final request =
+        CliRequest(id: id, token: token, cmd: requestCmd, args: args).encode();
     final line = await transport.roundTrip(endpoint, request);
     return CliResponse.decode(line.trim());
   }
@@ -131,17 +169,27 @@ Future<int> runCli(
     while (resp == null) {
       try {
         final r = await attempt();
-        if (!r.ok && r.code == CliExit.denied && launched && now().isBefore(deadline!)) {
+        if (!r.ok &&
+            r.code == CliExit.denied &&
+            deadline != null &&
+            now().isBefore(deadline)) {
           // The app is up but has not rewritten the token yet.
           await delay(const Duration(milliseconds: 200));
           continue;
         }
         resp = r;
+      } on _Starting {
+        deadline ??= now().add(launchWait);
+        if (!now().isBefore(deadline)) {
+          err.writeln('yourssh: YourSSH is starting but did not become ready');
+          return CliExit.unreachable.code;
+        }
+        await delay(const Duration(milliseconds: 200));
       } on CliUnreachable catch (e) {
         if (!launched) {
           launched = true;
           await launcher.launch(endpoint);
-          deadline = now().add(launchWait);
+          deadline ??= now().add(launchWait);
         } else if (!now().isBefore(deadline!)) {
           err.writeln('yourssh: YourSSH is not running and could not be '
               'started (${sanitize(e.message)})');
@@ -150,6 +198,19 @@ Future<int> runCli(
         await delay(const Duration(milliseconds: 200));
       }
     }
+  } on _TokenUnreadable catch (e) {
+    err.writeln('yourssh: cannot read the YourSSH token file '
+        '(${sanitize(e.path)}): ${sanitize(e.reason)}');
+    return CliExit.denied.code;
+  } on CliPermissionDenied {
+    err.writeln('yourssh: permission denied on the YourSSH socket');
+    return CliExit.denied.code;
+  } on CliConnectionLost {
+    err.writeln('yourssh: lost connection to YourSSH');
+    return CliExit.runtime.code;
+  } on CliTimeout catch (e) {
+    err.writeln('yourssh: YourSSH did not respond within ${e.seconds} s');
+    return CliExit.runtime.code;
   } on CliUnreachable catch (e) {
     err.writeln('yourssh: YourSSH is not running (${sanitize(e.message)}). '
         'Start YourSSH and retry.');
@@ -173,7 +234,8 @@ Future<int> runCli(
   }
 
   if (!resp.ok) {
-    err.writeln('yourssh: ${sanitize(resp.error)}');
+    final msg = sanitize(resp.error);
+    err.writeln('yourssh: ${msg.isEmpty ? 'unknown error' : msg}');
     for (final c in resp.candidates ?? const <Map<String, Object?>>[]) {
       err.writeln('  ${sanitize(c['label'])}  ${hostAddress(c)}');
     }
@@ -210,60 +272,190 @@ Future<int> runCli(
 
 /// Unix-domain socket transport (macOS / Linux).
 class UnixSocketTransport implements CliTransport {
-  UnixSocketTransport({this.timeout = const Duration(seconds: 30)});
+  UnixSocketTransport(
+      {this.timeout = const Duration(seconds: 30),
+      this.maxResponseBytes = kMaxResponseBytes});
   final Duration timeout;
+  final int maxResponseBytes;
 
-  @override
-  Future<String> roundTrip(CliEndpoint ep, String requestLine) async {
+  static const _enoent = 2;
+  static const _eacces = 13;
+  static const _econnrefusedLinux = 111;
+  static const _econnrefusedMac = 61;
+
+  Future<Socket> _connect(CliEndpoint ep) async {
     if (Platform.isWindows) {
       throw CliUnreachable('Windows support arrives in a later build');
     }
-    Socket socket;
     try {
-      socket = await Socket.connect(
+      return await Socket.connect(
               InternetAddress(ep.address, type: InternetAddressType.unix), 0)
           .timeout(const Duration(seconds: 2));
     } on SocketException catch (e) {
-      throw CliUnreachable(e.message);
+      switch (e.osError?.errorCode) {
+        case _enoent || _econnrefusedLinux || _econnrefusedMac:
+          throw CliUnreachable(e.message);
+        case _eacces:
+          throw CliPermissionDenied();
+      }
+      rethrow;
     } on TimeoutException {
-      throw CliUnreachable('connect timed out');
+      throw CliTimeout(2);
     }
+  }
+
+  @override
+  Future<bool> probe(CliEndpoint ep) async {
     try {
-      socket.write(requestLine);
-      socket.write('\n');
-      await socket.flush();
+      (await _connect(ep)).destroy();
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  @override
+  Future<String> roundTrip(CliEndpoint ep, String requestLine) async {
+    // Connect-phase failures above are the only ones that may be retried.
+    final socket = await _connect(ep);
+    try {
+      try {
+        socket.write(requestLine);
+        socket.write('\n');
+        await socket.flush();
+      } on Object {
+        throw CliConnectionLost();
+      }
       final buf = BytesBuilder(copy: false);
       final done = Completer<void>();
       final sub = socket.listen((chunk) {
         buf.add(chunk);
-        if (buf.length > kMaxResponseBytes && !done.isCompleted) {
+        if (done.isCompleted) return;
+        if (buf.length > maxResponseBytes) {
           done.completeError(
               CliProtocolException(CliExit.usage, 'response too long'));
-        } else if (chunk.contains(10) && !done.isCompleted) {
+        } else if (chunk.contains(10)) {
           done.complete();
         }
       }, onDone: () {
         if (!done.isCompleted) done.complete();
       }, onError: (Object e) {
-        if (!done.isCompleted) done.completeError(e);
+        if (!done.isCompleted) done.completeError(CliConnectionLost());
       });
       try {
         await done.future.timeout(timeout);
+      } on TimeoutException {
+        throw CliTimeout(timeout.inSeconds);
       } finally {
         await sub.cancel();
       }
-      final text = utf8.decode(buf.takeBytes(), allowMalformed: true);
+      final bytes = buf.takeBytes();
+      if (bytes.isEmpty) throw CliConnectionLost();
+      final text = utf8.decode(bytes, allowMalformed: true);
       final nl = text.indexOf('\n');
       return nl < 0 ? text : text.substring(0, nl);
-    } on SocketException catch (e) {
-      throw CliUnreachable(e.message);
     } finally {
       socket.destroy();
     }
   }
 }
 
-/// Starts the app: `open -b` on macOS, the path in `app.path` on Linux.
+/// What the launcher needs to know about a path (no symlink following).
+class PathStat {
+  const PathStat(
+      {required this.uid, required this.mode, required this.isRegularFile});
+  final int uid;
+
+  /// Permission bits (e.g. 0o700 = 448).
+  final int mode;
+  final bool isRegularFile;
+}
+
+/// Test seam for the Linux launch checks.
+abstract class PathInspector {
+  /// Owner / mode / type of [path] itself (a symlink is not followed), or
+  /// null when it does not exist or cannot be inspected.
+  Future<PathStat?> lstat(String path);
+
+  /// True when [path] (symlinks followed) is an existing regular file.
+  Future<bool> isExistingRegularFile(String path);
+}
+
+class SystemPathInspector implements PathInspector {
+  @override
+  Future<PathStat?> lstat(String path) async {
+    try {
+      final r = await Process.run('stat', ['-c', '%u %a %F', path]);
+      if (r.exitCode != 0) return null;
+      final parts = r.stdout.toString().trim().split(' ');
+      if (parts.length < 3) return null;
+      final uid = int.tryParse(parts[0]);
+      final mode = int.tryParse(parts[1], radix: 8);
+      if (uid == null || mode == null) return null;
+      final type = parts.sublist(2).join(' ');
+      return PathStat(
+          uid: uid, mode: mode, isRegularFile: type.startsWith('regular'));
+    } on ProcessException {
+      return null;
+    }
+  }
+
+  @override
+  Future<bool> isExistingRegularFile(String path) async =>
+      FileSystemEntity.typeSync(path) == FileSystemEntityType.file;
+}
+
+/// Linux: execs the path in `<runDir>/app.path`, but only when the run dir and
+/// that file belong to us and nobody else can write them.
+class LinuxAppLauncher implements AppLauncher {
+  LinuxAppLauncher({
+    required this.uid,
+    PathInspector? inspector,
+    Future<void> Function(String path)? spawn,
+  })  : inspector = inspector ?? SystemPathInspector(),
+        spawn = spawn ?? _spawnDetached;
+
+  final int uid;
+  final PathInspector inspector;
+  final Future<void> Function(String path) spawn;
+
+  static const _hint = 'start YourSSH once from your launcher';
+
+  static Future<void> _spawnDetached(String path) async {
+    await Process.start(path, const [], mode: ProcessStartMode.detached);
+  }
+
+  bool _safe(PathStat? s) =>
+      s != null && s.uid == uid && (s.mode & 18) == 0; // 0o022
+
+  @override
+  Future<void> launch(CliEndpoint ep) async {
+    final appPath = '${ep.runDir}/app.path';
+    final dir = await inspector.lstat(ep.runDir);
+    final file = await inspector.lstat(appPath);
+    if (!_safe(dir) || !_safe(file) || !file!.isRegularFile) {
+      throw CliUnreachable('$_hint (the app.path file is missing or unsafe)');
+    }
+    String path;
+    try {
+      path = (await File(appPath).readAsString()).trim();
+    } on FileSystemException {
+      path = '';
+    }
+    if (path.isEmpty ||
+        !path.startsWith('/') ||
+        !await inspector.isExistingRegularFile(path)) {
+      throw CliUnreachable('$_hint (the recorded app path is not usable)');
+    }
+    try {
+      await spawn(path);
+    } on ProcessException catch (e) {
+      throw CliUnreachable('cannot start YourSSH: ${e.message}');
+    }
+  }
+}
+
+/// Starts the app: `open -b` on macOS, [LinuxAppLauncher] on Linux.
 class SystemAppLauncher implements AppLauncher {
   @override
   Future<void> launch(CliEndpoint ep) async {
@@ -274,19 +466,6 @@ class SystemAppLauncher implements AppLauncher {
       await Process.run('open', ['-b', 'com.thangnm.yourssh']);
       return;
     }
-    String path;
-    try {
-      path = (await File('${ep.runDir}/app.path').readAsString()).trim();
-    } on FileSystemException {
-      path = '';
-    }
-    if (path.isEmpty) {
-      throw CliUnreachable('start YourSSH first (app path unknown)');
-    }
-    try {
-      await Process.start(path, const [], mode: ProcessStartMode.detached);
-    } on ProcessException catch (e) {
-      throw CliUnreachable('cannot start YourSSH: ${e.message}');
-    }
+    await LinuxAppLauncher(uid: currentUid()).launch(ep);
   }
 }

@@ -134,6 +134,18 @@ Future<String?> readToken(String tokenPath) async {
   }
 }
 
+/// Like [readToken] but only a missing file yields null (also an empty one);
+/// any other failure (EACCES, a directory, ...) is rethrown so the caller can
+/// tell "not there yet" from "cannot read".
+Future<String?> readTokenStrict(String tokenPath) async {
+  try {
+    final s = (await File(tokenPath).readAsString()).trim();
+    return s.isEmpty ? null : s;
+  } on PathNotFoundException {
+    return null;
+  }
+}
+
 /// Constant-time comparison (length is not secret).
 bool tokensEqual(String a, String b) {
   if (a.length != b.length) return false;
