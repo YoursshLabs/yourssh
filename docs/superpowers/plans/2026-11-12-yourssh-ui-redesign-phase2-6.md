@@ -431,7 +431,7 @@ Then remove the legacy styling paths.
 ### Task 12: Remote-desktop chrome and the in-app devops screens
 
 **Files to rebuild on forui:**
-- `rdp_workspace.dart` and `vnc_workspace.dart`: toolbar and overlays only. Keep the fullscreen pill behaviour.
+- `rdp_workspace.dart` and `vnc_workspace.dart`: toolbar and overlays only. Keep the fullscreen pill behaviour. Mount Task 6's `SessionStatusBar` (`app/lib/widgets/terminal_status_bar.dart`) at the bottom of both workspaces (ruling P12), hidden in fullscreen.
 - `containers_screen.dart`
 - `kubernetes_panel.dart`
 - `docker_panel.dart`
