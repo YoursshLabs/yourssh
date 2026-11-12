@@ -188,6 +188,19 @@ After phase 6:
 - Delete `AppColors`, `MobileColors`/`MobileTokens` and the leftover Material-only widgets.
 - A lint check (`custom_lint` rule or a CI grep) bans new `IconButton`/`AlertDialog`/`SnackBar`/`Icons.` uses under `app/lib/` and the plugin packages. Uses inside `packages/yourssh_ui` are allowed.
 
+### Phase 7 (decide after phase 6)
+
+**Goal:** check whether the root `MaterialApp` can become a `WidgetsApp` hosting `FTheme` directly, so Material isn't even the invisible plumbing.
+
+**What to check first:**
+- `xterm`'s `TerminalView`
+- the plugin packages
+- the Monaco webview
+- text-selection toolbars
+- `material_ui`, which forui uses internally
+
+**What happens next:** go ahead only if nothing visible regresses. Until then, Material is root plumbing only, and every visible widget is forui or `Ys*` (owner question, 2026-11-12).
+
 ## Verification
 
 - **Visual:** the macOS screenshot integration tests (`app/integration_test/feature_screenshots_test.dart`, `mobile_screenshots_test.dart`) render each migrated screen. The PR attaches the new PNGs next to the matching spike mockup, and the README screenshots are refreshed after phase 6.
