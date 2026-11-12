@@ -107,7 +107,8 @@ String generateToken() {
 
 /// Creates [runDir] (0700) and rewrites `cli.token` (0600) with 32 random
 /// bytes as lowercase hex. The file is created empty and restricted before
-/// the secret is written. Returns the token.
+/// the secret is written. On Windows (per-user %LOCALAPPDATA%, no modes) it
+/// is truncated and overwritten in place. Returns the token.
 Future<String> writeToken(String runDir, {String? token}) async {
   final dir = Directory(runDir);
   await dir.create(recursive: true);
@@ -117,6 +118,12 @@ Future<String> writeToken(String runDir, {String? token}) async {
 
   final path = p.join(runDir, 'cli.token');
   final file = File(path);
+  if (Platform.isWindows) {
+    // Truncate and overwrite in place: deleting a file another process has
+    // open fails or lingers on Windows. %LOCALAPPDATA% is per user.
+    await file.writeAsString(token, flush: true);
+    return token;
+  }
   if (await file.exists()) await file.delete();
   await file.create();
   await _chmod('600', path);

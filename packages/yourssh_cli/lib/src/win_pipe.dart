@@ -1,51 +1,46 @@
-/// Hand-written Win32 bindings (kernel32 / advapi32) for the YourSSH CLI
-/// named pipe, shared by the app's listener and the `yourssh` client.
+/// Hand-written Win32 bindings (kernel32 / advapi32 / ntdll) for the YourSSH
+/// CLI named pipe, shared by the app's listener and the `yourssh` client.
 ///
 /// Nothing loads a DLL until the first call, so importing this library is
 /// safe on macOS and Linux.
 ///
-/// Error codes: every call whose failure code we branch on returns at once
-/// (the pipe handles are overlapped) and is bound `isLeaf: true`, so the VM
-/// runs nothing between it and the `GetLastError` call that follows. Calls
-/// that block (the waits, `WaitNamedPipeW`, `GetOverlappedResult` with
-/// `bWait`) are not leaf calls: a blocking leaf call would hold up garbage
-/// collection for the whole isolate group. Their results never depend on
-/// `GetLastError`.
+/// R25: no decision depends on `GetLastError`. Under the Dart VM it reads 0
+/// (the VM's own transitions reset it), so it only feeds message text.
+/// Decisions come from:
+/// - return values (handles, BOOL);
+/// - NTSTATUS codes: pipe I/O goes through `NtFsControlFile(FSCTL_PIPE_LISTEN)`,
+///   `NtReadFile` and `NtWriteFile`, which return the status that kernel32
+///   would only store in the last error, and the completion status in the
+///   IO_STATUS_BLOCK (the head of OVERLAPPED) once an operation finishes;
+/// - [pipeExists], which lists `\\.\pipe\` (never opening the pipe itself).
+///
+/// The kernel32 wrappers can't be used for overlapped pipe I/O without
+/// GetLastError: they set `OVERLAPPED.Internal` to STATUS_PENDING before
+/// issuing the request, so a synchronous failure (no event, no status
+/// written) looks exactly like a pending operation.
 library;
 
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:io' show Directory, FileSystemException;
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
-/// Win32 error codes this library and its callers branch on.
-abstract final class WinError {
-  static const fileNotFound = 2; // ERROR_FILE_NOT_FOUND
-  static const accessDenied = 5; // ERROR_ACCESS_DENIED
-  static const lockViolation = 33; // ERROR_LOCK_VIOLATION
-  static const handleEof = 38; // ERROR_HANDLE_EOF
-  static const brokenPipe = 109; // ERROR_BROKEN_PIPE
-  static const insufficientBuffer = 122; // ERROR_INSUFFICIENT_BUFFER
-  static const pipeBusy = 231; // ERROR_PIPE_BUSY
-  static const noData = 232; // ERROR_NO_DATA
-  static const pipeNotConnected = 233; // ERROR_PIPE_NOT_CONNECTED
-  static const pipeConnected = 535; // ERROR_PIPE_CONNECTED
-  static const operationAborted = 995; // ERROR_OPERATION_ABORTED
-  static const ioPending = 997; // ERROR_IO_PENDING
-}
-
-/// A Win32 call failed with [code] (`GetLastError`).
+/// A Win32 call failed. [code] is the last error or NTSTATUS, for the
+/// message only: never branch on it (R25).
 class WinPipeException implements Exception {
-  const WinPipeException(this.op, this.code);
+  const WinPipeException(this.op, [this.code = 0]);
   final String op;
   final int code;
   @override
-  String toString() => 'WinPipeException: $op failed (error $code)';
+  String toString() =>
+      'WinPipeException: $op failed (0x${code.toRadixString(16)})';
 }
 
 // ---------------------------------------------------------------------------
-// Constants (winbase.h / winnt.h / fileapi.h / synchapi.h / sddl.h)
+// Constants (winbase.h / winnt.h / fileapi.h / synchapi.h / sddl.h /
+// winioctl.h / ntstatus.h)
 
 const int _invalidHandleValue = -1; // INVALID_HANDLE_VALUE
 const int _pipeAccessDuplex = 0x00000003; // PIPE_ACCESS_DUPLEX
@@ -69,15 +64,40 @@ const int _tokenQuery = 0x0008; // TOKEN_QUERY
 const int _tokenUserClass = 1; // TOKEN_INFORMATION_CLASS.TokenUser
 const int _sddlRevision1 = 1; // SDDL_REVISION_1
 
+/// CTL_CODE(FILE_DEVICE_NAMED_PIPE 0x11, 2, METHOD_BUFFERED, FILE_ANY_ACCESS).
+const int _fsctlPipeListen = 0x00110008;
+
+/// NTSTATUS values (ntstatus.h; MS-ERREF 2.3.1).
+abstract final class NtStatus {
+  static const success = 0x00000000; // STATUS_SUCCESS
+  static const pending = 0x00000103; // STATUS_PENDING
+  static const endOfFile = 0xC0000011; // STATUS_END_OF_FILE
+  static const pipeDisconnected = 0xC00000B0; // STATUS_PIPE_DISCONNECTED
+  static const pipeClosing = 0xC00000B1; // STATUS_PIPE_CLOSING
+  static const pipeConnected = 0xC00000B2; // STATUS_PIPE_CONNECTED
+  static const pipeBroken = 0xC000014B; // STATUS_PIPE_BROKEN
+  static const cancelled = 0xC0000120; // STATUS_CANCELLED
+}
+
+/// The other end is gone (or going): treat as a lost connection.
+bool _isClosedStatus(int status) =>
+    status == NtStatus.pipeBroken ||
+    status == NtStatus.pipeDisconnected ||
+    status == NtStatus.pipeClosing ||
+    status == NtStatus.endOfFile;
+
 /// One I/O chunk; also the pipe's advisory in/out buffer size.
 const int _chunk = 64 * 1024;
+
+const String _pipePrefix = r'\\.\pipe\';
 
 // ---------------------------------------------------------------------------
 // Structs
 
 /// `OVERLAPPED` (minwinbase.h): two ULONG_PTR, a union of two DWORDs with a
 /// PVOID (8 bytes on every Windows ABI), then the event HANDLE. 32 bytes on
-/// x64/arm64.
+/// x64/arm64. Its first two fields are the IO_STATUS_BLOCK (Status,
+/// Information) the Nt* calls fill in, exactly as kernel32 passes it.
 final class _Overlapped extends Struct {
   @IntPtr()
   external int internal;
@@ -103,104 +123,72 @@ final class _SecurityAttributes extends Struct {
 }
 
 // ---------------------------------------------------------------------------
-// Bindings. HANDLE = IntPtr, DWORD/ULONG = Uint32, BOOL = Int32.
+// Bindings. HANDLE = IntPtr, DWORD/ULONG = Uint32, BOOL = Int32, NTSTATUS =
+// Int32 (normalised with & 0xFFFFFFFF). Calls touching the pipe or the I/O
+// manager are not leaf calls (a stuck leaf call would hold up GC for the
+// isolate group); pure in-memory helpers are.
 
 final DynamicLibrary _kernel32 = DynamicLibrary.open('kernel32.dll');
 final DynamicLibrary _advapi32 = DynamicLibrary.open('advapi32.dll');
+final DynamicLibrary _ntdll = DynamicLibrary.open('ntdll.dll');
 
+// Message text only (R25).
 final _getLastError = _kernel32.lookupFunction<Uint32 Function(), int Function()>(
     'GetLastError',
     isLeaf: true);
 
 final _closeHandle =
     _kernel32.lookupFunction<Int32 Function(IntPtr), int Function(int)>(
-        'CloseHandle',
-        isLeaf: true);
+        'CloseHandle');
 
 final _createNamedPipeW = _kernel32.lookupFunction<
     IntPtr Function(Pointer<Utf16>, Uint32, Uint32, Uint32, Uint32, Uint32,
         Uint32, Pointer<_SecurityAttributes>),
     int Function(Pointer<Utf16>, int, int, int, int, int, int,
-        Pointer<_SecurityAttributes>)>('CreateNamedPipeW', isLeaf: true);
-
-// Overlapped handle: returns at once.
-final _connectNamedPipe = _kernel32.lookupFunction<
-    Int32 Function(IntPtr, Pointer<_Overlapped>),
-    int Function(int, Pointer<_Overlapped>)>('ConnectNamedPipe', isLeaf: true);
+        Pointer<_SecurityAttributes>)>('CreateNamedPipeW');
 
 final _disconnectNamedPipe =
     _kernel32.lookupFunction<Int32 Function(IntPtr), int Function(int)>(
-        'DisconnectNamedPipe',
-        isLeaf: true);
+        'DisconnectNamedPipe');
 
 final _createFileW = _kernel32.lookupFunction<
     IntPtr Function(Pointer<Utf16>, Uint32, Uint32,
         Pointer<_SecurityAttributes>, Uint32, Uint32, IntPtr),
     int Function(Pointer<Utf16>, int, int, Pointer<_SecurityAttributes>, int,
-        int, int)>('CreateFileW', isLeaf: true);
+        int, int)>('CreateFileW');
 
-// Blocks up to its timeout: not leaf.
 final _waitNamedPipeW = _kernel32.lookupFunction<
     Int32 Function(Pointer<Utf16>, Uint32),
     int Function(Pointer<Utf16>, int)>('WaitNamedPipeW');
 
-final _readFile = _kernel32.lookupFunction<
-    Int32 Function(
-        IntPtr, Pointer<Uint8>, Uint32, Pointer<Uint32>, Pointer<_Overlapped>),
-    int Function(int, Pointer<Uint8>, int, Pointer<Uint32>,
-        Pointer<_Overlapped>)>('ReadFile', isLeaf: true);
-
-final _writeFile = _kernel32.lookupFunction<
-    Int32 Function(
-        IntPtr, Pointer<Uint8>, Uint32, Pointer<Uint32>, Pointer<_Overlapped>),
-    int Function(int, Pointer<Uint8>, int, Pointer<Uint32>,
-        Pointer<_Overlapped>)>('WriteFile', isLeaf: true);
-
-// bWait = FALSE only (the operation has completed): returns at once.
-final _getOverlappedResult = _kernel32.lookupFunction<
-    Int32 Function(IntPtr, Pointer<_Overlapped>, Pointer<Uint32>, Int32),
-    int Function(int, Pointer<_Overlapped>, Pointer<Uint32>,
-        int)>('GetOverlappedResult', isLeaf: true);
-
-// bWait = TRUE (after CancelIoEx): may block briefly, not leaf.
-final _getOverlappedResultWait = _kernel32.lookupFunction<
-    Int32 Function(IntPtr, Pointer<_Overlapped>, Pointer<Uint32>, Int32),
-    int Function(
-        int, Pointer<_Overlapped>, Pointer<Uint32>, int)>('GetOverlappedResult');
-
 final _cancelIoEx = _kernel32.lookupFunction<
     Int32 Function(IntPtr, Pointer<_Overlapped>),
-    int Function(int, Pointer<_Overlapped>)>('CancelIoEx', isLeaf: true);
+    int Function(int, Pointer<_Overlapped>)>('CancelIoEx');
 
 final _createEventW = _kernel32.lookupFunction<
     IntPtr Function(Pointer<_SecurityAttributes>, Int32, Int32, Pointer<Utf16>),
     int Function(Pointer<_SecurityAttributes>, int, int,
-        Pointer<Utf16>)>('CreateEventW', isLeaf: true);
+        Pointer<Utf16>)>('CreateEventW');
 
 final _setEvent =
     _kernel32.lookupFunction<Int32 Function(IntPtr), int Function(int)>(
-        'SetEvent',
-        isLeaf: true);
+        'SetEvent');
 
 final _resetEvent =
     _kernel32.lookupFunction<Int32 Function(IntPtr), int Function(int)>(
-        'ResetEvent',
-        isLeaf: true);
+        'ResetEvent');
 
-// Blocks: not leaf.
 final _waitForMultipleObjects = _kernel32.lookupFunction<
     Uint32 Function(Uint32, Pointer<IntPtr>, Int32, Uint32),
     int Function(int, Pointer<IntPtr>, int, int)>('WaitForMultipleObjects');
 
 final _getNamedPipeClientProcessId = _kernel32.lookupFunction<
     Int32 Function(IntPtr, Pointer<Uint32>),
-    int Function(int, Pointer<Uint32>)>('GetNamedPipeClientProcessId',
-    isLeaf: true);
+    int Function(int, Pointer<Uint32>)>('GetNamedPipeClientProcessId');
 
 final _getNamedPipeServerProcessId = _kernel32.lookupFunction<
     Int32 Function(IntPtr, Pointer<Uint32>),
-    int Function(int, Pointer<Uint32>)>('GetNamedPipeServerProcessId',
-    isLeaf: true);
+    int Function(int, Pointer<Uint32>)>('GetNamedPipeServerProcessId');
 
 final _getCurrentProcess =
     _kernel32.lookupFunction<IntPtr Function(), int Function()>(
@@ -209,19 +197,19 @@ final _getCurrentProcess =
 
 final _openProcess = _kernel32.lookupFunction<
     IntPtr Function(Uint32, Int32, Uint32),
-    int Function(int, int, int)>('OpenProcess', isLeaf: true);
+    int Function(int, int, int)>('OpenProcess');
 
 final _localFree = _kernel32.lookupFunction<IntPtr Function(Pointer<Void>),
     int Function(Pointer<Void>)>('LocalFree', isLeaf: true);
 
 final _openProcessToken = _advapi32.lookupFunction<
     Int32 Function(IntPtr, Uint32, Pointer<IntPtr>),
-    int Function(int, int, Pointer<IntPtr>)>('OpenProcessToken', isLeaf: true);
+    int Function(int, int, Pointer<IntPtr>)>('OpenProcessToken');
 
 final _getTokenInformation = _advapi32.lookupFunction<
     Int32 Function(IntPtr, Int32, Pointer<Void>, Uint32, Pointer<Uint32>),
     int Function(int, int, Pointer<Void>, int,
-        Pointer<Uint32>)>('GetTokenInformation', isLeaf: true);
+        Pointer<Uint32>)>('GetTokenInformation');
 
 final _convertSidToStringSidW = _advapi32.lookupFunction<
     Int32 Function(Pointer<Void>, Pointer<Pointer<Utf16>>),
@@ -240,6 +228,32 @@ final _convertStringSdToSd = _advapi32.lookupFunction<
 final _equalSid = _advapi32.lookupFunction<
     Int32 Function(Pointer<Void>, Pointer<Void>),
     int Function(Pointer<Void>, Pointer<Void>)>('EqualSid', isLeaf: true);
+
+// NTSTATUS NtFsControlFile(HANDLE FileHandle, HANDLE Event,
+//   PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK
+//   IoStatusBlock, ULONG FsControlCode, PVOID InputBuffer, ULONG
+//   InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength)
+final _ntFsControlFile = _ntdll.lookupFunction<
+    Int32 Function(IntPtr, IntPtr, Pointer<Void>, Pointer<Void>,
+        Pointer<_Overlapped>, Uint32, Pointer<Void>, Uint32, Pointer<Void>,
+        Uint32),
+    int Function(int, int, Pointer<Void>, Pointer<Void>, Pointer<_Overlapped>,
+        int, Pointer<Void>, int, Pointer<Void>, int)>('NtFsControlFile');
+
+// NTSTATUS NtReadFile / NtWriteFile(HANDLE FileHandle, HANDLE Event,
+//   PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK
+//   IoStatusBlock, PVOID Buffer, ULONG Length, PLARGE_INTEGER ByteOffset,
+//   PULONG Key)
+typedef _NtIoNative = Int32 Function(IntPtr, IntPtr, Pointer<Void>,
+    Pointer<Void>, Pointer<_Overlapped>, Pointer<Uint8>, Uint32,
+    Pointer<Int64>, Pointer<Uint32>);
+typedef _NtIoDart = int Function(int, int, Pointer<Void>, Pointer<Void>,
+    Pointer<_Overlapped>, Pointer<Uint8>, int, Pointer<Int64>, Pointer<Uint32>);
+
+final _ntReadFile =
+    _ntdll.lookupFunction<_NtIoNative, _NtIoDart>('NtReadFile');
+final _ntWriteFile =
+    _ntdll.lookupFunction<_NtIoNative, _NtIoDart>('NtWriteFile');
 
 // ---------------------------------------------------------------------------
 // Users and security
@@ -312,25 +326,23 @@ int _openTokenOf(int process) {
   }
 }
 
-/// The SID in [token]'s TokenUser. The SID lives in an [arena] buffer.
+/// The SID in [token]'s TokenUser. The SID lives in an [arena] buffer. A
+/// too-small buffer is detected from ReturnLength, not the last error.
 Pointer<Void> _tokenUserSid(int token, Arena arena) {
   final needed = arena<Uint32>();
   var size = 256;
   for (var attempt = 0; attempt < 2; attempt++) {
     final buf = arena<Uint8>(size);
+    needed.value = 0;
     if (_getTokenInformation(token, _tokenUserClass, buf.cast(), size, needed) !=
         0) {
       // TOKEN_USER { SID_AND_ATTRIBUTES User { PSID Sid; DWORD Attributes } }
       return buf.cast<Pointer<Void>>().value;
     }
-    final err = _getLastError();
-    if (err != WinError.insufficientBuffer || needed.value <= size) {
-      throw WinPipeException('GetTokenInformation', err);
-    }
+    if (needed.value <= size) break; // not a size problem
     size = needed.value;
   }
-  throw const WinPipeException(
-      'GetTokenInformation', WinError.insufficientBuffer);
+  throw WinPipeException('GetTokenInformation', _getLastError());
 }
 
 String _sidToString(Pointer<Void> sid) {
@@ -374,6 +386,35 @@ T _withPipeSecurity<T>(
       _localFree(sd.value);
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Pipe names
+
+/// True when a pipe named [name] (`\\.\pipe\…`, case-insensitive) exists.
+/// Lists `\\.\pipe\` (FindFirstFile on the pipe namespace) and never opens
+/// or stats [name] itself, which would consume a listening instance.
+bool pipeExists(String name) {
+  if (name.length <= _pipePrefix.length ||
+      name.substring(0, _pipePrefix.length).toLowerCase() !=
+          _pipePrefix.toLowerCase()) {
+    return false;
+  }
+  final want = name.substring(_pipePrefix.length).toLowerCase();
+  try {
+    for (final e in Directory(_pipePrefix).listSync(followLinks: false)) {
+      final path = e.path;
+      final rest = path.length > _pipePrefix.length &&
+              path.substring(0, _pipePrefix.length).toLowerCase() ==
+                  _pipePrefix.toLowerCase()
+          ? path.substring(_pipePrefix.length)
+          : path.substring(path.lastIndexOf('\\') + 1);
+      if (rest.toLowerCase() == want) return true;
+    }
+  } on FileSystemException {
+    return false;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -427,15 +468,10 @@ enum PipeIoEnd {
   failed,
 }
 
-bool _isClosedCode(int code) =>
-    code == WinError.brokenPipe ||
-    code == WinError.pipeNotConnected ||
-    code == WinError.noData ||
-    code == WinError.handleEof;
-
-/// One OVERLAPPED + event for a sequence of operations on [pipe]. Every
-/// operation is waited for (or cancelled and waited for) before [run]
-/// returns, so the structure is never freed under a pending I/O.
+/// One IO_STATUS_BLOCK (in an OVERLAPPED) + event for a sequence of
+/// operations on [pipe]. Every operation is finished, or cancelled and
+/// waited for, before [run] returns, so the structure is never freed or
+/// reused under a pending I/O.
 class _Io {
   _Io(this.pipe) {
     final ev = _createEventW(nullptr, 1, 0, nullptr);
@@ -449,65 +485,67 @@ class _Io {
 
   final int pipe;
   final Pointer<_Overlapped> ov = calloc<_Overlapped>();
-  final Pointer<Uint32> transferred = calloc<Uint32>();
   final Pointer<IntPtr> handles = calloc<IntPtr>(2);
 
-  void _reset() {
+  /// ByteOffset for NtReadFile/NtWriteFile: ignored by pipes, but passed the
+  /// way kernel32 does (a zero LARGE_INTEGER).
+  final Pointer<Int64> zeroOffset = calloc<Int64>();
+
+  int get event => ov.ref.hEvent;
+
+  /// Starts an operation with [start] (an Nt* call returning NTSTATUS) and
+  /// waits for it. Returns (done, bytes), (closed|failed, NTSTATUS) or
+  /// (timeout|stopped, 0). [timeoutMs] null waits forever.
+  (PipeIoEnd, int) run(int Function(Pointer<_Overlapped> iosb) start,
+      {required int? timeoutMs, int stopEvent = 0}) {
     ov.ref
       ..internal = 0
       ..internalHigh = 0
       ..offset = 0
       ..offsetHigh = 0;
-    _resetEvent(ov.ref.hEvent);
-  }
-
-  /// Starts an operation with [start] (ReadFile / WriteFile) and waits for
-  /// it. Returns (done, bytes), (failed, error), (timeout|stopped, 0).
-  (PipeIoEnd, int) run(int Function(Pointer<_Overlapped> ov) start,
-      {required int? timeoutMs, int stopEvent = 0}) {
-    _reset();
-    if (start(ov) == 0) {
-      final err = _getLastError();
-      if (err != WinError.ioPending) return (PipeIoEnd.failed, err);
+    _resetEvent(event);
+    final status = start(ov) & 0xFFFFFFFF;
+    if (status != NtStatus.pending) {
+      // Finished synchronously. On success the IO_STATUS_BLOCK holds the
+      // byte count; on an error it may be untouched, the return is the truth.
+      return _classify(status, ov.ref.internalHigh);
     }
-    return wait(timeoutMs: timeoutMs, stopEvent: stopEvent);
-  }
 
-  /// Waits for the pending operation. The stop event comes first in the
-  /// handle array so it wins when both are signalled.
-  (PipeIoEnd, int) wait({required int? timeoutMs, int stopEvent = 0}) {
+    // Pending. The stop event comes first in the array, so it wins when both
+    // are signalled.
     var n = 0;
     if (stopEvent != 0) handles[n++] = stopEvent;
     final ioIndex = n;
-    handles[n++] = ov.ref.hEvent;
-    final ms = timeoutMs == null
-        ? _infinite
-        : (timeoutMs < 0 ? 0 : timeoutMs);
+    handles[n++] = event;
+    final ms = timeoutMs == null ? _infinite : (timeoutMs < 0 ? 0 : timeoutMs);
     final w = _waitForMultipleObjects(n, handles, 0, ms);
     if (w == _waitObject0 + ioIndex) {
-      if (_getOverlappedResult(pipe, ov, transferred, 0) == 0) {
-        return (PipeIoEnd.failed, _getLastError());
-      }
-      return (PipeIoEnd.done, transferred.value);
+      return _classify(ov.ref.internal & 0xFFFFFFFF, ov.ref.internalHigh);
     }
-    // Timed out, stopped or the wait failed: cancel, then wait for the
-    // cancellation so the OVERLAPPED is idle again.
+    // Timed out, stopped, or the wait failed: cancel, then wait for the
+    // completion (STATUS_CANCELLED or a late result) so the block is idle.
     _cancelIoEx(pipe, ov);
-    _getOverlappedResultWait(pipe, ov, transferred, 1);
+    waitForEvent(event, timeoutMs: _infinite);
     if (w == _waitTimeout) return (PipeIoEnd.timeout, 0);
     if (stopEvent != 0 && w == _waitObject0) return (PipeIoEnd.stopped, 0);
     return (PipeIoEnd.failed, 0);
   }
 
+  static (PipeIoEnd, int) _classify(int status, int information) {
+    if (status == NtStatus.success) return (PipeIoEnd.done, information);
+    if (_isClosedStatus(status)) return (PipeIoEnd.closed, status);
+    return (PipeIoEnd.failed, status);
+  }
+
   void dispose() {
-    _closeHandle(ov.ref.hEvent);
+    _closeHandle(event);
     _free();
   }
 
   void _free() {
     calloc.free(ov);
-    calloc.free(transferred);
     calloc.free(handles);
+    calloc.free(zeroOffset);
   }
 }
 
@@ -516,9 +554,9 @@ class _Io {
 
 /// Creates one server instance of pipe [name]: duplex, overlapped, byte
 /// mode, remote clients rejected, DACL from [pipeSddlForSid]([sid]). [first]
-/// adds FILE_FLAG_FIRST_PIPE_INSTANCE: it then fails with ERROR_ACCESS_DENIED
-/// when the name already exists (another instance or another user's pipe).
-/// Throws [WinPipeException].
+/// adds FILE_FLAG_FIRST_PIPE_INSTANCE, so it fails when the name already
+/// exists (another instance, or another user's pipe); tell that case apart
+/// with [pipeExists]. Throws [WinPipeException] on failure.
 int createPipeServerInstance(String name,
     {required String sid, required bool first}) {
   return _withPipeSecurity(sid, (sa) {
@@ -557,23 +595,26 @@ enum PipeConnect {
 PipeConnect waitForPipeClient(int pipe, {required int stopEvent}) {
   final io = _Io(pipe);
   try {
-    io._reset();
-    if (_connectNamedPipe(pipe, io.ov) != 0) return PipeConnect.connected;
-    final err = _getLastError();
-    if (err == WinError.pipeConnected) return PipeConnect.connected;
-    if (err == WinError.noData) return PipeConnect.clientGone;
-    if (err != WinError.ioPending) {
-      throw WinPipeException('ConnectNamedPipe', err);
-    }
-    final (end, code) = io.wait(timeoutMs: null, stopEvent: stopEvent);
+    final (end, status) = io.run(
+        (iosb) => _ntFsControlFile(pipe, io.event, nullptr, nullptr, iosb,
+            _fsctlPipeListen, nullptr, 0, nullptr, 0),
+        timeoutMs: null,
+        stopEvent: stopEvent);
     switch (end) {
       case PipeIoEnd.done:
         return PipeConnect.connected;
       case PipeIoEnd.stopped:
         return PipeConnect.stopped;
       default:
-        if (code == WinError.noData) return PipeConnect.clientGone;
-        throw WinPipeException('ConnectNamedPipe', code);
+        // A client that connected between create and listen.
+        if (status == NtStatus.pipeConnected) return PipeConnect.connected;
+        // Connected and already closed its end.
+        if (status == NtStatus.pipeClosing) return PipeConnect.clientGone;
+        // Anything else: a client is attached iff it has a process id.
+        if (_peerPid(pipe, _getNamedPipeClientProcessId) != null) {
+          return PipeConnect.connected;
+        }
+        throw WinPipeException('NtFsControlFile(FSCTL_PIPE_LISTEN)', status);
     }
   } finally {
     io.dispose();
@@ -582,31 +623,37 @@ PipeConnect waitForPipeClient(int pipe, {required int stopEvent}) {
 
 void disconnectPipe(int pipe) => _disconnectNamedPipe(pipe);
 
-bool _peerIsCurrentUser(
-    int pipe, int Function(int pipe, Pointer<Uint32> pid) peerPid) {
+int? _peerPid(int pipe, int Function(int pipe, Pointer<Uint32> pid) peerPid) {
   final pid = calloc<Uint32>();
   try {
-    if (peerPid(pipe, pid) == 0) return false;
-    return processRunsAsCurrentUser(pid.value);
+    return peerPid(pipe, pid) == 0 ? null : pid.value;
   } finally {
     calloc.free(pid);
   }
 }
 
 /// Server side: the connected client process runs as our user.
-bool pipeClientIsCurrentUser(int pipe) =>
-    _peerIsCurrentUser(pipe, _getNamedPipeClientProcessId);
+bool pipeClientIsCurrentUser(int pipe) {
+  final pid = _peerPid(pipe, _getNamedPipeClientProcessId);
+  return pid != null && processRunsAsCurrentUser(pid);
+}
 
 /// Client side: the server process of [pipe] runs as our user.
-bool pipeServerIsCurrentUser(int pipe) =>
-    _peerIsCurrentUser(pipe, _getNamedPipeServerProcessId);
+bool pipeServerIsCurrentUser(int pipe) {
+  final pid = _peerPid(pipe, _getNamedPipeServerProcessId);
+  return pid != null && processRunsAsCurrentUser(pid);
+}
 
-/// Reads one request on a connected server [pipe]: the client must run as
-/// our user, and a UTF-8 line must arrive within [timeoutMs] and
-/// [maxBytes]. Null means drop the client without a reply.
+/// Reads one request on a connected server [pipe]: [peerCheck] (the client
+/// must run as our user) passes before anything is read, then a UTF-8 line
+/// must arrive within [timeoutMs] and [maxBytes]. Null means drop the
+/// client without a reply.
 String? serveReadRequest(int pipe,
-    {required int stopEvent, required int timeoutMs, required int maxBytes}) {
-  if (!pipeClientIsCurrentUser(pipe)) return null;
+    {required int stopEvent,
+    required int timeoutMs,
+    required int maxBytes,
+    bool Function(int pipe) peerCheck = pipeClientIsCurrentUser}) {
+  if (!peerCheck(pipe)) return null;
   final r = readPipeLine(pipe,
       timeoutMs: timeoutMs, maxBytes: maxBytes, stopEvent: stopEvent);
   if (r.end != PipeIoEnd.newline) return null;
@@ -631,11 +678,11 @@ void serveWriteResponse(int pipe, List<int> bytes,
 // ---------------------------------------------------------------------------
 // Client side
 
-/// Opens the client end of pipe [name] (read/write, overlapped). SQOS
-/// identification level: a server can identify us but never impersonate us.
-/// Throws [WinPipeException] (ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY,
-/// ERROR_ACCESS_DENIED, ...).
-int openPipeClient(String name) => using((arena) {
+/// Opens the client end of pipe [name] (read/write, overlapped), or null when
+/// CreateFileW fails (missing, busy or denied: use [pipeExists] and
+/// [waitPipeAvailable] to tell them apart). SQOS identification level: a
+/// server can identify us but never impersonate us.
+int? tryOpenPipeClient(String name) => using((arena) {
       final h = _createFileW(
         name.toNativeUtf16(allocator: arena),
         _genericRead | _genericWrite,
@@ -645,14 +692,18 @@ int openPipeClient(String name) => using((arena) {
         _fileFlagOverlapped | _securitySqosPresent | _securityIdentification,
         0,
       );
-      if (h == _invalidHandleValue) {
-        throw WinPipeException('CreateFileW', _getLastError());
-      }
-      return h;
+      return h == _invalidHandleValue ? null : h;
     });
 
+/// Like [tryOpenPipeClient] but throws [WinPipeException] on failure.
+int openPipeClient(String name) {
+  final h = tryOpenPipeClient(name);
+  if (h == null) throw WinPipeException('CreateFileW', _getLastError());
+  return h;
+}
+
 /// Waits up to [timeoutMs] for a free instance of pipe [name]. The result is
-/// advisory; [openPipeClient] decides.
+/// advisory; opening decides.
 bool waitPipeAvailable(String name, {required int timeoutMs}) =>
     using((arena) => _waitNamedPipeW(
             name.toNativeUtf16(allocator: arena), timeoutMs < 1 ? 1 : timeoutMs) !=
@@ -663,14 +714,14 @@ bool waitPipeAvailable(String name, {required int timeoutMs}) =>
 
 /// A line read by [readPipeLine].
 class PipeRead {
-  const PipeRead(this.bytes, this.end, [this.error = 0]);
+  const PipeRead(this.bytes, this.end, [this.status = 0]);
 
   /// The bytes before the newline (or everything read, if none came).
   final Uint8List bytes;
   final PipeIoEnd end;
 
-  /// The Win32 error for [PipeIoEnd.failed].
-  final int error;
+  /// The NTSTATUS for [PipeIoEnd.closed] / [PipeIoEnd.failed].
+  final int status;
 }
 
 /// Reads until a newline, close, more than [maxBytes] before the newline,
@@ -685,24 +736,24 @@ PipeRead readPipeLine(int pipe,
     while (true) {
       final left = timeoutMs - sw.elapsedMilliseconds;
       if (left <= 0) return PipeRead(out.takeBytes(), PipeIoEnd.timeout);
-      final (end, n) = io.run(
-          (ov) => _readFile(pipe, buf, _chunk, nullptr, ov),
+      final (end, v) = io.run(
+          (iosb) => _ntReadFile(pipe, io.event, nullptr, nullptr, iosb, buf,
+              _chunk, io.zeroOffset, nullptr),
           timeoutMs: left,
           stopEvent: stopEvent);
       switch (end) {
         case PipeIoEnd.done:
-          final chunk = buf.asTypedList(n);
+          final chunk = buf.asTypedList(v);
           final nl = chunk.indexOf(0x0A);
-          final lineBytes = nl < 0 ? n : nl;
+          final lineBytes = nl < 0 ? v : nl;
           if (out.length + lineBytes > maxBytes) {
             return PipeRead(Uint8List(0), PipeIoEnd.tooLong);
           }
-          out.add(Uint8List.fromList(chunk.sublist(0, lineBytes)));
+          out.add(chunk.sublist(0, lineBytes)); // sublist copies
           if (nl >= 0) return PipeRead(out.takeBytes(), PipeIoEnd.newline);
+        case PipeIoEnd.closed:
         case PipeIoEnd.failed:
-          return _isClosedCode(n)
-              ? PipeRead(out.takeBytes(), PipeIoEnd.closed)
-              : PipeRead(out.takeBytes(), PipeIoEnd.failed, n);
+          return PipeRead(out.takeBytes(), end, v);
         default:
           return PipeRead(out.takeBytes(), end);
       }
@@ -727,18 +778,13 @@ PipeIoEnd writePipeAll(int pipe, List<int> data,
     while (off < data.length) {
       final left = timeoutMs - sw.elapsedMilliseconds;
       if (left <= 0) return PipeIoEnd.timeout;
-      final (end, n) = io.run(
-          (ov) => _writeFile(pipe, buf + off, data.length - off, nullptr, ov),
+      final (end, v) = io.run(
+          (iosb) => _ntWriteFile(pipe, io.event, nullptr, nullptr, iosb,
+              buf + off, data.length - off, io.zeroOffset, nullptr),
           timeoutMs: left,
           stopEvent: stopEvent);
-      switch (end) {
-        case PipeIoEnd.done:
-          off += n;
-        case PipeIoEnd.failed:
-          return _isClosedCode(n) ? PipeIoEnd.closed : PipeIoEnd.failed;
-        default:
-          return end;
-      }
+      if (end != PipeIoEnd.done) return end;
+      off += v;
     }
     return PipeIoEnd.done;
   } finally {

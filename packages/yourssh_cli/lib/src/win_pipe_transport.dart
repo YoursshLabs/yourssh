@@ -1,11 +1,14 @@
 import 'dart:convert';
-import 'dart:io' show sleep;
 import 'dart:isolate';
 
 import '../client.dart';
 import '../endpoint.dart';
 import '../protocol.dart';
 import 'win_pipe.dart';
+
+/// Exit-4 message when the pipe cannot be opened although it exists.
+const String kPipeCannotOpen =
+    'cannot open the YourSSH pipe (access denied or busy)';
 
 /// Windows named-pipe transport. Same contract as [UnixSocketTransport]:
 /// only open-phase failures are [CliUnreachable] (and may be retried with a
@@ -19,56 +22,74 @@ class WindowsPipeTransport implements CliTransport {
     this.timeout = const Duration(seconds: 30),
     this.maxResponseBytes = kMaxResponseBytes,
     this.busyWait = const Duration(seconds: 2),
+    this.peerCheck = pipeServerIsCurrentUser,
   });
 
   /// Write + read deadline once the pipe is open.
   final Duration timeout;
   final int maxResponseBytes;
 
-  /// How long to wait for a free instance (ERROR_PIPE_BUSY).
+  /// How long to wait for a free instance when the pipe exists but cannot
+  /// be opened (WaitNamedPipeW).
   final Duration busyWait;
 
+  /// R22: the server process must run as our user. A seam for tests; must be
+  /// a top-level function (it is sent to the I/O isolate).
+  final bool Function(int pipe) peerCheck;
+
+  /// True when something serves the pipe. Throws [CliPermissionDenied] when
+  /// the server runs as another user.
   @override
   Future<bool> probe(CliEndpoint ep) async {
+    int? pipe;
     try {
-      closeWinHandle(openPipeClient(ep.address));
-      return true;
-    } on WinPipeException catch (e) {
-      return e.code == WinError.pipeBusy; // exists, every instance in use
+      pipe = tryOpenPipeClient(ep.address);
     } on Object {
-      return false;
+      return false; // not on Windows
+    }
+    if (pipe == null) return pipeExists(ep.address); // busy or denied
+    try {
+      if (!peerCheck(pipe)) throw CliPermissionDenied(kPipeOwnedByAnotherUser);
+      return true;
+    } finally {
+      closeWinHandle(pipe);
     }
   }
 
   @override
   Future<String> roundTrip(CliEndpoint ep, String requestLine) =>
       _roundTripInIsolate(ep.address, requestLine, timeout.inMilliseconds,
-          maxResponseBytes, busyWait.inMilliseconds);
+          maxResponseBytes, busyWait.inMilliseconds, peerCheck);
 }
 
 // Top-level so the closure captures only these sendable values.
-Future<String> _roundTripInIsolate(String address, String requestLine,
-        int timeoutMs, int maxResponseBytes, int busyWaitMs) =>
+Future<String> _roundTripInIsolate(
+        String address,
+        String requestLine,
+        int timeoutMs,
+        int maxResponseBytes,
+        int busyWaitMs,
+        bool Function(int pipe) peerCheck) =>
     Isolate.run(
         () => pipeRoundTrip(address, requestLine,
             timeoutMs: timeoutMs,
             maxResponseBytes: maxResponseBytes,
-            busyWaitMs: busyWaitMs),
+            busyWaitMs: busyWaitMs,
+            peerCheck: peerCheck),
         debugName: 'yourssh-pipe');
 
-/// Blocking request/response over pipe [address]: open, check that the
-/// server runs as our user, write the line, read one line back.
+/// Blocking request/response over pipe [address]: open, check the server
+/// with [peerCheck], write the line, read one line back.
 String pipeRoundTrip(String address, String requestLine,
     {required int timeoutMs,
     required int maxResponseBytes,
-    required int busyWaitMs}) {
-  final pipe = _open(address, busyWaitMs);
+    required int busyWaitMs,
+    bool Function(int pipe) peerCheck = pipeServerIsCurrentUser}) {
+  final pipe = openPipeForClient(address, busyWaitMs: busyWaitMs);
   try {
     // R22: the pipe namespace is global and another user could have taken
     // the name first. Check the server before the token leaves this process.
-    if (!pipeServerIsCurrentUser(pipe)) {
-      throw CliPermissionDenied(kPipeOwnedByAnotherUser);
-    }
+    if (!peerCheck(pipe)) throw CliPermissionDenied(kPipeOwnedByAnotherUser);
     final sw = Stopwatch()..start();
     switch (writePipeAll(pipe, utf8.encode('$requestLine\n'),
         timeoutMs: timeoutMs)) {
@@ -100,28 +121,19 @@ String pipeRoundTrip(String address, String requestLine,
   }
 }
 
-/// Open phase: missing pipe → unreachable, access denied → denied, all
-/// instances busy → wait up to [busyWaitMs], then a 2 s-style timeout.
-int _open(String address, int busyWaitMs) {
-  final sw = Stopwatch()..start();
-  while (true) {
-    try {
-      return openPipeClient(address);
-    } on WinPipeException catch (e) {
-      switch (e.code) {
-        case WinError.fileNotFound:
-          throw CliUnreachable('pipe not found');
-        case WinError.accessDenied:
-          throw CliPermissionDenied('permission denied on the YourSSH pipe');
-        case WinError.pipeBusy:
-          final left = busyWaitMs - sw.elapsedMilliseconds;
-          if (left <= 0) throw CliTimeout(busyWaitMs ~/ 1000);
-          if (!waitPipeAvailable(address, timeoutMs: left)) {
-            sleep(const Duration(milliseconds: 10));
-          }
-        default:
-          rethrow;
-      }
-    }
-  }
+/// Open phase (R25: decided by listing `\\.\pipe\`, not by the last error):
+/// - opens → the handle;
+/// - not listed → [CliUnreachable] (launch and retry);
+/// - listed → WaitNamedPipeW up to [busyWaitMs], one more try; still
+///   failing → [CliPermissionDenied] (exit 4), unless the name vanished
+///   meanwhile (→ unreachable).
+int openPipeForClient(String address, {required int busyWaitMs}) {
+  final first = tryOpenPipeClient(address);
+  if (first != null) return first;
+  if (!pipeExists(address)) throw CliUnreachable('pipe not found');
+  waitPipeAvailable(address, timeoutMs: busyWaitMs);
+  final second = tryOpenPipeClient(address);
+  if (second != null) return second;
+  if (!pipeExists(address)) throw CliUnreachable('pipe not found');
+  throw CliPermissionDenied(kPipeCannotOpen);
 }

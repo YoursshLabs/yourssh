@@ -6,5 +6,5 @@ export 'endpoint.dart';
 export 'output.dart';
 export 'protocol.dart';
 export 'src/win_pipe.dart' show currentUserSid;
-export 'src/win_pipe_transport.dart' show WindowsPipeTransport;
+export 'src/win_pipe_transport.dart' show WindowsPipeTransport, kPipeCannotOpen;
 export 'uid.dart';

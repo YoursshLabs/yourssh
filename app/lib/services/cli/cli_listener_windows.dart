@@ -63,12 +63,11 @@ class WindowsPipeCliListener implements CliListener {
     int first;
     try {
       first = createPipeServerInstance(_ep.address, sid: sid, first: true);
-    } on WinPipeException catch (e) {
-      // FILE_FLAG_FIRST_PIPE_INSTANCE: the name exists (another instance,
-      // or another user's pipe squatting it).
-      if (e.code == WinError.accessDenied || e.code == WinError.pipeBusy) {
-        throw CliEndpointInUse(_ep.address);
-      }
+    } on WinPipeException {
+      // FILE_FLAG_FIRST_PIPE_INSTANCE fails when the name exists (another
+      // instance, or another user's pipe squatting it). R25: decided by
+      // listing \\.\pipe\, never by the last error.
+      if (pipeExists(_ep.address)) throw CliEndpointInUse(_ep.address);
       rethrow;
     }
     int stop;

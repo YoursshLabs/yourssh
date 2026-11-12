@@ -4,3 +4,4 @@
 library;
 
 export 'src/win_pipe.dart';
+export 'src/win_pipe_transport.dart' show openPipeForClient, pipeRoundTrip;

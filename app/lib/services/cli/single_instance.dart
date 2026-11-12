@@ -111,12 +111,14 @@ Future<_Attempt> _tryOnceWindows(
   final transport = WindowsPipeTransport(
       timeout: const Duration(seconds: 5),
       busyWait: const Duration(seconds: 1));
-  final token = await readToken(ep.tokenPath);
-  if (token == null) {
-    // Something answers but has not written its token yet: still starting.
-    return await transport.probe(ep) ? _Attempt.retry : _Attempt.noInstance;
-  }
+  // Everything inside the try: forwardToRunningInstance must never throw
+  // (probe throws CliPermissionDenied for a pipe owned by another user).
   try {
+    final token = await readToken(ep.tokenPath);
+    if (token == null) {
+      // Something answers but has not written its token yet: still starting.
+      return await transport.probe(ep) ? _Attempt.retry : _Attempt.noInstance;
+    }
     final line = await transport.roundTrip(
         ep,
         CliRequest(id: 'fwd', token: token, cmd: req.cmd, args: req.args)
@@ -194,9 +196,12 @@ class CliEndpointOwner {
   final _InstanceLock _lock;
   bool _stopped = false;
 
-  /// Best effort and idempotent. Files are removed and the lock released
-  /// synchronously (before the first await) so a closing process gets them
-  /// done even if it exits right after.
+  /// Best effort and idempotent. Files are removed synchronously (before the
+  /// first await) so a closing process gets them done even if it exits right
+  /// after. macOS/Linux release the lock then too. On Windows the lock is
+  /// released only after the listener has closed every pipe instance:
+  /// a relaunch in between would take the lock and then fail its FIRST
+  /// instance with CliEndpointInUse (the OS drops the lock at exit anyway).
   Future<void> stop() async {
     if (_stopped) return;
     _stopped = true;
@@ -208,11 +213,13 @@ class CliEndpointOwner {
         // Already gone.
       }
     }
-    _lock.release();
+    if (!Platform.isWindows) _lock.release();
     try {
       await _listener.stop();
     } catch (e) {
       debugPrint('single_instance: stop failed: $e');
+    } finally {
+      if (Platform.isWindows) _lock.release();
     }
   }
 }
