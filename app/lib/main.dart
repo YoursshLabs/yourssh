@@ -135,8 +135,7 @@ void main(List<String> args) async {
   // A second launch hands its request (open URL / just focus) to the running
   // instance and exits. Fail-soft: never keep the app from starting.
   try {
-    final ep = resolveCliEndpoint();
-    if (ep != null && await forwardToRunningInstance(args, ep)) exit(0);
+    if (await forwardToRunningInstance(args, resolveCliEndpoint())) exit(0);
   } catch (e) {
     debugPrint('[main] single-instance forward failed: $e');
   }
@@ -546,7 +545,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   }
 
   /// Opens the local CLI endpoint after the first frame. Never blocks or
-  /// crashes start-up: failures (and Windows, for now) just mean no CLI.
+  /// crashes start-up: a failure just means no CLI.
   Future<void> _startCliEndpoint() async {
     try {
       final handlers = AppCliHandlers(
@@ -559,8 +558,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         appVersion: kAppVersion,
       );
       // yourssh:// URLs: macOS events over the `yourssh/url` channel and
-      // this launch's own argv (cold start; no endpoint needed, so Windows
-      // works too). Opens wait until the saved hosts are loaded.
+      // this launch's own argv (cold start; works even when the endpoint
+      // fails to start). Opens wait until the saved hosts are loaded.
       final urls = UrlChannel(
         server: CliServer(handlers: handlers, token: generateToken()),
         ready: Future.wait<void>([
@@ -570,20 +569,16 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         ]),
       );
       try {
-        final ep = resolveCliEndpoint();
-        if (ep != null) {
-          final owner = await startCliEndpoint(ep, handlers, _launchArgs);
-          if (owner == null) {
-            exit(0); // another instance owns the endpoint and got the request
-          }
-          if (!mounted) {
-            await owner.stop();
-          } else {
-            _cliOwner = owner;
-          }
+        final owner = await startCliEndpoint(
+            resolveCliEndpoint(), handlers, _launchArgs);
+        if (owner == null) {
+          exit(0); // another instance owns the endpoint and got the request
         }
-      } on UnsupportedError catch (e) {
-        debugPrint('[main] CLI endpoint unsupported here: $e');
+        if (!mounted) {
+          await owner.stop();
+        } else {
+          _cliOwner = owner;
+        }
       } catch (e) {
         debugPrint('[main] CLI endpoint failed to start: $e');
       }
@@ -591,8 +586,6 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
       // process stays alive (a lost single-instance race exits above).
       urls.attach();
       unawaited(urls.openLaunchUrl(_launchArgs));
-    } on UnsupportedError catch (e) {
-      debugPrint('[main] CLI endpoint unsupported here: $e');
     } catch (e) {
       debugPrint('[main] CLI endpoint failed to start: $e');
     }

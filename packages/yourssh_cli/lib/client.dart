@@ -4,6 +4,8 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:path/path.dart' as p;
+
 import 'endpoint.dart';
 import 'output.dart';
 import 'protocol.dart';
@@ -23,8 +25,19 @@ class CliUnreachable implements Exception {
 /// may have been delivered, so it is never resent.
 class CliConnectionLost implements Exception {}
 
-/// connect() was refused with EACCES.
-class CliPermissionDenied implements Exception {}
+/// The endpoint refused us: EACCES on the socket, ERROR_ACCESS_DENIED on the
+/// pipe, or (Windows) the pipe's server runs as another user.
+class CliPermissionDenied implements Exception {
+  CliPermissionDenied(
+      [this.message = 'permission denied on the YourSSH socket']);
+  final String message;
+  @override
+  String toString() => 'CliPermissionDenied: $message';
+}
+
+/// Exit-4 message when the pipe's server process is not ours (R22).
+const String kPipeOwnedByAnotherUser =
+    'the YourSSH pipe is owned by another user';
 
 /// No complete response within the transport timeout.
 class CliTimeout implements Exception {
@@ -202,8 +215,8 @@ Future<int> runCli(
     err.writeln('yourssh: cannot read the YourSSH token file '
         '(${sanitize(e.path)}): ${sanitize(e.reason)}');
     return CliExit.denied.code;
-  } on CliPermissionDenied {
-    err.writeln('yourssh: permission denied on the YourSSH socket');
+  } on CliPermissionDenied catch (e) {
+    err.writeln('yourssh: ${sanitize(e.message)}');
     return CliExit.denied.code;
   } on CliConnectionLost {
     err.writeln('yourssh: lost connection to YourSSH');
@@ -285,7 +298,7 @@ class UnixSocketTransport implements CliTransport {
 
   Future<Socket> _connect(CliEndpoint ep) async {
     if (Platform.isWindows) {
-      throw CliUnreachable('Windows support arrives in a later build');
+      throw CliUnreachable('no Unix sockets on Windows (WindowsPipeTransport)');
     }
     try {
       return await Socket.connect(
@@ -455,12 +468,62 @@ class LinuxAppLauncher implements AppLauncher {
   }
 }
 
-/// Starts the app: `open -b` on macOS, [LinuxAppLauncher] on Linux.
+/// Windows: starts the `.exe` recorded in `<runDir>\app.path` (written by
+/// the app on start). The run dir is per user under %LOCALAPPDATA%, so there
+/// are no owner/mode checks (R24); the recorded path must be an absolute
+/// drive path to an existing `.exe` with no control or reserved characters
+/// (no UNC/device paths, no `:stream` suffix).
+class WindowsAppLauncher implements AppLauncher {
+  WindowsAppLauncher({
+    PathInspector? inspector,
+    Future<String> Function(String path)? read,
+    Future<void> Function(String path)? spawn,
+  })  : inspector = inspector ?? SystemPathInspector(),
+        read = read ?? ((path) => File(path).readAsString()),
+        spawn = spawn ?? _spawnDetached;
+
+  final PathInspector inspector;
+  final Future<String> Function(String path) read;
+  final Future<void> Function(String path) spawn;
+
+  static const _hint = 'start YourSSH once from the Start menu';
+
+  static final _exePath =
+      RegExp(r'^[A-Za-z]:\\[^\x00-\x1f\x7f-\x9f"*?<>|:]*\.exe$', caseSensitive: false);
+
+  static Future<void> _spawnDetached(String path) async {
+    await Process.start(path, const [], mode: ProcessStartMode.detached);
+  }
+
+  @override
+  Future<void> launch(CliEndpoint ep) async {
+    String path;
+    try {
+      path = (await read(p.windows.join(ep.runDir, 'app.path'))).trim();
+    } on FileSystemException {
+      path = '';
+    } on FormatException {
+      path = '';
+    }
+    if (!_exePath.hasMatch(path) || !await inspector.isExistingRegularFile(path)) {
+      throw CliUnreachable('$_hint (the recorded app path is missing or not usable)');
+    }
+    try {
+      await spawn(path);
+    } on ProcessException catch (e) {
+      throw CliUnreachable('cannot start YourSSH: ${e.message}');
+    }
+  }
+}
+
+/// Starts the app: `open -b` on macOS, [LinuxAppLauncher] on Linux,
+/// [WindowsAppLauncher] on Windows.
 class SystemAppLauncher implements AppLauncher {
   @override
   Future<void> launch(CliEndpoint ep) async {
     if (Platform.isWindows) {
-      throw CliUnreachable('Windows support arrives in a later build');
+      await WindowsAppLauncher().launch(ep);
+      return;
     }
     if (Platform.isMacOS) {
       await Process.run('open', ['-b', 'com.thangnm.yourssh']);

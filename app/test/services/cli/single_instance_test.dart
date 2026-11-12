@@ -192,4 +192,117 @@ void main() {
         FileSystemEntityType.notFound);
     expect(File(ep.tokenPath).existsSync(), isFalse);
   });
+
+  test('lock-busy error codes per platform', () {
+    // Windows LockFileEx: ERROR_LOCK_VIOLATION.
+    expect(isLockBusyError(33, windows: true), isTrue);
+    expect(isLockBusyError(11, windows: true), isFalse);
+    expect(isLockBusyError(13, windows: true), isFalse);
+    // POSIX fcntl: EACCES / EAGAIN (Linux 11, macOS 35).
+    for (final c in [11, 13, 35]) {
+      expect(isLockBusyError(c, windows: false), isTrue, reason: '$c');
+    }
+    expect(isLockBusyError(33, windows: false), isFalse);
+    expect(isLockBusyError(null, windows: false), isFalse);
+    expect(isLockBusyError(null, windows: true), isFalse);
+  });
+
+  test('every desktop OS resolves an endpoint (Windows: per-SID pipe)', () {
+    final ep = resolveCliEndpoint();
+    if (Platform.isWindows) {
+      expect(ep.address, startsWith(r'\\.\pipe\yourssh-cli-S-1-'));
+      expect(ep.runDir, endsWith(r'\YourSSH\run'));
+    } else {
+      expect(ep.address, endsWith('/cli.sock'));
+    }
+  });
+
+  group('Windows', skip: Platform.isWindows ? null : 'Windows only', () {
+    late Directory wtmp;
+    late CliEndpoint wep;
+    final wowners = <CliEndpointOwner>[];
+
+    setUp(() {
+      wtmp = Directory.systemTemp.createTempSync('ys');
+      // Unique pipe name: never a running YourSSH's endpoint.
+      wep = CliEndpoint.resolve(
+        os: 'windows',
+        env: {'LOCALAPPDATA': wtmp.path},
+        home: wtmp.path,
+        userSid: 'test-$pid-${DateTime.now().microsecondsSinceEpoch}',
+      );
+    });
+
+    tearDown(() async {
+      for (final o in wowners) {
+        await o.stop();
+      }
+      wowners.clear();
+      wtmp.deleteSync(recursive: true);
+    });
+
+    test('owner writes token and app.path; a URL launch is forwarded',
+        () async {
+      final h = FakeHandlers([prod()]);
+      final o = await startCliEndpoint(wep, h, const []);
+      wowners.add(o!);
+      expect(File(wep.tokenPath).existsSync(), isTrue);
+      expect(File('${wep.runDir}/app.path').readAsStringSync(),
+          Platform.resolvedExecutable);
+
+      expect(await forwardToRunningInstance(['yourssh://connect/prod'], wep),
+          isTrue);
+      expect(h.calls, ['connect:prod:url']);
+
+      // Lock busy in-process: the loser forwards activate and starts nothing.
+      final h2 = FakeHandlers([prod()]);
+      expect(await startCliEndpoint(wep, h2, const []), isNull);
+      expect(h2.calls, isEmpty);
+      expect(h.calls, ['connect:prod:url', 'focus']);
+    });
+
+    test('nothing listening: forward returns false quickly', () async {
+      final sw = Stopwatch()..start();
+      expect(await forwardToRunningInstance(const [], wep), isFalse);
+      expect(sw.elapsed, lessThan(const Duration(seconds: 1)));
+    });
+
+    test('cleanup removes the token, frees the pipe and the lock', () async {
+      final o = await startCliEndpoint(wep, FakeHandlers([]), const []);
+      await o!.stop();
+      await o.stop();
+      expect(File(wep.tokenPath).existsSync(), isFalse);
+      expect(await forwardToRunningInstance(const [], wep), isFalse);
+      final again = await startCliEndpoint(wep, FakeHandlers([]), const []);
+      expect(again, isNotNull);
+      wowners.add(again!);
+    });
+
+    test('a cli.lock held by ANOTHER PROCESS is respected', () async {
+      Directory(wep.runDir).createSync(recursive: true);
+      final lockPath = '${wep.runDir}\\cli.lock';
+      final holder = await Process.start('powershell', [
+        '-NoProfile',
+        '-Command',
+        "\$f = [System.IO.File]::Open('$lockPath', 'OpenOrCreate', "
+            "'ReadWrite', 'ReadWrite'); \$f.Lock(0, 1); "
+            "Write-Output held; Start-Sleep -Seconds 60",
+      ]);
+      // Runs before the group tearDown deletes the dir: the file must be
+      // closed by then.
+      addTearDown(() async {
+        holder.kill();
+        await holder.exitCode;
+      });
+      await holder.stdout
+          .transform(utf8.decoder)
+          .firstWhere((s) => s.contains('held'));
+
+      final r = await startCliEndpoint(wep, FakeHandlers([]), const [],
+          forwardRetry: const Duration(milliseconds: 300));
+      expect(r, isNull);
+      expect(File(wep.tokenPath).existsSync(), isFalse);
+      expect(await WindowsPipeTransport().probe(wep), isFalse);
+    });
+  });
 }

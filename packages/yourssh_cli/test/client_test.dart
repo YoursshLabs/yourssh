@@ -168,6 +168,15 @@ void main() {
     expect(err.toString(), contains('permission denied on the YourSSH socket'));
   });
 
+  test('pipe owned by another user exits 4 with that message', () async {
+    final t = FakeTransport((r) => ok(r, {}))
+      ..failWith = CliPermissionDenied(kPipeOwnedByAnotherUser);
+    final l = FakeLauncher();
+    expect(await run(['ls'], t, l: l), 4);
+    expect(err.toString(), contains('the YourSSH pipe is owned by another user'));
+    expect(l.calls, 0);
+  });
+
   test('response timeout message', () async {
     final t = FakeTransport((r) => ok(r, {}))..failWith = CliTimeout(30);
     expect(await run(['ls'], t), 1);
@@ -264,6 +273,90 @@ void main() {
       final (e, spawned) = await attemptLaunch(good, targetOk: false);
       expect(e, isA<CliUnreachable>());
       expect(spawned, isEmpty);
+    });
+  });
+
+  group('WindowsAppLauncher guards', () {
+    final wep = CliEndpoint.resolve(
+        os: 'windows',
+        env: {'LOCALAPPDATA': r'C:\Users\a\AppData\Local'},
+        home: r'C:\Users\a',
+        userSid: 'S-1-5-21-1');
+    const appPathFile = r'C:\Users\a\AppData\Local\YourSSH\run\app.path';
+
+    Future<(Object?, List<String>, List<String>)> attemptLaunch(
+        String? content,
+        {bool targetOk = true,
+        Object? spawnError}) async {
+      final spawned = <String>[];
+      final read = <String>[];
+      final launcher = WindowsAppLauncher(
+        inspector: FakeInspector(const {}, targetOk),
+        read: (path) async {
+          read.add(path);
+          if (content == null) {
+            throw const PathNotFoundException(
+                appPathFile, OSError('not found', 2));
+          }
+          return content;
+        },
+        spawn: (p) async {
+          if (spawnError != null) throw spawnError;
+          spawned.add(p);
+        },
+      );
+      try {
+        await launcher.launch(wep);
+        return (null, spawned, read);
+      } catch (e) {
+        return (e, spawned, read);
+      }
+    }
+
+    test('launches the recorded .exe (trimmed, any case)', () async {
+      final (e, spawned, read) = await attemptLaunch(
+          'C:\\Program Files\\YourSSH\\YourSSH.EXE\r\n');
+      expect(e, isNull);
+      expect(spawned, [r'C:\Program Files\YourSSH\YourSSH.EXE']);
+      expect(read, [appPathFile]);
+    });
+
+    for (final c in <String, String?>{
+      'app.path missing': null,
+      'empty app.path': '  ',
+      'relative path': r'YourSSH\yourssh.exe',
+      'drive-relative path': r'C:yourssh.exe',
+      'root-relative path': r'\Program Files\YourSSH\yourssh.exe',
+      'UNC share': r'\\server\share\yourssh.exe',
+      'device path': r'\\?\C:\YourSSH\yourssh.exe',
+      'not an .exe': r'C:\Program Files\YourSSH\yourssh.bat',
+      'POSIX path': '/usr/bin/yourssh',
+      'control character': 'C:\\Program Files\\YourSSH\x07\\yourssh.exe',
+      'two lines': 'C:\\a\\a.exe\nC:\\b\\b.exe',
+    }.entries) {
+      test('refuses: ${c.key}', () async {
+        final (e, spawned, _) = await attemptLaunch(c.value);
+        expect(e, isA<CliUnreachable>());
+        expect((e as CliUnreachable).message,
+            contains('start YourSSH once from the Start menu'));
+        expect(spawned, isEmpty);
+      });
+    }
+
+    test('refuses a target that is not an existing regular file', () async {
+      final (e, spawned, _) = await attemptLaunch(
+          r'C:\Program Files\YourSSH\yourssh.exe',
+          targetOk: false);
+      expect(e, isA<CliUnreachable>());
+      expect(spawned, isEmpty);
+    });
+
+    test('a spawn failure is unreachable', () async {
+      final (e, _, _) = await attemptLaunch(
+          r'C:\Program Files\YourSSH\yourssh.exe',
+          spawnError: const ProcessException('yourssh.exe', [], 'denied', 5));
+      expect(e, isA<CliUnreachable>());
+      expect((e as CliUnreachable).message, contains('cannot start YourSSH'));
     });
   });
 
@@ -410,6 +503,12 @@ void main() {
 }
 
 void unixTransportTests() {
+  group('UnixSocketTransport',
+      skip: Platform.isWindows ? 'unix sockets only' : null,
+      _unixTransportTests);
+}
+
+void _unixTransportTests() {
   Future<(CliEndpoint, ServerSocket)> serve(
       void Function(Socket) onClient) async {
     final d = await Directory.systemTemp.createTemp('ys');

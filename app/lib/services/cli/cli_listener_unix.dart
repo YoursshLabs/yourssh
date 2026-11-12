@@ -10,8 +10,6 @@ import 'cli_listener.dart';
 import 'cli_server.dart';
 import 'peer_cred.dart';
 
-const Duration kCliReadTimeout = Duration(seconds: 5);
-
 class UnixCliListener implements CliListener {
   UnixCliListener(this._ep, this._server);
 

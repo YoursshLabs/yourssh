@@ -5,4 +5,6 @@ export 'client.dart';
 export 'endpoint.dart';
 export 'output.dart';
 export 'protocol.dart';
+export 'src/win_pipe.dart' show currentUserSid;
+export 'src/win_pipe_transport.dart' show WindowsPipeTransport;
 export 'uid.dart';

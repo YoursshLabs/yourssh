@@ -9,14 +9,23 @@ import 'cli_handlers.dart';
 import 'cli_listener.dart';
 import 'cli_server.dart';
 
-/// The CLI endpoint for this machine, or null where it is not supported yet
-/// (Windows named pipes arrive in a later task).
-CliEndpoint? resolveCliEndpoint() {
-  if (Platform.isWindows) return null;
+/// The CLI endpoint for this machine. Uses the same resolve() arguments as
+/// the `yourssh` CLI (R10): the uid on macOS/Linux, the user SID on Windows
+/// (`%LOCALAPPDATA%\YourSSH\run`, `\\.\pipe\yourssh-cli-<SID>`).
+CliEndpoint resolveCliEndpoint() {
+  final env = Platform.environment;
+  if (Platform.isWindows) {
+    return CliEndpoint.resolve(
+      os: 'windows',
+      env: env,
+      home: env['USERPROFILE'] ?? '',
+      userSid: currentUserSid(),
+    );
+  }
   return CliEndpoint.resolve(
     os: Platform.isMacOS ? 'macos' : 'linux',
-    env: Platform.environment,
-    home: Platform.environment['HOME'] ?? '',
+    env: env,
+    home: env['HOME'] ?? '',
     uid: currentUid(),
   );
 }
@@ -44,7 +53,6 @@ CliEndpoint? resolveCliEndpoint() {
 Future<bool> forwardToRunningInstance(List<String> args, CliEndpoint ep,
     {Duration deadline = const Duration(seconds: 3),
     bool retryUnreachable = false}) async {
-  if (Platform.isWindows) return false;
   final req = requestForArgs(args);
   final end = DateTime.now().add(deadline);
   while (true) {
@@ -60,6 +68,7 @@ enum _Attempt { answered, noInstance, retry }
 
 Future<_Attempt> _tryOnce(
     ({String cmd, Map<String, Object?> args}) req, CliEndpoint ep) async {
+  if (Platform.isWindows) return _tryOnceWindows(req, ep);
   Socket socket;
   try {
     socket = await Socket.connect(
@@ -93,9 +102,45 @@ Future<_Attempt> _tryOnce(
   }
 }
 
+/// Windows: the shared pipe client, which checks that the pipe's server runs
+/// as our user before the token is sent (R22). A pipe owned by someone else
+/// counts as no instance: our own start then fails with CliEndpointInUse and
+/// the app runs without the CLI.
+Future<_Attempt> _tryOnceWindows(
+    ({String cmd, Map<String, Object?> args}) req, CliEndpoint ep) async {
+  final transport = WindowsPipeTransport(
+      timeout: const Duration(seconds: 5),
+      busyWait: const Duration(seconds: 1));
+  final token = await readToken(ep.tokenPath);
+  if (token == null) {
+    // Something answers but has not written its token yet: still starting.
+    return await transport.probe(ep) ? _Attempt.retry : _Attempt.noInstance;
+  }
+  try {
+    final line = await transport.roundTrip(
+        ep,
+        CliRequest(id: 'fwd', token: token, cmd: req.cmd, args: req.args)
+            .encode());
+    final resp = CliResponse.decode(line.trim());
+    if (!resp.ok && resp.code == CliExit.denied) return _Attempt.retry;
+    return _Attempt.answered;
+  } catch (e) {
+    debugPrint('single_instance: forward failed: $e');
+    return _Attempt.noInstance;
+  }
+}
+
+/// True when [code] (from RandomAccessFile.lock) means another holder:
+/// Windows LockFileEx ERROR_LOCK_VIOLATION (33); POSIX fcntl EACCES (13) or
+/// EAGAIN (11 Linux / 35 macOS).
+bool isLockBusyError(int? code, {required bool windows}) {
+  if (code == null) return false;
+  return windows ? code == 33 : (code == 13 || code == 11 || code == 35);
+}
+
 /// Paths whose lock this process holds. POSIX record locks (what dart:io
-/// uses) never conflict within one process, so in-process contention is
-/// tracked here.
+/// uses on macOS/Linux) never conflict within one process, so in-process
+/// contention is tracked here (Windows LockFileEx would also catch it).
 final Set<String> _heldLocks = {};
 
 /// Exclusive, non-blocking lock on `<runDir>/cli.lock`, held for the app's
@@ -109,14 +154,15 @@ class _InstanceLock {
   static Future<_InstanceLock?> tryAcquire(String runDir) async {
     final path = File('$runDir/cli.lock').absolute.path;
     if (_heldLocks.contains(path)) return null;
-    final file = await File(path).open(mode: FileMode.write);
+    // append: never truncates a file another process holds locked.
+    final file = await File(path).open(mode: FileMode.append);
     try {
       await file.lock(FileLock.exclusive);
     } on FileSystemException catch (e) {
       await file.close();
-      final code = e.osError?.errorCode;
-      // EACCES (13), EAGAIN (11 Linux / 35 macOS): somebody else holds it.
-      if (code == 13 || code == 11 || code == 35) return null;
+      if (isLockBusyError(e.osError?.errorCode, windows: Platform.isWindows)) {
+        return null; // somebody else holds it
+      }
       rethrow;
     }
     // Re-check: another start in this process may have won while we awaited.
@@ -154,7 +200,8 @@ class CliEndpointOwner {
   Future<void> stop() async {
     if (_stopped) return;
     _stopped = true;
-    for (final path in [_ep.address, _ep.tokenPath]) {
+    // A named pipe has no file to remove: it goes with its last handle.
+    for (final path in [if (!Platform.isWindows) _ep.address, _ep.tokenPath]) {
       try {
         File(path).deleteSync();
       } on FileSystemException {
@@ -180,7 +227,8 @@ class CliEndpointOwner {
 /// caller runs without the CLI).
 ///
 /// Lock holder order: token, then bind the socket (a stale socket file is
-/// replaced), then app.path (best effort).
+/// replaced) or create the named pipe, then app.path (best effort; the
+/// Windows and Linux CLIs start the app from it).
 Future<CliEndpointOwner?> startCliEndpoint(
     CliEndpoint ep, CliHandlers handlers, List<String> args,
     {Duration forwardRetry = const Duration(seconds: 5)}) async {
