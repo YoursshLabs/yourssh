@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:xterm/src/core/mouse/mode.dart';
 
 abstract class EscapeHandler {
@@ -212,4 +214,21 @@ abstract class EscapeHandler {
   void setIconName(String name);
 
   void unknownOSC(String code, List<String> args);
+}
+
+/// Optional bulk text entry point for an [EscapeHandler].
+///
+/// When the handler passed to [EscapeParser] also implements this interface,
+/// the parser hands over whole runs of code points that it would otherwise
+/// pass to [EscapeHandler.writeChar] one at a time (every code point >= 0x10
+/// except ESC), so the handler can write them in bulk.
+abstract class EscapeTextSink {
+  /// Must behave exactly like calling [EscapeHandler.writeChar] for each of
+  /// `runes[start]` .. `runes[end - 1]` in order.
+  void writeChars(Uint32List runes, int start, int end);
+
+  /// When [writeChars] throws: the index (into the `runes` it was given) of
+  /// the code point that was being written. The parser resumes after it on
+  /// the next write, as it would have after a throwing [writeChar].
+  int get writeCharsFailedAt;
 }
