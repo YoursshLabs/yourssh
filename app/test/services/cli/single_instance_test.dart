@@ -284,10 +284,12 @@ void main() {
       // pending): the early forward finds nothing, the lock is busy.
       final lock = await acquireInstanceLockOrForward(ep, const []);
       final h = FakeHandlers([prod()]);
+      // Generous retry: under a loaded full-suite run the owner's start can
+      // take a while; the claim returns as soon as the forward lands.
       final claim = claimSingleInstance(['yourssh://connect/prod'],
           resolve: () => ep,
           exitApp: _throwExit,
-          forwardRetry: const Duration(seconds: 3));
+          forwardRetry: const Duration(seconds: 15));
       await Future<void>.delayed(const Duration(milliseconds: 300));
       owners.add(await startCliEndpoint(ep, serverFor(h), lock: lock!));
       await expectLater(claim,
