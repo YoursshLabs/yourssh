@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/providers/key_provider.dart';
 import 'package:yourssh/services/key_gen_service.dart';
 import 'package:yourssh/widgets/keychain_screen.dart';
-import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../helpers/ys_test_app.dart';
 
