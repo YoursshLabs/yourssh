@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -148,5 +149,55 @@ void main() {
     await tester.pumpWidget(_host(engine, plugins));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Tab reaches the switch; Space and Enter toggle it', (
+    tester,
+  ) async {
+    final plugins = PluginProvider(plugins: [_FakePlugin('a.b', 'Alpha')]);
+    await tester.pumpWidget(_host(_engine([]), plugins));
+
+    // The row tile is not a focus stop: the first Tab lands on the switch.
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    final focused = FocusManager.instance.primaryFocus!;
+    final sw = focused.context!.findAncestorWidgetOfExactType<FSwitch>();
+    expect(sw?.key, const ValueKey('plugin-switch-a.b'));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(plugins.isEnabled('a.b'), isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(plugins.isEnabled('a.b'), isFalse);
+
+    // Only one stop in the row: a second Tab wraps back to the same switch.
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(focused));
+  });
+
+  testWidgets('Review and View logs are Tab-reachable and Enter-activated', (
+    tester,
+  ) async {
+    final engine = _engine([_m('dev.x', 'Scripty')]);
+    engine.setPendingConsent('x', _m('x', 'Newbie'), '/p/x');
+    engine.addLog('dev.x', 'hello log');
+    await tester.pumpWidget(_host(engine, PluginProvider(plugins: [])));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Install "Newbie"'), findsOneWidget);
+    await tester.tap(find.text('Deny'));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('hello log'), findsOneWidget);
   });
 }

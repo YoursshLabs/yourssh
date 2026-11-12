@@ -87,7 +87,7 @@ class _ScriptPluginPanelScreenState extends State<ScriptPluginPanelScreen> {
     if (_error != null) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(YsSpace.s5),
           child: Text(
             _error!,
             style: const TextStyle(color: YsColors.error, fontSize: 13),

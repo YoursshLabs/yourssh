@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 import '../models/ai_provider_config.dart';
@@ -231,7 +232,7 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
                         codeblockDecoration: BoxDecoration(
                           color: YsColors.background,
                           border: Border.all(color: YsColors.border),
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(YsRadius.control),
                         ),
                       ),
                     ),
@@ -246,6 +247,20 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
     );
   }
 
+  KeyEventResult _onInputKey(KeyEvent event, bool canSend) {
+    if (event.logicalKey != LogicalKeyboardKey.enter &&
+        event.logicalKey != LogicalKeyboardKey.numpadEnter) {
+      return KeyEventResult.ignored;
+    }
+    // Shift+Enter keeps the default newline; IME composition owns Enter.
+    if (HardwareKeyboard.instance.isShiftPressed ||
+        _controller.value.composing.isValid) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent && canSend) _send();
+    return KeyEventResult.handled;
+  }
+
   Widget _buildInput(AiChatProvider provider) {
     final canSend = provider.configured && !provider.loading;
     return Container(
@@ -256,13 +271,20 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
       child: Row(
         children: [
           Expanded(
-            child: FTextField(
-              key: const ValueKey('ai-chat-input'),
-              control: .managed(controller: _controller),
-              maxLines: 3,
-              minLines: 1,
-              hint: 'Ask a command question…',
-              onSubmit: (_) => canSend ? _send() : null,
+            // Enter sends, Shift+Enter inserts a newline. The Focus sits above
+            // the text field so it sees key events bubbling up from it.
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: (_, event) => _onInputKey(event, canSend),
+              child: FTextField(
+                key: const ValueKey('ai-chat-input'),
+                control: .managed(controller: _controller),
+                maxLines: 3,
+                minLines: 1,
+                hint: 'Ask a command question…',
+                onSubmit: (_) => canSend ? _send() : null,
+              ),
             ),
           ),
           const SizedBox(width: YsSpace.s2),

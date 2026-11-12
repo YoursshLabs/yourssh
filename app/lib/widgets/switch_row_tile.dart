@@ -3,8 +3,8 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Focus nodes for the tiles of [switchRowTile], one per switch key. A tile
 /// is built by a plain function (there is no State to own a node), and the
-/// keys are a small fixed set of constants, so the nodes are kept for the app
-/// lifetime. They never take focus: the switch inside is the row's only
+/// entries are bounded by the number of installed plugins and settings
+/// switches, and are never disposed. They never take focus: the switch inside is the row's only
 /// focus stop.
 final Map<Key, FocusNode> _tileFocusNodes = {};
 

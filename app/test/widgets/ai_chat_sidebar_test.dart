@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -135,12 +136,60 @@ void main() {
     expect(provider.messages, isEmpty);
   });
 
-  testWidgets('submit action (Enter) in the input sends', (tester) async {
+  testWidgets('Enter sends and clears the input', (tester) async {
     final provider = await pump(tester);
     await tester.enterText(_input, 'whoami');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 200));
     expect(provider.messages.first.content, 'whoami');
+    expect(tester.widget<EditableText>(_input).controller.text, '');
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('Shift+Enter does not send', (tester) async {
+    final provider = await pump(tester);
+    await tester.enterText(_input, 'line');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(provider.messages, isEmpty);
+    expect(tester.widget<EditableText>(_input).controller.text, 'line');
+  });
+
+  testWidgets('Enter while unconfigured does nothing', (tester) async {
+    final provider = await pump(tester, configured: false);
+    await tester.enterText(_input, 'x');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(provider.messages, isEmpty);
+    expect(tester.widget<EditableText>(_input).controller.text, 'x');
+  });
+
+  testWidgets('Enter while loading does nothing', (tester) async {
+    final gate = Completer<http.Response>();
+    final slow = MockClient((_) => gate.future);
+    final provider = AiChatProvider(client: slow);
+    await tester.runAsync(
+      () => provider.setProviderConfig(AiProvider.anthropic, apiKey: 'k'),
+    );
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: provider,
+        child: ysTestApp(AiChatSidebar(onClose: () {})),
+      ),
+    );
+    await tester.enterText(_input, 'first');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(provider.loading, isTrue);
+    await tester.enterText(_input, 'second');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(provider.messages.where((m) => m.role == 'user').length, 1);
+    expect(tester.widget<EditableText>(_input).controller.text, 'second');
+    gate.complete(http.Response(jsonEncode({'content': [{'text': 'ok'}]}), 200));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pumpAndSettle();
   });

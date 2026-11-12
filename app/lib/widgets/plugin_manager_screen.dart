@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
 import '../providers/plugin_engine_provider.dart';
 import '../providers/plugin_provider.dart';
 import 'plugin_consent_dialog.dart';
@@ -137,7 +138,7 @@ class PluginManagerScreen extends StatelessWidget {
     );
   }
 
-  FTile _builtInTile(PluginProvider pluginProvider, plugin) {
+  FTile _builtInTile(PluginProvider pluginProvider, YourSSHPlugin plugin) {
     final enabled = pluginProvider.isEnabled(plugin.id);
     return switchRowTile(
       key: ValueKey('plugin-switch-${plugin.id}'),
