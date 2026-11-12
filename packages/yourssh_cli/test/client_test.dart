@@ -600,6 +600,60 @@ void main() {
     expect(await i.lstat('${d.path}/missing'), isNull);
   });
 
+  group('stat lookup', () {
+    test('prefers /usr/bin/stat, then /bin/stat, then PATH', () async {
+      Future<bool> only(Set<String> have, String p) async => have.contains(p);
+      expect(
+          await resolveStatBinary(
+              exists: (p) => only({'/usr/bin/stat', '/bin/stat'}, p),
+              onPath: () async => '/nix/stat'),
+          '/usr/bin/stat');
+      expect(
+          await resolveStatBinary(
+              exists: (p) => only({'/bin/stat'}, p),
+              onPath: () async => '/nix/stat'),
+          '/bin/stat');
+      expect(
+          await resolveStatBinary(
+              exists: (p) => only({}, p), onPath: () async => '/nix/stat'),
+          '/nix/stat');
+      expect(
+          await resolveStatBinary(
+              exists: (p) => only({}, p), onPath: () async => null),
+          isNull);
+    });
+
+    test('no stat anywhere: fail closed with a clear message (exit 3)',
+        () async {
+      final i = SystemPathInspector(resolveStat: () async => null);
+      await expectLater(
+          i.lstat('/x'),
+          throwsA(isA<CliStatNotFound>().having((e) => e.toString(), 'text',
+              contains('cannot verify the YourSSH run directory (stat not found)'))));
+      final sep = CliEndpoint.resolve(
+          os: 'macos', env: {'TMPDIR': dir.path}, home: '/Users/${'x' * 60}');
+      final err = Sink();
+      final code = await runCli(['ls'],
+          transport: FakeTransport((r) => ok(r, {'hosts': []})),
+          launcher: FakeLauncher(),
+          endpoint: sep,
+          out: Sink(),
+          err: err,
+          isTty: false,
+          env: const {},
+          uid: 1000,
+          inspector: i);
+      expect(code, 3);
+      expect(err.toString(),
+          contains('cannot verify the YourSSH run directory (stat not found)'));
+    });
+
+    test('an injected resolver path is the one that is run', () async {
+      final i = SystemPathInspector(resolveStat: () async => 'stat');
+      expect(await i.lstat('/'), isNotNull);
+    }, skip: Platform.isWindows ? 'POSIX only' : null);
+  });
+
   group('shared-temp run dir is checked before the token is read', () {
     const ours = 1000;
     late CliEndpoint sep;

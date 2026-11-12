@@ -24,7 +24,7 @@ class CliServer {
     required String token,
     Future<void>? ready,
     this.now = DateTime.now,
-    this.readyTimeout = const Duration(seconds: 15),
+    this.readyTimeout = defaultReadyTimeout,
     this.onUrlRefused,
   })  : _token = token,
         _ready = ready ?? Future<void>.value() {
@@ -43,6 +43,9 @@ class CliServer {
   /// Called when an `open` names no saved host or has an unsupported shape
   /// (the app shows it in the notification bell).
   final void Function(String url, String reason)? onUrlRefused;
+
+  /// How long `ls`/`connect`/`open` wait for the providers by default.
+  static const defaultReadyTimeout = Duration(seconds: 15);
 
   /// A repeat of the same URL inside this window is dropped.
   static const dedupeWindow = Duration(seconds: 2);
@@ -73,11 +76,14 @@ class CliServer {
         return CliResponse.failure(req.id, CliExit.denied, 'denied').encode();
       }
       validateArgs(req.cmd, req.args);
-      if (req.cmd == 'open' && _isRepeatUrl(req.args['url'] as String)) {
-        return CliResponse.success(req.id, {'ignored': 'repeat'}).encode();
-      }
       if (const {'ls', 'connect', 'open'}.contains(req.cmd)) {
         await _waitReady();
+      }
+      // After the gate: a duplicate that arrived during a slow start sees
+      // the first request's key once the gate opens and is dropped, so a
+      // forwarder's retry of a timed-out `open` cannot open a second tab.
+      if (req.cmd == 'open' && _isRepeatUrl(req.args['url'] as String)) {
+        return CliResponse.success(req.id, {'ignored': 'repeat'}).encode();
       }
       final result = await _dispatch(req, source);
       return CliResponse.success(req.id, result).encode();

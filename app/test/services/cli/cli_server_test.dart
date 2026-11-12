@@ -6,6 +6,7 @@ import 'package:yourssh/models/host.dart';
 import 'package:yourssh/services/cli/cli_handlers.dart';
 import 'package:yourssh/services/cli/cli_server.dart';
 import 'package:yourssh/services/cli/host_resolver.dart';
+import 'package:yourssh/services/cli/single_instance.dart' show kForwardReplyTimeout;
 import 'package:yourssh_cli/yourssh_cli.dart';
 
 class FakeHandlers implements CliHandlers {
@@ -320,6 +321,31 @@ void main() {
       t = t.add(const Duration(seconds: 2));
       await open('yourssh://connect/web-1');
       expect(fake.calls.where((c) => c == 'connect:web-1:url'), hasLength(2));
+    });
+
+    test('slow ready gate: a duplicate arriving during the wait opens nothing',
+        () async {
+      final gate = Completer<void>();
+      final server = CliServer(
+          handlers: fake, token: tok, ready: gate.future);
+      Future<CliResponse> open() async =>
+          CliResponse.decode(await server.handleLine(
+              req('open', {'url': 'yourssh://connect/web-1'}, token: ''),
+              trusted: true));
+      final first = open();
+      await pumpEventQueue();
+      final second = open(); // arrives while the first still waits
+      await pumpEventQueue();
+      gate.complete();
+      expect((await first).ok, isTrue);
+      expect((await second).ok, isTrue);
+      expect(fake.calls.where((c) => c == 'connect:web-1:url'), hasLength(1));
+    });
+
+    test('the forwarder waits longer than the server holds an open', () {
+      expect(kForwardReplyTimeout, greaterThan(CliServer.defaultReadyTimeout));
+      expect(CliServer(handlers: fake, token: tok).readyTimeout,
+          CliServer.defaultReadyTimeout);
     });
 
     test('CLI connect is never debounced', () async {

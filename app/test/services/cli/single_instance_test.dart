@@ -297,6 +297,26 @@ void main() {
       expect(h.calls, ['connect:prod:url']);
     });
 
+    test('a loser keeps retrying an unreachable owner for the full window '
+        '(at least readyTimeout) before giving up', skip: skip, () async {
+      expect(kDefaultForwardRetry,
+          greaterThanOrEqualTo(CliServer.defaultReadyTimeout));
+      var t = DateTime(2026, 1, 1);
+      var delays = 0;
+      final ok = await forwardToRunningInstance(const [], ep,
+          deadline: kDefaultForwardRetry,
+          retryUnreachable: true,
+          clock: () => t,
+          delay: (d) async {
+            delays++;
+            t = t.add(d);
+          });
+      expect(ok, isFalse);
+      expect(delays, greaterThan(100)); // kept trying
+      expect(t.difference(DateTime(2026, 1, 1)),
+          greaterThanOrEqualTo(CliServer.defaultReadyTimeout));
+    });
+
     test('claimSingleInstance: an endpoint that cannot be resolved → null, '
         'the app starts without the CLI', () async {
       expect(

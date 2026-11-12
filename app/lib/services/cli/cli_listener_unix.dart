@@ -215,7 +215,10 @@ Future<bool> isPrivateRunDir(String dir) async {
 
 Future<int?> _ownerUid(String path) async {
   final args = Platform.isMacOS ? ['-f', '%u', path] : ['-c', '%u', path];
-  final r = await Process.run('/usr/bin/stat', args);
+  // No stat anywhere (NixOS, Guix without it on PATH): fail closed.
+  final stat = await resolveStatBinary();
+  if (stat == null) return null;
+  final r = await Process.run(stat, args);
   return r.exitCode == 0 ? int.tryParse((r.stdout as String).trim()) : null;
 }
 

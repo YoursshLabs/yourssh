@@ -50,6 +50,17 @@ CliEndpoint resolveCliEndpoint({bool dev = !kReleaseMode}) {
   return (cmd: 'activate', args: const <String, Object?>{});
 }
 
+/// How long a forwarder waits for the owner's reply. Longer than the
+/// server's ready gate, which can hold an `open` for up to
+/// [CliServer.defaultReadyTimeout]; shorter would time out, retry and (before
+/// the debounce moved behind the gate) open the URL twice.
+const kForwardReplyTimeout = Duration(seconds: 20);
+
+/// How long a losing second launch keeps retrying while the owner holds the
+/// lock but has not bound its socket yet (it binds after the first frame):
+/// as long as the owner's providers may take to load.
+const kDefaultForwardRetry = CliServer.defaultReadyTimeout;
+
 /// Hands this launch's request to an already-running instance. True when one
 /// answered — with ok OR an error such as an unknown host: either way the
 /// request reached the owner, so no second app may start. False when nothing
@@ -67,17 +78,22 @@ CliEndpoint resolveCliEndpoint({bool dev = !kReleaseMode}) {
 Future<bool> forwardToRunningInstance(List<String> args, CliEndpoint ep,
     {Duration deadline = const Duration(seconds: 3),
     bool retryUnreachable = false,
-    @visibleForTesting int? Function(Socket socket) peerUid = peerUidOf}) async {
+    @visibleForTesting int? Function(Socket socket) peerUid = peerUidOf,
+    @visibleForTesting DateTime Function() clock = DateTime.now,
+    @visibleForTesting
+    Future<void> Function(Duration) delay = _sleep}) async {
   final req = requestForArgs(args);
-  final end = DateTime.now().add(deadline);
+  final end = clock().add(deadline);
   while (true) {
     final r = await _tryOnce(req, ep, peerUid);
     if (r == _Attempt.answered) return true;
     if (r == _Attempt.noInstance && !retryUnreachable) return false;
-    if (DateTime.now().isAfter(end)) return false;
-    await Future<void>.delayed(const Duration(milliseconds: 100));
+    if (clock().isAfter(end)) return false;
+    await delay(const Duration(milliseconds: 100));
   }
 }
+
+Future<void> _sleep(Duration d) => Future<void>.delayed(d);
 
 enum _Attempt { answered, noInstance, retry }
 
@@ -117,7 +133,7 @@ Future<_Attempt> _tryOnce(({String cmd, Map<String, Object?> args}) req,
     final line = await utf8.decoder
         .bind(socket)
         .join()
-        .timeout(const Duration(seconds: 5));
+        .timeout(kForwardReplyTimeout);
     final resp = CliResponse.decode(line.trim());
     if (!resp.ok && resp.code == CliExit.denied) return _Attempt.retry;
     return _Attempt.answered;
@@ -136,7 +152,7 @@ Future<_Attempt> _tryOnce(({String cmd, Map<String, Object?> args}) req,
 Future<_Attempt> _tryOnceWindows(
     ({String cmd, Map<String, Object?> args}) req, CliEndpoint ep) async {
   final transport = WindowsPipeTransport(
-      timeout: const Duration(seconds: 5),
+      timeout: kForwardReplyTimeout,
       busyWait: const Duration(seconds: 1));
   // Everything inside the try: forwardToRunningInstance must never throw
   // (probe throws CliPermissionDenied for a pipe owned by another user).
@@ -226,7 +242,7 @@ class InstanceLock {
 /// (the app then runs without the CLI).
 Future<InstanceLock?> acquireInstanceLockOrForward(
     CliEndpoint ep, List<String> args,
-    {Duration forwardRetry = const Duration(seconds: 5)}) async {
+    {Duration forwardRetry = kDefaultForwardRetry}) async {
   await prepareCliRunDir(ep);
   final lock = await InstanceLock._tryAcquire(ep.runDir);
   if (lock != null) return lock;
@@ -252,7 +268,7 @@ Future<({CliEndpoint endpoint, InstanceLock lock})?> claimSingleInstance(
   List<String> args, {
   CliEndpoint Function() resolve = resolveCliEndpoint,
   Never Function(int code) exitApp = exit,
-  Duration forwardRetry = const Duration(seconds: 5),
+  Duration forwardRetry = kDefaultForwardRetry,
 }) async {
   final CliEndpoint ep;
   try {

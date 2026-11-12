@@ -13,6 +13,16 @@ import 'uid.dart';
 
 const String kCliVersion = '0.1.0';
 
+/// No `stat` binary could be found, so a shared run dir or the launcher's
+/// paths cannot be verified. Fail closed (exit 3); not retried or launched.
+class CliStatNotFound implements Exception {
+  const CliStatNotFound();
+  static const message =
+      'cannot verify the YourSSH run directory (stat not found)';
+  @override
+  String toString() => 'CliStatNotFound: $message';
+}
+
 /// The endpoint is missing or refused the connection.
 class CliUnreachable implements Exception {
   CliUnreachable(this.message);
@@ -237,6 +247,9 @@ Future<int> runCli(
   } on CliPermissionDenied catch (e) {
     err.writeln('yourssh: ${sanitize(e.message)}');
     return CliExit.denied.code;
+  } on CliStatNotFound {
+    err.writeln('yourssh: ${CliStatNotFound.message}');
+    return CliExit.unreachable.code;
   } on CliConnectionLost {
     err.writeln('yourssh: lost connection to YourSSH');
     return CliExit.runtime.code;
@@ -441,15 +454,46 @@ abstract class PathInspector {
   Future<bool> isExistingRegularFile(String path);
 }
 
-/// `/usr/bin/stat` (absolute, no PATH lookup; never follows a symlink):
-/// BSD `-f '%u %Lp %HT'` on macOS, GNU `-c '%u %a %F'` on Linux. A missing
-/// binary or path reads as null.
+/// Finds `stat`: `/usr/bin/stat`, else `/bin/stat`, else the first `stat` on
+/// PATH (NixOS and Guix have neither fixed path). Null when none exists.
+/// [exists] and [onPath] are test seams.
+Future<String?> resolveStatBinary(
+    {Future<bool> Function(String path)? exists,
+    Future<String?> Function()? onPath}) async {
+  final has = exists ?? (p) => File(p).exists();
+  for (final c in const ['/usr/bin/stat', '/bin/stat']) {
+    if (await has(c)) return c;
+  }
+  return (onPath ?? _statOnPath)();
+}
+
+Future<String?> _statOnPath() async {
+  final path = Platform.environment['PATH'] ?? '';
+  for (final d in path.split(':')) {
+    if (d.isEmpty || !d.startsWith('/')) continue;
+    if (await File('$d/stat').exists()) return '$d/stat';
+  }
+  return null;
+}
+
+/// `stat` (resolved by [resolveStatBinary], run without a shell; never
+/// follows a symlink): BSD `-f '%u %Lp %HT'` on macOS, GNU `-c '%u %a %F'`
+/// on Linux. A missing path reads as null; a missing `stat` binary is
+/// [CliStatNotFound] (fail closed, exit 3).
 class SystemPathInspector implements PathInspector {
+  SystemPathInspector({Future<String?> Function()? resolveStat})
+      : _resolveStat = resolveStat ?? resolveStatBinary;
+  final Future<String?> Function() _resolveStat;
+
   @override
   Future<PathStat?> lstat(String path) async {
+    final stat = await _resolveStat();
+    if (stat == null) {
+      throw const CliStatNotFound();
+    }
     try {
       final r = await Process.run(
-          '/usr/bin/stat',
+          stat,
           Platform.isMacOS
               ? ['-f', '%u %Lp %HT', path]
               : ['-c', '%u %a %F', path]);
