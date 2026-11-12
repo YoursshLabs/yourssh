@@ -733,18 +733,20 @@ class EscapeParser {
           handler.setForegroundColor16(NamedColor.white);
           continue;
         case 38:
-          final mode = params[i + 1];
-          switch (mode) {
+          // A truncated extended color (`ESC [ 38 m`, `ESC [ 38 ; 5 m`,
+          // `ESC [ 38 ; 2 ; 1 m`) is ignored along with the rest of the sequence,
+          // as xterm does.
+          if (i + 1 >= params.length) return;
+          switch (params[i + 1]) {
             case 2:
-              final r = params[i + 2];
-              final g = params[i + 3];
-              final b = params[i + 4];
-              handler.setForegroundColorRgb(r, g, b);
+              if (i + 4 >= params.length) return;
+              handler.setForegroundColorRgb(
+                  params[i + 2], params[i + 3], params[i + 4]);
               i += 4;
               break;
             case 5:
-              final index = params[i + 2];
-              handler.setForegroundColor256(index);
+              if (i + 2 >= params.length) return;
+              handler.setForegroundColor256(params[i + 2]);
               i += 2;
               break;
           }
@@ -778,18 +780,20 @@ class EscapeParser {
           handler.setBackgroundColor16(NamedColor.white);
           continue;
         case 48:
-          final mode = params[i + 1];
-          switch (mode) {
+          // A truncated extended color (`ESC [ 48 m`, `ESC [ 48 ; 5 m`,
+          // `ESC [ 48 ; 2 ; 1 m`) is ignored along with the rest of the sequence,
+          // as xterm does.
+          if (i + 1 >= params.length) return;
+          switch (params[i + 1]) {
             case 2:
-              final r = params[i + 2];
-              final g = params[i + 3];
-              final b = params[i + 4];
-              handler.setBackgroundColorRgb(r, g, b);
+              if (i + 4 >= params.length) return;
+              handler.setBackgroundColorRgb(
+                  params[i + 2], params[i + 3], params[i + 4]);
               i += 4;
               break;
             case 5:
-              final index = params[i + 2];
-              handler.setBackgroundColor256(index);
+              if (i + 2 >= params.length) return;
+              handler.setBackgroundColor256(params[i + 2]);
               i += 2;
               break;
           }
