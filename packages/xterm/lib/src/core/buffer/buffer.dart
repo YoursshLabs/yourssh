@@ -268,6 +268,13 @@ class Buffer {
     _cursorX = x;
   }
 
+  /// Results of NFC-composing a (base, mark) pair: the precomposed code point,
+  /// or -1 when there is none. Composition is a pure function of the pair, so
+  /// caching it only skips the string allocations and unorm work.
+  static final _composeCache = <int, int>{};
+
+  static const _composeCacheLimit = 4096;
+
   /// Tries to canonically compose the combining [mark] with the codepoint in
   /// the cell preceding the cursor. Returns true when the cell was rewritten
   /// with the precomposed character (the mark must then NOT be written).
@@ -286,15 +293,22 @@ class Buffer {
     if (base == 0) {
       return false;
     }
-    final composed =
-        unorm.nfc(String.fromCharCode(base) + String.fromCharCode(mark));
-    final runes = composed.runes;
-    if (runes.length != 1) {
+    final key = (base << 21) | mark;
+    var composed = _composeCache[key];
+    if (composed == null) {
+      final runes =
+          unorm.nfc(String.fromCharCode(base) + String.fromCharCode(mark)).runes;
+      composed = runes.length == 1 ? runes.first : -1;
+      if (_composeCache.length < _composeCacheLimit) {
+        _composeCache[key] = composed;
+      }
+    }
+    if (composed < 0) {
       return false; // no precomposed form exists
     }
     // setCodePoint preserves the cell's own fg/bg/attrs — the mark belongs
     // to the base character's style, not the current cursor style.
-    line.setCodePoint(x, runes.first);
+    line.setCodePoint(x, composed);
     return true;
   }
 
