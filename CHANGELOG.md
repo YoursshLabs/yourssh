@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **New look:** the app moves to the Amber Brand palette (warm dark surfaces, amber accent), the Inter font and a forui-based UI foundation on desktop and mobile.
+- **New "YourSSH Amber" terminal theme**, the default for new installs. Existing installs keep their current terminal theme.
+
 ## [0.3.0] — 2026-11-12
 
 ### Performance
