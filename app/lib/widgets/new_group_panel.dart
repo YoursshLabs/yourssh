@@ -95,7 +95,7 @@ class _NewGroupPanelState extends State<NewGroupPanel> {
       child: Row(
         children: [
           const Expanded(
-            child: Text('New Group',
+            child: Text('New group',
                 style: TextStyle(
                     color: YsColors.foreground,
                     fontSize: 14,

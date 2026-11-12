@@ -268,6 +268,32 @@ void main() {
     expect(activate, 2);
   });
 
+  testWidgets('focusNode: the caller can focus the card', (t) async {
+    final node = FocusNode();
+    addTearDown(node.dispose);
+    var activate = 0;
+    await t.pumpWidget(
+      _wrap(
+        YsHostCard(
+          leading: const SizedBox(),
+          title: 'a',
+          subtitle: 'b',
+          focusNode: node,
+          onActivate: () => activate++,
+        ),
+      ),
+    );
+    node.requestFocus();
+    await t.pump();
+    expect(
+      Focus.of(t.element(find.byKey(const Key('ys-host-card-box')))),
+      same(node),
+    );
+    expect((_cardDeco(t).border! as Border).top.width, 2, reason: 'focus ring');
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(activate, 1);
+  });
+
   testWidgets('onActivate overrides onTap for the keyboard only', (t) async {
     var tap = 0;
     var activate = 0;

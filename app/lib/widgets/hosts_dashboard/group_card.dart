@@ -16,7 +16,29 @@ class _GroupCard extends StatefulWidget {
 
 class _GroupCardState extends State<_GroupCard> {
   bool _hovered = false;
-  bool _focusWithin = false;
+
+  /// A deletable group's card is a tab stop, so the keyboard can reveal its
+  /// menu button (which is not focusable while hidden).
+  final _focus = FocusNode(debugLabel: 'group-card');
+
+  @override
+  void initState() {
+    super.initState();
+    // Fires when focus enters/leaves the card or moves between the card and
+    // its menu button (focus ring vs. button).
+    _focus.addListener(_onFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    _focus.removeListener(_onFocusChanged);
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (mounted) setState(() {});
+  }
 
   /// The menu lives in an overlay; keep its trigger visible while it is open
   /// (the pointer leaves the card to reach it).
@@ -28,19 +50,19 @@ class _GroupCardState extends State<_GroupCard> {
 
   @override
   Widget build(BuildContext context) {
-    // The menu button stays mounted (and in the Tab order) for a deletable
-    // group, but only shows on hover or keyboard focus, as before.
-    final showMenu = _hovered || _focusWithin || _menuOpen;
-    return MouseRegion(
+    final deletable = widget.onDelete != null;
+    // The menu button stays mounted for a deletable group (so an open menu
+    // survives the pointer leaving the card), but while hidden it can be
+    // neither focused nor hit; hover or keyboard focus on the card shows it.
+    final showMenu = _hovered || _focus.hasFocus || _menuOpen;
+    final card = MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: Focus(
-        canRequestFocus: false,
-        skipTraversal: true,
-        includeSemantics: false,
-        onFocusChange: (f) {
-          if (mounted) setState(() => _focusWithin = f);
-        },
+        focusNode: _focus,
+        canRequestFocus: deletable,
+        skipTraversal: !deletable,
+        includeSemantics: deletable,
         child: SizedBox(
           width: 200,
           child: FCard(
@@ -80,8 +102,15 @@ class _GroupCardState extends State<_GroupCard> {
                       ],
                     ),
                   ),
-                  if (widget.onDelete != null)
-                    Opacity(opacity: showMenu ? 1 : 0, child: _menu()),
+                  if (deletable)
+                    ExcludeFocus(
+                      excluding: !showMenu,
+                      child: IgnorePointer(
+                        ignoring: !showMenu,
+                        child: Opacity(
+                            opacity: showMenu ? 1 : 0, child: _menu()),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -89,6 +118,7 @@ class _GroupCardState extends State<_GroupCard> {
         ),
       ),
     );
+    return FFocusedOutline(focused: _focus.hasPrimaryFocus, child: card);
   }
 
   Widget _menu() => FPopoverMenu(

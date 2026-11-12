@@ -274,7 +274,7 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
             const Icon(FLucideIcons.radar, color: YsColors.primary, size: 18),
             const SizedBox(width: YsSpace.s2),
             const Text(
-              'Discover Devices',
+              'Discover devices',
               style: TextStyle(
                   color: YsColors.foreground,
                   fontSize: 15,

@@ -17,7 +17,7 @@ class _MoveToGroupDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final options = ['', ...groups]; // '' = No group
     return YsDialog(
-      title: 'Move to Group',
+      title: 'Move to group',
       body: SizedBox(
         width: 280,
         child: FItemGroup(
@@ -82,7 +82,7 @@ class _ExportDialogState extends State<_ExportDialog> {
   @override
   Widget build(BuildContext context) {
     return YsDialog(
-      title: 'Export Host',
+      title: 'Export host',
       body: SizedBox(
         width: 420,
         child: Column(

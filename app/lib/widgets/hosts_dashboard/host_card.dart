@@ -9,7 +9,8 @@ part of 'hosts_dashboard.dart';
 /// selection in select mode. Keyboard: Enter/Space on the focused card does
 /// the same — connect, or toggle in select mode. The hover actions (Test,
 /// SFTP, Monitor, More) also show while the card has keyboard focus, so Tab
-/// reaches them.
+/// reaches them. Select mode has one tab stop per card: the checkbox is not
+/// focusable (Enter/Space on the card toggles).
 class _HostCard extends StatefulWidget {
   final Host host;
   final void Function(Host)? onEditHost;
@@ -49,10 +50,12 @@ class _HostCardState extends State<_HostCard> {
   bool _testing = false;
   ({bool success, int latencyMs, String? error})? _testResult;
   Timer? _resultTimer;
+  final _cardFocus = FocusNode(debugLabel: 'host-card');
 
   @override
   void dispose() {
     _resultTimer?.cancel();
+    _cardFocus.dispose();
     super.dispose();
   }
 
@@ -78,6 +81,11 @@ class _HostCardState extends State<_HostCard> {
   Future<void> _test() async {
     if (_testing) return;
     _resultTimer?.cancel();
+    // The spinner replaces the action buttons; if one of them has keyboard
+    // focus, hand it to the card so focus is not dropped.
+    if (_cardFocus.hasFocus && !_cardFocus.hasPrimaryFocus) {
+      _cardFocus.requestFocus();
+    }
     setState(() { _testing = true; _testResult = null; });
 
     final sshService = context.read<SshService>();
@@ -146,11 +154,14 @@ class _HostCardState extends State<_HostCard> {
       leading = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          FCheckbox(
-            key: const Key('host-card-checkbox'),
-            value: widget.selected,
-            semanticsLabel: 'Select ${host.label}',
-            onChange: (_) => widget.onToggleSelect?.call(),
+          // Not a tab stop: Enter/Space on the card toggles the selection.
+          ExcludeFocus(
+            child: FCheckbox(
+              key: const Key('host-card-checkbox'),
+              value: widget.selected,
+              semanticsLabel: 'Select ${host.label}',
+              onChange: (_) => widget.onToggleSelect?.call(),
+            ),
           ),
           const SizedBox(width: YsSpace.s2),
           leading,
@@ -173,6 +184,7 @@ class _HostCardState extends State<_HostCard> {
           title: host.label,
           subtitle: '${host.username}@${host.host}$port',
           statusDot: Container(
+            key: const Key('host-status-dot'),
             width: 7,
             height: 7,
             decoration: BoxDecoration(
@@ -189,6 +201,7 @@ class _HostCardState extends State<_HostCard> {
           onTap: widget.selectionMode ? widget.onToggleSelect : null,
           onDoubleTap: widget.selectionMode ? null : _connect,
           onActivate: widget.selectionMode ? widget.onToggleSelect : _connect,
+          focusNode: _cardFocus,
           trailingAction: _trailing(context),
         ),
       ),
@@ -239,7 +252,7 @@ class _HostCardState extends State<_HostCard> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (isSsh) ...[
-          _iconBtn(FLucideIcons.activity, 'Test Connection', _test),
+          _iconBtn(FLucideIcons.activity, 'Test connection', _test),
           _iconBtn(FLucideIcons.folder, 'SFTP', () => _openSftp(context)),
           if (widget.hasSshSession)
             _iconBtn(FLucideIcons.heartPulse, 'Monitor',
@@ -298,7 +311,7 @@ class _HostCardState extends State<_HostCard> {
           item(c, FLucideIcons.link,
               'Copy ${widget.host.protocol.name.toUpperCase()} URL',
               () => _copyHostUrl(context)),
-          item(c, FLucideIcons.folderInput, 'Move to Group',
+          item(c, FLucideIcons.folderInput, 'Move to group',
               () => _moveToGroup(context, hosts())),
           item(c, FLucideIcons.upload, 'Export', () => _export(context)),
         ]),

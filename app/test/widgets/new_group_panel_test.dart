@@ -42,7 +42,7 @@ void main() {
       (t) async {
     var closed = 0;
     await _pump(t, () => closed++);
-    expect(find.text('New Group'), findsOneWidget);
+    expect(find.text('New group'), findsOneWidget);
     expect(find.text('Group name'), findsOneWidget);
     expect(find.text('Save group'), findsOneWidget);
     expect(t.widget<EditableText>(_field).focusNode.hasFocus, isTrue,

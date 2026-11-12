@@ -6,6 +6,8 @@ import 'package:yourssh/models/discovered_host.dart';
 import 'package:yourssh/services/network_discovery_service.dart';
 import 'package:yourssh/widgets/network_discovery_sheet.dart';
 
+import 'package:yourssh_ui/yourssh_ui.dart' show FButton;
+
 import '../helpers/ys_test_app.dart';
 
 class _FakeDiscovery extends NetworkDiscoveryService {
@@ -90,7 +92,7 @@ void main() {
     final svc = _FakeDiscovery([_wifi, _eth], [ssh, rdp]);
     await _pumpSheet(t, svc);
 
-    expect(find.text('Discover Devices'), findsOneWidget);
+    expect(find.text('Discover devices'), findsOneWidget);
     expect(find.byTooltip('Close'), findsOneWidget);
     // Interface picker (more than one interface) shows the current one.
     expect(find.text('Wi-Fi'), findsOneWidget);
@@ -123,10 +125,16 @@ void main() {
         'nope');
     await t.pumpAndSettle();
     expect(find.text('Expected format: 192.168.1.0/24'), findsOneWidget);
+    final scan = find.ancestor(
+        of: find.text('Scan'), matching: find.byType(FButton));
+    expect(t.widget<FButton>(scan).onPress, isNull, reason: 'Scan disabled');
+    await t.tap(find.text('Scan'));
+    await t.pumpAndSettle();
+    expect(svc.scans, 2, reason: 'no scan on an invalid subnet');
 
     await t.tap(find.byTooltip('Close'));
     await t.pumpAndSettle();
-    expect(find.text('Discover Devices'), findsNothing);
+    expect(find.text('Discover devices'), findsNothing);
   });
 
   testWidgets('selection mode: tapping a row selects and closes', (t) async {
@@ -138,7 +146,7 @@ void main() {
     await t.tap(find.text('nas.local'));
     await t.pumpAndSettle();
     expect(picked?.ip, '192.168.1.20');
-    expect(find.text('Discover Devices'), findsNothing);
+    expect(find.text('Discover devices'), findsNothing);
   });
 
   testWidgets('no interfaces message', (t) async {

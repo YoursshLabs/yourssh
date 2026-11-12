@@ -32,6 +32,10 @@ class YsHostCard extends StatefulWidget {
   /// Keyboard activation (Enter/Space) and the semantics tap action.
   /// Defaults to [onTap].
   final VoidCallback? onActivate;
+
+  /// The card's focus node, for callers that move focus to the card (e.g.
+  /// when a focused trailing action is replaced). Owned by the caller.
+  final FocusNode? focusNode;
   final Widget? trailingAction;
 
   const YsHostCard({
@@ -49,6 +53,7 @@ class YsHostCard extends StatefulWidget {
     this.onSecondaryTap,
     this.onLongPress,
     this.onActivate,
+    this.focusNode,
     this.trailingAction,
   });
 
@@ -73,6 +78,7 @@ class _YsHostCardState extends State<YsHostCard> {
       label: '${w.title}, ${w.subtitle}',
       onTap: activate,
       child: FocusableActionDetector(
+        focusNode: w.focusNode,
         enabled: activate != null,
         mouseCursor: tappable ? SystemMouseCursors.click : MouseCursor.defer,
         onFocusChange: (v) => setState(() => _focused = v),

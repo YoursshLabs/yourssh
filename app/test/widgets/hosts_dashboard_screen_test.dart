@@ -1,13 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/app_session.dart';
 import 'package:yourssh/models/host.dart';
+import 'package:yourssh/models/ssh_key.dart';
 import 'package:yourssh/models/ssh_session.dart';
 import 'package:yourssh/providers/host_provider.dart';
+import 'package:yourssh/providers/key_provider.dart';
 import 'package:yourssh/providers/session_provider.dart';
 import 'package:yourssh/providers/settings_provider.dart';
 import 'package:yourssh/services/ssh_service.dart';
@@ -15,6 +20,8 @@ import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/tab_metadata_service.dart';
 import 'package:yourssh/util/host_sort.dart';
 import 'package:yourssh/widgets/hosts_dashboard.dart';
+
+import 'package:yourssh_ui/yourssh_ui.dart' show YsColors;
 
 import '../helpers/ys_test_app.dart';
 
@@ -36,10 +43,27 @@ class _FakeSessions extends SessionProvider {
   }
 }
 
+/// Test connection resolves only when the test completes [pending].
+class _FakeSsh extends SshService {
+  _FakeSsh(super.storage);
+
+  Completer<({bool success, int latencyMs, String? error})>? pending;
+
+  @override
+  Future<({bool success, int latencyMs, String? error})> testConnection(
+    Host host, {
+    String? password,
+    SshKeyEntry? keyEntry,
+    List<JumpHop> jumpChain = const [],
+  }) =>
+      (pending = Completer()).future;
+}
+
 class _Env {
   final HostProvider hosts;
   final SettingsProvider settings;
   final _FakeSessions sessions;
+  late final _FakeSsh ssh;
   final calls = <String>[];
   final edited = <Host>[];
   _Env(this.hosts, this.settings, this.sessions);
@@ -79,13 +103,16 @@ Future<_Env> _pump(
   settings.dashboardViewMode = view;
   final fake = _FakeSessions(storage);
   if (sessions != null) fake.fake = sessions(hosts);
-  final env = _Env(hp, settings, fake);
+  final env = _Env(hp, settings, fake)..ssh = _FakeSsh(storage);
   await t.pumpWidget(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<HostProvider>.value(value: hp),
         ChangeNotifierProvider<SettingsProvider>.value(value: settings),
         ChangeNotifierProvider<SessionProvider>.value(value: fake),
+        ChangeNotifierProvider<KeyProvider>(create: (_) => KeyProvider()),
+        Provider<StorageService>.value(value: storage),
+        Provider<SshService>.value(value: env.ssh),
       ],
       child: ysTestApp(
         Row(
@@ -145,6 +172,17 @@ FocusNode _cardFocus(WidgetTester t, Host h) => Focus.of(t.element(
     find.descendant(
         of: _card(h), matching: find.byKey(const Key('ys-host-card-box')))));
 
+Color? _dotColor(WidgetTester t, Host h) => (t
+        .widget<Container>(find.descendant(
+            of: _card(h), matching: find.byKey(const Key('host-status-dot'))))
+        .decoration! as BoxDecoration)
+    .color;
+
+Future<void> _tab(WidgetTester t) async {
+  await t.sendKeyEvent(LogicalKeyboardKey.tab);
+  await t.pumpAndSettle();
+}
+
 void main() {
   final web = Host(
       label: 'web', host: '10.0.0.1', username: 'root', group: 'prod',
@@ -156,6 +194,12 @@ void main() {
       username: 'Administrator',
       port: 3389,
       protocol: HostProtocol.rdp);
+  final vnc = Host(
+      label: 'vnc',
+      host: '10.0.0.4',
+      username: 'u',
+      port: 5900,
+      protocol: HostProtocol.vnc);
 
   group('top bar actions', () {
     testWidgets('every top-bar action is present and wired', (t) async {
@@ -174,9 +218,9 @@ void main() {
 
       await t.tap(find.byTooltip('Show menu'));
       await t.pumpAndSettle();
-      expect(find.text('New Group'), findsOneWidget);
+      expect(find.text('New group'), findsOneWidget);
       expect(find.text('Import'), findsOneWidget);
-      await t.tap(find.text('New Group'));
+      await t.tap(find.text('New group'));
       await t.pumpAndSettle();
       expect(find.text('Import'), findsNothing, reason: 'menu closes');
       await t.tap(find.byTooltip('Show menu'));
@@ -268,7 +312,7 @@ void main() {
         (t) async {
       final env = await _pump(t, hosts: [web]);
       await _hover(t, _card(web));
-      expect(find.byTooltip('Test Connection'), findsOneWidget);
+      expect(find.byTooltip('Test connection'), findsOneWidget);
       expect(find.byTooltip('SFTP'), findsOneWidget);
       expect(find.byTooltip('Monitor'), findsNothing,
           reason: 'no open SSH session');
@@ -280,7 +324,7 @@ void main() {
         'Edit',
         'Duplicate',
         'Copy SSH URL',
-        'Move to Group',
+        'Move to group',
         'Export',
         'Delete',
       ]) {
@@ -323,7 +367,7 @@ void main() {
       await _pump(t, hosts: [win]);
       expect(find.text('RDP'), findsOneWidget);
       await _hover(t, _card(win));
-      expect(find.byTooltip('Test Connection'), findsNothing);
+      expect(find.byTooltip('Test connection'), findsNothing);
       expect(find.byTooltip('SFTP'), findsNothing);
       await _tapInCard(t, find.byTooltip('More'));
       expect(find.text('SFTP'), findsNothing);
@@ -351,7 +395,7 @@ void main() {
       final env = await _pump(t, hosts: [web, db]);
       await _hover(t, _card(db));
       await _tapInCard(t, _more(db));
-      await t.tap(find.text('Move to Group'));
+      await t.tap(find.text('Move to group'));
       await t.pumpAndSettle();
       expect(find.text('No group'), findsOneWidget);
       await t.tap(find.text('prod'));
@@ -365,14 +409,14 @@ void main() {
       await _tapInCard(t, _more(db));
       await t.tap(find.text('Export'));
       await t.pumpAndSettle();
-      expect(find.text('Export Host'), findsOneWidget);
+      expect(find.text('Export host'), findsOneWidget);
       expect(find.textContaining('HostName 10.0.0.2'), findsOneWidget);
       await t.tap(find.text('JSON'));
       await t.pumpAndSettle();
       expect(find.textContaining('"host": "10.0.0.2"'), findsOneWidget);
       await t.tap(find.text('Close'));
       await t.pumpAndSettle();
-      expect(find.text('Export Host'), findsNothing);
+      expect(find.text('Export host'), findsNothing);
     });
   });
 
@@ -422,6 +466,168 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Select'), findsOneWidget);
       expect(find.text('1 selected'), findsNothing);
+    });
+  });
+
+  group('fix round 1', () {
+    testWidgets('status dot: green only for a connected SSH session',
+        (t) async {
+      await _pump(t, hosts: [web, db, win], sessions: (hosts) => [
+            SshSession(host: hosts[0], status: SessionStatus.connected),
+            SshSession(host: hosts[1]), // connecting
+          ]);
+      expect(_dotColor(t, web), YsColors.ok);
+      expect(_dotColor(t, db), isNot(YsColors.ok));
+      expect(_dotColor(t, win), isNot(YsColors.ok));
+    });
+
+    testWidgets('Tab from the search field reaches the first host card',
+        (t) async {
+      await _pump(t, hosts: [web, db]);
+      await t.tap(find.byKey(const Key('hosts-search')));
+      await t.pumpAndSettle();
+      // Sorted A→Z, so db is the first card.
+      final first = _cardFocus(t, db);
+      final second = _cardFocus(t, web);
+      var tabs = 0;
+      while (!first.hasPrimaryFocus && tabs < 30) {
+        expect(second.hasPrimaryFocus, isFalse,
+            reason: 'reached the second card before the first');
+        await _tab(t);
+        tabs++;
+      }
+      expect(first.hasPrimaryFocus, isTrue, reason: 'after $tabs tabs');
+    });
+
+    testWidgets('select mode: a checkbox tap toggles exactly once; the '
+        'checkbox is not a tab stop', (t) async {
+      await _pump(t, hosts: [web, db]);
+      await t.tap(find.text('Select'));
+      await t.pumpAndSettle();
+      final box = find.descendant(
+          of: _card(web), matching: find.byKey(const Key('host-card-checkbox')));
+      await t.tap(box);
+      await t.pumpAndSettle();
+      expect(find.text('1 selected'), findsOneWidget);
+      await t.tap(box);
+      await t.pumpAndSettle();
+      expect(find.text('0 selected'), findsOneWidget);
+
+      _cardFocus(t, db).requestFocus();
+      await t.pumpAndSettle();
+      await _tab(t);
+      expect(_cardFocus(t, web).hasPrimaryFocus, isTrue,
+          reason: 'one tab stop per card');
+    });
+
+    testWidgets('VNC card: SSH-only actions hidden, copies a vnc:// URL',
+        (t) async {
+      String? clip;
+      t.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clip = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      });
+      addTearDown(() => t.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+
+      await _pump(t, hosts: [vnc]);
+      expect(find.text('VNC'), findsOneWidget);
+      await _hover(t, _card(vnc));
+      expect(find.byTooltip('Test connection'), findsNothing);
+      expect(find.byTooltip('SFTP'), findsNothing);
+      await _tapInCard(t, _more(vnc));
+      expect(find.text('SFTP'), findsNothing);
+      expect(find.text('Monitor'), findsNothing);
+      expect(find.text('Connect'), findsOneWidget);
+      await t.tap(find.text('Copy VNC URL'));
+      await t.pumpAndSettle();
+      expect(clip, 'vnc://u@10.0.0.4:5900');
+      expect(find.text('VNC URL copied'), findsOneWidget);
+      await t.pump(const Duration(seconds: 3));
+      await t.pumpAndSettle();
+    });
+
+    testWidgets('keyboard Test keeps focus on the card while it runs',
+        (t) async {
+      final agentHost = Host(
+          label: 'agent', host: '10.0.0.7', username: 'u',
+          authType: AuthType.agent);
+      final env = await _pump(t, hosts: [agentHost]);
+      final card = _cardFocus(t, agentHost);
+      card.requestFocus();
+      await t.pumpAndSettle();
+      expect(find.byTooltip('Test connection'), findsOneWidget,
+          reason: 'actions show while the card has focus');
+      await _tab(t); // into the card's first action: Test connection
+      expect(card.hasPrimaryFocus, isFalse);
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.pump();
+      expect(env.ssh.pending, isNotNull, reason: 'Test started');
+      expect(find.byTooltip('Test connection'), findsNothing,
+          reason: 'spinner replaces the actions');
+      expect(card.hasPrimaryFocus, isTrue, reason: 'focus moved to the card');
+
+      env.ssh.pending!.complete((success: true, latencyMs: 12, error: null));
+      await t.pump();
+      expect(find.text('12ms'), findsOneWidget);
+      expect(card.hasPrimaryFocus, isTrue);
+      await t.pump(const Duration(seconds: 9));
+      await t.pumpAndSettle();
+      expect(find.byTooltip('Test connection'), findsOneWidget);
+      expect(card.hasFocus, isTrue);
+    });
+
+    testWidgets('group menu: hidden button is not hit-testable or focusable; '
+        'card focus reveals it and Tab reaches it', (t) async {
+      await _pump(t, hosts: [web], groups: ['Empty']);
+      expect(find.byTooltip('Group options').hitTestable(), findsNothing);
+
+      // Tab from the search field: the hidden button is never a stop.
+      final groupCard = Focus.of(t.element(find.text('EMPTY')));
+      await t.tap(find.byKey(const Key('hosts-search')));
+      await t.pumpAndSettle();
+      var tabs = 0;
+      while (!groupCard.hasPrimaryFocus && tabs < 30) {
+        await _tab(t);
+        tabs++;
+      }
+      expect(groupCard.hasPrimaryFocus, isTrue, reason: 'card is a tab stop');
+      expect(find.byTooltip('Group options').hitTestable(), findsOneWidget,
+          reason: 'card focus reveals the menu button');
+      await _tab(t);
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.pumpAndSettle();
+      expect(find.text('Delete group'), findsOneWidget);
+    });
+
+    testWidgets('compact toolbar button announces its name once', (t) async {
+      final h = t.ensureSemantics();
+      await _pump(t, hosts: [web], size: const Size(900, 600));
+      // Count every mention across the whole tree: a Tooltip puts its
+      // message on a parent node, apart from the button's own label.
+      final spoken = <String>[];
+      SemanticsNode? named;
+      void visit(SemanticsNode n) {
+        for (final text in [n.label, n.tooltip]) {
+          if (RegExp(r'\bSelect\b').hasMatch(text)) {
+            spoken.add(text);
+            named = n;
+          }
+        }
+        n.visitChildren((c) {
+          visit(c);
+          return true;
+        });
+      }
+      visit(t.binding.pipelineOwner.semanticsOwner!.rootSemanticsNode!);
+      expect(spoken, ['Select'], reason: 'one accessible name');
+      expect(named!.label, 'Select');
+      expect(named!.getSemanticsData().flagsCollection.isButton, isTrue,
+          reason: 'the name sits on the button node');
+      h.dispose();
     });
   });
 

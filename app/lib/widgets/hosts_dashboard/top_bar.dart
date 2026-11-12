@@ -134,6 +134,9 @@ class _ToolbarBtn extends StatelessWidget {
   Widget build(BuildContext context) => compact
       ? Tooltip(
           message: label,
+          // The button's semanticsLabel is the one accessible name; the
+          // tooltip would announce it a second time on a parent node.
+          excludeFromSemantics: true,
           child: FButton.icon(
             variant: .outline,
             size: .sm,
@@ -264,7 +267,7 @@ class _SplitNewBtn extends StatelessWidget {
               children: [
                 FItem(
                   prefix: const Icon(FLucideIcons.folderPlus),
-                  title: const Text('New Group'),
+                  title: const Text('New group'),
                   onPress: () {
                     controller.hide();
                     onNewGroup?.call();
