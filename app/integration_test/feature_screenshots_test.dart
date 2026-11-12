@@ -180,7 +180,7 @@ void main() {
       await prefs.setString('yourssh.port_forwards', portForwardsJson);
 
       // ── Launch app ───────────────────────────────────────────────────────
-      app.main();
+      app.main(const <String>[]);
       await tester.pump(const Duration(seconds: 2));
       await _waitFor(
         tester,

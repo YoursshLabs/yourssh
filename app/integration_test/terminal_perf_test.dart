@@ -60,7 +60,7 @@ void main() {
       }
     });
 
-    app.main();
+    app.main(const <String>[]);
     Future<void> sleep(int ms) => Future.delayed(Duration(milliseconds: ms));
     await sleep(4000);
 

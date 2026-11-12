@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`yourssh` command-line client (phase 1, macOS, Linux and Windows, run from source)** — `yourssh connect <host>`, `ls [--json] [--tag T] [--filter Q]`, `version`, `open <url>` and `help` talk to the running app (NDJSON protocol v1) and start the app if it is not running. Hosts resolve by id, label or `user@host[:port]`; ad-hoc `user@host[:port]` works from the CLI only and signs in with the SSH agent's keys (a password-only server needs a saved host). `yourssh version` never starts the app. A debug build of the app uses its own endpoint (`YourSSH-dev`, `\\.\pipe\yourssh-cli-dev-<SID>`); the CLI reaches it with `YOURSSH_DEV=1`. macOS/Linux: a per-user Unix socket, 0600 in a 0700 run dir, that checks the peer uid. Windows: the named pipe `\\.\pipe\yourssh-cli-<SID>` with a current-user-only DACL and remote clients rejected; the app drops clients running as another user, and the CLI checks the pipe's server the same way before sending anything (a pipe owned by another user exits 4). Every request carries a token rotated at every launch, and the app is single-instance on all three (a second launch, including a clicked link, is handed to the running app before it starts anything else). Exit codes: 0 ok, 1 error, 2 usage, 3 app unreachable, 4 denied. Not yet: packaging the CLI binary in releases (today `yourssh` in a release is the GUI app) and an install button, `sftp`/`tunnel`/`import`/`export`, MCP.
+- **`yourssh://connect/<host-id-or-label>` links** — open a saved host from a browser or script; saved hosts only, repeats of the same link within 2 s are ignored, and a refused link (unknown host, unsupported form) is listed in the notification bell. The scheme is registered by the macOS app, the Windows installer (current user) and the Linux .deb; the portable zip and tarball do not register it.
+- **Audit source for CLI and URL connects** — SSH connect rows carry `meta.source` = `cli` / `url`; RDP and VNC rows keep `source: rdp|vnc` and carry `via` = `cli` / `url`.
+
 ### Changed
 - Built with Flutter 3.50.
 

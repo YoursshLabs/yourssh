@@ -11,8 +11,11 @@ class KeyProvider extends ChangeNotifier {
 
   List<SshKeyEntry> get keys => _keys;
 
+  /// Completes once the saved keys are loaded.
+  late final Future<void> ready;
+
   KeyProvider() {
-    _load();
+    ready = _load();
   }
 
   Future<void> _load() async {
