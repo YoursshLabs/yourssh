@@ -79,6 +79,10 @@ jobs:
         working-directory: packages/yourssh_ui
         run: flutter pub get
 
+      - name: Analyze (yourssh_ui)
+        working-directory: packages/yourssh_ui
+        run: flutter analyze --no-fatal-infos
+
       - name: Test (yourssh_ui)
         working-directory: packages/yourssh_ui
         run: flutter test

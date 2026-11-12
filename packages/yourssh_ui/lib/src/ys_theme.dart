@@ -93,19 +93,59 @@ FSidebarStyle _ysSidebarStyle({
 }
 
 /// forui theme (desktop sizing) with Amber Brand tokens.
-FThemeData ysThemeData() => _build(touch: false);
+FThemeData ysThemeData() => _desktopTheme;
+final FThemeData _desktopTheme = _build(touch: false);
 
 /// forui theme (touch sizing) with Amber Brand tokens, for mobile.
-FThemeData ysThemeDataTouch() => _build(touch: true);
+FThemeData ysThemeDataTouch() => _touchTheme;
+final FThemeData _touchTheme = _build(touch: true);
 
 /// Material fallback theme so un-migrated widgets match the system.
-ThemeData ysMaterialTheme() {
+ThemeData ysMaterialTheme() => _materialTheme;
+final ThemeData _materialTheme = _buildMaterialTheme();
+
+/// Opaque equivalent of the translucent `border` token over `background`.
+final Color _opaqueBorder = Color.alphaBlend(
+  YsColors.border,
+  YsColors.background,
+);
+
+ThemeData _buildMaterialTheme() {
+  // Every slot is set from tokens so no stock Material colour (teal, purple,
+  // grey) can leak into un-migrated controls.
   final scheme = const ColorScheme.dark().copyWith(
     primary: YsColors.primary,
     onPrimary: YsColors.primaryForeground,
+    primaryContainer: YsColors.primary,
+    onPrimaryContainer: YsColors.primaryForeground,
+    secondary: YsColors.primary,
+    onSecondary: YsColors.primaryForeground,
+    secondaryContainer: YsColors.primary,
+    onSecondaryContainer: YsColors.primaryForeground,
+    tertiary: YsColors.primary,
+    onTertiary: YsColors.primaryForeground,
+    tertiaryContainer: YsColors.primary,
+    onTertiaryContainer: YsColors.primaryForeground,
+    error: YsColors.error,
+    onError: YsColors.foreground,
+    errorContainer: YsColors.error,
+    onErrorContainer: YsColors.foreground,
     surface: YsColors.background,
     onSurface: YsColors.foreground,
-    error: YsColors.error,
+    onSurfaceVariant: YsColors.mutedForeground,
+    surfaceDim: YsColors.background,
+    surfaceBright: YsColors.secondary,
+    surfaceContainerLowest: YsColors.background,
+    surfaceContainerLow: YsColors.card,
+    surfaceContainer: YsColors.card,
+    surfaceContainerHigh: YsColors.secondary,
+    surfaceContainerHighest: YsColors.secondary,
+    surfaceTint: Colors.transparent,
+    outline: _opaqueBorder,
+    outlineVariant: _opaqueBorder,
+    inverseSurface: YsColors.foreground,
+    onInverseSurface: YsColors.background,
+    inversePrimary: YsColors.primary,
   );
   RoundedRectangleBorder shape(double r, {bool side = true}) =>
       RoundedRectangleBorder(
@@ -123,6 +163,16 @@ ThemeData ysMaterialTheme() {
     colorScheme: scheme,
     scaffoldBackgroundColor: YsColors.background,
     dividerColor: YsColors.border,
+    dividerTheme: const DividerThemeData(
+      color: YsColors.border,
+      thickness: 1,
+      space: 1,
+    ),
+    textTheme: const TextTheme(
+      bodyMedium: TextStyle(color: YsColors.foreground, fontSize: 13),
+      bodySmall: TextStyle(color: YsColors.mutedForeground, fontSize: 12),
+      labelMedium: TextStyle(color: YsColors.mutedForeground, fontSize: 12),
+    ),
     tooltipTheme: TooltipThemeData(
       decoration: BoxDecoration(
         color: YsColors.card,

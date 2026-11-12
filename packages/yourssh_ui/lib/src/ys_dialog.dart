@@ -1,11 +1,22 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
 import 'ys_colors.dart';
 import 'ys_metrics.dart';
 
-/// Shows a modal dialog through forui's dialog route (blurred, token-tinted
-/// barrier, forui transition).
+/// Tint-only barrier filter: the theme's `barrier` colour fades in with the
+/// route animation, with no blur.
+ImageFilter Function(BuildContext, double)? _tintBarrierFilter() =>
+    (context, animation) => ColorFilter.mode(
+      Color.lerp(Colors.transparent, context.theme.colors.barrier, animation)!,
+      BlendMode.srcOver,
+    );
+
+/// Shows a modal dialog through forui's dialog route (token-tinted barrier
+/// with no backdrop blur, so a streaming terminal behind it is not re-blurred
+/// every frame; forui transition).
 ///
 /// Always pushes on the root navigator, like `showDialog`, so the dialog
 /// covers nested navigators and inherits the root `FTheme`. Escape and a
@@ -23,6 +34,9 @@ Future<T?> showYsDialog<T>(
   context: context,
   useRootNavigator: true,
   barrierDismissible: barrierDismissible,
+  routeStyle: const FDialogRouteStyleDelta.delta(
+    barrierFilter: _tintBarrierFilter,
+  ),
   builder: (ctx, style, animation) => builder(ctx),
 );
 

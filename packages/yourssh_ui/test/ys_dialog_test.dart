@@ -5,8 +5,10 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 
 Widget _host(void Function(BuildContext) onTap) => MaterialApp(
   theme: ysMaterialTheme(),
-  builder: (context, child) =>
-      FTheme(data: ysThemeData(), child: FToaster(child: child!)),
+  builder: (context, child) => FTheme(
+    data: ysThemeData(),
+    child: FToaster(child: child!),
+  ),
   home: Scaffold(
     body: Builder(
       builder: (c) =>
@@ -22,6 +24,20 @@ Future<void> _open(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('dialog barrier is tint-only (no backdrop blur)', (tester) async {
+    await tester.pumpWidget(
+      _host((c) => showYsDialog<void>(c, builder: (_) => const Text('body'))),
+    );
+    await _open(tester);
+    expect(find.text('body'), findsOneWidget);
+    final filter = tester.widget<BackdropFilter>(find.byType(BackdropFilter));
+    final text = filter.filter.toString().toLowerCase();
+    expect(text, isNot(contains('blur')));
+    expect(text, contains('colorfilter'));
+    // 60% black tint, fully applied once the entrance animation has settled.
+    expect(text, contains('alpha: 0.6'));
+  });
+
   group('showYsConfirm', () {
     testWidgets('returns true on confirm', (tester) async {
       bool? result;
@@ -144,7 +160,10 @@ void main() {
   });
 
   group('YsDialog layout', () {
-    Future<List<Rect>> openWith(WidgetTester tester, List<String> labels) async {
+    Future<List<Rect>> openWith(
+      WidgetTester tester,
+      List<String> labels,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(1200, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
@@ -180,11 +199,7 @@ void main() {
     testWidgets('long labels wrap but stay content-sized and inside', (
       tester,
     ) async {
-      final labels = [
-        'Long label one',
-        'Long label two',
-        'Long label three',
-      ];
+      final labels = ['Long label one', 'Long label two', 'Long label three'];
       final r = await openWith(tester, labels);
       final dialog = tester.getRect(
         find
@@ -206,13 +221,15 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(1200, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
-        _host((c) => showYsConfirm(
-          c,
-          title: 'Delete?',
-          message: 'Gone forever',
-          confirmLabel: 'Delete',
-          destructive: true,
-        )),
+        _host(
+          (c) => showYsConfirm(
+            c,
+            title: 'Delete?',
+            message: 'Gone forever',
+            confirmLabel: 'Delete',
+            destructive: true,
+          ),
+        ),
       );
       await _open(tester);
       Rect rect(String label) => tester.getRect(
@@ -309,8 +326,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: ysMaterialTheme(),
-          builder: (context, child) =>
-              FTheme(data: ysThemeData(), child: FToaster(child: child!)),
+          builder: (context, child) => FTheme(
+            data: ysThemeData(),
+            child: FToaster(child: child!),
+          ),
           home: Navigator(
             onGenerateRoute: (_) => MaterialPageRoute<void>(
               builder: (_) => Scaffold(
@@ -363,8 +382,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: ysMaterialTheme(),
-        builder: (context, child) =>
-            FTheme(data: ysThemeData(), child: FToaster(child: child!)),
+        builder: (context, child) => FTheme(
+          data: ysThemeData(),
+          child: FToaster(child: child!),
+        ),
         home: const Scaffold(
           body: Center(child: YsDialogFrame(child: Text('framed'))),
         ),
@@ -372,10 +393,12 @@ void main() {
     );
     expect(find.text('framed'), findsOneWidget);
     final box = tester.widget<DecoratedBox>(
-      find.descendant(
-        of: find.byType(YsDialogFrame),
-        matching: find.byType(DecoratedBox),
-      ).first,
+      find
+          .descendant(
+            of: find.byType(YsDialogFrame),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
     );
     final deco = box.decoration as ShapeDecoration;
     expect(deco.color, YsColors.card);
