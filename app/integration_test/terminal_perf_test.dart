@@ -10,7 +10,6 @@
 // Env (via --dart-define): BENCH_DIR, PERF_OUT, PHASE_CAP_S (default 300).
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
