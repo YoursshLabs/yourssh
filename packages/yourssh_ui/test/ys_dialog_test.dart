@@ -15,7 +15,7 @@ Widget _host(void Function(BuildContext) onTap) => MaterialApp(
   ),
 );
 
-/// Opens the dialog and returns a holder for its eventual result.
+/// Taps the 'go' button to open the dialog and waits for it to settle.
 Future<void> _open(WidgetTester tester) async {
   await tester.tap(find.text('go'));
   await tester.pumpAndSettle();
@@ -140,6 +140,43 @@ void main() {
       await tester.pumpAndSettle();
       expect(result, isFalse);
       expect(find.text('T'), findsNothing);
+    });
+  });
+
+  group('YsDialog layout', () {
+    testWidgets('actions share one row and are content-sized', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _host((c) => showYsConfirm(
+          c,
+          title: 'Delete?',
+          message: 'Gone forever',
+          confirmLabel: 'Delete',
+          destructive: true,
+        )),
+      );
+      await _open(tester);
+      Rect rect(String label) => tester.getRect(
+        find.ancestor(of: find.text(label), matching: find.byType(FButton)),
+      );
+      final cancel = rect('Cancel');
+      final del = rect('Delete');
+      final dialog = tester.getRect(
+        find
+            .descendant(
+              of: find.byType(FDialog),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+      expect(cancel.top, del.top);
+      expect(cancel.right, lessThan(del.left));
+      expect(cancel.width, lessThan(dialog.width / 2));
+      expect(del.width, lessThan(dialog.width / 2));
+      // Right-aligned, and the dialog hugs its short content.
+      expect(del.right, lessThanOrEqualTo(dialog.right));
+      expect(dialog.width, lessThan(560));
     });
   });
 

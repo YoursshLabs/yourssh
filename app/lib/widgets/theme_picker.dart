@@ -40,7 +40,8 @@ class ThemePickerButton extends StatelessWidget {
   }
 
   void _openPicker(BuildContext context) {
-    showYsDialog<String>(context,
+    showYsDialog<String>(
+      context,
       builder: (ctx) => _ThemePickerDialog(
         currentTheme: currentTheme,
         onSelected: (name) {

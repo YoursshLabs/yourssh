@@ -120,24 +120,25 @@ class _BulkPushDialogState extends State<BulkPushDialog> {
 
   Future<void> _close() async {
     if (_controller.isRunning) {
-      final ok = await showYsDialog<bool>(context,
+      final ok = await showYsDialog<bool>(
+        context,
         builder: (ctx) => YsDialog(
-        title: 'Cancel push?',
-        body: Text('Transfers in flight will stop at the next file boundary.'),
-        actions: [
-          FButton(
-            autofocus: true,
-            variant: FButtonVariant.outline,
-            onPress: () => Navigator.pop(ctx, false),
-            child: Text('Keep pushing'),
-          ),
-          FButton(
-            variant: FButtonVariant.destructive,
-            onPress: () => Navigator.pop(ctx, true),
-            child: Text('Cancel push'),
-          ),
-        ],
-      ),
+          title: 'Cancel push?',
+          body: Text('Transfers in flight will stop at the next file boundary.'),
+          actions: [
+            FButton(
+              autofocus: true,
+              variant: FButtonVariant.outline,
+              onPress: () => Navigator.pop(ctx, false),
+              child: const Text('Keep pushing'),
+            ),
+            FButton(
+              variant: FButtonVariant.destructive,
+              onPress: () => Navigator.pop(ctx, true),
+              child: const Text('Cancel push'),
+            ),
+          ],
+        ),
       );
       if (ok != true || !mounted) return;
       _controller.cancel();
@@ -161,7 +162,7 @@ class _BulkPushDialogState extends State<BulkPushDialog> {
         maxWidth: 760,
         padding: EdgeInsets.zero,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           child: SizedBox(
             width: 760,
             height: 600,

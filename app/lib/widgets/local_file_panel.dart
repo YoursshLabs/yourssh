@@ -110,24 +110,25 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
 
   Future<void> _delete(List<LocalEntry> entries) async {
     if (entries.isEmpty) return;
-    final confirmed = await showYsDialog<bool>(context,
+    final confirmed = await showYsDialog<bool>(
+      context,
       builder: (ctx) => YsDialog(
-      title: 'Delete',
-      body: Text('Delete ${entries.length} item(s)? This cannot be undone.'),
-      actions: [
-        FButton(
-          autofocus: true,
-          variant: FButtonVariant.outline,
-          onPress: () => Navigator.pop(ctx, false),
-          child: Text('Cancel'),
-        ),
-        FButton(
-          variant: FButtonVariant.destructive,
-          onPress: () => Navigator.pop(ctx, true),
-          child: Text('Delete'),
-        ),
-      ],
-    ),
+        title: 'Delete',
+        body: Text('Delete ${entries.length} item(s)? This cannot be undone.'),
+        actions: [
+          FButton(
+            autofocus: true,
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FButton(
+            variant: FButtonVariant.destructive,
+            onPress: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
     if (confirmed != true) return;
     try {
@@ -162,7 +163,8 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
   }
 
   Future<void> _showPermissionsDialog(LocalEntry entry) async {
-    final result = await showYsDialog<({int mode, bool recursive})>(context,
+    final result = await showYsDialog<({int mode, bool recursive})>(
+      context,
       builder: (_) => PermissionsDialog(
         entryName: entry.name,
         // Scan-time mode from the model — no blocking statSync at
@@ -654,46 +656,47 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
     String initial = '',
   }) async {
     final controller = TextEditingController(text: initial);
-    return showYsDialog<String>(context,
+    return showYsDialog<String>(
+      context,
       builder: (ctx) => YsDialog(
-      title: title,
-      body: TextField(
-        controller: controller,
-        autofocus: true,
-        style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 13),
-          filled: true,
-          fillColor: const Color(0xFF111111),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(6),
-            borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+        title: title,
+        body: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 13),
+            filled: true,
+            fillColor: const Color(0xFF111111),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: const BorderSide(color: AppColors.accent),
+            ),
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(6),
-            borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(6),
-            borderSide: const BorderSide(color: AppColors.accent),
-          ),
+          onSubmitted: (_) => Navigator.pop(ctx, controller.text),
         ),
-        onSubmitted: (_) => Navigator.pop(ctx, controller.text),
+        actions: [
+          FButton(
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FButton(
+            variant: FButtonVariant.primary,
+            onPress: () => Navigator.pop(ctx, controller.text),
+            child: const Text('OK'),
+          ),
+        ],
       ),
-      actions: [
-        FButton(
-          variant: FButtonVariant.outline,
-          onPress: () => Navigator.pop(ctx),
-          child: Text('Cancel'),
-        ),
-        FButton(
-          variant: FButtonVariant.primary,
-          onPress: () => Navigator.pop(ctx, controller.text),
-          child: Text('OK'),
-        ),
-      ],
-    ),
     );
   }
 }

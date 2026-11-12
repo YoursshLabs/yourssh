@@ -118,7 +118,8 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
 
   Future<void> _pickSource(bool left) async {
     final hosts = context.read<HostProvider>().allHosts;
-    final picked = await showYsDialog<PanelSource>(context,
+    final picked = await showYsDialog<PanelSource>(
+      context,
       builder: (_) => SourcePickerDialog(hosts: hosts, current: _sourceOf(left)),
     );
     if (!mounted || picked == null || picked == _sourceOf(left)) return;

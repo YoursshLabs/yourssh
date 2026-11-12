@@ -36,7 +36,9 @@ class _TofuWatcherState extends State<TofuWatcher> {
   }
 
   Future<void> _show(HostKeyChallenge c) async {
-    final accept = await showYsDialog<bool>(context, barrierDismissible: false,
+    final accept = await showYsDialog<bool>(
+      context,
+      barrierDismissible: false,
       builder: (_) => YsDialog(
         title: c.isKeyTypeChange ? 'Host key type changed' : 'Host key changed',
         body: Column(
@@ -51,7 +53,10 @@ class _TofuWatcherState extends State<TofuWatcher> {
                   : 'The host key for ${c.host}:${c.port} has changed. This '
                         'could be a server reinstall — or a man-in-the-middle '
                         'attack.',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -77,12 +82,12 @@ class _TofuWatcherState extends State<TofuWatcher> {
             autofocus: true,
             variant: FButtonVariant.outline,
             onPress: () => Navigator.of(context).pop(false),
-            child: Text('Reject'),
+            child: const Text('Reject'),
           ),
           FButton(
             variant: FButtonVariant.destructive,
             onPress: () => Navigator.of(context).pop(true),
-            child: Text('Trust'),
+            child: const Text('Trust'),
           ),
         ],
       ),

@@ -45,7 +45,8 @@ class HostChainEditor extends StatelessWidget {
     final chosen = chain.map((h) => h.id).toSet();
     final pickable =
         candidates.where((h) => !chosen.contains(h.id)).toList();
-    final picked = await showYsDialog<Host>(context,
+    final picked = await showYsDialog<Host>(
+      context,
       builder: (_) => _HostPickerDialog(candidates: pickable),
     );
     if (picked != null) onChanged([...chain.map((h) => h.id), picked.id]);

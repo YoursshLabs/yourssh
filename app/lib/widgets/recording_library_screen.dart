@@ -262,24 +262,25 @@ class _RecordingRow extends StatelessWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context) async {
-    final confirmed = await showYsDialog<bool>(context,
+    final confirmed = await showYsDialog<bool>(
+      context,
       builder: (_) => YsDialog(
-      title: 'Delete recording?',
-      body: Text(entry.fileName),
-      actions: [
-        FButton(
-          autofocus: true,
-          variant: FButtonVariant.outline,
-          onPress: () => Navigator.pop(context, false),
-          child: Text('Cancel'),
-        ),
-        FButton(
-          variant: FButtonVariant.destructive,
-          onPress: () => Navigator.pop(context, true),
-          child: Text('Delete'),
-        ),
-      ],
-    ),
+        title: 'Delete recording?',
+        body: Text(entry.fileName),
+        actions: [
+          FButton(
+            autofocus: true,
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FButton(
+            variant: FButtonVariant.destructive,
+            onPress: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
     if (confirmed == true && context.mounted) {
       try {

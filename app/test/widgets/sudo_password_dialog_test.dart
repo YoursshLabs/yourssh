@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/widgets/sudo_password_dialog.dart';
 import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
+import 'package:yourssh_ui/yourssh_ui.dart' show showYsDialog;
 
 /// Holder so tests can observe the dialog result after it pops.
 class _Result {
@@ -20,9 +21,9 @@ void main() {
         builder: (context) => TextButton(
           onPressed: () async {
             result.value =
-                await showDialog<({String password, bool remember})>(
-              context: context,
-              builder: (_) => SudoPasswordDialog(host: host),
+                await showYsDialog<({String password, bool remember})>(
+            context,
+            builder: (_) => SudoPasswordDialog(host: host),
             );
             result.popped = true;
           },

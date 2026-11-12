@@ -119,27 +119,28 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   /// Shown when downloaded content turns out to be binary: offer to hand the
   /// file to the OS default app instead, then close the editor either way.
   Future<void> _offerExternalOpen() async {
-    final open = await showYsDialog<bool>(context,
+    final open = await showYsDialog<bool>(
+      context,
       builder: (ctx) => YsDialog(
-      title: 'Cannot edit in-app',
-      body: Text(
-        '"${widget.entry.name}" appears to be a binary file.\n'
-        'Open it with an external application instead? Changes saved '
-        'there are uploaded back automatically.',
+        title: 'Cannot edit in-app',
+        body: Text(
+          '"${widget.entry.name}" appears to be a binary file.\n'
+          'Open it with an external application instead? Changes saved '
+          'there are uploaded back automatically.',
+        ),
+        actions: [
+          FButton(
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FButton(
+            variant: FButtonVariant.primary,
+            onPress: () => Navigator.pop(ctx, true),
+            child: const Text('Open externally'),
+          ),
+        ],
       ),
-      actions: [
-        FButton(
-          variant: FButtonVariant.outline,
-          onPress: () => Navigator.pop(ctx, false),
-          child: Text('Cancel'),
-        ),
-        FButton(
-          variant: FButtonVariant.primary,
-          onPress: () => Navigator.pop(ctx, true),
-          child: Text('Open externally'),
-        ),
-      ],
-    ),
     );
     if (!mounted) return;
     if (open == true) {
@@ -221,24 +222,25 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   }
 
   Future<void> _showDiscardDialog() async {
-    final discard = await showYsDialog<bool>(context,
+    final discard = await showYsDialog<bool>(
+      context,
       builder: (ctx) => YsDialog(
-      title: 'Unsaved changes',
-      body: Text('Discard changes and close?'),
-      actions: [
-        FButton(
-          autofocus: true,
-          variant: FButtonVariant.outline,
-          onPress: () => Navigator.pop(ctx, false),
-          child: Text('Cancel'),
-        ),
-        FButton(
-          variant: FButtonVariant.destructive,
-          onPress: () => Navigator.pop(ctx, true),
-          child: Text('Discard'),
-        ),
-      ],
-    ),
+        title: 'Unsaved changes',
+        body: Text('Discard changes and close?'),
+        actions: [
+          FButton(
+            autofocus: true,
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FButton(
+            variant: FButtonVariant.destructive,
+            onPress: () => Navigator.pop(ctx, true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
     );
     if (discard == true && mounted) Navigator.pop(context);
   }

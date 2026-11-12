@@ -451,24 +451,25 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
   }
 
   Future<void> _confirmDelete(Host host) async {
-    final ok = await showYsDialog<bool>(context,
+    final ok = await showYsDialog<bool>(
+      context,
       builder: (ctx) => YsDialog(
-      title: 'Delete ${host.label}?',
-      body: Text('This removes the saved host and its credentials.'),
-      actions: [
-        FButton(
-          autofocus: true,
-          variant: FButtonVariant.outline,
-          onPress: () => Navigator.pop(ctx, false),
-          child: Text('Cancel'),
-        ),
-        FButton(
-          variant: FButtonVariant.destructive,
-          onPress: () => Navigator.pop(ctx, true),
-          child: Text('Delete'),
-        ),
-      ],
-    ),
+        title: 'Delete ${host.label}?',
+        body: Text('This removes the saved host and its credentials.'),
+        actions: [
+          FButton(
+            autofocus: true,
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FButton(
+            variant: FButtonVariant.destructive,
+            onPress: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
     if (ok == true && mounted) {
       await context.read<HostProvider>().deleteHost(host.id);

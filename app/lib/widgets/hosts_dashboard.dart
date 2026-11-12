@@ -150,22 +150,23 @@ class _HostsDashboardState extends State<HostsDashboard> {
     final plan =
         planConnectAll(selected: _selectedHosts(), liveHostIds: live);
     if (plan.toConnect.length > 5) {
-      final ok = await showYsDialog<bool>(context,
+      final ok = await showYsDialog<bool>(
+        context,
         builder: (ctx) => YsDialog(
-        title: 'Open ${plan.toConnect.length} tabs?',
-        actions: [
-          FButton(
-            variant: FButtonVariant.outline,
-            onPress: () => Navigator.pop(ctx, false),
-            child: Text('Cancel'),
-          ),
-          FButton(
-            variant: FButtonVariant.primary,
-            onPress: () => Navigator.pop(ctx, true),
-            child: Text('Open all'),
-          ),
-        ],
-      ),
+          title: 'Open ${plan.toConnect.length} tabs?',
+          actions: [
+            FButton(
+              variant: FButtonVariant.outline,
+              onPress: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FButton(
+              variant: FButtonVariant.primary,
+              onPress: () => Navigator.pop(ctx, true),
+              child: const Text('Open all'),
+            ),
+          ],
+        ),
       );
       if (ok != true || !mounted) return;
     }
@@ -197,7 +198,9 @@ class _HostsDashboardState extends State<HostsDashboard> {
   void _openBulkRun() {
     final hosts = _selectedSshHosts('Run command');
     if (hosts.isEmpty) return;
-    showYsDialog(context, barrierDismissible: false,
+    showYsDialog(
+      context,
+      barrierDismissible: false,
       builder: (_) => BulkRunDialog(hosts: hosts),
     );
   }
@@ -205,7 +208,9 @@ class _HostsDashboardState extends State<HostsDashboard> {
   void _openBulkPush() {
     final hosts = _selectedSshHosts('Push files');
     if (hosts.isEmpty) return;
-    showYsDialog(context, barrierDismissible: false,
+    showYsDialog(
+      context,
+      barrierDismissible: false,
       builder: (_) => BulkPushDialog(hosts: hosts),
     );
   }
@@ -1349,8 +1354,9 @@ class _HostCardState extends State<_HostCard> {
         .toList()
       ..sort();
 
-    showYsDialog<void>(context,
-
+    showYsDialog<void>(
+      context,
+    
       builder: (_) => _MoveToGroupDialog(
         host: widget.host,
         groups: groups,
@@ -1359,13 +1365,13 @@ class _HostCardState extends State<_HostCard> {
     );
   }
   void _export(BuildContext context) {
-    showYsDialog<void>(context,
-      builder: (_) => _ExportDialog(host: widget.host),
-    );
+    showYsDialog<void>(context, builder: (_) => _ExportDialog(host: widget.host));
   }
 
   void _openSftp(BuildContext context) {
-    showYsDialog<void>(context, barrierDismissible: false,
+    showYsDialog<void>(
+      context,
+      barrierDismissible: false,
       builder: (_) => YsDialogFrame(
         maxWidth: 800,
         padding: EdgeInsets.zero,
@@ -1373,7 +1379,7 @@ class _HostCardState extends State<_HostCard> {
           width: 800,
           height: 600,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             child: SftpScreen(host: widget.host),
           ),
         ),
@@ -1523,7 +1529,7 @@ class _ExportDialogState extends State<_ExportDialog> {
         FButton(
           variant: FButtonVariant.outline,
           onPress: () => Navigator.of(context).pop(),
-          child: Text('Close'),
+          child: const Text('Close'),
         ),
         FButton(
           variant: FButtonVariant.primary,

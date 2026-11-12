@@ -37,9 +37,11 @@ class PluginManagerScreen extends StatelessWidget {
                       color: AppColors.textSecondary, fontSize: 12),
                 ),
                 trailing: ElevatedButton(
-                  onPressed: () => showYsDialog(context, barrierDismissible: false,
-                    builder: (_) => PluginConsentDialog(
-                        manifest: engineProvider.pendingConsent!),
+                  onPressed: () => showYsDialog(
+                    context,
+                    barrierDismissible: false,
+                    builder: (_) =>
+                        PluginConsentDialog(manifest: engineProvider.pendingConsent!),
                   ),
                   child: const Text('Review'),
                 ),

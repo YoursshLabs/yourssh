@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/widgets/permissions_dialog.dart';
 import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
-import 'package:yourssh_ui/yourssh_ui.dart' show FButton;
+import 'package:yourssh_ui/yourssh_ui.dart' show FButton, showYsDialog;
 
 Future<({int mode, bool recursive})?> _open(
   WidgetTester tester, {
@@ -15,8 +15,8 @@ Future<({int mode, bool recursive})?> _open(
     home: Builder(
       builder: (context) => TextButton(
         onPressed: () async {
-          result = await showDialog<({int mode, bool recursive})>(
-            context: context,
+          result = await showYsDialog<({int mode, bool recursive})>(
+            context,
             builder: (_) => PermissionsDialog(
               entryName: 'notes.txt',
               initialMode: initialMode,
@@ -69,9 +69,9 @@ void main() {
       home: Builder(
         builder: (context) => TextButton(
           onPressed: () async {
-            result = await showDialog<({int mode, bool recursive})>(
-              context: context,
-              builder: (_) => const PermissionsDialog(
+            result = await showYsDialog<({int mode, bool recursive})>(
+            context,
+            builder: (_) => const PermissionsDialog(
                 entryName: 'notes.txt',
                 initialMode: 0x1A4,
                 isDirectory: false,

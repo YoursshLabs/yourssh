@@ -206,26 +206,27 @@ class MobileKeysScreen extends StatelessWidget {
 
   Future<void> _confirmDelete(
       BuildContext context, SshKeyEntry entry) async {
-    final ok = await showYsDialog<bool>(context,
+    final ok = await showYsDialog<bool>(
+      context,
       builder: (ctx) => YsDialog(
-      title: 'Remove "${entry.label}"?',
-      body: Text(
-        'This removes the key from the keychain. The file on disk is kept.',
+        title: 'Remove "${entry.label}"?',
+        body: Text(
+          'This removes the key from the keychain. The file on disk is kept.',
+        ),
+        actions: [
+          FButton(
+            autofocus: true,
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FButton(
+            variant: FButtonVariant.destructive,
+            onPress: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+        ],
       ),
-      actions: [
-        FButton(
-          autofocus: true,
-          variant: FButtonVariant.outline,
-          onPress: () => Navigator.pop(ctx, false),
-          child: Text('Cancel'),
-        ),
-        FButton(
-          variant: FButtonVariant.destructive,
-          onPress: () => Navigator.pop(ctx, true),
-          child: Text('Remove'),
-        ),
-      ],
-    ),
     );
     if (ok == true && context.mounted) {
       await context.read<KeyProvider>().deleteKey(entry.id);

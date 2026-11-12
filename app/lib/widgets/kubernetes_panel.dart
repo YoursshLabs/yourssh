@@ -270,16 +270,22 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
     final names =
         await _service().podContainers(widget.host, p.name, p.namespace);
     if (names.length > 1 && mounted) {
-      container = await showYsDialog<String>(context,
-        builder: (_) => SimpleDialog(
-          title: const Text('Select container'),
-          children: [
-            for (final n in names)
-              SimpleDialogOption(
-                child: Text(n),
-                onPressed: () => Navigator.pop(context, n),
-              ),
-          ],
+      container = await showYsDialog<String>(
+        context,
+        builder: (_) => YsDialog(
+          title: 'Select container',
+          body: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final n in names)
+                ListTile(
+                  dense: true,
+                  title: Text(n),
+                  onTap: () => Navigator.pop(context, n),
+                ),
+            ],
+          ),
         ),
       );
       if (container == null) return;
@@ -301,16 +307,22 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
     final names =
         await _service().podContainers(widget.host, p.name, p.namespace);
     if (names.length > 1 && mounted) {
-      container = await showYsDialog<String>(context,
-        builder: (_) => SimpleDialog(
-          title: const Text('Select container'),
-          children: [
-            for (final n in names)
-              SimpleDialogOption(
-                child: Text(n),
-                onPressed: () => Navigator.pop(context, n),
-              ),
-          ],
+      container = await showYsDialog<String>(
+        context,
+        builder: (_) => YsDialog(
+          title: 'Select container',
+          body: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final n in names)
+                ListTile(
+                  dense: true,
+                  title: Text(n),
+                  onTap: () => Navigator.pop(context, n),
+                ),
+            ],
+          ),
         ),
       );
       if (container == null) return;
@@ -427,11 +439,11 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
   // ── Port-forward dialog ──────────────────────────────
 
   Future<void> _showForwardDialog(PodEntry p) async {
-    await showYsDialog<void>(context,
+    await showYsDialog<void>(
+      context,
       builder: (_) => _PortForwardDialog(
         pod: p,
-        onConfirm: (podPort, localPort) =>
-            _startForward(p, podPort, localPort),
+        onConfirm: (podPort, localPort) => _startForward(p, podPort, localPort),
       ),
     );
   }
@@ -603,7 +615,7 @@ class _PortForwardDialogState extends State<_PortForwardDialog> {
         FButton(
           variant: FButtonVariant.outline,
           onPress: () => Navigator.pop(context),
-          child: Text('Cancel'),
+          child: const Text('Cancel'),
         ),
         FButton(
           variant: FButtonVariant.primary,

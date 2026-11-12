@@ -457,27 +457,28 @@ class _SyncSectionState extends State<_SyncSection> {
   }
 
   Future<void> _regenerate() async {
-    final ok = await showYsDialog<bool>(context,
+    final ok = await showYsDialog<bool>(
+      context,
       builder: (ctx) => YsDialog(
-      title: 'Regenerate sync code?',
-      body: Text(
-        'A new code creates a new cloud record. Data tied to the old code '
-        'becomes unreachable until you re-enter the old code.',
+        title: 'Regenerate sync code?',
+        body: Text(
+          'A new code creates a new cloud record. Data tied to the old code '
+          'becomes unreachable until you re-enter the old code.',
+        ),
+        actions: [
+          FButton(
+            autofocus: true,
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FButton(
+            variant: FButtonVariant.destructive,
+            onPress: () => Navigator.pop(ctx, true),
+            child: const Text('Regenerate'),
+          ),
+        ],
       ),
-      actions: [
-        FButton(
-          autofocus: true,
-          variant: FButtonVariant.outline,
-          onPress: () => Navigator.pop(ctx, false),
-          child: Text('Cancel'),
-        ),
-        FButton(
-          variant: FButtonVariant.primary,
-          onPress: () => Navigator.pop(ctx, true),
-          child: Text('Regenerate'),
-        ),
-      ],
-    ),
     );
     if (ok == true) await _generateCode();
   }
@@ -631,7 +632,9 @@ class _SyncSectionState extends State<_SyncSection> {
 
   Future<void> _showQrExport(BuildContext context) async {
     final hostProvider = context.read<HostProvider>();
-    await showYsDialog<void>(context, barrierDismissible: false,
+    await showYsDialog<void>(
+      context,
+      barrierDismissible: false,
       builder: (_) => QrExportDialog(
         getPayload: () async {
           final hosts = hostProvider.allHosts;
@@ -916,9 +919,7 @@ class _SyncSectionState extends State<_SyncSection> {
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.content_paste, size: 16),
                   label: const Text('Import via Code'),
-                  onPressed: () => showYsDialog<void>(context,
-                    builder: (_) => const QrImportDialog(),
-                  ),
+                  onPressed: () => showYsDialog<void>(context, builder: (_) => const QrImportDialog()),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.textPrimary,
                     side: const BorderSide(color: AppColors.border),
@@ -1234,9 +1235,7 @@ class _CustomShellsRows extends StatelessWidget {
 
 Future<void> _showAddCustomShellDialog(BuildContext context) async {
   final settings = context.read<SettingsProvider>();
-  final profile = await showYsDialog<ShellProfile>(context,
-    builder: (_) => const _AddShellDialog(),
-  );
+  final profile = await showYsDialog<ShellProfile>(context, builder: (_) => const _AddShellDialog());
   if (profile != null) await settings.addCustomShellProfile(profile);
 }
 
@@ -1326,12 +1325,12 @@ class _AddShellDialogState extends State<_AddShellDialog> {
         FButton(
           variant: FButtonVariant.outline,
           onPress: () => Navigator.pop(context),
-          child: Text('Cancel'),
+          child: const Text('Cancel'),
         ),
         FButton(
           variant: FButtonVariant.primary,
           onPress: () => Navigator.pop(context, _buildProfile()),
-          child: Text('Add'),
+          child: const Text('Add'),
         ),
       ],
     );

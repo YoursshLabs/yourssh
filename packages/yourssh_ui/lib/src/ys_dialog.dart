@@ -11,6 +11,10 @@ import 'ys_metrics.dart';
 /// covers nested navigators and inherits the root `FTheme`. Escape and a
 /// barrier tap close it only while [barrierDismissible] is true; the future
 /// then completes with `null`.
+///
+/// The barrier closes the route with `Navigator.pop`, not `maybePop`, so a
+/// `PopScope` inside the dialog is bypassed: a dialog guarding against
+/// dismissal must pass `barrierDismissible: false`.
 Future<T?> showYsDialog<T>(
   BuildContext context, {
   required WidgetBuilder builder,
@@ -69,37 +73,45 @@ class YsDialog extends StatelessWidget {
         type: MaterialType.transparency,
         child: Padding(
           padding: const EdgeInsets.all(YsSpace.s5),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              DefaultTextStyle.merge(
-                style: style.titleTextStyle,
-                child: titleWidget ?? Text(title!),
-              ),
-              if (body != null) ...[
-                const SizedBox(height: YsSpace.s3),
-                Flexible(
-                  child: DefaultTextStyle.merge(
-                    style: style.bodyTextStyle,
-                    child: body!,
-                  ),
+          // Size to content (up to maxWidth), like AlertDialog.
+          child: IntrinsicWidth(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DefaultTextStyle.merge(
+                  style: style.titleTextStyle,
+                  child: titleWidget ?? Text(title!),
                 ),
-              ],
-              if (actions.isNotEmpty) ...[
-                const SizedBox(height: YsSpace.s5),
-                Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: Wrap(
-                    alignment: WrapAlignment.end,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: YsSpace.s2,
-                    runSpacing: YsSpace.s2,
-                    children: actions,
+                if (body != null) ...[
+                  const SizedBox(height: YsSpace.s3),
+                  Flexible(
+                    child: DefaultTextStyle.merge(
+                      style: style.bodyTextStyle,
+                      child: body!,
+                    ),
                   ),
-                ),
+                ],
+                if (actions.isNotEmpty) ...[
+                  const SizedBox(height: YsSpace.s5),
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: YsSpace.s2,
+                      runSpacing: YsSpace.s2,
+                      // FButton fills the width by default; give each action
+                      // its intrinsic width so the row is content-sized and
+                      // only wraps when the buttons really do not fit.
+                      children: [
+                        for (final a in actions) IntrinsicWidth(child: a),
+                      ],
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -167,11 +179,12 @@ class YsDialogFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    Widget frame = Align(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth + 80),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+          padding: EdgeInsets.fromLTRB(40, 24, 40, 24 + keyboard),
           child: DecoratedBox(
             decoration: ShapeDecoration(
               color: YsColors.card,
@@ -191,5 +204,10 @@ class YsDialogFrame extends StatelessWidget {
         ),
       ),
     );
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation != null) {
+      frame = FadeTransition(opacity: animation, child: frame);
+    }
+    return frame;
   }
 }

@@ -9,6 +9,7 @@ import 'package:yourssh/services/bulk_action_service.dart';
 import 'package:yourssh/widgets/bulk/bulk_run_dialog.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
+import 'package:yourssh_ui/yourssh_ui.dart' show showYsDialog;
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -69,9 +70,8 @@ void main() {
         }),
       ),
     ));
-    showDialog<void>(
-      context: dialogCtx,
-      builder: (_) => BulkRunDialog(
+    showYsDialog<void>(
+dialogCtx, barrierDismissible: false, builder: (_) => BulkRunDialog(
         hosts: [Host(label: 'a', host: 'a.x', username: 'u')],
         serviceOverride: service,
       ),

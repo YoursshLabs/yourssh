@@ -67,26 +67,27 @@ class _BulkRunDialogState extends State<BulkRunDialog> {
 
   Future<void> _close() async {
     if (_controller.isRunning) {
-      final ok = await showYsDialog<bool>(context,
+      final ok = await showYsDialog<bool>(
+        context,
         builder: (ctx) => YsDialog(
-        title: 'Cancel run?',
-        body: Text(
-          'Hosts still in flight will finish; queued hosts will be cancelled.',
+          title: 'Cancel run?',
+          body: Text(
+            'Hosts still in flight will finish; queued hosts will be cancelled.',
+          ),
+          actions: [
+            FButton(
+              autofocus: true,
+              variant: FButtonVariant.outline,
+              onPress: () => Navigator.pop(ctx, false),
+              child: const Text('Keep running'),
+            ),
+            FButton(
+              variant: FButtonVariant.destructive,
+              onPress: () => Navigator.pop(ctx, true),
+              child: const Text('Cancel run'),
+            ),
+          ],
         ),
-        actions: [
-          FButton(
-            autofocus: true,
-            variant: FButtonVariant.outline,
-            onPress: () => Navigator.pop(ctx, false),
-            child: Text('Keep running'),
-          ),
-          FButton(
-            variant: FButtonVariant.destructive,
-            onPress: () => Navigator.pop(ctx, true),
-            child: Text('Cancel run'),
-          ),
-        ],
-      ),
       );
       if (ok != true || !mounted) return;
       _controller.cancel();
@@ -118,7 +119,7 @@ class _BulkRunDialogState extends State<BulkRunDialog> {
         maxWidth: 900,
         padding: EdgeInsets.zero,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           child: SizedBox(
             width: 900,
             height: 650,

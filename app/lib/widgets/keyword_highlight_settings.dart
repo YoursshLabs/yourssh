@@ -114,7 +114,8 @@ class KeywordHighlightSection extends StatelessWidget {
     AppKeywordHighlightRule? rule,
     int? index,
   }) async {
-    final result = await showYsDialog<AppKeywordHighlightRule>(context,
+    final result = await showYsDialog<AppKeywordHighlightRule>(
+      context,
       builder: (_) => _KeywordRuleDialog(initial: rule),
     );
     if (result == null || !context.mounted) return;
@@ -348,7 +349,7 @@ class _KeywordRuleDialogState extends State<_KeywordRuleDialog> {
         FButton(
           variant: FButtonVariant.outline,
           onPress: () => Navigator.pop(context),
-          child: Text('Cancel'),
+          child: const Text('Cancel'),
         ),
         FButton(
           variant: FButtonVariant.primary,
@@ -455,7 +456,8 @@ class _ColorPickerButton extends StatelessWidget {
   }
 
   Future<void> _pick(BuildContext context) async {
-    final result = await showYsDialog<Color?>(context,
+    final result = await showYsDialog<Color?>(
+      context,
       builder: (_) => _ColorGridDialog(presets: presets, current: current),
     );
     if (result == _clearSentinel) {

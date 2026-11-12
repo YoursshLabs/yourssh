@@ -220,24 +220,25 @@ class _CloudflareTunnelBodyState extends State<_CloudflareTunnelBody> {
             icon: const Icon(Icons.delete_outline,
                 size: 16, color: AppColors.textTertiary),
             onPressed: () async {
-              final confirmed = await showYsDialog<bool>(context,
+              final confirmed = await showYsDialog<bool>(
+                context,
                 builder: (_) => YsDialog(
-                title: 'Remove tunnel',
-                body: Text('Remove "${tunnel.label}"?'),
-                actions: [
-                  FButton(
-                    autofocus: true,
-                    variant: FButtonVariant.outline,
-                    onPress: () => Navigator.pop(context, false),
-                    child: Text('Cancel'),
-                  ),
-                  FButton(
-                    variant: FButtonVariant.destructive,
-                    onPress: () => Navigator.pop(context, true),
-                    child: Text('Remove'),
-                  ),
-                ],
-              ),
+                  title: 'Remove tunnel',
+                  body: Text('Remove "${tunnel.label}"?'),
+                  actions: [
+                    FButton(
+                      autofocus: true,
+                      variant: FButtonVariant.outline,
+                      onPress: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    FButton(
+                      variant: FButtonVariant.destructive,
+                      onPress: () => Navigator.pop(context, true),
+                      child: const Text('Remove'),
+                    ),
+                  ],
+                ),
               );
               if (confirmed == true && mounted) {
                 context.read<TunnelProvider>().remove(tunnel.id);
