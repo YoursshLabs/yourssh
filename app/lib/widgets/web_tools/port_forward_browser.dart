@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../models/port_forward.dart';
 import '../../providers/port_forward_provider.dart';
-import '../../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import '../container_widgets.dart';
 
 class PortForwardBrowser extends StatelessWidget {
   final ValueChanged<String> onOpenUrl;
@@ -18,22 +19,11 @@ class PortForwardBrowser extends StatelessWidget {
         .toList();
 
     if (localActive.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.router_outlined, size: 48, color: AppColors.textTertiary),
-            const SizedBox(height: 12),
-            const Text('No active local tunnels',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-            const SizedBox(height: 4),
-            const Text(
-              'Start a local port forward in the Port Forwarding section\nto open it here.',
-              style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+      return const YsEmptyState(
+        icon: FLucideIcons.router,
+        title: 'No active local tunnels',
+        message:
+            'Start a local port forward in the Port Forwarding section\nto open it here.',
       );
     }
 
@@ -42,22 +32,25 @@ class PortForwardBrowser extends StatelessWidget {
       children: [
         Container(
           height: 52,
-          color: AppColors.sidebar,
+          color: YsColors.sidebar,
           padding: const EdgeInsets.symmetric(horizontal: 20),
           alignment: Alignment.centerLeft,
-          child: const Text('Active Local Tunnels',
-              style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500)),
+          child: const Text(
+            'Active Local Tunnels',
+            style: TextStyle(
+              color: YsColors.foreground,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
-        const Divider(height: 1, color: AppColors.border),
+        const FDivider(style: .delta(padding: .value(EdgeInsets.zero))),
         Expanded(
           child: ListView.separated(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(YsSpace.s4),
             itemCount: localActive.length,
             separatorBuilder: (_, _) =>
-                const Divider(height: 1, color: AppColors.border),
+                const FDivider(style: .delta(padding: .value(EdgeInsets.zero))),
             itemBuilder: (_, i) =>
                 _TunnelRow(forward: localActive[i], onOpenUrl: onOpenUrl),
           ),
@@ -67,108 +60,77 @@ class PortForwardBrowser extends StatelessWidget {
   }
 }
 
-class _TunnelRow extends StatefulWidget {
+class _TunnelRow extends StatelessWidget {
   final PortForward forward;
   final ValueChanged<String> onOpenUrl;
   const _TunnelRow({required this.forward, required this.onOpenUrl});
 
-  @override
-  State<_TunnelRow> createState() => _TunnelRowState();
-}
-
-class _TunnelRowState extends State<_TunnelRow> {
-  bool _hovered = false;
-
-  String get _url =>
-      'http://${widget.forward.localHost}:${widget.forward.localPort}';
+  String get _url => 'http://${forward.localHost}:${forward.localPort}';
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: _hovered ? AppColors.cardHover : AppColors.card,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: AppColors.success,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(widget.forward.label,
-                      style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 2),
-                  Text(_url,
-                      style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                          fontFamily: 'monospace')),
-                ],
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.copy, size: 14),
-              color: AppColors.textTertiary,
-              tooltip: 'Copy URL',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              onPressed: () => Clipboard.setData(ClipboardData(text: _url)),
-            ),
-            const SizedBox(width: 8),
-            _OpenButton(onTap: () => widget.onOpenUrl(_url)),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: YsSpace.s3,
+        vertical: YsSpace.s3,
       ),
-    );
-  }
-}
-
-class _OpenButton extends StatefulWidget {
-  final VoidCallback onTap;
-  const _OpenButton({required this.onTap});
-
-  @override
-  State<_OpenButton> createState() => _OpenButtonState();
-}
-
-class _OpenButtonState extends State<_OpenButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.accentDim : AppColors.accent,
-            borderRadius: BorderRadius.circular(5),
+      decoration: BoxDecoration(
+        color: YsColors.card,
+        borderRadius: BorderRadius.circular(YsRadius.control),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: YsColors.ok,
+              shape: BoxShape.circle,
+            ),
           ),
-          child: const Text('Open',
-              style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600)),
-        ),
+          const SizedBox(width: YsSpace.s3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  forward.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: YsColors.foreground,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _url,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: YsColors.mutedForeground,
+                    fontSize: 12,
+                    fontFamily: kYsMonoFontFamily,
+                    fontFamilyFallback: kYsMonoFontFallback,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ContainerIconAction(
+            icon: FLucideIcons.copy,
+            tooltip: 'Copy URL',
+            onPress: () => Clipboard.setData(ClipboardData(text: _url)),
+          ),
+          const SizedBox(width: YsSpace.s2),
+          FButton(
+            mainAxisSize: MainAxisSize.min,
+            size: .sm,
+            onPress: () => onOpenUrl(_url),
+            child: const Text('Open'),
+          ),
+        ],
       ),
     );
   }

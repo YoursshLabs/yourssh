@@ -4,7 +4,9 @@ import '../models/tool_result.dart';
 import '../providers/session_provider.dart';
 import '../services/ssh_service.dart';
 import '../services/web_tools_service.dart';
-import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import 'container_widgets.dart';
+import 'devops_widgets.dart';
 import 'tool_result_view.dart';
 
 String _tabLabel(String toolName, String input) {
@@ -57,18 +59,18 @@ extension _ToolExt on _Tool {
   };
 
   IconData get icon => switch (this) {
-    _Tool.ping => Icons.wifi_tethering,
-    _Tool.curl => Icons.http,
-    _Tool.dns => Icons.dns,
-    _Tool.traceroute => Icons.route,
-    _Tool.portScan => Icons.radar,
-    _Tool.whois => Icons.info_outline,
-    _Tool.netstat => Icons.device_hub,
-    _Tool.diskUsage => Icons.storage,
-    _Tool.topProcesses => Icons.memory,
-    _Tool.memory => Icons.developer_board,
-    _Tool.httpHeaders => Icons.receipt_long,
-    _Tool.sslCert => Icons.lock_outline,
+    _Tool.ping => FLucideIcons.radio,
+    _Tool.curl => FLucideIcons.globe,
+    _Tool.dns => FLucideIcons.server,
+    _Tool.traceroute => FLucideIcons.route,
+    _Tool.portScan => FLucideIcons.radar,
+    _Tool.whois => FLucideIcons.info,
+    _Tool.netstat => FLucideIcons.network,
+    _Tool.diskUsage => FLucideIcons.hardDrive,
+    _Tool.topProcesses => FLucideIcons.cpu,
+    _Tool.memory => FLucideIcons.memoryStick,
+    _Tool.httpHeaders => FLucideIcons.receipt,
+    _Tool.sslCert => FLucideIcons.lock,
   };
 }
 
@@ -86,14 +88,14 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
   int _activeTabIndex = -1;
 
   IconData _iconFor(_Tool tool) => switch (tool) {
-    _Tool.ping || _Tool.traceroute => Icons.wifi_tethering_outlined,
-    _Tool.dns => Icons.dns_outlined,
-    _Tool.portScan => Icons.radar,
-    _Tool.whois => Icons.info_outline,
-    _Tool.curl || _Tool.httpHeaders => Icons.link,
-    _Tool.sslCert => Icons.lock_outline,
-    _Tool.diskUsage => Icons.folder_outlined,
-    _ => Icons.search,
+    _Tool.ping || _Tool.traceroute => FLucideIcons.radio,
+    _Tool.dns => FLucideIcons.server,
+    _Tool.portScan => FLucideIcons.radar,
+    _Tool.whois => FLucideIcons.info,
+    _Tool.curl || _Tool.httpHeaders => FLucideIcons.link,
+    _Tool.sslCert => FLucideIcons.lock,
+    _Tool.diskUsage => FLucideIcons.folder,
+    _ => FLucideIcons.search,
   };
 
   String _defaultInputFor(_Tool tool) => switch (tool) {
@@ -200,77 +202,39 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
     if (_tabs.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      height: 33,
+      height: YsTab.height,
       decoration: const BoxDecoration(
-        color: AppColors.sidebar,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+        color: YsColors.sidebar,
+        border: Border(bottom: BorderSide(color: YsColors.border)),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          children: _tabs.asMap().entries.map((e) {
-            final i = e.key;
-            final tab = e.value;
-            final isActive = i == _activeTabIndex;
-
-            return GestureDetector(
-              onTap: () => setState(() => _activeTabIndex = i),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: isActive ? AppColors.bg : Colors.transparent,
-                  border: Border(
-                    bottom: BorderSide(
-                      color: isActive ? AppColors.accent : Colors.transparent,
-                      width: 2,
-                    ),
-                    right: const BorderSide(color: AppColors.border),
-                  ),
+          children: [
+            for (final (i, tab) in _tabs.indexed)
+              YsTab(
+                key: ValueKey('devops-tab-${tab.id}'),
+                active: i == _activeTabIndex,
+                onTap: () => setState(() => _activeTabIndex = i),
+                onClose: () => _closeTab(i),
+                closeTooltip: 'Close tab',
+                leading: Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: tab.isLoading
+                      ? const ContainerSpinner(size: 11)
+                      : Icon(
+                          tab.result?.isSuccess == true
+                              ? FLucideIcons.circleCheck
+                              : FLucideIcons.circleAlert,
+                          size: 11,
+                          color: tab.result?.isSuccess == true
+                              ? YsColors.ok
+                              : YsColors.error,
+                        ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (tab.isLoading)
-                      const SizedBox(
-                        width: 10,
-                        height: 10,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 1.5, color: AppColors.accent),
-                      )
-                    else
-                      Icon(
-                        tab.result?.isSuccess == true
-                            ? Icons.check_circle_outline
-                            : Icons.error_outline,
-                        size: 11,
-                        color: tab.result?.isSuccess == true
-                            ? AppColors.success
-                            : AppColors.red,
-                      ),
-                    const SizedBox(width: 6),
-                    Text(
-                      tab.label,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isActive
-                            ? AppColors.textPrimary
-                            : AppColors.textTertiary,
-                        fontWeight: isActive
-                            ? FontWeight.w500
-                            : FontWeight.normal,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: () => _closeTab(i),
-                      child: const Icon(Icons.close,
-                          size: 11, color: AppColors.textTertiary),
-                    ),
-                  ],
-                ),
+                label: Text(tab.label, maxLines: 1),
               ),
-            );
-          }).toList(),
+          ],
         ),
       ),
     );
@@ -289,113 +253,88 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
 
     return Row(
       children: [
-        SizedBox(
+        Container(
           width: 160,
-          child: Container(
-            color: AppColors.sidebar,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: ListView(
-              children: [
-                const _SidebarSection('Network'),
-                ...[
-                  _Tool.ping, _Tool.curl, _Tool.dns,
-                  _Tool.traceroute, _Tool.portScan, _Tool.whois, _Tool.netstat,
-                ].map(_navItem),
-                const _SidebarSection('System'),
-                ...[_Tool.diskUsage, _Tool.topProcesses, _Tool.memory]
-                    .map(_navItem),
-                const _SidebarSection('HTTP'),
-                ...[_Tool.httpHeaders, _Tool.sslCert].map(_navItem),
-              ],
-            ),
+          color: YsColors.sidebar,
+          padding: const EdgeInsets.symmetric(vertical: YsSpace.s2),
+          child: ListView(
+            children: [
+              const _SidebarSection('Network'),
+              ...[
+                _Tool.ping, _Tool.curl, _Tool.dns,
+                _Tool.traceroute, _Tool.portScan, _Tool.whois, _Tool.netstat,
+              ].map(_navItem),
+              const _SidebarSection('System'),
+              ...[_Tool.diskUsage, _Tool.topProcesses, _Tool.memory]
+                  .map(_navItem),
+              const _SidebarSection('HTTP'),
+              ...[_Tool.httpHeaders, _Tool.sslCert].map(_navItem),
+            ],
           ),
         ),
-        const VerticalDivider(width: 1, color: AppColors.border),
+        const VerticalDivider(width: 1, color: YsColors.border),
         Expanded(
           child: Column(
             children: [
               if (session == null)
                 Container(
-                  padding: const EdgeInsets.all(8),
-                  color: AppColors.card,
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(YsSpace.s2),
+                  color: YsColors.card,
                   child: const Row(
                     children: [
-                      Icon(Icons.warning_amber, size: 14, color: AppColors.orange),
-                      SizedBox(width: 8),
-                      Text(
-                        'No active session — connect to a host first',
-                        style: TextStyle(color: AppColors.orange, fontSize: 12),
+                      Icon(FLucideIcons.triangleAlert,
+                          size: 14, color: YsColors.warn),
+                      SizedBox(width: YsSpace.s2),
+                      Expanded(
+                        child: Text(
+                          'No active session — connect to a host first',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: YsColors.warn, fontSize: 12),
+                        ),
                       ),
                     ],
                   ),
                 ),
               Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(YsSpace.s3),
                 child: Row(
                   children: [
                     if (_needsInput) ...[
                       Expanded(
-                        child: SizedBox(
-                          height: 44,
-                          child: TextField(
-                            controller: _inputController,
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontFamily: 'monospace',
-                              fontSize: 13,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: _inputHint,
-                              hintStyle: const TextStyle(color: AppColors.textTertiary),
-                              prefixIcon: Icon(
-                                _iconFor(_selected),
-                                size: 16,
-                                color: AppColors.textTertiary,
-                              ),
-                              prefixIconConstraints: const BoxConstraints(
-                                minWidth: 40,
-                                minHeight: 0,
-                              ),
-                              filled: true,
-                              fillColor: AppColors.card,
-                              border: const OutlineInputBorder(
-                                borderSide: BorderSide(color: AppColors.border),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 0),
-                            ),
-                            onSubmitted: (_) => session != null ? _run() : null,
-                          ),
+                        child: DevopsTextField(
+                          key: const ValueKey('devops-input'),
+                          controller: _inputController,
+                          hint: _inputHint,
+                          icon: _iconFor(_selected),
+                          mono: true,
+                          onSubmit: () {
+                            if (session != null) _run();
+                          },
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: YsSpace.s2),
                     ],
-                    SizedBox(
-                      height: 44,
-                      child: ElevatedButton.icon(
-                        onPressed: session != null ? _run : null,
-                        icon: const Icon(Icons.play_arrow, size: 16),
-                        label: Text(_selected.label),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                        ),
-                      ),
+                    FButton(
+                      key: const ValueKey('devops-run'),
+                      mainAxisSize: MainAxisSize.min,
+                      onPress: session != null ? _run : null,
+                      prefix: const Icon(FLucideIcons.play),
+                      child: Text(_selected.label),
                     ),
                     if (_tabs.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.clear_all,
-                            size: 18, color: AppColors.textSecondary),
+                      const SizedBox(width: YsSpace.s2),
+                      ContainerIconAction(
+                        icon: FLucideIcons.listX,
                         tooltip: 'Clear all tabs',
-                        onPressed: _clearAllTabs,
+                        onPress: _clearAllTabs,
                       ),
                     ],
                   ],
                 ),
               ),
-              const Divider(height: 1, color: AppColors.border),
+              const FDivider(style: .delta(padding: .value(EdgeInsets.zero))),
               _buildTabBar(),
               Expanded(
                 child: _activeTabIndex >= 0 && _activeTabIndex < _tabs.length
@@ -421,20 +360,20 @@ class _SidebarSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-        child: Text(
-          label.toUpperCase(),
-          style: const TextStyle(
-            color: AppColors.textTertiary,
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+    child: Text(
+      label.toUpperCase(),
+      style: const TextStyle(
+        color: YsColors.mutedForeground,
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.8,
+      ),
+    ),
+  );
 }
 
-class _NavItem extends StatefulWidget {
+class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool active;
@@ -447,56 +386,49 @@ class _NavItem extends StatefulWidget {
   });
 
   @override
-  State<_NavItem> createState() => _NavItemState();
-}
-
-class _NavItemState extends State<_NavItem> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = widget.active
-        ? AppColors.accent.withValues(alpha: 0.12)
-        : _hovered
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.transparent;
-    final color = widget.active ? AppColors.accent : AppColors.textSecondary;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(6),
-            border: widget.active
-                ? Border.all(color: AppColors.accent.withValues(alpha: 0.2))
-                : null,
-          ),
-          child: Row(
-            children: [
-              Icon(widget.icon, size: 13, color: color),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  widget.label,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 12,
-                    fontWeight:
-                        widget.active ? FontWeight.w500 : FontWeight.normal,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+  Widget build(BuildContext context) => FTappable(
+    semanticsLabel: label,
+    selected: active,
+    onPress: onTap,
+    builder: (context, variants, child) {
+      final hovered = variants.contains(FTappableVariant.hovered);
+      final focused = variants.contains(FTappableVariant.focused);
+      final color = active ? YsColors.primary : YsColors.mutedForeground;
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: active
+              ? YsColors.primary.withValues(alpha: 0.12)
+              : hovered
+              ? YsColors.secondary
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(YsRadius.control),
+          border: active || focused
+              ? Border.all(
+                  color: YsColors.primary.withValues(alpha: focused ? 1 : 0.2),
+                )
+              : null,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: YsSpace.s2),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: active ? FontWeight.w500 : FontWeight.normal,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 }
