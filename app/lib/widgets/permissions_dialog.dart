@@ -203,6 +203,19 @@ class _PermissionsDialogState extends State<PermissionsDialog> {
                       FilteringTextInputFormatter.allow(RegExp('[0-7]')),
                       LengthLimitingTextInputFormatter(4),
                     ],
+                    style: .delta(
+                      contentTextStyle: .delta([
+                        .all(
+                          .delta(
+                            fontFamily: kYsMonoFontFamily,
+                            fontFamilyFallback: kYsMonoFontFallback,
+                          ),
+                        ),
+                      ]),
+                    ),
+                    // The message is the Row hint beside the field; this
+                    // only switches forui to its error border.
+                    error: octalInvalid ? const SizedBox.shrink() : null,
                   ),
                 ),
                 if (octalInvalid) ...[

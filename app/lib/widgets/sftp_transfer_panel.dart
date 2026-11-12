@@ -84,17 +84,21 @@ class _SftpTransferPanelState extends State<SftpTransferPanel> {
     );
   }
 
-  /// Determinate bar; unknown progress (0) shows an empty track, as the old
-  /// indeterminate bar had no value either.
-  Widget _bar(double value, {Color? fill}) => FDeterminateProgress(
-    value: value.clamp(0.0, 1.0),
-    style: .delta(
-      constraints: const BoxConstraints.tightFor(height: 4),
-      fillDecoration: fill == null
-          ? null
-          : DecorationDelta.value(BoxDecoration(color: fill)),
-    ),
-  );
+  /// Determinate bar; unknown progress (0 / no total) shows the
+  /// indeterminate [FProgress] instead.
+  Widget _bar(double value) {
+    const style = FDeterminateProgressStyleDelta.delta(
+      constraints: BoxConstraints.tightFor(height: 4),
+    );
+    if (value <= 0) {
+      return const FProgress(
+        style: FProgressStyleDelta.delta(
+          constraints: BoxConstraints.tightFor(height: 4),
+        ),
+      );
+    }
+    return FDeterminateProgress(value: value.clamp(0.0, 1.0), style: style);
+  }
 
   // ── Minimized strip ───────────────────────────────────
 

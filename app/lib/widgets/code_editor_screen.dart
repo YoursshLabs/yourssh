@@ -380,7 +380,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
         fontFamily: kYsMonoFontFamily,
         fontFamilyFallback: kYsMonoFontFallback,
         fontSize: 13,
-        color: Color(0xFFE7E5E4),
+        color: YsColors.foreground,
         height: 1.5,
       ),
       decoration: const InputDecoration(
