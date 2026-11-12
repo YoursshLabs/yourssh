@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/share_provider.dart';
 import '../providers/sync_provider.dart';
+import '../services/share_crypto.dart';
 import '../theme/app_theme.dart';
 
 class JoinShareDialog extends StatefulWidget {
@@ -24,9 +25,9 @@ class _JoinShareDialogState extends State<JoinShareDialog> {
   }
 
   Future<void> _join(BuildContext context) async {
-    final code = _controller.text.trim().toUpperCase();
-    if (code.length != 6) {
-      setState(() => _error = 'Enter a 6-character share code');
+    final code = ShareCrypto.normalizeCode(_controller.text);
+    if (code == null) {
+      setState(() => _error = 'Enter the full share code (XXXXXX-XXXXXXXXXXXXXXXX)');
       return;
     }
 
@@ -55,7 +56,7 @@ class _JoinShareDialogState extends State<JoinShareDialog> {
       backgroundColor: AppColors.sidebar,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: SizedBox(
-        width: 320,
+        width: 400,
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -67,21 +68,21 @@ class _JoinShareDialogState extends State<JoinShareDialog> {
               TextField(
                 controller: _controller,
                 autofocus: true,
-                maxLength: 6,
+                maxLength: 30,
                 inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+                  FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9 -]')),
                   _UpperCaseFormatter(),
                 ],
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 22,
-                  letterSpacing: 4,
+                  fontSize: 15,
+                  letterSpacing: 1,
                   fontFamily: 'monospace',
                 ),
                 textAlign: TextAlign.center,
                 decoration: InputDecoration(
-                  hintText: 'A3K9PX',
-                  hintStyle: const TextStyle(color: Color(0xFF333333), letterSpacing: 4),
+                  hintText: 'A3K9PX-XXXXXXXXXXXXXXXX',
+                  hintStyle: const TextStyle(color: Color(0xFF333333), letterSpacing: 1, fontSize: 13),
                   counterText: '',
                   filled: true,
                   fillColor: const Color(0xFF1A1A1A),

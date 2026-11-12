@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:xterm/xterm.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
 import '../models/share_event.dart';
+import 'share_crypto.dart';
 
 class ShareSessionService {
   static const maxBufferLength = 500 * 1024;
@@ -44,10 +44,46 @@ class ShareSessionService {
 
   // ─── Helpers ─────────────────────────────────────────
 
-  static String generateShareCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final rng = Random.secure();
-    return List.generate(6, (_) => chars[rng.nextInt(chars.length)]).join();
+  /// New share code: `ROOM-SECRET` (80-bit secret). See [ShareCrypto].
+  static String generateShareCode() => ShareCrypto.generateCode();
+
+  ShareCrypto? _crypto;
+
+  // Encrypt/decrypt are async; chain them so broadcast ordering is preserved.
+  Future<void> _sendChain = Future.value();
+  Future<void> _recvChain = Future.value();
+
+  Future<void> _send(ShareEvent event, {String? targetGuestId}) {
+    final crypto = _crypto;
+    final channel = _channel;
+    if (crypto == null || channel == null) return Future.value();
+    final json = event.toJson();
+    if (targetGuestId != null) json['targetGuestId'] = targetGuestId;
+    final next = _sendChain.then((_) async {
+      try {
+        final envelope = await crypto.encrypt(json);
+        await channel.sendBroadcastMessage(
+          event: _broadcastEvent,
+          payload: envelope,
+        );
+      } catch (e) {
+        debugPrint('[ShareSessionService] send failed: $e');
+      }
+    });
+    _sendChain = next;
+    return next;
+  }
+
+  void _receive(
+    Map<String, dynamic> payload,
+    void Function(Map<String, dynamic>) handler,
+  ) {
+    final crypto = _crypto;
+    if (crypto == null) return;
+    _recvChain = _recvChain.then((_) async {
+      final clear = await crypto.decrypt(payload);
+      if (clear != null) handler(clear);
+    });
   }
 
   void _appendToBuffer(String text) {
@@ -84,13 +120,14 @@ class ShareSessionService {
     });
 
     final code = generateShareCode();
+    _crypto = ShareCrypto(code);
     _client = SupabaseClient(supabaseUrl, anonKey);
-    _channel = _client!.channel('share:$code');
+    _channel = _client!.channel(ShareCrypto.channelName(code));
 
     _channel!
         .onBroadcast(
           event: _broadcastEvent,
-          callback: (payload) => _onHostReceived(payload),
+          callback: (payload) => _receive(payload, _onHostReceived),
         )
         .onPresenceLeave((leavePayload) {
           for (final p in leavePayload.leftPresences) {
@@ -115,71 +152,50 @@ class ShareSessionService {
   }
 
   void _broadcastOutput(String text) {
-    _channel?.sendBroadcastMessage(
-      event: _broadcastEvent,
-      payload: ShareEvent.output(text).toJson(),
-    );
+    _send(ShareEvent.output(text));
   }
 
   Future<void> sendSnapshot(String guestId) async {
     if (_channel == null) return;
     final snapshot = _outputBuffer.toString();
     if (snapshot.length <= _chunkSize) {
-      final payload = ShareEvent.snapshot(snapshot).toJson()
-        ..['targetGuestId'] = guestId;
-      await _channel!.sendBroadcastMessage(
-        event: _broadcastEvent,
-        payload: payload,
-      );
+      await _send(ShareEvent.snapshot(snapshot), targetGuestId: guestId);
     } else {
       final chunks = <String>[];
       for (var i = 0; i < snapshot.length; i += _chunkSize) {
         chunks.add(snapshot.substring(i, (i + _chunkSize).clamp(0, snapshot.length)));
       }
       for (var i = 0; i < chunks.length; i++) {
-        final payload = ShareEvent.snapshotChunk(chunks[i], i, chunks.length).toJson()
-          ..['targetGuestId'] = guestId;
-        await _channel!.sendBroadcastMessage(
-          event: _broadcastEvent,
-          payload: payload,
+        await _send(
+          ShareEvent.snapshotChunk(chunks[i], i, chunks.length),
+          targetGuestId: guestId,
         );
       }
     }
   }
 
   Future<void> sendRejected(String guestId, String reason) async {
-    await _channel?.sendBroadcastMessage(
-      event: _broadcastEvent,
-      payload: ShareEvent.rejected(reason).toJson(),
-    );
+    await _send(ShareEvent.rejected(reason, guestId));
   }
 
   Future<void> grantControl(String guestId) async {
-    await _channel?.sendBroadcastMessage(
-      event: _broadcastEvent,
-      payload: ShareEvent.controlGrant(guestId).toJson(),
-    );
+    await _send(ShareEvent.controlGrant(guestId));
   }
 
   Future<void> revokeControl() async {
-    await _channel?.sendBroadcastMessage(
-      event: _broadcastEvent,
-      payload: ShareEvent.controlRevoke().toJson(),
-    );
+    await _send(ShareEvent.controlRevoke());
   }
 
   Future<void> stopSharing() async {
     _hookBus?.unregisterAll(_pluginId);
     _hookBus = null;
     _sessionId = null;
-    await _channel?.sendBroadcastMessage(
-      event: _broadcastEvent,
-      payload: ShareEvent.ended().toJson(),
-    );
+    await _send(ShareEvent.ended());
     if (_client != null && _channel != null) {
       await _client!.removeChannel(_channel!);
     }
     _channel = null;
+    _crypto = null;
     _client?.dispose();
     _client = null;
     _outputBuffer.clear();
@@ -197,22 +213,20 @@ class ShareSessionService {
     String anonKey,
     Terminal localTerminal,
   ) async {
+    _crypto = ShareCrypto(shareCode); // throws FormatException when malformed
     _guestTerminal = localTerminal;
     _client = SupabaseClient(supabaseUrl, anonKey);
-    _channel = _client!.channel('share:$shareCode');
+    _channel = _client!.channel(ShareCrypto.channelName(shareCode));
 
     _channel!
         .onBroadcast(
           event: _broadcastEvent,
-          callback: (payload) => _onGuestReceived(payload),
+          callback: (payload) => _receive(payload, _onGuestReceived),
         )
         .subscribe((status, _) async {
           if (status == RealtimeSubscribeStatus.subscribed) {
             await _channel!.track({'guestId': _guestId, 'role': 'guest'});
-            await _channel!.sendBroadcastMessage(
-              event: _broadcastEvent,
-              payload: ShareEvent.joinRequest(_guestId).toJson(),
-            );
+            await _send(ShareEvent.joinRequest(_guestId));
           }
         });
   }
@@ -227,13 +241,17 @@ class ShareSessionService {
     }
 
     // For snapshot events, only process if targeted at this guest
-    final targetGuestId = payload['targetGuestId'] as String?;
+    final targetGuestId = event.targetGuestId;
     final isSnapshotEvent = event.type == ShareEventType.snapshot ||
         event.type == ShareEventType.snapshotChunk;
     if (isSnapshotEvent && targetGuestId != null && targetGuestId != _guestId) {
       return; // Not for us
     }
 
+    _dispatchGuestEvent(event);
+  }
+
+  void _dispatchGuestEvent(ShareEvent event) {
     switch (event.type) {
       case ShareEventType.output:
         if (event.data != null) _guestTerminal?.write(event.data!);
@@ -262,7 +280,8 @@ class ShareSessionService {
       case ShareEventType.controlRevoke:
         _events.add(event);
       case ShareEventType.rejected:
-        _events.add(event);
+        // Rejections are addressed to one guest; ignore others'.
+        if (event.targetGuestId == _guestId) _events.add(event);
       case ShareEventType.ended:
         _events.add(event);
       case ShareEventType.input:
@@ -273,10 +292,7 @@ class ShareSessionService {
   }
 
   Future<void> sendGuestInput(String data) async {
-    await _channel?.sendBroadcastMessage(
-      event: _broadcastEvent,
-      payload: ShareEvent.input(data).toJson(),
-    );
+    await _send(ShareEvent.input(data, _guestId));
   }
 
   Future<void> leaveSession() async {
@@ -285,6 +301,7 @@ class ShareSessionService {
       await _client!.removeChannel(_channel!);
     }
     _channel = null;
+    _crypto = null;
     _client?.dispose();
     _client = null;
     _guestTerminal = null;
@@ -293,6 +310,7 @@ class ShareSessionService {
 
   // ─── Test helpers ────────────────────────────────────
 
+  void handleGuestEventForTest(ShareEvent event) => _dispatchGuestEvent(event);
   void appendToBufferForTest(String text) => _appendToBuffer(text);
   int get bufferLengthForTest => _bufferLength;
   String get bufferSnapshotForTest => _outputBuffer.toString();
