@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' show max;
 import 'dart:typed_data';
 
@@ -229,8 +230,36 @@ class Terminal
   /// [onTitleChange] when the escape sequences in [data] request it.
   void write(String data) {
     _parser.write(data);
+    _writeDirty = true;
+    flushWrites();
+  }
+
+  /// Like [write] but does not notify listeners. Pair with [flushWrites] so a
+  /// batch of writes triggers a single repaint.
+  void writeNoNotify(String data) {
+    _parser.write(data);
+    _writeDirty = true;
+  }
+
+  /// Notifies listeners once if anything was written since the last
+  /// notification, unless synchronized output (DEC private mode 2026) is
+  /// active, in which case the repaint is deferred until the mode is reset or
+  /// [synchronizedOutputTimeout] elapses.
+  void flushWrites() {
+    if (!_writeDirty || _synchronizedOutput) return;
+    _writeDirty = false;
     notifyListeners();
   }
+
+  /// Whether DEC private mode 2026 (synchronized output) is set.
+  bool get synchronizedOutput => _synchronizedOutput;
+
+  /// Safety net: repaint even if the application never resets mode 2026.
+  static const synchronizedOutputTimeout = Duration(milliseconds: 150);
+
+  bool _writeDirty = false;
+  bool _synchronizedOutput = false;
+  Timer? _syncOutputTimer;
 
   /// Sends a key event to the underlying program.
   ///
@@ -803,7 +832,18 @@ class Terminal
 
   @override
   void setUnknownDecMode(int mode, bool enabled) {
-    // no-op
+    if (mode == 2026) {
+      _syncOutputTimer?.cancel();
+      _syncOutputTimer = null;
+      _synchronizedOutput = enabled;
+      if (enabled) {
+        _syncOutputTimer = Timer(synchronizedOutputTimeout, () {
+          _syncOutputTimer = null;
+          _synchronizedOutput = false;
+          flushWrites();
+        });
+      }
+    }
   }
 
   /* Select Graphic Rendition (SGR) */

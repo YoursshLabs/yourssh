@@ -65,6 +65,8 @@ class _FakeShell implements SSHSession {
     writes.add(const Utf8Decoder().convert(data));
   }
 
+  bool get stdoutPaused => _stdout.isPaused;
+
   void emitStdout(String text) =>
       _stdout.add(Uint8List.fromList(const Utf8Encoder().convert(text)));
 
@@ -502,6 +504,49 @@ void main() {
     // _FakeShell.write decodes bytes as UTF-8 — corrupt input would surface
     // as replacement characters here.
     expect(shell.writes, contains(vietnamese));
+
+    await shell.close();
+    await shellDone;
+  });
+
+  test('flood pauses the stdout subscription at the high-water mark and '
+      'resumes once drained; output stays intact and ordered', () async {
+    final svc = SshService(StorageService());
+    final host =
+        Host(label: 'f', host: 'e.com', username: 'u', shellIntegration: false);
+    final session = SshSession(host: host);
+    session.terminal.resize(80, 24);
+    final shell = _FakeShell();
+    svc.debugSetClient(host.id, _FakeClient(shell));
+
+    final shellDone = svc.openShell(session);
+    await pumpEventQueue();
+
+    expect(shell.stdoutPaused, isFalse);
+    shell.emitStdout('start\r\n');
+    final line = 'x' * 78 + '\r\n';
+    for (var i = 0; i < 20; i++) {
+      // Microtask turns only: the queue drains between event-loop turns, so
+      // the backlog only builds up in a burst.
+      shell.emitStdout(line * 1000); // ~1.6 MB total, well past 1 MiB
+      await Future<void>.value();
+      if (shell.stdoutPaused) break;
+    }
+    expect(shell.stdoutPaused, isTrue);
+
+    svc.flushShellOutput(session.id);
+    await pumpEventQueue();
+    expect(shell.stdoutPaused, isFalse);
+    shell.emitStdout('END\r\n'); // delivered after resume, still in order
+    await pumpEventQueue();
+    svc.flushShellOutput(session.id);
+    final text = session.terminal.buffer.lines
+        .toList()
+        .map((l) => l.toString().trimRight())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    expect(text.last, 'END');
+    expect(text[text.length - 2], 'x' * 78);
 
     await shell.close();
     await shellDone;

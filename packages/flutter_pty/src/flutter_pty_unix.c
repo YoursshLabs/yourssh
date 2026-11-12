@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <poll.h>
+#include <sys/select.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <termios.h>
@@ -47,7 +49,7 @@ static void *read_loop(void *arg)
 {
     ReadLoopOptions *options = (ReadLoopOptions *)arg;
 
-    char buffer[1024];
+    char buffer[64 * 1024];
 
     while (1)
     {
@@ -68,6 +70,33 @@ static void *read_loop(void *arg)
         if (n == 0)
         {
             break;
+        }
+
+        // Coalesce: a pty hands out data in small slices (~1 KiB under a
+        // flood). Posting each one costs a round trip through the Dart event
+        // loop (and, in ack mode, a stall until it is acked), which caps
+        // throughput far below what the parser can do. Keep reading while
+        // more data is already waiting, up to a nearly full buffer.
+        while ((size_t)n + 4096 <= sizeof(buffer))
+        {
+            // Interactive output (a few bytes) never waits. Once a sizeable
+            // chunk arrived the stream is flowing: wait a few hundred
+            // microseconds for the producer to refill the pty instead of
+            // posting a tiny chunk and paying a full Dart round trip.
+            struct timeval tv = {0, n >= 2048 ? 300 : 0};
+            fd_set rfds;
+            FD_ZERO(&rfds);
+            FD_SET(options->fd, &rfds);
+            if (select(options->fd + 1, &rfds, NULL, NULL, &tv) <= 0)
+            {
+                break;
+            }
+            ssize_t m = read(options->fd, buffer + n, sizeof(buffer) - (size_t)n);
+            if (m <= 0)
+            {
+                break; // EOF/error surfaces on the next blocking read
+            }
+            n += m;
         }
 
         Dart_CObject result;

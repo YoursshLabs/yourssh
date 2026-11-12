@@ -277,7 +277,7 @@ static DWORD WINAPI read_loop(LPVOID arg)
 {
     ReadLoopOptions *options = (ReadLoopOptions *)arg;
 
-    char buffer[1024];
+    char buffer[64 * 1024];
 
     while (1)
     {
