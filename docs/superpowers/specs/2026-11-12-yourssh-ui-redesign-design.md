@@ -45,8 +45,7 @@ The goal is one design system, built on [forui](https://github.com/duobaseio/for
 
 ## Constraints
 
-- forui 0.27.x needs Flutter ≥ 3.47.0 and Dart ≥ 3.13.
-  - CI pins Flutter **3.47.1**, so `app/pubspec.yaml` `environment.sdk` rises from `^3.12.0` to `^3.13.0`. The spike only built on 3.50, so phase 0's first step is a CI build on 3.47.1.
+- forui 0.27.x needs Flutter ≥ 3.47.0 and Dart ≥ 3.13. The project moves to Flutter 3.50.0 (see Toolchain), and `app/pubspec.yaml` `environment.sdk` rises to `^3.13.0`.
   - forui pulls in `material_ui` 1.11, which needs Flutter ≥ 3.47.
 - forui runs inside the existing `MaterialApp`, so migration can go screen by screen. Material stays as the app root.
 - About 117 of 261 files under `app/lib` import Material. The largest groups:
@@ -204,11 +203,12 @@ After phase 6:
   - The PR merges into `develop` after the owner OKs the screenshots.
 - **Cross-platform:** CI builds macOS, Windows, Linux, Android and iOS (once the iOS work lands). Manual spot checks on each desktop OS after phases 1 and 3.
 
-## Toolchain fallback
+## Toolchain
 
-If forui 0.27.x does not build on Flutter 3.47.1:
-1. Use the newest forui release that does.
-2. Bumping the CI/release Flutter pin is **not** part of this project. It belongs to the separate Flutter 3.50 migration, which needs the Gradle, AGP and Kotlin bumps. Stop and report if no forui release builds on 3.47.1.
+The owner asked for the latest Flutter and forui (2026-11-12):
+- **Flutter 3.50.0** (Dart 3.14) and **forui 0.27.7**.
+- CI and the release pins move from 3.47.1 to 3.50.0 in a separate `chore/flutter-3.50` PR, which also carries the required Android Gradle, AGP and Kotlin bumps.
+- This redesign builds on top of that PR.
 
 ## Ordering with other work
 
@@ -229,7 +229,7 @@ The order, which is the builder's call (the owner can reorder):
 - Mockups are illustrative. No new measurement or data plumbing.
 - Mobile keeps its structure and only gets restyled.
 - The owner OKs each phase's screenshots before merge.
-- No Flutter pin bump inside this project.
+- Flutter 3.50.0 + forui 0.27.7 (owner request). The pin bump ships separately in `chore/flutter-3.50`.
 - The SDK bump to Dart ^3.13 that forui requires.
 
 ## Left to the builder
