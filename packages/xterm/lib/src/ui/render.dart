@@ -293,7 +293,8 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     if (dropped == _seenDropped) return;
     final delta = dropped - _seenDropped;
     _seenDropped = dropped;
-    if (!_stickToBottom && _offset.hasPixels) {
+    // Above the top (overscroll) there is nothing to shift up into.
+    if (!_stickToBottom && _offset.hasPixels && _offset.pixels > 0) {
       final shift = delta * _painter.cellSize.height;
       _offset.correctBy(-shift.clamp(0.0, _offset.pixels));
     }
