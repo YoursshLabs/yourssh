@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class ScriptPluginPanelScreen extends StatefulWidget {
   final PluginPanelEntry panel;
@@ -89,7 +90,7 @@ class _ScriptPluginPanelScreenState extends State<ScriptPluginPanelScreen> {
           padding: const EdgeInsets.all(24),
           child: Text(
             _error!,
-            style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+            style: const TextStyle(color: YsColors.error, fontSize: 13),
             textAlign: TextAlign.center,
           ),
         ),
@@ -99,7 +100,7 @@ class _ScriptPluginPanelScreenState extends State<ScriptPluginPanelScreen> {
       children: [
         WebViewWidget(controller: _controller),
         if (!_loaded)
-          const Center(child: CircularProgressIndicator()),
+          const Center(child: FCircularProgress()),
       ],
     );
   }
