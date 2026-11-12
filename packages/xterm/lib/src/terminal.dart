@@ -437,6 +437,13 @@ class Terminal
     notifyListeners();
   }
 
+  /// Like [writeBytes] but does not notify listeners. Pair with [flushWrites]
+  /// so a batch of writes triggers a single repaint.
+  void writeBytesNoNotify(Uint8List data) {
+    _parser.writeBytes(data);
+    _writeDirty = true;
+  }
+
   /// Bulk form of [writeChar] used by the parser for runs of text.
   @override
   int writeChars(Uint32List runes, int start, int end) {

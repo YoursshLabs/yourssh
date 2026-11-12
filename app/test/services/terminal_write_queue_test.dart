@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/services/terminal_write_queue.dart';
@@ -381,6 +383,84 @@ void main() {
       q.add('k');
       expect(written, ['k']);
       expect(commits, 1);
+    });
+  });
+
+  group('bytes entries', () {
+    test('addBytes feeds writeBytes in order, pieces split by pieceSize', () {
+      final got = <List<int>>[];
+      final q = TerminalWriteQueue(
+        write: (_) => fail('text path unused'),
+        writeBytes: (b) => got.add(List<int>.of(b)),
+        pieceSize: 4,
+        clockMicros: () => now,
+        scheduleNext: scheduled.add,
+        scheduleAfter: (d, run) => timers.add((delay: d, run: run)),
+      );
+      q.addBytes(Uint8List.fromList(List.generate(10, (i) => i)));
+      q.flush();
+      expect(got, [
+        [0, 1, 2, 3],
+        [4, 5, 6, 7],
+        [8, 9],
+      ]);
+    });
+
+    test('onConsumed reports every unit exactly once, batched per slice', () {
+      final consumed = <int>[];
+      final q = TerminalWriteQueue(
+        write: (_) {},
+        writeBytes: (_) => now += 1000,
+        onConsumed: consumed.add,
+        pieceSize: 10,
+        budget: const Duration(milliseconds: 3),
+        clockMicros: () => now,
+        scheduleNext: scheduled.add,
+        scheduleAfter: (d, run) => timers.add((delay: d, run: run)),
+      );
+      q.addBytes(Uint8List(100)); // idle: first slice runs inline
+      while (scheduled.isNotEmpty) {
+        runScheduled();
+      }
+      q.flush();
+      expect(consumed.fold<int>(0, (a, b) => a + b), 100);
+      expect(consumed.length, lessThan(10), reason: 'batched, not per piece');
+      expect(q.pendingChars, 0);
+    });
+
+    test('onBatch sees the exact text even when a character is split', () {
+      final text = <String>[];
+      final bytes = utf8.encode('aé日😀b' * 7);
+      final q = TerminalWriteQueue(
+        write: (_) {},
+        writeBytes: (_) {},
+        onBatch: text.add,
+        pieceSize: 3, // splits multi-byte sequences
+        clockMicros: () => now,
+        scheduleNext: scheduled.add,
+        scheduleAfter: (d, run) => timers.add((delay: d, run: run)),
+      );
+      q.addBytes(Uint8List.fromList(bytes));
+      q.flush();
+      expect(text.join(), 'aé日😀b' * 7);
+    });
+
+    test('dispose returns the credit of everything still queued', () {
+      final consumed = <int>[];
+      final q = TerminalWriteQueue(
+        write: (_) {},
+        writeBytes: (_) {},
+        onConsumed: consumed.add,
+        clockMicros: () => now,
+        scheduleNext: scheduled.add,
+        scheduleAfter: (d, run) => timers.add((delay: d, run: run)),
+      );
+      q.addBytes(Uint8List(50)); // inline (idle)
+      q.addBytes(Uint8List(70)); // queued behind the schedule
+      final before = consumed.fold<int>(0, (a, b) => a + b);
+      q.dispose();
+      expect(consumed.fold<int>(0, (a, b) => a + b), 120);
+      expect(before, lessThanOrEqualTo(120));
     });
   });
 }

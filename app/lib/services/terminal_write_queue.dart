@@ -1,7 +1,9 @@
 // ignore_for_file: prefer_initializing_formals
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:math' show max;
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -24,12 +26,21 @@ import 'package:flutter/foundation.dart';
 /// the source (SSH stream subscription). [add]'s `onTaken` fires when a chunk
 /// starts being consumed (PTY `ackRead`).
 ///
+/// Chunks may be text ([add]) or raw UTF-8 bytes ([addBytes], fed to
+/// `writeBytes` without any String round trip). [onBatch] always receives
+/// text: byte pieces are decoded for it with one stateful decoder, so it sees
+/// exactly the text a stream decoder would produce. [onConsumed] reports, once
+/// per slice, how many units (chars / bytes) were parsed so a source with
+/// credit based flow control can return credit in batches.
+///
 /// Ordering is exact (FIFO, never reordered). When idle for at least
 /// [idleThreshold] a chunk is processed synchronously, so single keystroke
 /// echoes keep their latency.
 class TerminalWriteQueue {
   TerminalWriteQueue({
     required void Function(String data) write,
+    void Function(Uint8List data)? writeBytes,
+    void Function(int units)? onConsumed,
     void Function()? commit,
     void Function(String batch)? onBatch,
     void Function(bool paused)? onPressure,
@@ -45,6 +56,8 @@ class TerminalWriteQueue {
     void Function(void Function() run)? scheduleNext,
     void Function(Duration delay, void Function() run)? scheduleAfter,
   })  : _write = write,
+        _writeBytes = writeBytes,
+        _onConsumed = onConsumed,
         _commit = commit,
         _onBatch = onBatch,
         _onPressure = onPressure,
@@ -74,12 +87,20 @@ class TerminalWriteQueue {
   final Duration idleThreshold;
 
   final void Function(String) _write;
+  final void Function(Uint8List)? _writeBytes;
+  final void Function(int)? _onConsumed;
   final void Function()? _commit;
   final void Function(String)? _onBatch;
   final void Function(bool)? _onPressure;
   final int Function() _clockMicros;
   final void Function(void Function()) _scheduleNext;
   final void Function(Duration, void Function()) _scheduleAfter;
+
+  // Stateful: a multi-byte sequence split across pieces / slices is joined.
+  StringBuffer? _batchOut;
+  late final ByteConversionSink _decoder = const Utf8Decoder(
+    allowMalformed: true,
+  ).startChunkedConversion(_StringSink((s) => _batchOut?.write(s)));
 
   final Queue<_Entry> _queue = Queue<_Entry>();
   int _pending = 0;
@@ -118,6 +139,15 @@ class TerminalWriteQueue {
     Timer(delay, run);
   }
 
+  /// Queues raw UTF-8 [data] (needs a `writeBytes` callback). The queue keeps
+  /// a reference: the caller must not mutate [data] afterwards. A multi-byte
+  /// sequence may be split across chunks. Don't mix with [add] on a stream
+  /// whose chunks can split a sequence: text pieces are parsed as is.
+  void addBytes(Uint8List data, {void Function()? onTaken}) {
+    assert(_writeBytes != null, 'addBytes needs a writeBytes callback');
+    _enqueue(_Entry.bytes(data, onTaken));
+  }
+
   /// Queues [data]. [onTaken] runs once, when the first piece of this chunk is
   /// about to be consumed (immediately for empty strings).
   void add(String data, {void Function()? onTaken}) {
@@ -126,9 +156,18 @@ class TerminalWriteQueue {
       onTaken?.call();
       return;
     }
+    _enqueue(_Entry(data, onTaken));
+  }
+
+  void _enqueue(_Entry entry) {
+    if (_disposed) return;
+    if (entry.length == 0) {
+      entry.onTaken?.call();
+      return;
+    }
     final wasIdle = _queue.isEmpty;
-    _queue.add(_Entry(data, onTaken));
-    _pending += data.length;
+    _queue.add(entry);
+    _pending += entry.length;
     if (!_paused && _pending >= highWater) {
       _paused = true;
       _onPressure?.call(true);
@@ -183,7 +222,9 @@ class TerminalWriteQueue {
         e.onTaken?.call();
       }
     }
+    final rest = _pending;
     _pending = 0;
+    if (rest > 0) _onConsumed?.call(rest);
   }
 
   void _drainSlice() => _drain(unlimited: false);
@@ -191,6 +232,8 @@ class TerminalWriteQueue {
   void _drain({required bool unlimited, bool forceCommit = false}) {
     _draining = true;
     final batch = _onBatch == null ? null : StringBuffer();
+    _batchOut = batch;
+    var consumed = 0;
     final startMicros = _clockMicros();
     final budgetMicros = budget.inMicroseconds;
     try {
@@ -200,34 +243,61 @@ class TerminalWriteQueue {
           e.taken = true;
           e.onTaken?.call();
         }
-        final text = e.text;
+        final isBytes = e.bytes != null;
+        final length = e.length;
         var end = e.offset + pieceSize;
-        if (end >= text.length) {
-          end = text.length;
-        } else if (_isHighSurrogate(text.codeUnitAt(end - 1))) {
+        if (end >= length) {
+          end = length;
+        } else if (!isBytes && _isHighSurrogate(e.text!.codeUnitAt(end - 1))) {
           end--; // never split a surrogate pair across writes
         }
-        final piece = (e.offset == 0 && end == text.length)
-            ? text
-            : text.substring(e.offset, end);
-        _pending -= end - e.offset;
-        _charsSinceCommit += end - e.offset;
-        if (end == text.length) {
+        final taken = end - e.offset;
+        final Object piece;
+        if (isBytes) {
+          piece = (e.offset == 0 && end == length)
+              ? e.bytes!
+              : Uint8List.sublistView(e.bytes!, e.offset, end);
+        } else {
+          piece = (e.offset == 0 && end == length)
+              ? e.text!
+              : e.text!.substring(e.offset, end);
+        }
+        _pending -= taken;
+        _charsSinceCommit += taken;
+        consumed += taken;
+        if (end == length) {
           _queue.removeFirst();
         } else {
           e.offset = end;
         }
         _uncommitted = true;
         try {
-          _write(piece);
+          if (isBytes) {
+            _writeBytes!(piece as Uint8List);
+          } else {
+            _write(piece as String);
+          }
         } catch (err, st) {
           debugPrint('[TerminalWriteQueue] write threw: $err\n$st');
         }
-        batch?.write(piece);
+        if (batch != null) {
+          if (isBytes) {
+            _decoder.add(piece as Uint8List);
+          } else {
+            batch.write(piece);
+          }
+        }
         if (!unlimited && _clockMicros() - startMicros >= budgetMicros) break;
       }
     } finally {
       _draining = false;
+    }
+    if (consumed > 0) {
+      try {
+        _onConsumed?.call(consumed);
+      } catch (err, st) {
+        debugPrint('[TerminalWriteQueue] onConsumed threw: $err\n$st');
+      }
     }
     if (unlimited || forceCommit) {
       _doCommit();
@@ -300,9 +370,21 @@ class TerminalWriteQueue {
   static bool _isHighSurrogate(int unit) => unit >= 0xD800 && unit <= 0xDBFF;
 }
 
+class _StringSink implements Sink<String> {
+  _StringSink(this._onData);
+  final void Function(String) _onData;
+  @override
+  void add(String data) => _onData(data);
+  @override
+  void close() {}
+}
+
 class _Entry {
-  _Entry(this.text, this.onTaken);
-  final String text;
+  _Entry(String this.text, this.onTaken) : bytes = null;
+  _Entry.bytes(Uint8List this.bytes, this.onTaken) : text = null;
+  final String? text;
+  final Uint8List? bytes;
+  int get length => bytes?.length ?? text!.length;
   final void Function()? onTaken;
   int offset = 0;
   bool taken = false;
