@@ -82,7 +82,7 @@ The goal is one design system, built on [forui](https://github.com/duobaseio/for
 | accentText | `#FFC85A` | amber text and links on dark |
 | chrome | `#080706` | top tab bar, status bar |
 | sidebar | `#110F0D` | left nav |
-| terminalSurface | `#0E0C0A` | terminal background (new default terminal theme "YourSSH Dark") |
+| terminalSurface | `#0E0C0A` | terminal background (new default terminal theme "YourSSH Amber") |
 | status ok / warn / off / error | `#22C55E` / `#EAB308` / `#71717A` / `#EF4444` | health dots, toasts |
 
 Spacing is a 4-px scale: 4, 8, 12, 16, 24, 32. Radii are 6 for controls, 10 for cards, 14 for mobile cards. Session tab colours and host avatar colours keep their existing palettes; they are user data.
@@ -177,7 +177,7 @@ Each phase is its own PR into `develop` with passing CI. Releases may go out bet
 
 | Phase | Scope |
 |---|---|
-| **0 · Foundation** | forui dependency and SDK bump, verified on CI's Flutter 3.47.1. `YsTheme` plus `FTheme` at the root. Inter bundled. `AppColors`/`MobileColors` aliased to the new tokens, so the whole app turns amber/stone at once. "YourSSH Dark" terminal theme as the default for new installs (existing users keep their choice). Screenshot harness updated. |
+| **0 · Foundation** | forui dependency and SDK bump, verified on CI's Flutter 3.47.1. `YsTheme` plus `FTheme` at the root. Inter bundled. `AppColors`/`MobileColors` aliased to the new tokens, so the whole app turns amber/stone at once. "YourSSH Amber" terminal theme (new; the existing "YourSSH Dark" theme is kept unchanged) as the default for new installs; existing installs keep their current theme, including the implicit "Dracula" default. Screenshot harness updated. |
 | **1 · Shell** | Left sidebar → `FSidebar`. Top tab bar → `YsSessionTabBar`. Global sweep of toasts (`ScaffoldMessenger`/`SnackBar` → `FToaster`), dialogs (`AlertDialog` → `FDialog`), tooltips and context menus. |
 | **2 · Hosts** | Hosts dashboard (search, tag filter chips, groups, `YsHostCard` grid/list), `HostDetailPanel` editor, import panel, keychain picker. |
 | **3 · Terminal workspace** | Terminal frame and split chrome, `WorkspaceSidePanel` (snippets, terminal config), input bar, broadcast/bulk-run bars, `YsStatusBar`, terminal context menu. Perf check against v0.3.0. |
@@ -222,7 +222,7 @@ The order, which is the builder's call (the owner can reorder):
 - Direction B (Amber Brand) only. The app stays dark-only.
 - forui inside the existing `MaterialApp`, with screen-by-screen migration and a global palette switch first.
 - Inter bundled for UI. Lucide icons. Monospace fonts unchanged.
-- A new default terminal theme "YourSSH Dark" for new installs only.
+- A new terminal theme "YourSSH Amber" (the name "YourSSH Dark" is already taken by an existing catalog theme), default for new installs only.
 - Custom `Ys*` components for tab bar, status bar, file table and host card.
 - Seven phases, each PR shippable. Redesign before iOS.
 - A shared `packages/yourssh_ui`, so the plugin packages are redesigned too (phase 5).
