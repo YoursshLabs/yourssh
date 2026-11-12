@@ -237,6 +237,61 @@ void main() {
     expect(tap, 2);
   });
 
+  testWidgets('onActivate: focusable without onTap; Enter fires onActivate', (
+    t,
+  ) async {
+    var activate = 0;
+    var doubleTap = 0;
+    await t.pumpWidget(
+      _wrap(
+        YsHostCard(
+          leading: const SizedBox(),
+          title: 'a',
+          subtitle: 'b',
+          onDoubleTap: () => doubleTap++,
+          onActivate: () => activate++,
+        ),
+      ),
+    );
+    // A single click does nothing when only onActivate is set.
+    await t.tap(find.text('a'));
+    await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    expect(activate, 0);
+    expect(doubleTap, 0);
+
+    final node = Focus.of(t.element(find.byKey(const Key('ys-host-card-box'))));
+    node.requestFocus();
+    await t.pump();
+    expect(node.hasFocus, isTrue);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(activate, 2);
+  });
+
+  testWidgets('onActivate overrides onTap for the keyboard only', (t) async {
+    var tap = 0;
+    var activate = 0;
+    await t.pumpWidget(
+      _wrap(
+        YsHostCard(
+          leading: const SizedBox(),
+          title: 'a',
+          subtitle: 'b',
+          onTap: () => tap++,
+          onActivate: () => activate++,
+        ),
+      ),
+    );
+    await t.tap(find.text('a'));
+    expect(tap, 1);
+    final node = Focus.of(t.element(find.byKey(const Key('ys-host-card-box'))));
+    node.requestFocus();
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(activate, 1);
+    expect(tap, 1);
+  });
+
   testWidgets('semantics label contains title', (t) async {
     final h = t.ensureSemantics();
     await t.pumpWidget(

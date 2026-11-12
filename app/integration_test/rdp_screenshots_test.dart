@@ -122,8 +122,8 @@ void main() {
       // 2. Host editor in RDP mode (protocol selector + RDP-only fields).
       // Scope finds to the panel — the dashboard card's RDP badge shares the
       // 'RDP' text and other widgets share the close icon.
-      await tester.ensureVisible(find.text('NEW HOST').first);
-      await tester.tap(find.text('NEW HOST').first);
+      await tester.ensureVisible(find.text('New host').first);
+      await tester.tap(find.text('New host').first);
       await tester.pump(const Duration(milliseconds: 400));
       final panel = find.byType(HostDetailPanel);
       await tester.tap(find.descendant(

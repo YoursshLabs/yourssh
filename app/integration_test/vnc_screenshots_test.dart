@@ -117,8 +117,8 @@ void main() {
       // 2. Host editor in VNC mode (protocol selector + VNC fields).
       // Scope finds to the panel — the dashboard card's VNC badge shares the
       // 'VNC' text and other widgets share the close icon.
-      await tester.ensureVisible(find.text('NEW HOST').first);
-      await tester.tap(find.text('NEW HOST').first);
+      await tester.ensureVisible(find.text('New host').first);
+      await tester.tap(find.text('New host').first);
       await tester.pump(const Duration(milliseconds: 400));
       final panel = find.byType(HostDetailPanel);
       await tester.tap(find.descendant(

@@ -10,6 +10,11 @@ import 'ys_metrics.dart';
 ///
 /// Note: passing [onDoubleTap] makes the gesture arena wait, so [onTap] is
 /// delayed by `kDoubleTapTimeout` (300 ms).
+///
+/// Keyboard: the card is focusable when [onTap] or [onActivate] is set;
+/// Enter/Space run [onActivate], falling back to [onTap]. Use [onActivate]
+/// when the keyboard action differs from a single click (for example a card
+/// whose click does nothing but whose double-click connects).
 class YsHostCard extends StatefulWidget {
   final Widget leading;
   final String title;
@@ -23,6 +28,10 @@ class YsHostCard extends StatefulWidget {
   final VoidCallback? onDoubleTap;
   final void Function(Offset)? onSecondaryTap;
   final VoidCallback? onLongPress;
+
+  /// Keyboard activation (Enter/Space) and the semantics tap action.
+  /// Defaults to [onTap].
+  final VoidCallback? onActivate;
   final Widget? trailingAction;
 
   const YsHostCard({
@@ -39,6 +48,7 @@ class YsHostCard extends StatefulWidget {
     this.onDoubleTap,
     this.onSecondaryTap,
     this.onLongPress,
+    this.onActivate,
     this.trailingAction,
   });
 
@@ -55,14 +65,15 @@ class _YsHostCardState extends State<YsHostCard> {
     final w = widget;
     final hasChips = w.tags.isNotEmpty || w.meta != null;
     final tappable = w.onTap != null;
+    final activate = w.onActivate ?? w.onTap;
     return Semantics(
       button: true,
       container: true,
       selected: w.selected,
       label: '${w.title}, ${w.subtitle}',
-      onTap: w.onTap,
+      onTap: activate,
       child: FocusableActionDetector(
-        enabled: tappable,
+        enabled: activate != null,
         mouseCursor: tappable ? SystemMouseCursors.click : MouseCursor.defer,
         onFocusChange: (v) => setState(() => _focused = v),
         shortcuts: const {
@@ -72,7 +83,7 @@ class _YsHostCardState extends State<YsHostCard> {
         actions: {
           ActivateIntent: CallbackAction<ActivateIntent>(
             onInvoke: (_) {
-              w.onTap?.call();
+              activate?.call();
               return null;
             },
           ),

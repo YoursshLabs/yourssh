@@ -6,8 +6,9 @@ import '../models/discovered_host.dart';
 import '../models/host.dart';
 import '../providers/host_provider.dart';
 import '../providers/session_provider.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+
 import '../services/network_discovery_service.dart';
-import '../theme/app_theme.dart';
 import 'host_detail_panel.dart';
 
 class NetworkDiscoverySheet extends StatefulWidget {
@@ -15,16 +16,22 @@ class NetworkDiscoverySheet extends StatefulWidget {
   final bool selectionMode;
   final void Function(DiscoveredHost)? onSelected;
 
+  /// Test seam; a real [NetworkDiscoveryService] when null.
+  @visibleForTesting
+  final NetworkDiscoveryService? service;
+
   const NetworkDiscoverySheet({
     super.key,
     this.selectionMode = false,
     this.onSelected,
+    this.service,
   });
 
   static void show(
     BuildContext context, {
     bool selectionMode = false,
     void Function(DiscoveredHost)? onSelected,
+    @visibleForTesting NetworkDiscoveryService? service,
   }) {
     showModalBottomSheet(
       context: context,
@@ -33,6 +40,7 @@ class NetworkDiscoverySheet extends StatefulWidget {
       builder: (_) => NetworkDiscoverySheet(
         selectionMode: selectionMode,
         onSelected: onSelected,
+        service: service,
       ),
     );
   }
@@ -42,9 +50,14 @@ class NetworkDiscoverySheet extends StatefulWidget {
 }
 
 class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
-  final _svc = NetworkDiscoveryService();
+  late final NetworkDiscoveryService _svc =
+      widget.service ?? NetworkDiscoveryService();
   final _results = <String, DiscoveredHost>{};
   late final TextEditingController _subnetCtrl;
+
+  /// Last subnet text seen; the forui field also reports programmatic writes
+  /// and selection-only changes, and only a user edit marks the subnet edited.
+  String _subnetText = '';
 
   List<SubnetInfo> _subnets = [];
   SubnetInfo? _selected;
@@ -95,7 +108,7 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
         _subnets = subnets;
         _selected = subnets.isNotEmpty ? subnets.first : null;
         if (_selected != null) {
-          _subnetCtrl.text = _selected!.subnet;
+          _setSubnetText(_selected!.subnet);
         }
       });
       if (_selected != null) _startScan();
@@ -144,6 +157,20 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
             if (mounted) setState(() { _scanning = false; _scanError = e.toString(); });
           },
         );
+  }
+
+  void _setSubnetText(String text) {
+    _subnetText = text;
+    _subnetCtrl.text = text;
+  }
+
+  void _onSubnetChanged(TextEditingValue v) {
+    if (v.text == _subnetText) return;
+    _subnetText = v.text;
+    setState(() {
+      _editingSubnet = true;
+      _subnetError = SubnetInfo.validateSubnet(v.text);
+    });
   }
 
   void _stopScan() {
@@ -209,8 +236,9 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
       maxChildSize: 0.95,
       builder: (ctx, scroll) => Container(
         decoration: const BoxDecoration(
-          color: AppColors.bg,
+          color: YsColors.background,
           borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          border: Border(top: BorderSide(color: YsColors.border)),
         ),
         child: Column(
           children: [
@@ -219,7 +247,7 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
             _buildSubnetBar(),
             if (_scanning) _buildProgress(),
             _buildCounterRow(),
-            const Divider(color: AppColors.border, height: 1),
+            const FDivider(style: .delta(padding: .value(EdgeInsets.zero))),
             Expanded(child: _buildResultList(context, scroll)),
           ],
         ),
@@ -233,7 +261,7 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
           height: 4,
           margin: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: AppColors.border,
+            color: YsColors.border,
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -243,20 +271,24 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
         padding: const EdgeInsets.fromLTRB(20, 4, 12, 8),
         child: Row(
           children: [
-            const Icon(Icons.wifi_find, color: AppColors.accent, size: 18),
-            const SizedBox(width: 8),
+            const Icon(FLucideIcons.radar, color: YsColors.primary, size: 18),
+            const SizedBox(width: YsSpace.s2),
             const Text(
               'Discover Devices',
               style: TextStyle(
-                  color: AppColors.textPrimary,
+                  color: YsColors.foreground,
                   fontSize: 15,
                   fontWeight: FontWeight.w600),
             ),
             const Spacer(),
-            IconButton(
-              icon: const Icon(Icons.close, size: 18),
-              color: AppColors.textSecondary,
-              onPressed: () => Navigator.of(context).pop(),
+            Tooltip(
+              message: 'Close',
+              child: FButton.icon(
+                variant: .ghost,
+                size: .sm,
+                onPress: () => Navigator.of(context).pop(),
+                child: const Icon(FLucideIcons.x),
+              ),
             ),
           ],
         ),
@@ -268,7 +300,7 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
         child: Text(
           'Failed to list interfaces: $_subnetsError',
-          style: TextStyle(color: Colors.red.shade300, fontSize: 13),
+          style: const TextStyle(color: YsColors.error, fontSize: 13),
         ),
       );
     }
@@ -277,77 +309,88 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
         padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
         child: Text(
           'No active network interfaces found.',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          style: TextStyle(color: YsColors.mutedForeground, fontSize: 13),
         ),
       );
     }
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_subnets.length > 1)
-            DropdownButton<SubnetInfo>(
-              value: _selected,
-              dropdownColor: AppColors.card,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-              underline: const SizedBox(),
-              items: _subnets
-                  .map((s) => DropdownMenuItem(value: s, child: Text(s.displayName)))
-                  .toList(),
-              onChanged: (s) {
-                if (s == null) return;
-                setState(() {
-                  _selected = s;
-                  _subnetCtrl.text = s.subnet;
-                  _editingSubnet = false;
-                  _subnetError = null;
-                });
-              },
-            )
+            _interfacePicker()
           else
-            Text(
-              _selected?.displayName ?? '',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-            ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _subnetCtrl,
-              style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 13,
-                  fontFamily: 'monospace'),
-              decoration: InputDecoration(
-                isDense: true,
-                border: InputBorder.none,
-                errorText: _subnetError,
-                errorStyle: const TextStyle(fontSize: 10),
+            Padding(
+              padding: const EdgeInsets.only(top: 7),
+              child: Text(
+                _selected?.displayName ?? '',
+                style: const TextStyle(
+                    color: YsColors.mutedForeground, fontSize: 13),
               ),
-              onChanged: (v) {
-                setState(() {
-                  _editingSubnet = true;
-                  _subnetError = SubnetInfo.validateSubnet(v);
-                });
-              },
+            ),
+          const SizedBox(width: YsSpace.s2),
+          Expanded(
+            child: FTextField(
+              key: const Key('discovery-subnet'),
+              control: FTextFieldControl.managed(
+                controller: _subnetCtrl,
+                onChange: _onSubnetChanged,
+              ),
+              size: .sm,
+              error: _subnetError == null ? null : Text(_subnetError!),
             ),
           ),
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: _subnetError != null
+          const SizedBox(width: YsSpace.s2),
+          FButton(
+            variant: .outline,
+            size: .sm,
+            mainAxisSize: MainAxisSize.min,
+            onPress: _subnetError != null
                 ? null
                 : () {
                     if (_scanning) _stopScan();
                     _startScan();
                   },
-            child: Text(
-              _scanning ? 'Restart' : 'Scan',
-              style: const TextStyle(fontSize: 12),
-            ),
+            child: Text(_scanning ? 'Restart' : 'Scan'),
           ),
         ],
       ),
     );
   }
+
+  Widget _interfacePicker() => FPopoverMenu(
+        menuAnchor: Alignment.topLeft,
+        childAnchor: Alignment.bottomLeft,
+        menuBuilder: (context, controller, _) => [
+          FItemGroup(
+            children: [
+              for (final s in _subnets)
+                FItem(
+                  title: Text(s.displayName),
+                  selected: s == _selected,
+                  onPress: () {
+                    controller.hide();
+                    setState(() {
+                      _selected = s;
+                      _setSubnetText(s.subnet);
+                      _editingSubnet = false;
+                      _subnetError = null;
+                    });
+                  },
+                ),
+            ],
+          ),
+        ],
+        builder: (context, controller, _) => FButton(
+          variant: .outline,
+          size: .sm,
+          mainAxisSize: MainAxisSize.min,
+          onPress: controller.toggle,
+          suffix: const Icon(FLucideIcons.chevronDown),
+          child: Text(_selected?.displayName ?? ''),
+        ),
+      );
 
   Widget _buildProgress() {
     final progress = _total > 0 ? _scanned / _total : 0.0;
@@ -356,15 +399,11 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LinearProgressIndicator(
-            value: progress,
-            backgroundColor: AppColors.border,
-            color: AppColors.accent,
-          ),
-          const SizedBox(height: 4),
+          FDeterminateProgress(value: progress),
+          const SizedBox(height: YsSpace.s1),
           Text(
             _total > 0 ? 'Scanning… $_scanned / $_total' : 'Starting…',
-            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+            style: const TextStyle(color: YsColors.mutedForeground, fontSize: 11),
           ),
         ],
       ),
@@ -375,7 +414,7 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
         child: Text(
           'mDNS: $_mdnsCount found · TCP scan: $_tcpCount found',
-          style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+          style: const TextStyle(color: YsColors.mutedForeground, fontSize: 11),
         ),
       );
 
@@ -388,7 +427,7 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
           padding: const EdgeInsets.all(16),
           child: Text(
             'Scan failed: $_scanError',
-            style: TextStyle(color: Colors.red.shade300),
+            style: const TextStyle(color: YsColors.error),
             textAlign: TextAlign.center,
           ),
         ),
@@ -398,7 +437,7 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
       return const Center(
         child: Text(
           'No devices found yet…',
-          style: TextStyle(color: AppColors.textTertiary),
+          style: TextStyle(color: YsColors.mutedForeground),
         ),
       );
     }
@@ -436,96 +475,61 @@ class _DiscoveredRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: selectionMode ? onSelect : null,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        child: Row(
-          children: [
-            Icon(
-              host.isRdp ? Icons.desktop_windows : Icons.computer,
-              size: 16,
-              color: AppColors.textSecondary,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      child: Row(
+        children: [
+          Icon(
+            host.isRdp ? FLucideIcons.monitor : FLucideIcons.laptop,
+            size: 16,
+            color: YsColors.mutedForeground,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  host.hostname ?? host.ip,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: YsColors.foreground, fontSize: 13),
+                ),
+                if (host.hostname != null)
                   Text(
-                    host.hostname ?? host.ip,
+                    host.ip,
                     style: const TextStyle(
-                        color: AppColors.textPrimary, fontSize: 13),
+                        color: YsColors.mutedForeground,
+                        fontSize: 11,
+                        fontFamily: kYsMonoFontFamily,
+                        fontFamilyFallback: kYsMonoFontFallback),
                   ),
-                  if (host.hostname != null)
-                    Text(
-                      host.ip,
-                      style: const TextStyle(
-                          color: AppColors.textTertiary, fontSize: 11),
-                    ),
-                ],
-              ),
+              ],
             ),
-            _Badge(host.portLabel),
-            if (!selectionMode) ...[
-              const SizedBox(width: 8),
-              _SmallBtn('Add', onAdd),
-              const SizedBox(width: 4),
-              _SmallBtn('Connect', onConnect, primary: true),
-            ],
+          ),
+          YsStatusBadge(host.portLabel),
+          if (!selectionMode) ...[
+            const SizedBox(width: YsSpace.s2),
+            FButton(
+              variant: .outline,
+              size: .xs,
+              mainAxisSize: MainAxisSize.min,
+              onPress: onAdd,
+              child: const Text('Add'),
+            ),
+            const SizedBox(width: YsSpace.s1),
+            FButton(
+              size: .xs,
+              mainAxisSize: MainAxisSize.min,
+              onPress: onConnect,
+              child: const Text('Connect'),
+            ),
           ],
-        ),
+        ],
       ),
     );
+    // Only a selection-mode row is tappable, as before.
+    return selectionMode ? FTappable(onPress: onSelect, child: row) : row;
   }
-}
-
-class _Badge extends StatelessWidget {
-  final String label;
-  const _Badge(this.label);
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-        ),
-      );
-}
-
-class _SmallBtn extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  final bool primary;
-
-  const _SmallBtn(this.label, this.onTap, {this.primary = false});
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: primary ? AppColors.accent : AppColors.card,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-                color: primary ? AppColors.accent : AppColors.border),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: primary ? Colors.white : AppColors.textPrimary,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      );
 }
