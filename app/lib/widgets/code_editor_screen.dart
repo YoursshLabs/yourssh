@@ -12,6 +12,7 @@ import '../models/sftp_entry.dart';
 import '../services/external_edit_service.dart';
 import '../services/sftp_file_inspector.dart';
 import '../services/sftp_transfer_service.dart';
+import '../util/safe_local_path.dart';
 
 class CodeEditorScreen extends StatefulWidget {
   final Host host;
@@ -206,7 +207,8 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       // Reuse the download location; path_provider only as a fallback when
       // the initial download never completed.
       final tmpPath = _tmpPath ??
-          '${(await getTemporaryDirectory()).path}/${widget.entry.name}';
+          safeLocalChild(
+              (await getTemporaryDirectory()).path, widget.entry.name);
       await File(tmpPath).writeAsString(content);
       await service.uploadFile(widget.host, tmpPath, widget.entry.path);
       if (mounted) {

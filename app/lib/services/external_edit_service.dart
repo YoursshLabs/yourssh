@@ -8,6 +8,7 @@ import '../models/host.dart';
 import '../models/sftp_entry.dart';
 import '../util/app_launcher.dart';
 import 'sftp_transfer_service.dart';
+import '../util/safe_local_path.dart';
 
 typedef ExternalLauncher = Future<bool> Function(Uri uri);
 typedef AppLauncher = Future<bool> Function(Uri uri, String? appPath);
@@ -90,7 +91,7 @@ class ExternalEditService {
     final sessionDir = Directory(
         '${File(tmpPath).parent.path}/yourssh_edit/${_sessionCounter++}');
     await sessionDir.create(recursive: true);
-    return File(tmpPath).rename('${sessionDir.path}/${entry.name}');
+    return File(tmpPath).rename(safeLocalChild(sessionDir.path, entry.name));
   }
 
   void _startWatcher(Host host, SftpEntry entry, File localFile) {
