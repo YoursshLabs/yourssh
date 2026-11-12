@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class TerminalThemeEntry {
   final String name;
@@ -7,7 +8,11 @@ class TerminalThemeEntry {
   const TerminalThemeEntry(this.name, this.data);
 }
 
-const List<TerminalThemeEntry> kTerminalThemes = [
+/// Theme for new installs, and the fallback `terminalThemeByName` resolves to.
+const String kDefaultTerminalTheme = 'YourSSH Amber';
+
+final List<TerminalThemeEntry> kTerminalThemes = [
+  TerminalThemeEntry('YourSSH Amber', _yourSshAmber),
   TerminalThemeEntry('YourSSH Dark', _yourSshDark),
   TerminalThemeEntry('Dracula', _dracula),
   TerminalThemeEntry('One Dark', _oneDark),
@@ -63,8 +68,37 @@ TerminalTheme terminalThemeByName(String name) {
       .data;
 }
 
+// ── YourSSH Amber ─────────────────────────────
+// Amber Brand scheme: YourSSH Dark's desaturated ANSI set on the warm
+// terminal surface, with amber cursor, selection and search hits.
+final _yourSshAmber = TerminalTheme(
+  cursor: YsColors.primary,
+  selection: YsColors.primary.withAlpha(0x55),
+  foreground: const Color(0xFFE7E5E4),
+  background: YsColors.terminalSurface,
+  black: const Color(0xFF1F2225),
+  red: const Color(0xFFCF6A6A),
+  green: const Color(0xFF7CB07A),
+  yellow: const Color(0xFFD6A15C),
+  blue: const Color(0xFF5A9BD4),
+  magenta: const Color(0xFFA98BC9),
+  cyan: const Color(0xFF5FB3B8),
+  white: const Color(0xFFB8BCC2),
+  brightBlack: const Color(0xFF4E545C),
+  brightRed: const Color(0xFFE08A8A),
+  brightGreen: const Color(0xFF97C795),
+  brightYellow: const Color(0xFFE8BC7A),
+  brightBlue: const Color(0xFF7DB4E3),
+  brightMagenta: const Color(0xFFC2A6DD),
+  brightCyan: const Color(0xFF7FCBCF),
+  brightWhite: const Color(0xFFE8EAED),
+  searchHitBackground: YsColors.primary,
+  searchHitBackgroundCurrent: YsColors.accentText,
+  searchHitForeground: YsColors.terminalSurface,
+);
+
 // ── YourSSH Dark ──────────────────────────────
-// The app's own scheme, and the fallback `terminalThemeByName` resolves to.
+// The previous app scheme; kept unchanged as the second catalog entry.
 // Neutral charcoal base (no blue/purple cast) with a deliberately
 // desaturated ANSI set so long log output stays flat and readable;
 // azure/teal carry the accents (cursor, selection, current search hit).
