@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **New look:** the app moves to the Amber Brand palette (warm dark surfaces, amber accent), the Inter font and a forui-based UI foundation on desktop and mobile.
 - **New "YourSSH Amber" terminal theme**, the default for new installs. Existing installs keep their current terminal theme.
 - Built with Flutter 3.50.
+- **New sidebar** with grouped sections and an amber selected item.
+- **New tab bar** for sessions, with the active tab marked in amber.
+- **New toasts** for notifications, shown bottom-right on desktop.
+- **New dialogs** across the app; security prompts (host key, RDP certificate) now focus the safe choice by default.
 
 ---
 
