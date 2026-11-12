@@ -543,9 +543,9 @@ class _SyncSectionState extends State<_SyncSection> {
     if (_testing) return const SizedBox.shrink();
     if (_testOk) {
       return Row(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.check_circle, size: 12, color: Colors.green),
+        const Icon(Icons.check_circle, size: 12, color: AppColors.success),
         const SizedBox(width: 4),
-        const Text('Connected', style: TextStyle(color: Colors.green, fontSize: 11)),
+        const Text('Connected', style: TextStyle(color: AppColors.success, fontSize: 11)),
         const SizedBox(width: 12),
         TextButton(
           onPressed: _disconnect,
@@ -954,7 +954,7 @@ class _SyncStatusRow extends StatelessWidget {
       case SyncStatus.synced:
         final ago = sync.lastSynced == null ? '' : _ago(sync.lastSynced!);
         return Row(children: [
-          const Icon(Icons.check_circle, size: 12, color: Colors.green),
+          const Icon(Icons.check_circle, size: 12, color: AppColors.success),
           const SizedBox(width: 6),
           Text('Synced$ago', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
         ]);
@@ -1103,7 +1103,7 @@ class _AiProvidersSectionState extends State<_AiProvidersSection> {
               ),
               const Spacer(),
               if (config != null)
-                const Icon(Icons.check_circle, size: 14, color: Colors.green),
+                const Icon(Icons.check_circle, size: 14, color: AppColors.success),
             ],
           ),
           const SizedBox(height: 8),
@@ -1426,13 +1426,13 @@ class _SecuritySectionState extends State<_SecuritySection> {
               children: [
                 Icon(secure ? Icons.lock_outline : Icons.lock_open,
                     size: 14,
-                    color: secure ? AppColors.accent : AppColors.red),
+                    color: secure ? AppColors.success : AppColors.red),
                 const SizedBox(width: 6),
                 Text(
                   secure ? 'Encrypted' : 'Plain text',
                   style: TextStyle(
                     fontSize: 12,
-                    color: secure ? AppColors.accent : AppColors.red,
+                    color: secure ? AppColors.success : AppColors.red,
                   ),
                 ),
               ],

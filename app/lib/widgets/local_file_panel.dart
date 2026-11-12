@@ -12,6 +12,7 @@ import '../util/fs_error.dart';
 import 'entry_context_menu.dart';
 import 'path_breadcrumb.dart';
 import 'permissions_dialog.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 class LocalFilePanel extends StatefulWidget {
   final LocalFilePanelProvider provider;
@@ -238,11 +239,11 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.laptop_mac, size: 11, color: Color(0xFF22C55E)),
+                    Icon(Icons.laptop_mac, size: 11, color: AppColors.accent),
                     SizedBox(width: 4),
                     Text(
                       'Local',
-                      style: TextStyle(color: Color(0xFF22C55E), fontSize: 12),
+                      style: TextStyle(color: AppColors.accent, fontSize: 12),
                     ),
                     SizedBox(width: 4),
                     Icon(Icons.unfold_more, size: 11, color: Color(0xFF555555)),
@@ -400,7 +401,7 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(6),
-            borderSide: const BorderSide(color: Color(0xFF22C55E)),
+            borderSide: const BorderSide(color: AppColors.accent),
           ),
         ),
         onChanged: prov.setFilterQuery,
@@ -504,7 +505,7 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
   Widget _buildContent(LocalFilePanelProvider prov) {
     if (prov.loadState == LocalFilePanelLoadState.loading) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF22C55E)),
+        child: CircularProgressIndicator(color: AppColors.accent),
       );
     }
     if (prov.loadState == LocalFilePanelLoadState.error) {
@@ -560,7 +561,7 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
                 onChanged: (_) =>
                     prov.isAllSelected ? prov.deselectAll() : prov.selectAll(),
                 side: const BorderSide(color: Color(0xFF444444)),
-                activeColor: const Color(0xFF22C55E),
+                activeColor: AppColors.accent,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 visualDensity: VisualDensity.compact,
               ),
@@ -690,7 +691,7 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: Color(0xFF22C55E)),
+              borderSide: const BorderSide(color: AppColors.accent),
             ),
           ),
           onSubmitted: (_) => Navigator.pop(ctx, controller.text),
@@ -705,7 +706,7 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('OK', style: TextStyle(color: Color(0xFF22C55E))),
+            child: const Text('OK', style: TextStyle(color: AppColors.accent)),
           ),
         ],
       ),
@@ -734,19 +735,19 @@ class _HeaderButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
           color: active
-              ? const Color(0xFF22C55E).withValues(alpha: 0.12)
+              ? AppColors.accent.withValues(alpha: 0.12)
               : const Color(0xFF1E1E1E),
           borderRadius: BorderRadius.circular(5),
           border: Border.all(
             color: active
-                ? const Color(0xFF22C55E).withValues(alpha: 0.4)
+                ? AppColors.accent.withValues(alpha: 0.4)
                 : const Color(0xFF2A2A2A),
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: active ? const Color(0xFF22C55E) : const Color(0xFFD4D4D4),
+            color: active ? AppColors.accent : const Color(0xFFD4D4D4),
             fontSize: 12,
           ),
         ),
@@ -808,18 +809,18 @@ class _LocalEntryRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFF22C55E).withValues(alpha: 0.15),
+            color: AppColors.accent.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Text(
             entry.name,
-            style: const TextStyle(color: Color(0xFF22C55E), fontSize: 13),
+            style: const TextStyle(color: AppColors.accent, fontSize: 13),
           ),
         ),
       ),
       child: Container(
         color: selected
-            ? const Color(0xFF22C55E).withValues(alpha: 0.08)
+            ? AppColors.accent.withValues(alpha: 0.08)
             : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
         child: Row(
@@ -830,7 +831,7 @@ class _LocalEntryRow extends StatelessWidget {
               value: selected,
               onChanged: (_) => onToggleSelect(),
               side: const BorderSide(color: Color(0xFF444444)),
-              activeColor: const Color(0xFF22C55E),
+              activeColor: AppColors.accent,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               visualDensity: VisualDensity.compact,
             ),

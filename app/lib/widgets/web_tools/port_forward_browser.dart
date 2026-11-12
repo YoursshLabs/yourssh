@@ -99,7 +99,7 @@ class _TunnelRowState extends State<_TunnelRow> {
               width: 8,
               height: 8,
               decoration: const BoxDecoration(
-                color: AppColors.accent,
+                color: AppColors.success,
                 shape: BoxShape.circle,
               ),
             ),

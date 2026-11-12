@@ -58,7 +58,7 @@ class _ResultRowState extends State<_ResultRow> {
       case BulkHostStatus.success:
         final clean = (r.exitCode ?? 0) == 0;
         return Icon(clean ? Icons.check_circle_outline : Icons.error_outline,
-            size: 14, color: clean ? AppColors.accent : AppColors.orange);
+            size: 14, color: clean ? AppColors.success : AppColors.orange);
       case BulkHostStatus.failed:
         return const Icon(Icons.error_outline,
             size: 14, color: AppColors.red);

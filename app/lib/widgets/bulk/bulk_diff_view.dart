@@ -241,8 +241,8 @@ class _UnifiedDiff extends StatelessWidget {
       itemBuilder: (_, i) {
         final l = lines[i];
         final (prefix, color, bg) = switch (l.op) {
-          DiffOp.added => ('+ ', AppColors.accent,
-              AppColors.accent.withValues(alpha: 0.08)),
+          DiffOp.added => ('+ ', AppColors.success,
+              AppColors.success.withValues(alpha: 0.08)),
           DiffOp.removed => ('- ', AppColors.red,
               AppColors.red.withValues(alpha: 0.08)),
           DiffOp.same => ('  ', AppColors.textSecondary, null),
@@ -331,13 +331,13 @@ class _SideBySide extends StatelessWidget {
   Widget _cell(DiffLine? line) {
     final color = switch (line?.op) {
       DiffOp.removed => AppColors.red,
-      DiffOp.added => AppColors.accent,
+      DiffOp.added => AppColors.success,
       DiffOp.same => AppColors.textSecondary,
       null => Colors.transparent,
     };
     final bg = switch (line?.op) {
       DiffOp.removed => AppColors.red.withValues(alpha: 0.08),
-      DiffOp.added => AppColors.accent.withValues(alpha: 0.08),
+      DiffOp.added => AppColors.success.withValues(alpha: 0.08),
       _ => null,
     };
     return Expanded(

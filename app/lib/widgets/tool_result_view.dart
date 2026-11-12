@@ -33,7 +33,7 @@ class ToolResultView extends StatelessWidget {
               Icon(
                 result!.isSuccess ? Icons.check_circle_outline : Icons.error_outline,
                 size: 14,
-                color: result!.isSuccess ? AppColors.accent : AppColors.red,
+                color: result!.isSuccess ? AppColors.success : AppColors.red,
               ),
               const SizedBox(width: 6),
               Text(
@@ -41,7 +41,7 @@ class ToolResultView extends StatelessWidget {
                     ? 'Success (${result!.durationMs}ms)'
                     : 'Error',
                 style: TextStyle(
-                  color: result!.isSuccess ? AppColors.accent : AppColors.red,
+                  color: result!.isSuccess ? AppColors.success : AppColors.red,
                   fontSize: 12,
                 ),
               ),

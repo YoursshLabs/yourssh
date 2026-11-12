@@ -1230,12 +1230,12 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: _testResult!.success
-                            ? AppColors.accent.withValues(alpha: 0.08)
+                            ? AppColors.success.withValues(alpha: 0.08)
                             : AppColors.red.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: _testResult!.success
-                              ? AppColors.accent.withValues(alpha: 0.3)
+                              ? AppColors.success.withValues(alpha: 0.3)
                               : AppColors.red.withValues(alpha: 0.3),
                         ),
                       ),
@@ -1244,7 +1244,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                           Icon(
                             _testResult!.success ? Icons.check_circle_outline : Icons.error_outline,
                             size: 14,
-                            color: _testResult!.success ? AppColors.accent : AppColors.red,
+                            color: _testResult!.success ? AppColors.success : AppColors.red,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -1253,7 +1253,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                                   ? 'Connected · ${_testResult!.latencyMs}ms'
                                   : _testResult!.error ?? 'Failed',
                               style: TextStyle(
-                                color: _testResult!.success ? AppColors.accent : AppColors.red,
+                                color: _testResult!.success ? AppColors.success : AppColors.red,
                                 fontSize: 12,
                               ),
                             ),

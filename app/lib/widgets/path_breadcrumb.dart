@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 /// One clickable segment of a [PathBreadcrumb].
 typedef PathCrumb = ({String label, String path});
@@ -127,7 +128,7 @@ class _PathBreadcrumbState extends State<PathBreadcrumb> {
         child: TextField(
           controller: _controller,
           autofocus: true,
-          cursorColor: const Color(0xFF22C55E),
+          cursorColor: AppColors.accent,
           style: const TextStyle(
               color: Color(0xFFD4D4D4), fontSize: 12, fontFamily: 'monospace'),
           decoration: InputDecoration(
@@ -150,7 +151,7 @@ class _PathBreadcrumbState extends State<PathBreadcrumb> {
                 borderSide: const BorderSide(color: Color(0xFF2A2A2A))),
             focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(5),
-                borderSide: const BorderSide(color: Color(0xFF22C55E))),
+                borderSide: const BorderSide(color: AppColors.accent)),
           ),
           onSubmitted: (_) => _submit(),
           onTapOutside: (_) => _cancel(),

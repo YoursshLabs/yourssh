@@ -21,6 +21,7 @@ import 'local_file_panel.dart';
 import 'sftp_panel.dart';
 import 'sftp_transfer_panel.dart';
 import 'source_picker_dialog.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 /// Two-panel commander layout. Each slot points at a [PanelSource] (the
 /// local filesystem or any saved host) and can be switched at any time.
@@ -476,7 +477,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
           decoration: BoxDecoration(
             border: localCandidates.isNotEmpty || sftpCandidates.isNotEmpty
                 ? Border.all(
-                    color: const Color(0xFF22C55E).withValues(alpha: 0.4),
+                    color: AppColors.accent.withValues(alpha: 0.4),
                     width: 2)
                 : null,
           ),
@@ -568,11 +569,11 @@ class _Btn extends StatelessWidget {
         child: Container(
           width: 26, height: 26,
           decoration: BoxDecoration(
-            color: enabled ? const Color(0xFF22C55E).withValues(alpha: 0.12) : const Color(0xFF1A1A1A),
+            color: enabled ? AppColors.accent.withValues(alpha: 0.12) : const Color(0xFF1A1A1A),
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: enabled ? const Color(0xFF22C55E).withValues(alpha: 0.3) : const Color(0xFF252525)),
+            border: Border.all(color: enabled ? AppColors.accent.withValues(alpha: 0.3) : const Color(0xFF252525)),
           ),
-          child: Icon(icon, size: 14, color: enabled ? const Color(0xFF22C55E) : const Color(0xFF333333)),
+          child: Icon(icon, size: 14, color: enabled ? AppColors.accent : const Color(0xFF333333)),
         ),
       ),
     );

@@ -148,14 +148,14 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
                 width: 7,
                 height: 7,
                 decoration: const BoxDecoration(
-                  color: AppColors.accent,
+                  color: AppColors.success,
                   shape: BoxShape.circle,
                 ),
               ),
               const SizedBox(width: 5),
               const Text(
                 'Live',
-                style: TextStyle(color: AppColors.accent, fontSize: 11),
+                style: TextStyle(color: AppColors.success, fontSize: 11),
               ),
             ]),
         ]),
@@ -281,7 +281,7 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
               value: fraction.clamp(0.0, 1.0),
               minHeight: 6,
               backgroundColor: const Color(0xFF2A2A2A),
-              color: fraction > 0.85 ? AppColors.red : AppColors.accent,
+              color: fraction > 0.85 ? AppColors.red : AppColors.success,
             ),
           ),
         ),
@@ -357,7 +357,7 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
           const SizedBox(width: 6),
           _chip(
             fw.enabled ? 'active' : 'inactive',
-            fw.enabled ? AppColors.accent : AppColors.red,
+            fw.enabled ? AppColors.success : AppColors.red,
           ),
           if (fw.defaultInboundPolicy != null) ...[
             const SizedBox(width: 8),

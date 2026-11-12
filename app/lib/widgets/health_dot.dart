@@ -50,7 +50,7 @@ class _HealthDotState extends State<HealthDot>
   Color _color(BadgeTone tone) {
     switch (tone) {
       case BadgeTone.green:
-        return AppColors.accent;
+        return AppColors.success;
       case BadgeTone.amber:
       case BadgeTone.connecting:
         return AppColors.orange;

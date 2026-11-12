@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 import 'workspace_side_panel.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 class TerminalSnippetsPanel extends StatefulWidget {
   final bool canRun;
@@ -51,7 +52,7 @@ class _TerminalSnippetsPanelState extends State<TerminalSnippetsPanel> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Color(0xFF22C55E)),
+            borderSide: const BorderSide(color: AppColors.accent),
           ),
           isDense: true,
         ),
@@ -149,7 +150,7 @@ class _SnippetRow extends StatelessWidget {
           SelectableText(
             snippet.command,
             style: const TextStyle(
-              color: Color(0xFF22C55E),
+              color: AppColors.accent,
               fontSize: 12,
               fontFamily: 'monospace',
             ),

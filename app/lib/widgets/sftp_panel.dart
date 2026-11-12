@@ -15,6 +15,7 @@ import 'code_editor_screen.dart';
 import 'path_breadcrumb.dart';
 import 'entry_context_menu.dart';
 import 'permissions_dialog.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 class SftpPanel extends StatefulWidget {
   final Host? host;
@@ -204,7 +205,7 @@ class _SftpPanelState extends State<SftpPanel> {
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Open externally',
-                  style: TextStyle(color: Color(0xFF22C55E)))),
+                  style: TextStyle(color: AppColors.accent))),
         ],
       ),
     );
@@ -357,13 +358,13 @@ class _SftpPanelState extends State<SftpPanel> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.dns, size: 11, color: Color(0xFF22C55E)),
+                          const Icon(Icons.dns, size: 11, color: AppColors.accent),
                           const SizedBox(width: 4),
                           Flexible(
                             child: Text(widget.host!.label,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                    color: Color(0xFF22C55E), fontSize: 12)),
+                                    color: AppColors.accent, fontSize: 12)),
                           ),
                           const SizedBox(width: 4),
                           const Icon(Icons.unfold_more, size: 11, color: Color(0xFF555555)),
@@ -492,7 +493,7 @@ class _SftpPanelState extends State<SftpPanel> {
               borderSide: const BorderSide(color: Color(0xFF2A2A2A))),
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: Color(0xFF22C55E))),
+              borderSide: const BorderSide(color: AppColors.accent)),
         ),
         onChanged: prov.setFilterQuery,
       ),
@@ -562,7 +563,7 @@ class _SftpPanelState extends State<SftpPanel> {
 
   Widget _buildContent(SftpPanelProvider prov) {
     if (prov.loadState == SftpPanelLoadState.loading) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFF22C55E)));
+      return const Center(child: CircularProgressIndicator(color: AppColors.accent));
     }
     if (prov.loadState == SftpPanelLoadState.error) {
       return Center(
@@ -597,7 +598,7 @@ class _SftpPanelState extends State<SftpPanel> {
                 tristate: true,
                 onChanged: (_) => prov.isAllSelected ? prov.deselectAll() : prov.selectAll(),
                 side: const BorderSide(color: Color(0xFF444444)),
-                activeColor: const Color(0xFF22C55E),
+                activeColor: AppColors.accent,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 visualDensity: VisualDensity.compact,
               ),
@@ -662,16 +663,16 @@ class _SftpPanelState extends State<SftpPanel> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xFF22C55E).withValues(alpha: 0.15),
+              color: AppColors.accent.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Text(entry.name, style: const TextStyle(color: Color(0xFF22C55E), fontSize: 13)),
+            child: Text(entry.name, style: const TextStyle(color: AppColors.accent, fontSize: 13)),
           ),
         ),
         child: InkWell(
           onTap: () => _onEntryTap(entry),
           child: Container(
-            color: isSelected ? const Color(0xFF22C55E).withValues(alpha: 0.1) : Colors.transparent,
+            color: isSelected ? AppColors.accent.withValues(alpha: 0.1) : Colors.transparent,
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             child: Row(
               children: [
@@ -679,7 +680,7 @@ class _SftpPanelState extends State<SftpPanel> {
                   value: isSelected,
                   onChanged: (_) => prov.toggleSelection(entry),
                   side: const BorderSide(color: Color(0xFF444444)),
-                  activeColor: const Color(0xFF22C55E),
+                  activeColor: AppColors.accent,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   visualDensity: VisualDensity.compact,
                 ),
@@ -735,13 +736,13 @@ class _SftpPanelState extends State<SftpPanel> {
           decoration: const InputDecoration(
             hintText: 'Folder name', hintStyle: TextStyle(color: Color(0xFF555555)),
             enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF2A2A2A))),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF22C55E))),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accent)),
           ),
           onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: Color(0xFF888888)))),
-          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Create', style: TextStyle(color: Color(0xFF22C55E)))),
+          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Create', style: TextStyle(color: AppColors.accent))),
         ],
       ),
     );
@@ -771,13 +772,13 @@ class _SftpPanelState extends State<SftpPanel> {
           decoration: const InputDecoration(
             hintText: 'File name', hintStyle: TextStyle(color: Color(0xFF555555)),
             enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF2A2A2A))),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF22C55E))),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accent)),
           ),
           onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: Color(0xFF888888)))),
-          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Create', style: TextStyle(color: Color(0xFF22C55E)))),
+          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Create', style: TextStyle(color: AppColors.accent))),
         ],
       ),
     );
@@ -815,13 +816,13 @@ class _SftpPanelState extends State<SftpPanel> {
           style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
           decoration: const InputDecoration(
             enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF2A2A2A))),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF22C55E))),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accent)),
           ),
           onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: Color(0xFF888888)))),
-          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Rename', style: TextStyle(color: Color(0xFF22C55E)))),
+          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Rename', style: TextStyle(color: AppColors.accent))),
         ],
       ),
     );
@@ -926,19 +927,19 @@ class _HeaderButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
           color: active
-              ? const Color(0xFF22C55E).withValues(alpha: 0.12)
+              ? AppColors.accent.withValues(alpha: 0.12)
               : const Color(0xFF1E1E1E),
           borderRadius: BorderRadius.circular(5),
           border: Border.all(
               color: active
-                  ? const Color(0xFF22C55E).withValues(alpha: 0.4)
+                  ? AppColors.accent.withValues(alpha: 0.4)
                   : const Color(0xFF2A2A2A)),
         ),
         child: Text(
           label,
           style: TextStyle(
             color: active
-                ? const Color(0xFF22C55E)
+                ? AppColors.accent
                 : const Color(0xFFD4D4D4),
             fontSize: 12,
           ),

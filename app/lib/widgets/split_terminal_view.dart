@@ -18,6 +18,7 @@ import 'terminal_input_bar.dart';
 import 'broadcast_toolbar.dart';
 import 'terminal_config_panel.dart';
 import 'terminal_snippets_panel.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 class SplitTerminalView extends StatelessWidget {
   final VoidCallback? onNavigateToSettings;
@@ -273,7 +274,7 @@ class _WatchBanner extends StatelessWidget {
       label = 'Session ended by host';
     } else if (hasControl) {
       bg = const Color(0xFF1A2A1A);
-      fg = const Color(0xFF22C55E);
+      fg = AppColors.success;
       label = 'You have control';
     } else {
       bg = const Color(0xFF1A1A2A);

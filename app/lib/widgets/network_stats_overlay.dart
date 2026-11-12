@@ -6,6 +6,7 @@ import '../providers/session_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/network_stats_service.dart';
 import '../services/ssh_service.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 class NetworkStatsOverlay extends StatefulWidget {
   const NetworkStatsOverlay({super.key});
@@ -73,11 +74,11 @@ class _NetworkStatsOverlayState extends State<NetworkStatsOverlay> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.arrow_downward, size: 12, color: Color(0xFF22C55E)),
+          const Icon(Icons.arrow_downward, size: 12, color: AppColors.accent),
           const SizedBox(width: 2),
           Text(
             NetworkStats.formatBytes(_delta!.rxBytesPerSec),
-            style: const TextStyle(color: Color(0xFF22C55E), fontSize: 11, fontFamily: 'monospace'),
+            style: const TextStyle(color: AppColors.accent, fontSize: 11, fontFamily: 'monospace'),
           ),
           const SizedBox(width: 8),
           const Icon(Icons.arrow_upward, size: 12, color: Color(0xFF60A5FA)),

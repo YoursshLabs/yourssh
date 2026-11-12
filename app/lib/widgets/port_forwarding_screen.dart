@@ -205,7 +205,7 @@ class _ForwardTileState extends State<_ForwardTile> {
   Widget build(BuildContext context) {
     final fwd = widget.forward;
     final statusColor = switch (fwd.status) {
-      ForwardStatus.active => AppColors.accent,
+      ForwardStatus.active => AppColors.success,
       ForwardStatus.error => AppColors.red,
       ForwardStatus.connecting || ForwardStatus.reconnecting => AppColors.orange,
       ForwardStatus.idle => AppColors.textTertiary,

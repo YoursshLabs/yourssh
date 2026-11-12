@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 class AppColors {
-  static const bg = Color(0xFF0F0F0F);
-  static const sidebar = Color(0xFF141414);
-  static const card = Color(0xFF1C1C1C);
-  static const cardHover = Color(0xFF242424);
-  static const border = Color(0xFF2A2A2A);
-  static const accent = Color(0xFF22C55E);
-  static const accentDim = Color(0xFF16A34A);
-  static const textPrimary = Color(0xFFE5E5E5);
-  static const textSecondary = Color(0xFF888888);
-  static const textTertiary = Color(0xFF555555);
-  static const red = Color(0xFFEF4444);
+  static const bg = YsColors.background;
+  static const sidebar = YsColors.sidebar;
+  static const card = YsColors.card;
+  static const cardHover = YsColors.secondary;
+  static const border = YsColors.border;
+  static const accent = YsColors.primary;
+  static const accentDim = Color(0xFFE87C08);
+  static const textPrimary = YsColors.foreground;
+  static const textSecondary = YsColors.mutedForeground;
+  static const textTertiary = Color(0xFF78716C);
+  static const red = YsColors.error;
+  static const success = YsColors.ok;
+  static const warning = YsColors.warn;
+  static const offline = YsColors.off;
   static const orange = Color(0xFFF97316);
   static const blue = Color(0xFF3B82F6);
   static const purple = Color(0xFF8B5CF6);
@@ -88,7 +91,7 @@ class AppSnack {
   static void success(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(message, style: const TextStyle(color: Colors.white)),
-      backgroundColor: AppColors.accent,
+      backgroundColor: AppColors.success,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 3),
     ));

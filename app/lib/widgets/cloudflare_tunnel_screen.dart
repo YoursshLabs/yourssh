@@ -161,7 +161,7 @@ class _CloudflareTunnelBodyState extends State<_CloudflareTunnelBody> {
     final statusColor = switch (tunnel.status) {
       TunnelStatus.idle => AppColors.textTertiary,
       TunnelStatus.starting => AppColors.orange,
-      TunnelStatus.active => AppColors.accent,
+      TunnelStatus.active => AppColors.success,
       TunnelStatus.error => AppColors.red,
     };
 

@@ -181,7 +181,7 @@ class _McpServerScreenState extends State<McpServerScreen> {
               decoration: BoxDecoration(
                 color: AppColors.card,
                 border: Border.all(
-                    color: AppColors.accent.withValues(alpha: 0.4)),
+                    color: AppColors.success.withValues(alpha: 0.4)),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -189,11 +189,11 @@ class _McpServerScreenState extends State<McpServerScreen> {
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.circle, size: 8, color: AppColors.accent),
+                      Icon(Icons.circle, size: 8, color: AppColors.success),
                       SizedBox(width: 8),
                       Text('MCP Server Running',
                           style: TextStyle(
-                              color: AppColors.accent,
+                              color: AppColors.success,
                               fontWeight: FontWeight.w600)),
                     ],
                   ),

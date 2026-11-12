@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/sftp_transfer_item.dart';
 import '../providers/sftp_transfer_provider.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 /// Docked, minimizable transfer-progress panel at the bottom of the
 /// two-panel SFTP workspace. Non-modal: transfers run in
@@ -91,7 +92,7 @@ class _SftpTransferPanelState extends State<SftpTransferPanel> {
               borderRadius: BorderRadius.circular(2),
               child: LinearProgressIndicator(
                 value: tp.overallProgress > 0 ? tp.overallProgress : null,
-                color: const Color(0xFF22C55E),
+                color: AppColors.accent,
                 backgroundColor: const Color(0xFF252525),
                 minHeight: 4,
               ),
@@ -121,7 +122,7 @@ class _SftpTransferPanelState extends State<SftpTransferPanel> {
           padding: const EdgeInsets.fromLTRB(12, 8, 4, 2),
           child: Row(
             children: [
-              const Icon(Icons.swap_horiz, size: 15, color: Color(0xFF22C55E)),
+              const Icon(Icons.swap_horiz, size: 15, color: AppColors.accent),
               const SizedBox(width: 8),
               Text(
                 '${finished ? 'Transferred' : 'Transferring'} '
@@ -145,7 +146,7 @@ class _SftpTransferPanelState extends State<SftpTransferPanel> {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: tp.overallProgress > 0 ? tp.overallProgress : null,
-              color: const Color(0xFF22C55E),
+              color: AppColors.accent,
               backgroundColor: const Color(0xFF252525),
               minHeight: 5,
             ),
@@ -199,7 +200,7 @@ class _SftpTransferPanelState extends State<SftpTransferPanel> {
 
   Widget _buildRow(SftpTransferItem item) {
     final (icon, color) = switch (item.status) {
-      TransferStatus.done => (Icons.check_circle_outline, const Color(0xFF22C55E)),
+      TransferStatus.done => (Icons.check_circle_outline, AppColors.success),
       TransferStatus.skipped => (Icons.skip_next, const Color(0xFF888888)),
       TransferStatus.error => (Icons.error_outline, const Color(0xFFEF4444)),
       TransferStatus.inProgress => (Icons.swap_horiz, const Color(0xFF60A5FA)),

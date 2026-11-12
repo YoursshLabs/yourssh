@@ -413,7 +413,7 @@ String _fmtDuration(Duration d) {
 /// Tab key-icon color per live forwarding state (off renders no icon).
 Color agentForwardingColor(AgentForwardingState state) => switch (state) {
       AgentForwardingState.ready => AppColors.textSecondary,
-      AgentForwardingState.active => AppColors.accent,
+      AgentForwardingState.active => AppColors.success,
       AgentForwardingState.fallback => AppColors.orange,
       AgentForwardingState.refused => AppColors.red,
       // Unreachable from the tab (the icon is gated on state != off); kept

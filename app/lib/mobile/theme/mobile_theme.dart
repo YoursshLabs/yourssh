@@ -3,22 +3,22 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Color palette for the mobile UI. Desktop theme ([AppColors]) is untouched.
 abstract final class MobileColors {
-  static const accent      = Color(0xFFF7A01A);
+  static const accent      = YsColors.primary;
   static const accentSoft  = Color(0xFF2A2010);
-  static const bg          = Color(0xFF000000);
-  static const surface     = Color(0xFF161618);
-  static const surfaceAlt  = Color(0xFF0C0C0E);
-  static const border      = Color(0xFF232325);
-  static const borderSoft  = Color(0xFF1A1A1C);
-  static const textPrimary = Color(0xFFF5F5F7);
-  static const textMuted   = Color(0xFF8A8A8E);
-  static const textFaint   = Color(0xFF5D5D63);
-  static const green       = Color(0xFF22C55E);
-  static const red         = Color(0xFFFF6464);
+  static const bg          = YsColors.background;
+  static const surface     = YsColors.card;
+  static const surfaceAlt  = YsColors.chrome;
+  static const border      = YsColors.border;
+  static const borderSoft  = Color(0x14FFEBD2);
+  static const textPrimary = YsColors.foreground;
+  static const textMuted   = YsColors.mutedForeground;
+  static const textFaint   = Color(0xFF78716C);
+  static const green       = YsColors.ok;
+  static const red         = YsColors.error;
   static const blue        = Color(0xFF4DA3FF);
-  static const yellow      = Color(0xFFFFCE35);
+  static const yellow      = YsColors.warn;
   /// Input field fill color.
-  static const fieldFill   = Color(0xFF1C1C1E);
+  static const fieldFill   = YsColors.secondary;
   /// Tab bar inactive icon/label color.
   static const tabInactive = Color(0xFF6D6D72);
 }

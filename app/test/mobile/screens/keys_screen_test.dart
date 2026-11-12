@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -136,12 +135,6 @@ Future<void> _pump(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
-  setUpAll(() {
-    // Disable Google Fonts runtime network fetching so tests don't make
-    // real HTTP requests (which are blocked in the test environment).
-    GoogleFonts.config.allowRuntimeFetching = false;
-  });
-
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   testWidgets('shows title "Keys"', (tester) async {

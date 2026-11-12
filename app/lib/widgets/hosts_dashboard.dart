@@ -1085,7 +1085,7 @@ class _HostCardState extends State<_HostCard> {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        color: (_testResult?.success ?? false) ? AppColors.accent : AppColors.red,
+        color: (_testResult?.success ?? false) ? AppColors.success : AppColors.red,
         fontSize: 11,
       ),
     );
@@ -1121,7 +1121,7 @@ class _HostCardState extends State<_HostCard> {
         Icon(
           _testResult!.success ? Icons.check_circle_outline : Icons.error_outline,
           size: 14,
-          color: _testResult!.success ? AppColors.accent : AppColors.red,
+          color: _testResult!.success ? AppColors.success : AppColors.red,
         ),
         const SizedBox(width: 4),
         resultText,

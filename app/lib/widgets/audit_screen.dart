@@ -189,7 +189,7 @@ class _AuditRow extends StatelessWidget {
   const _AuditRow({required this.event});
 
   Color get _typeColor => switch (event.type) {
-        AuditEventType.connect => Colors.green,
+        AuditEventType.connect => AppColors.success,
         AuditEventType.disconnect => Colors.orange,
         AuditEventType.exec => Colors.blue,
         AuditEventType.input => Colors.purple,
@@ -251,7 +251,7 @@ class _AuditRow extends StatelessWidget {
             padding: const EdgeInsets.only(left: 8),
             child: Text('exit ${event.exitCode}',
                 style: TextStyle(
-                    color: event.exitCode == 0 ? Colors.green : Colors.red,
+                    color: event.exitCode == 0 ? AppColors.success : Colors.red,
                     fontSize: 11,
                     fontFamily: 'monospace')),
           ),

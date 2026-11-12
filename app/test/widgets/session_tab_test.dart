@@ -192,7 +192,7 @@ void main() {
     );
   });
 
-  testWidgets('key icon shows accent color when active', (tester) async {
+  testWidgets('key icon shows success color when active', (tester) async {
     final fwdHost = Host(
         id: 'h10',
         label: 'fwd2',
@@ -210,7 +210,7 @@ void main() {
         sessions,
         hosts));
 
-    expect(tester.widget<Icon>(find.byIcon(Icons.key)).color, AppColors.accent);
+    expect(tester.widget<Icon>(find.byIcon(Icons.key)).color, AppColors.success);
   });
 
   testWidgets('key icon colors for ready and fallback states', (tester) async {

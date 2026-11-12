@@ -46,7 +46,7 @@ class _AgentStatusLineState extends State<AgentStatusLine> {
         ),
       AgentProbeSystem(:final identityCount) => (
           Icons.check_circle_outline,
-          AppColors.accent,
+          AppColors.success,
           'System agent connected — $identityCount '
               '${identityCount == 1 ? 'identity' : 'identities'}',
         ),

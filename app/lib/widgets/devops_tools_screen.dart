@@ -244,7 +244,7 @@ class _DevopsToolsScreenState extends State<DevopsToolsScreen> {
                             : Icons.error_outline,
                         size: 11,
                         color: tab.result?.isSuccess == true
-                            ? AppColors.accent
+                            ? AppColors.success
                             : AppColors.red,
                       ),
                     const SizedBox(width: 6),

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/shell_integration_provider.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 /// One paintable marker: an absolute buffer line + its success state.
 typedef _Dot = ({int line, bool? ok});
@@ -90,7 +91,7 @@ class _GutterPainter extends CustomPainter {
   final double scrollOffset;
   final double lineHeight;
 
-  static const _green = Color(0xFF22C55E);
+  static const _green = AppColors.success;
   static const _red = Color(0xFFEF4444);
   static const _grey = Color(0xFF6B7280);
 

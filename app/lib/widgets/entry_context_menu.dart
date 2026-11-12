@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/app_option.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 /// Right-click context menu for file/folder entries, shared by the remote
 /// SFTP panel and the local file panel. Built on MenuAnchor so the
@@ -220,12 +221,12 @@ class _EntryContextMenuState extends State<EntryContextMenu> {
                         horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
                       color:
-                          const Color(0xFF22C55E).withValues(alpha: 0.15),
+                          AppColors.accent.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(3),
                     ),
                     child: const Text('default',
                         style: TextStyle(
-                            color: Color(0xFF22C55E),
+                            color: AppColors.accent,
                             fontSize: 9,
                             fontWeight: FontWeight.w600)),
                   ),

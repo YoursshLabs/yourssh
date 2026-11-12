@@ -9,6 +9,7 @@ import '../providers/session_provider.dart';
 import '../services/audit_service.dart';
 import '../services/path_completion.dart';
 import 'suggestion_popup.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 class TerminalInputBar extends StatefulWidget {
   final String sessionId;
@@ -192,7 +193,7 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
               hintText: 'Type command… (↑↓ history/suggestions, Tab complete, Esc dismiss)',
               hintStyle: const TextStyle(color: Color(0xFF555555)),
               border: const OutlineInputBorder(borderSide: BorderSide.none),
-              prefixIcon: const Icon(Icons.terminal, color: Color(0xFF22C55E), size: 16),
+              prefixIcon: const Icon(Icons.terminal, color: AppColors.accent, size: 16),
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
             onSubmitted: _submit,

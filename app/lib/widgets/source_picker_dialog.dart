@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/host.dart';
 import '../models/panel_source.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 /// Picker for an SFTP panel slot's source: the local filesystem (pinned
 /// first) or any saved host. Pops a [PanelSource], or null when dismissed.
@@ -92,16 +93,16 @@ class _SourceTile extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        color: active ? const Color(0xFF22C55E).withValues(alpha: 0.08) : Colors.transparent,
+        color: active ? AppColors.accent.withValues(alpha: 0.08) : Colors.transparent,
         child: Row(children: [
           Container(
             width: 28,
             height: 28,
             decoration: BoxDecoration(
-              color: const Color(0xFF22C55E).withValues(alpha: 0.12),
+              color: AppColors.accent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Icon(icon, size: 14, color: const Color(0xFF22C55E)),
+            child: Icon(icon, size: 14, color: AppColors.accent),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -110,7 +111,7 @@ class _SourceTile extends StatelessWidget {
               children: [
                 Text(title,
                     style: TextStyle(
-                        color: active ? const Color(0xFF22C55E) : const Color(0xFFD4D4D4),
+                        color: active ? AppColors.accent : const Color(0xFFD4D4D4),
                         fontSize: 13,
                         fontWeight: active ? FontWeight.w600 : FontWeight.normal)),
                 Text(subtitle,
@@ -119,7 +120,7 @@ class _SourceTile extends StatelessWidget {
               ],
             ),
           ),
-          if (active) const Icon(Icons.check, size: 14, color: Color(0xFF22C55E)),
+          if (active) const Icon(Icons.check, size: 14, color: AppColors.accent),
         ]),
       ),
     );

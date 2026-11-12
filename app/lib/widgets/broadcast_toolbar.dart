@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 import '../providers/plugin_provider.dart';
 import '../providers/terminal_layout_provider.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 class BroadcastToolbar extends StatelessWidget {
   const BroadcastToolbar({super.key});
@@ -70,11 +71,11 @@ class BroadcastToolbar extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: layout.broadcastEnabled
-                      ? const Color(0xFF22C55E).withValues(alpha: 0.2)
+                      ? AppColors.accent.withValues(alpha: 0.2)
                       : Colors.transparent,
                   border: Border.all(
                     color: layout.broadcastEnabled
-                        ? const Color(0xFF22C55E)
+                        ? AppColors.accent
                         : const Color(0xFF2A2A2A),
                   ),
                   borderRadius: BorderRadius.circular(4),
@@ -86,7 +87,7 @@ class BroadcastToolbar extends StatelessWidget {
                       Icons.cell_tower,
                       size: 14,
                       color: layout.broadcastEnabled
-                          ? const Color(0xFF22C55E)
+                          ? AppColors.accent
                           : const Color(0xFF888888),
                     ),
                     const SizedBox(width: 4),
@@ -95,7 +96,7 @@ class BroadcastToolbar extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         color: layout.broadcastEnabled
-                            ? const Color(0xFF22C55E)
+                            ? AppColors.accent
                             : const Color(0xFF888888),
                       ),
                     ),
@@ -134,7 +135,7 @@ class _LayoutButton extends StatelessWidget {
           child: Icon(
             icon,
             size: 16,
-            color: selected ? const Color(0xFF22C55E) : const Color(0xFF555555),
+            color: selected ? AppColors.accent : const Color(0xFF555555),
           ),
         ),
       ),

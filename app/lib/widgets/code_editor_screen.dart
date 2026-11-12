@@ -14,6 +14,7 @@ import '../services/sftp_file_inspector.dart';
 import '../services/sftp_transfer_service.dart';
 import '../util/safe_local_path.dart';
 import '../util/webview_result.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 class CodeEditorScreen extends StatefulWidget {
   final Host host;
@@ -142,7 +143,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Open externally',
-                  style: TextStyle(color: Color(0xFF22C55E)))),
+                  style: TextStyle(color: AppColors.accent))),
         ],
       ),
     );
@@ -279,7 +280,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Color(0xFF22C55E)),
+                        strokeWidth: 2, color: AppColors.accent),
                   ),
                 ),
               IconButton(
@@ -292,7 +293,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
         ),
         body: !_ready
             ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFF22C55E)))
+                child: CircularProgressIndicator(color: AppColors.accent))
             : _useWebView
                 ? WebViewWidget(controller: _controller!)
                 : _buildFallbackEditor(),

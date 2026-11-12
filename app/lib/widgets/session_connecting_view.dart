@@ -387,7 +387,7 @@ class _LogsPanel extends StatelessWidget {
 
   Widget _line(ConnectionLogLine l) {
     final color = switch (l.level) {
-      ConnectionLogLevel.success => AppColors.accent,
+      ConnectionLogLevel.success => AppColors.success,
       ConnectionLogLevel.warn => AppColors.orange,
       ConnectionLogLevel.error => AppColors.red,
       ConnectionLogLevel.info => AppColors.textSecondary,

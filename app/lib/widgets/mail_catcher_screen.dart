@@ -147,14 +147,14 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
               if (_running)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  color: AppColors.accent.withValues(alpha: 0.1),
+                  color: AppColors.success.withValues(alpha: 0.1),
                   child: const Row(
                     children: [
-                      Icon(Icons.circle, size: 8, color: AppColors.accent),
+                      Icon(Icons.circle, size: 8, color: AppColors.success),
                       SizedBox(width: 6),
                       Text('Listening on :1025',
                           style: TextStyle(
-                              color: AppColors.accent, fontSize: 11)),
+                              color: AppColors.success, fontSize: 11)),
                     ],
                   ),
                 ),
