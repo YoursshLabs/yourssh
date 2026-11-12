@@ -18,6 +18,7 @@ import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/tab_metadata_service.dart';
 import 'package:yourssh/theme/app_theme.dart';
 import 'package:yourssh/widgets/session_tab.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../helpers/ys_test_app.dart';
 
@@ -242,5 +243,81 @@ void main() {
         hosts));
     expect(
         tester.widget<Icon>(find.byIcon(Icons.key)).color, AppColors.orange);
+  });
+
+  group('context menu', () {
+    Future<(SessionProvider, SshSession)> openMenu(WidgetTester tester,
+        {bool pinned = false}) async {
+      final (sessions, hosts) = makeProviders();
+      final session = seedSession(sessions, host, pinned: pinned);
+      await tester.pumpWidget(wrap(
+          SessionTab(
+              session: session,
+              isActive: true,
+              provider: sessions,
+              onTap: () {}),
+          sessions,
+          hosts));
+      final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse, buttons: kSecondaryButton);
+      await gesture.down(tester.getCenter(find.byType(SessionTab)));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      return (sessions, session);
+    }
+
+    Color? textColor(WidgetTester tester, String label) =>
+        tester.widget<Text>(find.text(label)).style?.color;
+
+    testWidgets('uses card surface, token text and Lucide icons',
+        (tester) async {
+      await openMenu(tester);
+      for (final t in ['Rename', 'Pin', 'Color tag', 'Close']) {
+        expect(find.text(t), findsOneWidget, reason: t);
+      }
+      expect(textColor(tester, 'Rename'), YsColors.foreground);
+      expect(textColor(tester, 'Pin'), YsColors.foreground);
+      expect(textColor(tester, 'Color tag'), YsColors.foreground);
+      expect(textColor(tester, 'Close'), YsColors.mutedForeground);
+      expect(find.byIcon(FLucideIcons.pencil), findsOneWidget);
+      expect(find.byIcon(FLucideIcons.pin), findsWidgets);
+      expect(find.byIcon(FLucideIcons.palette), findsOneWidget);
+      expect(find.byIcon(FLucideIcons.x), findsWidgets);
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      expect(find.byIcon(Icons.push_pin_outlined), findsNothing);
+      expect(find.byIcon(Icons.close), findsNothing);
+    });
+
+    testWidgets('menu surface is the card token', (tester) async {
+      await openMenu(tester);
+      final route = ModalRoute.of(tester.element(find.text('Rename')))!;
+      expect(route, isA<PopupRoute<String>>());
+      final popup = tester.widget<Material>(find
+          .ancestor(of: find.text('Rename'), matching: find.byType(Material))
+          .last);
+      expect(popup.color, YsColors.card);
+    });
+
+    testWidgets('Pin toggles, Close closes', (tester) async {
+      final (sessions, session) = await openMenu(tester);
+      await tester.tap(find.text('Pin'));
+      await tester.pumpAndSettle();
+      expect(session.isPinned, isTrue);
+      expect(sessions.sessions, hasLength(1));
+    });
+
+    testWidgets('color submenu lists None and colours with token text',
+        (tester) async {
+      final (sessions, session) = await openMenu(tester);
+      await tester.tap(find.text('Color tag'));
+      await tester.pumpAndSettle();
+      expect(textColor(tester, 'None'), YsColors.mutedForeground);
+      expect(textColor(tester, 'Red'), YsColors.foreground);
+      await tester.tap(find.text('Red'));
+      await tester.pumpAndSettle();
+      expect(session.colorTag, '#ef4444');
+      expect(sessions.sessions, hasLength(1));
+    });
   });
 }

@@ -17,6 +17,7 @@ import '../services/os_detection.dart';
 import '../theme/app_theme.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 import 'health_dot.dart';
+import 'ys_menu.dart';
 
 class SessionTab extends StatefulWidget {
   final AppSession session;
@@ -85,51 +86,27 @@ class _SessionTabState extends State<SessionTab> {
       position: RelativeRect.fromLTRB(
         globalPos.dx, globalPos.dy, globalPos.dx + 1, globalPos.dy + 1,
       ),
-      color: const Color(0xFF1E1E1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      color: kYsMenuColor,
+      shape: kYsMenuShape,
       items: [
-        PopupMenuItem(
-          value: 'rename',
-          child: const Row(children: [
-            Icon(Icons.edit_outlined, size: 14, color: Color(0xFFAAAAAA)),
-            SizedBox(width: 8),
-            Text('Rename', style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
-          ]),
+        ysMenuItem('rename', FLucideIcons.pencil, 'Rename'),
+        ysMenuItem(
+          'pin',
+          session.isPinned ? FLucideIcons.pinOff : FLucideIcons.pin,
+          session.isPinned ? 'Unpin' : 'Pin',
         ),
-        PopupMenuItem(
-          value: 'pin',
-          child: Row(children: [
-            Icon(
-              session.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
-              size: 14,
-              color: const Color(0xFFAAAAAA),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              session.isPinned ? 'Unpin' : 'Pin',
-              style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13),
-            ),
-          ]),
-        ),
-        PopupMenuItem(
-          value: 'color',
-          child: const Row(children: [
-            Icon(Icons.circle_outlined, size: 14, color: Color(0xFFAAAAAA)),
-            SizedBox(width: 8),
-            Text('Color tag', style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
-            Spacer(),
-            Icon(Icons.chevron_right, size: 14, color: Color(0xFF666666)),
-          ]),
+        ysMenuItem(
+          'color',
+          FLucideIcons.palette,
+          'Color tag',
+          trailing: const Icon(
+            FLucideIcons.chevronRight,
+            size: 14,
+            color: YsColors.mutedForeground,
+          ),
         ),
         const PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'close',
-          child: const Row(children: [
-            Icon(Icons.close, size: 14, color: Color(0xFF888888)),
-            SizedBox(width: 8),
-            Text('Close', style: TextStyle(color: Color(0xFF888888), fontSize: 13)),
-          ]),
-        ),
+        ysMenuItem('close', FLucideIcons.x, 'Close', muted: true),
       ],
     );
 
@@ -154,21 +131,11 @@ class _SessionTabState extends State<SessionTab> {
         globalPos.dx + 160, globalPos.dy + 60,
         globalPos.dx + 161, globalPos.dy + 61,
       ),
-      color: const Color(0xFF1E1E1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      color: kYsMenuColor,
+      shape: kYsMenuShape,
       items: [
-        PopupMenuItem(
-          value: 'none',
-          child: const Row(children: [
-            SizedBox(
-              width: 14, height: 14,
-              child: Icon(Icons.block, size: 12, color: Color(0xFF666666)),
-            ),
-            SizedBox(width: 8),
-            Text('None', style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 13)),
-          ]),
-        ),
-        ...AppColors.tabColors.map((c) => PopupMenuItem(
+        ysMenuItem('none', FLucideIcons.ban, 'None', muted: true),
+        ...AppColors.tabColors.map((c) => PopupMenuItem<String>(
           value: c.$2,
           child: Row(children: [
             Container(
@@ -179,7 +146,9 @@ class _SessionTabState extends State<SessionTab> {
               ),
             ),
             const SizedBox(width: 8),
-            Text(c.$1, style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
+            Text(c.$1,
+                style: const TextStyle(
+                    color: YsColors.foreground, fontSize: 13)),
           ]),
         )),
       ],

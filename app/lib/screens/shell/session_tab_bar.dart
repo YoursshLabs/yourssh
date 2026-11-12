@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
+import '../../widgets/ys_menu.dart';
 
 import '../../models/shell_profile.dart';
 import '../../models/terminal_session.dart';
@@ -110,18 +111,6 @@ class _AddTabButton extends StatelessWidget {
       onNewLocal;
   const _AddTabButton({required this.onNewSsh, required this.onNewLocal});
 
-  static PopupMenuItem<String> _item(String value, IconData icon, String text) =>
-      PopupMenuItem(
-        value: value,
-        child: Row(children: [
-          Icon(icon, size: 14, color: YsColors.mutedForeground),
-          const SizedBox(width: 8),
-          Text(text,
-              style: const TextStyle(
-                  color: YsColors.foreground, fontSize: 13)),
-        ]),
-      );
-
   Future<void> _showAddMenu(BuildContext context) async {
     // Same set as the Settings dropdown: platform default + detected + custom.
     final profiles = context.read<SettingsProvider>().allShellProfiles;
@@ -131,18 +120,17 @@ class _AddTabButton extends StatelessWidget {
       context: context,
       position: RelativeRect.fromLTRB(
           origin.dx, origin.dy, origin.dx + 1, origin.dy + 1),
-      color: YsColors.card,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(YsRadius.control)),
+      color: kYsMenuColor,
+      shape: kYsMenuShape,
       items: [
-        _item('ssh', FLucideIcons.server, 'New SSH session'),
-        _item('local', FLucideIcons.laptop, 'New local terminal'),
+        ysMenuItem('ssh', FLucideIcons.server, 'New SSH session'),
+        ysMenuItem('local', FLucideIcons.laptop, 'New local terminal'),
         if (profiles.isNotEmpty) const PopupMenuDivider(height: 4),
         if (profiles.isNotEmpty)
-          _item('shell:$kPlatformDefaultShellId', FLucideIcons.terminal,
+          ysMenuItem('shell:$kPlatformDefaultShellId', FLucideIcons.terminal,
               'Platform default shell'),
         for (final s in profiles)
-          _item('shell:${s.id}', FLucideIcons.terminal, s.name),
+          ysMenuItem('shell:${s.id}', FLucideIcons.terminal, s.name),
       ],
     );
     if (result == null) return;
