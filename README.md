@@ -278,9 +278,11 @@ yourssh version
 
 `yourssh` starts YourSSH if it is not running. `yourssh://connect/<host>` links open saved hosts only (registered by the macOS app, the Windows installer and the Linux .deb; not by the portable zip or tarball). Exit codes: 0 ok, 1 error, 2 usage/unknown or ambiguous host, 3 app unreachable, 4 denied.
 
-Availability: macOS and Linux, from source for now (`dart run packages/yourssh_cli/bin/yourssh.dart …`); the CLI binary is not packaged in releases yet (in a release, `yourssh` / `yourssh.exe` is the GUI app). On Windows the CLI is not available yet. On Linux, auto-starting the app needs it to have run once (it writes `app.path`).
+Availability: macOS, Linux and Windows, from source for now (`dart run packages/yourssh_cli/bin/yourssh.dart …`); the CLI binary is not packaged in releases yet (in a release, `yourssh` / `yourssh.exe` is the GUI app). On Linux and Windows, auto-starting the app needs it to have run once (it writes `app.path`).
 
-Not yet: Windows CLI endpoint; packaged CLI binary and an "Install command-line tool" button; `sftp`/`tunnel`/`import`/`export`; MCP.
+The CLI talks to the app over a per-user Unix socket on macOS/Linux and over the named pipe `\\.\pipe\yourssh-cli-<SID>` on Windows (current-user-only DACL, local clients only, and each side checks that the other runs as the same user before the token is sent). YourSSH is single-instance on all three: a second launch, such as a clicked `yourssh://` link, is handed to the running app.
+
+Not yet: packaged CLI binary and an "Install command-line tool" button; `sftp`/`tunnel`/`import`/`export`; MCP.
 
 ---
 
