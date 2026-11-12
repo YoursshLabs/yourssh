@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
 import 'services/cli/app_cli_handlers.dart';
-import 'services/cli/cli_listener.dart';
 import 'services/cli/single_instance.dart';
 import 'platform/runtime_platform.dart';
 import 'mobile/mobile_app.dart';
@@ -210,7 +209,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final AuditProvider _auditProvider;
   String? _lastUpdateNotifVersion;
 
-  CliListener? _cliListener;
+  CliEndpointOwner? _cliOwner;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   final _navigatorKey = GlobalKey<NavigatorState>();
 
@@ -517,6 +516,13 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     ));
   }
 
+  /// Normal quit: remove the CLI socket/token and release the instance lock.
+  /// Not preventClose — this only observes the close.
+  @override
+  void onWindowClose() {
+    unawaited(_cliOwner?.stop());
+  }
+
   @override
   void onWindowFocus() {
     NotificationService.instance.onWindowFocus();
@@ -551,15 +557,15 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         },
         appVersion: kAppVersion,
       );
-      final listener = await startCliEndpoint(ep, handlers, _launchArgs);
-      if (listener == null) {
-        exit(0); // lost a start race: the request went to the other instance
+      final owner = await startCliEndpoint(ep, handlers, _launchArgs);
+      if (owner == null) {
+        exit(0); // another instance owns the endpoint and got the request
       }
       if (!mounted) {
-        await listener.stop();
+        await owner.stop();
         return;
       }
-      _cliListener = listener;
+      _cliOwner = owner;
     } on UnsupportedError catch (e) {
       debugPrint('[main] CLI endpoint unsupported here: $e');
     } catch (e) {
@@ -569,8 +575,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
 
   @override
   void dispose() {
-    unawaited(_cliListener?.stop());
-    _cliListener = null;
+    unawaited(_cliOwner?.stop());
+    _cliOwner = null;
     _settingsProvider.removeListener(_syncNotificationSetting);
     _updateProvider.removeListener(_pushUpdateNotification);
     // A queued reconnect timer may still fire onSessionDropped during

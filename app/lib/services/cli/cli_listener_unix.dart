@@ -27,7 +27,7 @@ class UnixCliListener implements CliListener {
 
   @override
   Future<void> start() async {
-    await _prepareRunDir();
+    await prepare();
 
     final existing =
         FileSystemEntity.typeSync(_ep.address, followLinks: false);
@@ -63,7 +63,8 @@ class UnixCliListener implements CliListener {
     _sub = socket.listen(_onConnection, onError: (_) {});
   }
 
-  Future<void> _prepareRunDir() async {
+  @override
+  Future<void> prepare() async {
     final dir = Directory(_ep.runDir);
     final existed = dir.existsSync();
     if (!existed) await dir.create(recursive: true);

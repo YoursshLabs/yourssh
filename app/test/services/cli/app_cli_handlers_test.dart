@@ -96,7 +96,12 @@ void main() {
 
     await handlers.connect(_host(), source: 'url');
     ssh.gate.complete();
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // The row is written once connect() resolves: poll instead of sleeping.
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (audit.query(const AuditFilter(type: 'connect')).isEmpty &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
 
     final rows = audit.query(const AuditFilter(type: 'connect'));
     expect(rows.length, 1);

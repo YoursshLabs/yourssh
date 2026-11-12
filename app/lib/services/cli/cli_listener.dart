@@ -8,6 +8,10 @@ import 'cli_server.dart';
 /// Accepts CLI connections on the platform's local IPC endpoint and feeds
 /// request lines to a [CliServer].
 abstract class CliListener {
+  /// Creates the run dir (0700) and validates it. Idempotent; [start] calls
+  /// it too.
+  Future<void> prepare();
+
   Future<void> start();
   Future<void> stop();
 }
