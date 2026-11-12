@@ -47,7 +47,7 @@ static void *read_loop(void *arg)
 {
     ReadLoopOptions *options = (ReadLoopOptions *)arg;
 
-    char buffer[1024];
+    char buffer[64 * 1024];
 
     while (1)
     {

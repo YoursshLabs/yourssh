@@ -9,6 +9,7 @@ import '../models/shell_profile.dart';
 import 'notification_service.dart';
 import 'pty_runner.dart';
 import 'recording_service.dart';
+import 'terminal_write_queue.dart';
 
 typedef PtyFactory = PtyRunner Function(
   String shell,
@@ -33,6 +34,12 @@ class LocalShellService {
   /// `localShell` setter.
   void Function()? onSessionStateChanged;
 
+  final Map<String, TerminalWriteQueue> _queues = {};
+
+  /// Synchronously drains pending output of [sessionId] into its terminal
+  /// (ordering barrier; used by tests and before out-of-band writes).
+  void flushOutput(String sessionId) => _queues[sessionId]?.flush();
+
   LocalShellService({PtyFactory? ptyFactory})
       : _ptyFactory = ptyFactory ?? _defaultFactory;
 
@@ -48,7 +55,8 @@ class LocalShellService {
             arguments: args,
             columns: columns,
             rows: rows,
-            environment: environment),
+            environment: environment,
+            ackRead: true),
       );
 
   /// Picks the shell executable for the current platform. On Windows `SHELL`
@@ -96,21 +104,43 @@ class LocalShellService {
 
       session.attachPty(pty);
 
-      pty.output
-          .transform(const Utf8Decoder(allowMalformed: true))
-          .listen((data) {
-            terminal.write(data);
-            recordingService?.writeOutput(session.id, data);
-            try {
-              NotificationService.instance.onTerminalData(
-                data,
-                sessionId: session.id,
-                sessionLabel: 'Local Shell',
-              );
-            } catch (e) {
-              debugPrint('[LocalShellService] notification handler threw: $e');
-            }
-          });
+      _queues.remove(session.id)?.dispose();
+      final queue = TerminalWriteQueue(
+        write: terminal.writeNoNotify,
+        commit: terminal.flushWrites,
+        onBatch: (batch) {
+          recordingService?.writeOutput(session.id, batch);
+          try {
+            NotificationService.instance.onTerminalData(
+              batch,
+              sessionId: session.id,
+              sessionLabel: 'Local Shell',
+            );
+          } catch (e) {
+            debugPrint('[LocalShellService] notification handler threw: $e');
+          }
+        },
+      );
+      _queues[session.id] = queue;
+
+      // With ackRead the native reader blocks until each chunk is acked; ack
+      // as soon as the queue starts consuming the chunk (one chunk of
+      // read-ahead), so the shell stalls when the UI is behind.
+      final ackable = pty is AckablePty ? pty as AckablePty : null;
+      final decoder = const Utf8Decoder(allowMalformed: true);
+      var decoded = '';
+      // Stateful decoding (multi-byte sequences may straddle chunks).
+      final byteSink =
+          decoder.startChunkedConversion(_CollectingSink((s) => decoded += s));
+      pty.output.listen((bytes) {
+        decoded = '';
+        byteSink.add(bytes);
+        if (decoded.isEmpty) {
+          ackable?.ackRead();
+        } else {
+          queue.add(decoded, onTaken: ackable?.ackRead);
+        }
+      });
 
       terminal.onOutput = (data) {
         pty.write(const Utf8Encoder().convert(data));
@@ -122,6 +152,7 @@ class LocalShellService {
 
       pty.exitCode.then((code) {
         session.status = LocalSessionStatus.exited;
+        _queues.remove(session.id)?.flush();
         terminal.write('\r\n[Process exited with code $code]\r\n');
         recordingService?.onShellClosed(session.id);
         NotificationService.instance.removeSession(session.id);
@@ -138,8 +169,18 @@ class LocalShellService {
     recordingService?.onShellClosed(sessionId);
     _sessions[sessionId]?.kill();
     _sessions.remove(sessionId);
+    _queues.remove(sessionId)?.dispose();
     NotificationService.instance.removeSession(sessionId);
   }
 
   LocalSession? getSession(String sessionId) => _sessions[sessionId];
+}
+
+class _CollectingSink implements Sink<String> {
+  _CollectingSink(this._onData);
+  final void Function(String) _onData;
+  @override
+  void add(String data) => _onData(data);
+  @override
+  void close() {}
 }

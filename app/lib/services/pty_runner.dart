@@ -10,7 +10,15 @@ abstract class PtyRunner {
   Future<int> get exitCode;
 }
 
-class FlutterPtyRunner implements PtyRunner {
+/// Optional capability of a [PtyRunner]: the native reader waits for
+/// [ackRead] after every chunk before reading more, so a shell that outputs
+/// faster than the app can parse blocks in `write(2)` instead of flooding the
+/// UI isolate (and reacts to Ctrl+C promptly).
+abstract class AckablePty {
+  void ackRead();
+}
+
+class FlutterPtyRunner implements PtyRunner, AckablePty {
   final Pty _pty;
   FlutterPtyRunner(this._pty);
 
@@ -22,6 +30,9 @@ class FlutterPtyRunner implements PtyRunner {
 
   @override
   void resize(int rows, int cols) => _pty.resize(rows, cols);
+
+  @override
+  void ackRead() => _pty.ackRead();
 
   @override
   void kill() => _pty.kill();
