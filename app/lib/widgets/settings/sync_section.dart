@@ -182,6 +182,17 @@ class _SyncSettingsSectionState extends State<SyncSettingsSection> {
   }
 
   Future<void> _disconnect() async {
+    final ok = await showYsConfirm(
+      context,
+      title: 'Disconnect sync?',
+      message:
+          'This removes the Supabase URL, anon key and sync code from this '
+          "device. Without the sync code the synced data can't be recovered "
+          '— copy it first.',
+      confirmLabel: 'Disconnect',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
     await context.read<SyncProvider>().clearSupabaseConfig();
     if (!mounted) return;
     setState(() {
