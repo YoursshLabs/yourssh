@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/widgets/theme_picker.dart';
+import '../helpers/ys_test_app.dart';
 
 void main() {
   Widget wrap(Widget child) {
-    return MaterialApp(home: Scaffold(body: Center(child: child)));
+    return ysTestApp(Center(child: child));
   }
 
   testWidgets('mini swatch paints visible color stripes', (tester) async {

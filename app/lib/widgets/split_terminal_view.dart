@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 import '../models/audit_event.dart';
@@ -18,7 +19,7 @@ import 'terminal_input_bar.dart';
 import 'broadcast_toolbar.dart';
 import 'terminal_config_panel.dart';
 import 'terminal_snippets_panel.dart';
-import 'package:yourssh/theme/app_theme.dart';
+import 'terminal_header_chips.dart';
 
 class SplitTerminalView extends StatelessWidget {
   final VoidCallback? onNavigateToSettings;
@@ -73,14 +74,19 @@ class SplitTerminalView extends StatelessWidget {
     final active = activeRaw is TerminalSession ? activeRaw : (termSessions.isNotEmpty ? termSessions[0] : null);
 
     if (termSessions.isEmpty) {
-      return const Center(
-        child: Text('No active sessions', style: TextStyle(color: Color(0xFF555555))),
+      return const YsEmptyState(
+        icon: FLucideIcons.terminal,
+        title: 'No active sessions',
       );
     }
 
     return Column(
       children: [
-        const BroadcastToolbar(),
+        BroadcastToolbar(
+          leading: active == null
+              ? null
+              : TerminalHeaderChips(key: ValueKey(active.id), session: active),
+        ),
         Expanded(
           child: Row(
             children: [
@@ -132,7 +138,7 @@ class SplitTerminalView extends StatelessWidget {
       case SplitLayout.horizontal:
         return Row(children: [
           Expanded(child: _buildPane(context, 0, sessions[0], sessions, layout)),
-          const VerticalDivider(width: 1, color: Color(0xFF2A2A2A)),
+          const _SplitDivider.vertical(),
           Expanded(
             child: sessions.length > 1
                 ? _buildPane(context, 1, sessions[1], sessions, layout)
@@ -143,7 +149,7 @@ class SplitTerminalView extends StatelessWidget {
       case SplitLayout.vertical:
         return Column(children: [
           Expanded(child: _buildPane(context, 0, sessions[0], sessions, layout)),
-          const Divider(height: 1, color: Color(0xFF2A2A2A)),
+          const _SplitDivider.horizontal(),
           Expanded(
             child: sessions.length > 1
                 ? _buildPane(context, 1, sessions[1], sessions, layout)
@@ -156,7 +162,7 @@ class SplitTerminalView extends StatelessWidget {
           Expanded(
             child: Row(children: [
               Expanded(child: _buildPane(context, 0, sessions[0], sessions, layout)),
-              const VerticalDivider(width: 1, color: Color(0xFF2A2A2A)),
+              const _SplitDivider.vertical(),
               Expanded(
                 child: sessions.length > 1
                     ? _buildPane(context, 1, sessions[1], sessions, layout)
@@ -164,7 +170,7 @@ class SplitTerminalView extends StatelessWidget {
               ),
             ]),
           ),
-          const Divider(height: 1, color: Color(0xFF2A2A2A)),
+          const _SplitDivider.horizontal(),
           Expanded(
             child: Row(children: [
               Expanded(
@@ -172,7 +178,7 @@ class SplitTerminalView extends StatelessWidget {
                     ? _buildPane(context, 2, sessions[2], sessions, layout)
                     : _buildEmptyPane(),
               ),
-              const VerticalDivider(width: 1, color: Color(0xFF2A2A2A)),
+              const _SplitDivider.vertical(),
               Expanded(
                 child: sessions.length > 3
                     ? _buildPane(context, 3, sessions[3], sessions, layout)
@@ -186,7 +192,8 @@ class SplitTerminalView extends StatelessWidget {
 
   Widget _buildEmptyPane() {
     return const Center(
-      child: Text('No session', style: TextStyle(color: Color(0xFF555555), fontSize: 13)),
+      child: Text('No session',
+          style: TextStyle(color: YsColors.mutedForeground, fontSize: 13)),
     );
   }
 
@@ -254,6 +261,22 @@ class SplitTerminalView extends StatelessWidget {
   }
 }
 
+/// 1 px token-coloured pane separator. [vertical] separates side-by-side
+/// panes (a vertical line); the other separates stacked panes.
+class _SplitDivider extends StatelessWidget {
+  final bool vertical;
+  const _SplitDivider.vertical() : vertical = true;
+  const _SplitDivider.horizontal() : vertical = false;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        key: const Key('split-divider'),
+        width: vertical ? 1 : null,
+        height: vertical ? null : 1,
+        child: const ColoredBox(color: YsColors.border),
+      );
+}
+
 class _WatchBanner extends StatelessWidget {
   final SshSession session;
   const _WatchBanner({required this.session});
@@ -274,7 +297,7 @@ class _WatchBanner extends StatelessWidget {
       label = 'Session ended by host';
     } else if (hasControl) {
       bg = const Color(0xFF1A2A1A);
-      fg = AppColors.success;
+      fg = YsColors.ok;
       label = 'You have control';
     } else {
       bg = const Color(0xFF1A1A2A);

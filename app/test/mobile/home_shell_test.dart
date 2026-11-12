@@ -1,3 +1,4 @@
+import 'package:yourssh/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -49,6 +50,7 @@ Widget _wrap(Widget child) {
     ],
     child: MaterialApp(
       theme: buildMobileTheme(),
+      builder: ysRootBuilderTouch,
       home: child,
     ),
   );

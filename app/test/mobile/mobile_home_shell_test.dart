@@ -20,7 +20,7 @@ import 'package:yourssh/services/tab_metadata_service.dart';
 import 'package:yourssh/theme/app_theme.dart' show ysRootBuilderTouch;
 import 'package:yourssh_ui/yourssh_ui.dart';
 
-Widget _wrap(Widget child, {bool withRoot = false}) {
+Widget _wrap(Widget child, {bool withRoot = true}) {
   final storage = StorageService();
   final sync = SyncProvider();
   return MultiProvider(

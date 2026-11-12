@@ -20,21 +20,16 @@ class ThemePickerButton extends StatelessWidget {
       orElse: () => kTerminalThemes.first,
     );
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(6),
-      onTap: () => _openPicker(context),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _MiniSwatch(entry: entry, size: 18),
-            const SizedBox(width: 8),
-            Text(currentTheme, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-            const SizedBox(width: 4),
-            const Icon(Icons.expand_more, size: 16, color: AppColors.textSecondary),
-          ],
-        ),
+    return FButton(
+      variant: .ghost,
+      size: .sm,
+      mainAxisSize: MainAxisSize.min,
+      onPress: () => _openPicker(context),
+      prefix: _MiniSwatch(entry: entry, size: 18),
+      suffix: const Icon(FLucideIcons.chevronDown),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 120),
+        child: Text(currentTheme, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
     );
   }
@@ -75,7 +70,7 @@ class _ThemePickerDialogState extends State<_ThemePickerDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _header(),
-            const Divider(height: 1, color: AppColors.border),
+            const FDivider(),
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -118,11 +113,14 @@ class _ThemePickerDialogState extends State<_ThemePickerDialog> {
             style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
           ),
           const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.close, size: 16, color: AppColors.textSecondary),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-            onPressed: () => Navigator.of(context).pop(),
+          Tooltip(
+            message: 'Close',
+            child: FButton.icon(
+              variant: .ghost,
+              size: .sm,
+              onPress: () => Navigator.of(context).pop(),
+              child: const Icon(FLucideIcons.x),
+            ),
           ),
         ],
       ),
@@ -175,7 +173,7 @@ class _ThemeCard extends StatelessWidget {
                     ),
                   ),
                   if (isSelected)
-                    const Icon(Icons.check_circle, size: 12, color: AppColors.accent),
+                    const Icon(FLucideIcons.circleCheck, size: 12, color: AppColors.accent),
                 ],
               ),
             ),

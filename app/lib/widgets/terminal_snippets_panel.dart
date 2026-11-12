@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'workspace_side_panel.dart';
-import 'package:yourssh/theme/app_theme.dart';
 
 class TerminalSnippetsPanel extends StatefulWidget {
   final bool canRun;
@@ -29,66 +29,70 @@ class _TerminalSnippetsPanelState extends State<TerminalSnippetsPanel> {
     final snippets = context.watch<SnippetProvider>().snippets;
     final filtered = filterSnippets(snippets, _query);
 
+    // Group by tag (untagged last), preserving the provider's order.
+    final groups = <String, List<Snippet>>{};
+    for (final s in filtered) {
+      groups.putIfAbsent(s.tag, () => []).add(s);
+    }
+    final tags = groups.keys.toList()
+      ..sort((a, b) {
+        if (a.isEmpty != b.isEmpty) return a.isEmpty ? 1 : -1;
+        return 0;
+      });
+
     return WorkspaceSidePanel(
       title: 'Snippets',
       closeTooltip: 'Close snippets panel',
       onClose: widget.onClose,
-      headerExtra: TextField(
-        onChanged: (value) => setState(() => _query = value),
-        style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
-        decoration: InputDecoration(
-          hintText: 'Search snippets…',
-          hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 13),
-          prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF555555)),
-          filled: true,
-          fillColor: const Color(0xFF1C1C1C),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: AppColors.accent),
-          ),
-          isDense: true,
+      headerExtra: FTextField(
+        key: const Key('snippets-search'),
+        control: FTextFieldControl.managed(
+          onChange: (v) => setState(() => _query = v.text),
         ),
+        size: .sm,
+        hint: 'Search snippets…',
+        prefixBuilder: (context, style, variants) =>
+            FTextField.prefixIconBuilder(
+                context, style, variants, const Icon(FLucideIcons.search)),
       ),
       child: Column(
         children: [
           if (!widget.canRun)
-            Container(
-              width: double.infinity,
-              color: const Color(0xFF2A1A1A),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: const Text(
-                'No active SSH pane selected',
-                style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 12),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  YsSpace.s3, YsSpace.s3, YsSpace.s3, 0),
+              child: FAlert(
+                variant: .destructive,
+                title: const Text('No active SSH pane selected'),
               ),
             ),
           Expanded(
             child: filtered.isEmpty
-                ? Center(
-                    child: Text(
-                      _query.isEmpty ? 'No snippets yet' : 'No snippets match "$_query"',
-                      style: const TextStyle(color: Color(0xFF555555)),
-                    ),
+                ? YsEmptyState(
+                    icon: FLucideIcons.code,
+                    title: _query.isEmpty
+                        ? 'No snippets yet'
+                        : 'No snippets match "$_query"',
                   )
-                : ListView.separated(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, index) => const SizedBox(height: 8),
-                    itemBuilder: (_, index) {
-                      final snippet = filtered[index];
-                      return _SnippetRow(
-                        snippet: snippet,
-                        canRun: widget.canRun,
-                        onRun: () => widget.onRunSnippet(snippet),
-                      );
-                    },
+                : ListView(
+                    padding: const EdgeInsets.all(YsSpace.s3),
+                    children: [
+                      for (final tag in tags) ...[
+                        if (tag.isNotEmpty)
+                          YsSectionHeader(title: tag),
+                        FTileGroup(
+                          children: [
+                            for (final snippet in groups[tag]!)
+                              _snippetTile(
+                                snippet,
+                                canRun: widget.canRun,
+                                onRun: () => widget.onRunSnippet(snippet),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: YsSpace.s3),
+                      ],
+                    ],
                   ),
           ),
         ],
@@ -97,96 +101,60 @@ class _TerminalSnippetsPanelState extends State<TerminalSnippetsPanel> {
   }
 }
 
-class _SnippetRow extends StatelessWidget {
-  final Snippet snippet;
-  final bool canRun;
-  final VoidCallback onRun;
-
-  const _SnippetRow({
-    required this.snippet,
-    required this.canRun,
-    required this.onRun,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1C),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF2A2A2A)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  snippet.label,
-                  style: const TextStyle(
-                    color: Color(0xFFE5E5E5),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              if (snippet.tag.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2A2A2A),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    snippet.tag,
-                    style: const TextStyle(color: Color(0xFF888888), fontSize: 10),
-                  ),
-                ),
-            ],
+FTile _snippetTile(
+  Snippet snippet, {
+  required bool canRun,
+  required VoidCallback onRun,
+}) {
+  return FTile(
+    key: ValueKey('snippet-${snippet.id}'),
+    title: Text(snippet.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+    subtitle: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SelectableText(
+          snippet.command,
+          style: const TextStyle(
+            color: YsColors.accentText,
+            fontSize: 12,
+            fontFamily: kYsMonoFontFamily,
+            fontFamilyFallback: kYsMonoFontFallback,
           ),
-          const SizedBox(height: 8),
-          SelectableText(
-            snippet.command,
-            style: const TextStyle(
-              color: AppColors.accent,
-              fontSize: 12,
-              fontFamily: 'monospace',
-            ),
-          ),
-          if (snippet.description.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
+        ),
+        if (snippet.description.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: YsSpace.s1),
+            child: Text(
               snippet.description,
-              style: const TextStyle(color: Color(0xFF888888), fontSize: 11),
+              style: const TextStyle(
+                  color: YsColors.mutedForeground, fontSize: 11),
             ),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Tooltip(
-                message: 'Run snippet',
-                child: TextButton.icon(
-                  onPressed: canRun ? onRun : null,
-                  icon: const Icon(Icons.play_arrow, size: 14),
-                  label: const Text('Run'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Tooltip(
-                message: 'Copy snippet',
-                child: TextButton.icon(
-                  onPressed: () =>
-                      Clipboard.setData(ClipboardData(text: snippet.command)),
-                  icon: const Icon(Icons.copy, size: 14),
-                  label: const Text('Copy'),
-                ),
-              ),
-            ],
           ),
-        ],
-      ),
-    );
-  }
+      ],
+    ),
+    suffix: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Tooltip(
+          message: 'Run snippet',
+          child: FButton.icon(
+            variant: .ghost,
+            size: .sm,
+            onPress: canRun ? onRun : null,
+            child: const Icon(FLucideIcons.play),
+          ),
+        ),
+        Tooltip(
+          message: 'Copy snippet',
+          child: FButton.icon(
+            variant: .ghost,
+            size: .sm,
+            onPress: () =>
+                Clipboard.setData(ClipboardData(text: snippet.command)),
+            child: const Icon(FLucideIcons.copy),
+          ),
+        ),
+      ],
+    ),
+  );
 }

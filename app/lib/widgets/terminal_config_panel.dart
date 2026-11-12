@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import '../models/keyword_highlight_rule.dart';
 import '../providers/settings_provider.dart';
-import '../theme/app_theme.dart';
 import 'terminal_appearance_controls.dart';
 import 'workspace_side_panel.dart';
 
@@ -19,12 +19,12 @@ class TerminalConfigPanel extends StatelessWidget {
       closeTooltip: 'Close terminal settings',
       onClose: onClose,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(YsSpace.s4),
         children: [
           const TerminalAppearanceControls(
             layout: AppearanceControlsLayout.vertical,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: YsSpace.s5),
           _KeywordHighlightCompact(onOpenSettings: onOpenSettings),
         ],
       ),
@@ -39,6 +39,7 @@ class _KeywordHighlightCompact extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
+    final rules = settings.keywordHighlightRules;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -46,79 +47,69 @@ class _KeywordHighlightCompact extends StatelessWidget {
         const Text(
           'KEYWORD HIGHLIGHTING',
           style: TextStyle(
-            color: AppColors.textSecondary,
+            color: YsColors.mutedForeground,
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
+            letterSpacing: 0.8,
           ),
         ),
-        const SizedBox(height: 8),
-        Row(
+        const SizedBox(height: YsSpace.s2),
+        FTileGroup(
           children: [
-            const Expanded(
-              child: Text('Enable',
-                  style: TextStyle(
-                      color: AppColors.textPrimary, fontSize: 13)),
+            FTile.raw(
+              child: FSwitch(
+                key: const Key('keyword-highlight-enable'),
+                value: settings.keywordHighlightingEnabled,
+                onChange: (v) => context
+                    .read<SettingsProvider>()
+                    .save(keywordHighlightingEnabled: v),
+                label: const Text('Enable'),
+              ),
             ),
-            Switch(
-              value: settings.keywordHighlightingEnabled,
-              onChanged: (v) => context
-                  .read<SettingsProvider>()
-                  .save(keywordHighlightingEnabled: v),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        ...settings.keywordHighlightRules.asMap().entries.map((entry) {
-          final i = entry.key;
-          final rule = entry.value;
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              children: [
-                if (rule.background != null)
-                  _Dot(color: rule.background!),
-                if (rule.foreground != null) ...[
-                  if (rule.background != null) const SizedBox(width: 4),
-                  _Dot(color: rule.foreground!, border: true),
-                ],
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    rule.label,
-                    style: const TextStyle(
-                        color: AppColors.textPrimary, fontSize: 12),
-                  ),
-                ),
-                Switch(
+            for (final (i, rule) in rules.indexed)
+              FTile.raw(
+                child: FSwitch(
+                  key: ValueKey('keyword-rule-$i'),
                   value: rule.enabled,
-                  onChanged: (v) {
-                    final updated = List<AppKeywordHighlightRule>.from(
-                        settings.keywordHighlightRules);
+                  onChange: (v) {
+                    final updated =
+                        List<AppKeywordHighlightRule>.from(rules);
                     updated[i] = rule.copyWith(enabled: v);
                     context
                         .read<SettingsProvider>()
                         .save(keywordHighlightRules: updated);
                   },
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  label: Row(
+                    children: [
+                      if (rule.background != null) _Dot(color: rule.background!),
+                      if (rule.foreground != null) ...[
+                        if (rule.background != null) const SizedBox(width: 4),
+                        _Dot(color: rule.foreground!, border: true),
+                      ],
+                      const SizedBox(width: YsSpace.s2),
+                      Expanded(
+                        child: Text(rule.label,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-          );
-        }),
-        const SizedBox(height: 8),
-        if (onOpenSettings != null)
-          GestureDetector(
-            onTap: onOpenSettings,
-            child: const Text(
-              'Manage rules in Settings →',
-              style: TextStyle(
-                  color: AppColors.accent,
-                  fontSize: 12,
-                  decoration: TextDecoration.underline),
+              ),
+          ],
+        ),
+        if (onOpenSettings != null) ...[
+          const SizedBox(height: YsSpace.s2),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FButton(
+              variant: .ghost,
+              size: .sm,
+              mainAxisSize: MainAxisSize.min,
+              onPress: onOpenSettings,
+              child: const Text('Manage rules in Settings →'),
             ),
           ),
+        ],
       ],
     );
   }
@@ -138,7 +129,7 @@ class _Dot extends StatelessWidget {
         color: color,
         shape: BoxShape.circle,
         border: border
-            ? Border.all(color: AppColors.textSecondary, width: 1)
+            ? Border.all(color: YsColors.mutedForeground, width: 1)
             : null,
       ),
     );

@@ -187,9 +187,14 @@ class _SessionConnectingViewState extends State<SessionConnectingView>
           ),
         ),
         const SizedBox(width: 12),
-        _PillButton(
-          label: _showLogs ? 'Hide logs' : 'Show logs',
-          onTap: () => setState(() => _showLogs = !_showLogs),
+        // Flexible: in a narrow split pane the pill shrinks (ellipsis)
+        // instead of overflowing the header.
+        Flexible(
+          flex: 2,
+          child: _PillButton(
+            label: _showLogs ? 'Hide logs' : 'Show logs',
+            onTap: () => setState(() => _showLogs = !_showLogs),
+          ),
         ),
       ],
     );
@@ -447,6 +452,8 @@ class _PillButtonState extends State<_PillButton> {
           ),
           child: Text(
             widget.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(color: fg, fontSize: 13, fontWeight: FontWeight.w500),
           ),
         ),

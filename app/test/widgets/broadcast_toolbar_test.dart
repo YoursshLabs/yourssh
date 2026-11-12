@@ -6,6 +6,7 @@ import 'package:yourssh/providers/plugin_provider.dart';
 import 'package:yourssh/providers/terminal_layout_provider.dart';
 import 'package:yourssh/widgets/broadcast_toolbar.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
+import '../helpers/ys_test_app.dart';
 
 void main() {
   setUp(() {
@@ -27,7 +28,7 @@ void main() {
         ChangeNotifierProvider.value(value: layout),
         ChangeNotifierProvider.value(value: plugins),
       ],
-      child: const MaterialApp(home: Scaffold(body: BroadcastToolbar())),
+      child: ysTestApp(const BroadcastToolbar()),
     );
   }
 
@@ -36,11 +37,11 @@ void main() {
     await tester.pumpWidget(wrap(layout, await pluginProvider(snippetsEnabled: false)));
 
     await tester.tap(find.byTooltip('Toggle Terminal Settings'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(layout.configPanelVisible, true);
 
     await tester.tap(find.byTooltip('Toggle Terminal Settings'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(layout.configPanelVisible, false);
   });
 
@@ -60,7 +61,7 @@ void main() {
     expect(find.byTooltip('Toggle Snippets Panel'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Toggle Snippets Panel'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(layout.snippetsPanelVisible, true);
   });
 
@@ -83,11 +84,11 @@ void main() {
     await tester.pumpWidget(wrap(layout, await pluginProvider(snippetsEnabled: true)));
 
     await tester.tap(find.byTooltip('Toggle Snippets Panel'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(layout.snippetsPanelVisible, true);
 
     await tester.tap(find.byTooltip('Toggle Terminal Settings'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(layout.configPanelVisible, true);
     expect(layout.snippetsPanelVisible, false);
   });

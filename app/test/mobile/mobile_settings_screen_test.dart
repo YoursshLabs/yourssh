@@ -1,3 +1,4 @@
+import 'package:yourssh/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -32,6 +33,7 @@ Future<SyncProvider> _pump(WidgetTester tester) async {
       ],
       child: MaterialApp(
         theme: buildMobileTheme(),
+        builder: ysRootBuilderTouch,
         home: const MobileSettingsScreen(),
       ),
     ),

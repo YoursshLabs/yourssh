@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh/providers/plugin_provider.dart';
@@ -7,6 +8,8 @@ import 'package:yourssh/widgets/broadcast_toolbar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/widgets/terminal_snippets_panel.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import '../helpers/ys_test_app.dart';
 
 void main() {
   setUp(() {
@@ -19,12 +22,10 @@ void main() {
   }) {
     return ChangeNotifierProvider(
       create: (_) => SnippetProvider(),
-      child: MaterialApp(
-        home: Scaffold(
-          body: TerminalSnippetsPanel(
-            canRun: canRun,
-            onRunSnippet: onRunSnippet,
-          ),
+      child: ysTestApp(
+        TerminalSnippetsPanel(
+          canRun: canRun,
+          onRunSnippet: onRunSnippet,
         ),
       ),
     );
@@ -42,7 +43,7 @@ void main() {
     await tester.pumpWidget(wrap(canRun: true, onRunSnippet: (_) {}));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField), 'memory');
+    await tester.enterText(find.byType(FTextField), 'memory');
     await tester.pump();
 
     expect(find.text('Memory info'), findsOneWidget);
@@ -61,7 +62,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Run snippet').first);
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(command, 'df -h');
   });
@@ -78,10 +79,32 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Run snippet').first);
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(command, isNull);
     expect(find.text('No active SSH pane selected'), findsOneWidget);
+  });
+
+  testWidgets('keyboard flow: Tab from search reaches Run, Enter runs it',
+      (tester) async {
+    String? command;
+    await tester.pumpWidget(
+      wrap(canRun: true, onRunSnippet: (s) => command = s.command),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FTextField));
+    await tester.pump();
+    await tester.enterText(find.byType(FTextField), 'disk');
+    await tester.pump();
+    expect(find.text('Disk usage'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(command, 'df -h');
   });
 
   testWidgets('toolbar toggle controls snippets panel visibility', (tester) async {
@@ -99,18 +122,14 @@ void main() {
           ChangeNotifierProvider<TerminalLayoutProvider>.value(value: layout),
           ChangeNotifierProvider<PluginProvider>.value(value: plugins),
         ],
-        child: const MaterialApp(
-          home: Scaffold(
-            body: BroadcastToolbar(),
-          ),
-        ),
+        child: ysTestApp(const BroadcastToolbar()),
       ),
     );
 
     expect(layout.snippetsPanelVisible, false);
 
     await tester.tap(find.byTooltip('Toggle Snippets Panel'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(layout.snippetsPanelVisible, true);
   });
