@@ -98,6 +98,25 @@ jobs:
         working-directory: packages/${{ matrix.crate }}
         run: flutter test
 
+  # Pure-Dart CLI protocol package: no Flutter, no native libs.
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install dependencies
+        working-directory: packages/yourssh_cli
+        run: dart pub get
+
+      - name: Test (yourssh_cli)
+        working-directory: packages/yourssh_cli
+        run: dart test
+
   # Aggregate gate. master's branch protection requires a check literally named
   # "test", so that name has to survive the split — this job carries it, and it
   # is red unless every job above is green. `always()` matters: without it the
@@ -105,12 +124,13 @@ jobs:
   # forever instead of failing.
   test:
     name: test
-    needs: [app, bridge]
+    needs: [app, bridge, cli]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
         run: |
-          echo "app=${{ needs.app.result }} bridge=${{ needs.bridge.result }}"
+          echo "app=${{ needs.app.result }} bridge=${{ needs.bridge.result }} cli=${{ needs.cli.result }}"
           [ "${{ needs.app.result }}" = "success" ] || exit 1
           [ "${{ needs.bridge.result }}" = "success" ] || exit 1
+          [ "${{ needs.cli.result }}" = "success" ] || exit 1
