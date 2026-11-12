@@ -1,3 +1,21 @@
 # Changelog
 
 - 2026-11-12: Started. The owner asked for the latest Flutter and forui.
+- 2026-11-12: Flutter 3.50.0 upgrade done on `chore/flutter-3.50` (full detail in `report.md`).
+  - **CI pin** 3.47.1 → 3.50.0 in `pr-test.yml` and `release.yml`. Tag `3.50.0` exists upstream (ab2912035e) and is in the stable release manifests, so both `subosito/flutter-action` and the ARM64 `git clone -b` steps resolve it.
+  - **Android toolchain.** Gradle 9.1.0 → 9.5.1, AGP 9.0.1 → 9.3.3, Kotlin 2.3.20 → 2.4.21. Why: Flutter 3.50's Gradle plugin throws below Gradle 9.3.1 / AGP 9.1.1 / KGP 2.4.10 and warns below 9.5.0 / 9.3.1 / 2.4.20. The versions chosen are the newest set inside every compatibility table:
+    - KGP 2.4.20–2.4.21 documents AGP ≤ 9.3.1, so AGP stays on 9.3.x (9.3.3 is the newest patch; 9.3.2 fixed a lint crash on JDK 17).
+    - AGP 9.3 needs Gradle ≥ 9.5.0. Flutter 3.50 tests and knows Gradle only up to 9.5.0, so Gradle stays on 9.5.x (9.5.1).
+    - AGP 9.4 and 9.5 are outside KGP 2.4's documented range, and Kotlin 2.5.0 is only an RC.
+  - No DSL migration was needed. The app already matches the 3.50 template (`android.newDsl=false`, `android.builtInKotlin=false`, `kotlin { compilerOptions }`). `minSdk` 24, `targetSdk` 36, `compileSdk` 36 and NDK 28.2 are the same in 3.47.1 and 3.50.0.
+  - `packages/flutter_pty/android` was left unchanged: it has a namespace, no Kotlin, and its buildscript AGP 8.1.0 classpath is shadowed by the app's settings classpath, as before.
+  - **New `android` job** in `pr-test.yml` runs `flutter build apk --debug`, on JDK 17 and `setup-java` v6 pinned by SHA. The `test` gate now needs it. Before this, the Android build was only exercised by `release.yml` on master, which is how PR #113's breakage went unnoticed.
+  - **Lock.** `app/pubspec.lock` changed only in SDK-pinned packages: matcher, meta, test_api, stack_trace, clock, vector_math, and the new `listen` dependency of `package:flutter`. All URLs are pub.dev.
+  - **Generated project migrations (separate commit).** These come from Flutter 3.47.1 too, not from 3.50. The 0.3.0 release build on 3.47.1 printed the same "Upgrading …" lines. Develop simply never committed them, so every local build dirtied the tree.
+    - `pub get` adds `analyzer.exclude` (`build/**` and the platform folders) to `app/analysis_options.yaml`. The block was moved below `include:`.
+    - `flutter build macos` raises `MACOSX_DEPLOYMENT_TARGET` / `platform :osx` from 10.15 to 12.0.
+    - Swift Package Manager is on by default, so `Podfile.lock` only lists the plugins that lack SwiftPM support.
+    - Shipped builds already target macOS 12.0, so this is not a new user-facing requirement.
+    - The two Xcode `swiftpm/Package.resolved` files the build creates stay untracked, as in the main checkout.
+  - **Analyzer.** 0 issues on 3.47.1 → 214 infos on 3.50.0, all `deprecated_member_use` for `package:flutter/material.dart`. The material_ui migration is a separate task.
+  - **Docs.** CLAUDE.md gained a Toolchain section (the pin and the "bump Android with Flutter" rule). CHANGELOG `[Unreleased]` says "Built with Flutter 3.50".
