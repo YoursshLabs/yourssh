@@ -34,6 +34,7 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     required FocusNode focusNode,
     required TerminalCursorType cursorType,
     required bool alwaysShowCursor,
+    double devicePixelRatio = 1.0,
     EditableRectCallback? onEditableRect,
     String? composingText,
   })  : _terminal = terminal,
@@ -50,6 +51,7 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
           theme: theme,
           textStyle: textStyle,
           textScaler: textScaler,
+          devicePixelRatio: devicePixelRatio,
         );
 
   Terminal _terminal;
@@ -112,6 +114,13 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     markNeedsPaint();
   }
 
+  /// Physical pixels per logical pixel; the glyph atlas renders at it.
+  set devicePixelRatio(double value) {
+    if (value == _painter.devicePixelRatio) return;
+    _painter.devicePixelRatio = value;
+    markNeedsPaint();
+  }
+
   FocusNode _focusNode;
   set focusNode(FocusNode value) {
     if (value == _focusNode) return;
@@ -152,6 +161,9 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   TerminalSize? _viewportSize;
 
   final TerminalPainter _painter;
+
+  @visibleForTesting
+  TerminalPainter get debugPainter => _painter;
 
   List<KeywordHighlightRule> _keywordRules = const [];
   set keywordRules(List<KeywordHighlightRule> value) {
@@ -217,6 +229,8 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     _terminal.addListener(_onTerminalChange);
     _controller.addListener(_onControllerUpdate);
     _focusNode.addListener(_onFocusChange);
+    // New atlas tiles: let the visible lines switch to them.
+    _painter.onGlyphAtlasChanged = markNeedsPaint;
   }
 
   @override
@@ -226,6 +240,13 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     _terminal.removeListener(_onTerminalChange);
     _controller.removeListener(_onControllerUpdate);
     _focusNode.removeListener(_onFocusChange);
+    _painter.onGlyphAtlasChanged = null;
+  }
+
+  @override
+  void dispose() {
+    _painter.dispose();
+    super.dispose();
   }
 
   @override
@@ -474,16 +495,25 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     final effectFirstLine = firstLine.clamp(0, lines.length - 1);
     final effectLastLine = lastLine.clamp(0, lines.length - 1);
 
+    // Where this box lands in device pixels: the glyph atlas places its
+    // sprites on exact device pixels. Unknown under a non-translation
+    // transform; lines are then drawn with paragraphs only.
+    final origin = _deviceOrigin();
+    final scale = _painter.devicePixelRatio;
+
     for (var i = effectFirstLine; i <= effectLastLine; i++) {
       // Lines are painted via cached per-line pictures: a line is re-recorded
       // only when its content changes, so scrolling and steady output replay
       // pictures instead of re-laying-out every visible cell each frame.
-      final picture = _painter.getLinePicture(lines[i]);
-      canvas.save();
-      canvas.translate(
-        offset.dx,
-        offset.dy + (i * charHeight + _lineOffset).truncateToDouble(),
+      final y = (i * charHeight + _lineOffset).truncateToDouble();
+      final picture = _painter.getLinePicture(
+        lines[i],
+        deviceOffset: origin == null
+            ? null
+            : Offset(origin.dx * scale, (origin.dy + y) * scale),
       );
+      canvas.save();
+      canvas.translate(offset.dx, offset.dy + y);
       canvas.drawPicture(picture);
       canvas.restore();
     }
@@ -519,6 +549,17 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
         effectLastLine,
       );
     }
+  }
+
+  /// This box's origin in global logical coordinates, or null when the
+  /// transform to the screen is not a plain translation.
+  Offset? _deviceOrigin() {
+    final m = getTransformTo(null).storage;
+    if (m[0] != 1 || m[1] != 0 || m[4] != 0 || m[5] != 1 || m[3] != 0 ||
+        m[7] != 0 || m[15] != 1) {
+      return null;
+    }
+    return Offset(m[12], m[13]);
   }
 
   /// Paints the text that is currently being composed in IME to [canvas] at
