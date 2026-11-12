@@ -20,6 +20,11 @@ class GeneratedKey {
 /// [probeSshKeygen]. See
 /// docs/superpowers/specs/2026-06-06-ssh-key-generation-design.md.
 class KeyGenService {
+  KeyGenService({Future<void> Function(String path, int mode)? chmod})
+      : _chmod = chmod ?? chmodLocal;
+
+  final Future<void> Function(String path, int mode) _chmod;
+
   static String sanitizeKeyName(String name) =>
       name.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
 
@@ -77,10 +82,26 @@ class KeyGenService {
         '$name';
 
     final keyPath = p.join(dir, sanitizeKeyName(name));
-    await File(keyPath).writeAsString(pem);
+    _ensureNoExistingKey(keyPath);
+    // Create empty and restrict to 0600 BEFORE any key material is written.
+    final keyFile = File(keyPath);
+    await keyFile.create(exclusive: true);
+    try {
+      if (!Platform.isWindows) await _chmod(keyPath, 0x180 /* 0600 */);
+    } catch (_) {
+      await keyFile.delete();
+      rethrow;
+    }
+    await keyFile.writeAsString(pem);
     await File('$keyPath.pub').writeAsString('$publicKeyLine\n');
-    if (!Platform.isWindows) await chmodLocal(keyPath, 0x180 /* 0600 */);
     return GeneratedKey(privateKeyPath: keyPath, publicKeyLine: publicKeyLine);
+  }
+
+  static void _ensureNoExistingKey(String keyPath) {
+    if (File(keyPath).existsSync() || File('$keyPath.pub').existsSync()) {
+      throw Exception('A key named ${p.basename(keyPath)} already exists in '
+          '${p.dirname(keyPath)}; choose another name.');
+    }
   }
 
   Future<GeneratedKey> generateWithSshKeygen({
@@ -90,6 +111,7 @@ class KeyGenService {
     required String dir,
   }) async {
     final keyPath = p.join(dir, sanitizeKeyName(name));
+    _ensureNoExistingKey(keyPath);
     final proc = await Process.run(
         'ssh-keygen',
         sshKeygenArgs(

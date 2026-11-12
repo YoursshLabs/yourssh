@@ -512,7 +512,9 @@ class SSHClient {
     var agentForwardingRefused = false;
     if (agentHandler != null) {
       final agentOk = await channelController.sendAgentForwardingRequest();
-      if (!agentOk) {
+      if (agentOk) {
+        _agentForwardingAccepted = true;
+      } else {
         // OpenSSH treats a refused auth-agent-req as a warning, not an error
         // (e.g. sshd with AllowAgentForwarding no). Keep the session alive
         // and let callers surface the refusal via
@@ -1056,9 +1058,15 @@ class SSHClient {
     );
   }
 
+  /// True once the server accepted an `auth-agent-req@openssh.com` request
+  /// sent by this client. Server-opened agent channels are refused before
+  /// that: a server must not reach the agent on exec/SFTP/forwarding
+  /// connections or after refusing the request.
+  bool _agentForwardingAccepted = false;
+
   void _handleAgentChannelOpen(SSH_Message_Channel_Open message) {
     final handler = agentHandler;
-    if (handler == null) {
+    if (handler == null || !_agentForwardingAccepted) {
       final reply = SSH_Message_Channel_Open_Failure(
         recipientChannel: message.senderChannel,
         reasonCode:

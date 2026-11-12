@@ -429,8 +429,15 @@ class SSHTransport {
       _processData();
     } on SSHError catch (e, stackTrace) {
       closeWithError(e, stackTrace);
-    } catch (e) {
-      rethrow;
+    } catch (e, stackTrace) {
+      // Any other parse/handler failure (RangeError, StateError, FormatException,
+      // null-check on a malformed point, ...) must still terminate the
+      // connection with an SSHError. Rethrowing would escape the socket
+      // listener and leave `done` / `authenticated` pending forever.
+      closeWithError(
+        SSHPacketError('Malformed packet: $e'),
+        stackTrace,
+      );
     }
   }
 
@@ -720,11 +727,20 @@ class SSHTransport {
     if (packetLength > SSHPacket.maxLength) {
       throw SSHPacketError('Packet too long: $packetLength');
     }
+    // padding_length (1) + at least 1 payload byte + at least 4 padding bytes.
+    if (packetLength < 6) {
+      throw SSHPacketError('Packet too short: $packetLength');
+    }
   }
 
   /// Verifies that the padding of the packet is correct. Throws [SSHPacketError]
   /// if the padding is incorrect.
   void _verifyPacketPadding(int payloadLength, int paddingLength) {
+    if (payloadLength < 1) {
+      throw SSHPacketError(
+        'Invalid payload length: $payloadLength (padding length: $paddingLength)',
+      );
+    }
     final expectedPacketAlign = _decryptCipher == null
         ? SSHPacket.minAlign
         : max(SSHPacket.minAlign, _decryptCipher!.blockSize);
@@ -1283,6 +1299,12 @@ class SSHTransport {
     final message = SSH_Message_KexDH_GexGroup.decode(payload);
     printTrace?.call('<- $socket: $message');
 
+    SSHKexDH.validateGexGroup(
+      p: message.p,
+      g: message.g,
+      minBits: SSHKexDH.gexMin,
+      maxBits: SSHKexDH.gexMax,
+    );
     _kex = SSHKexDH(p: message.p, g: message.g, secretBits: 256);
     _sendKexDHGexInit();
   }

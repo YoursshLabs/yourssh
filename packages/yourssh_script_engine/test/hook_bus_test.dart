@@ -2,6 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh_script_engine/src/hook_bus.dart';
 
 void main() {
+  test('hasTransform is true only with a transform handler registered', () {
+    final bus = HookBus();
+    expect(bus.hasTransform('terminal.output'), isFalse);
+    bus.register('terminal.output', 'plugin-a', (e) => null);
+    expect(bus.hasTransform('terminal.output'), isTrue);
+    expect(bus.hasTransform('terminal.input'), isFalse);
+  });
+
   group('HookBus.fireTransform', () {
     test('returns original data when no handlers registered', () {
       final bus = HookBus();

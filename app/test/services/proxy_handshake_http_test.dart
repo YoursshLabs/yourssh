@@ -58,4 +58,26 @@ void main() {
         utf8.encode('HTTP/1.1 407 Proxy Authentication Required\r\n\r\n')));
     await expectLater(future, throwsA(isA<ProxyException>()));
   });
+
+  test('response headers larger than 64 KiB fail', () async {
+    final input = StreamController<Uint8List>();
+    final reader = ByteReader(input.stream);
+    final future = httpConnectHandshake(reader, _ListSink(),
+        targetHost: 'example.com', targetPort: 22);
+    final expectation = expectLater(future, throwsA(isA<ProxyException>()));
+    input.add(Uint8List(70 * 1024)..fillRange(0, 70 * 1024, 0x41));
+    await expectation;
+  });
+
+  test('CR/LF in the target host is rejected before anything is sent',
+      () async {
+    final input = StreamController<Uint8List>();
+    final sink = _ListSink();
+    final reader = ByteReader(input.stream);
+    await expectLater(
+        httpConnectHandshake(reader, sink,
+            targetHost: 'a.com\r\nX-Evil: 1', targetPort: 22),
+        throwsA(isA<ProxyException>()));
+    expect(sink.bytes, isEmpty);
+  });
 }

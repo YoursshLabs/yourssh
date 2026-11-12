@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/audit_event.dart';
 import 'package:yourssh/services/audit_service.dart';
@@ -142,4 +144,20 @@ void main() {
     expect(page2.map((e) => e.command), ['c2', 'c1'],
         reason: 'anchor paging must not re-serve or skip rows');
   });
+
+  test('on-disk DB and WAL sidecars are 0600 on POSIX', () async {
+    final dir = Directory.systemTemp.createTempSync('audit_perm');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final disk = AuditService();
+    addTearDown(disk.dispose);
+    await disk.init(dbPath: '${dir.path}/audit.db');
+    expect(disk.isAvailable, isTrue);
+    disk.record(ev(AuditEventType.connect, hostId: 'h1'));
+    for (final suffix in ['', '-wal', '-shm']) {
+      final f = File('${dir.path}/audit.db$suffix');
+      if (suffix == '' || f.existsSync()) {
+        expect(f.statSync().mode & 0x1FF, 0x180, reason: 'audit.db$suffix');
+      }
+    }
+  }, skip: Platform.isWindows);
 }

@@ -272,12 +272,17 @@ class SSHChannelController {
       return;
     }
 
+    // A peer that sends more than the window we granted violates the
+    // protocol (RFC 4254 §5.2); drop the channel instead of buffering.
+    if (data.length > _localWindow) {
+      printDebug?.call('SSHChannel._handleDataMessage: window overrun');
+      destroy();
+      return;
+    }
+
     _remoteStream.add(SSHChannelData(data, type: type));
 
     _localWindow -= data.length;
-    if (_localWindow < 0) {
-      // Maybe we should close the channel here?
-    }
 
     _sendWindowAdjustIfNeeded();
   }

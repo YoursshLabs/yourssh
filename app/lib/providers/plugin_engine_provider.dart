@@ -8,8 +8,8 @@ class PluginEngineProvider extends ChangeNotifier {
   final PluginUiRegistry uiRegistry;
 
   final _logs = <String, List<String>>{};
-  PluginManifest? _pendingConsent;
-  String? _pendingConsentDir;
+  // Plugins waiting for consent, in arrival order; the dialog shows the head.
+  final _pendingConsents = <({PluginManifest manifest, String dir})>[];
 
   List<PluginManifest> get loadedPlugins => engine.loadedManifests;
 
@@ -25,8 +25,10 @@ class PluginEngineProvider extends ChangeNotifier {
   List<String> logsFor(String pluginId) =>
       List.unmodifiable(_logs[pluginId] ?? []);
 
-  PluginManifest? get pendingConsent => _pendingConsent;
-  String? get pendingConsentDir => _pendingConsentDir;
+  PluginManifest? get pendingConsent =>
+      _pendingConsents.isEmpty ? null : _pendingConsents.first.manifest;
+  String? get pendingConsentDir =>
+      _pendingConsents.isEmpty ? null : _pendingConsents.first.dir;
 
   void addLog(String pluginId, String message) {
     final list = _logs.putIfAbsent(pluginId, () => []);
@@ -37,25 +39,24 @@ class PluginEngineProvider extends ChangeNotifier {
 
   void setPendingConsent(
       String pluginId, PluginManifest manifest, String dir) {
-    _pendingConsent = manifest;
-    _pendingConsentDir = dir;
+    final index = _pendingConsents.indexWhere((p) => p.dir == dir);
+    if (index >= 0) {
+      _pendingConsents[index] = (manifest: manifest, dir: dir);
+    } else {
+      _pendingConsents.add((manifest: manifest, dir: dir));
+    }
     notifyListeners();
   }
 
   Future<void> approveConsent(Set<String> granted) async {
-    final m = _pendingConsent;
-    final dir = _pendingConsentDir;
-    _pendingConsent = null;
-    _pendingConsentDir = null;
+    if (_pendingConsents.isEmpty) return;
+    final head = _pendingConsents.removeAt(0);
     notifyListeners();
-    if (m != null && dir != null) {
-      await loader.approvePermissions(m.id, granted, dir);
-    }
+    await loader.approvePermissions(head.manifest.id, granted, head.dir);
   }
 
   void denyConsent() {
-    _pendingConsent = null;
-    _pendingConsentDir = null;
+    if (_pendingConsents.isNotEmpty) _pendingConsents.removeAt(0);
     notifyListeners();
   }
 

@@ -122,6 +122,26 @@ void main() {
       expect(fake.startLog, isEmpty);
     });
 
+    test('probe output outside kSftpServerPaths → binaryNotFound, nothing run',
+        () async {
+      for (final evil in [
+        '/tmp/evil\n',
+        '/usr/lib/openssh/sftp-server; id\n',
+        '/usr/lib/openssh/sftp-server\n/tmp/evil\n',
+      ]) {
+        final fake = _Fake()..probeStdout = evil;
+        await expectLater(
+          fake.orchestrator().openForHost(_host(SftpMode.sudo),
+              getPassword: fake.getPassword, interactive: true),
+          throwsA(isA<SudoSftpException>().having((e) => e.reason, 'reason',
+              SudoSftpFailureReason.binaryNotFound)),
+          reason: evil,
+        );
+        expect(fake.startLog, isEmpty, reason: evil);
+        expect(fake.passwordRequests, isEmpty, reason: evil);
+      }
+    });
+
     test('password flow: validate caches timestamp, retry succeeds', () async {
       final fake = _Fake()
         ..startOutcomes = [false, true]

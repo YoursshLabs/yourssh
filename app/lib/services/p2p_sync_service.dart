@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../models/discovered_host.dart';
 
@@ -24,6 +25,38 @@ class P2PSyncService {
   /// and the sender has no idea anything went wrong.
   void Function(Object error)? onServerError;
 
+  @visibleForTesting
+  InternetAddress? get boundAddress => _server?.address;
+
+  /// Largest sync payload [fetchPayload] accepts.
+  static const int maxPayloadBytes = 16 * 1024 * 1024;
+
+  /// True for http URLs whose host is a loopback, link-local or private IP
+  /// literal (or `localhost`) - a sync payload only ever comes from the LAN.
+  static bool isAllowedSyncUrl(String url) {
+    final Uri uri;
+    try {
+      uri = Uri.parse(url);
+    } on FormatException {
+      return false;
+    }
+    if (uri.scheme != 'http' || uri.host.isEmpty) return false;
+    if (uri.host == 'localhost') return true;
+    final ip = InternetAddress.tryParse(uri.host);
+    if (ip == null) return false;
+    final b = ip.rawAddress;
+    if (ip.type == InternetAddressType.IPv4) {
+      return b[0] == 10 ||
+          b[0] == 127 ||
+          (b[0] == 172 && b[1] >= 16 && b[1] <= 31) ||
+          (b[0] == 192 && b[1] == 168) ||
+          (b[0] == 169 && b[1] == 254);
+    }
+    return ip.isLoopback ||
+        (b[0] == 0xfe && (b[1] & 0xc0) == 0x80) || // fe80::/10
+        (b[0] & 0xfe) == 0xfc; // fc00::/7
+  }
+
   Future<List<NetworkInterfaceInfo>> getLocalInterfaces() async {
     final interfaces =
         await NetworkInterface.list(type: InternetAddressType.IPv4);
@@ -39,7 +72,8 @@ class P2PSyncService {
     required String encryptedPayload,
     required String hostAddress,
   }) async {
-    _server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
+    // Bind only to the interface the user picked, not every interface.
+    _server = await HttpServer.bind(InternetAddress(hostAddress), 0);
     final port = _server!.port;
     _handleRequests(encryptedPayload);
     return 'http://$hostAddress:$port/sync';
@@ -73,6 +107,9 @@ class P2PSyncService {
   }
 
   Future<String> fetchPayload(String url) async {
+    if (!isAllowedSyncUrl(url)) {
+      throw Exception('Sync URL must be http on a local/private address');
+    }
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 5);
     try {
@@ -81,10 +118,16 @@ class P2PSyncService {
       if (response.statusCode != 200) {
         throw Exception('HTTP ${response.statusCode}');
       }
-      return await response.transform(utf8.decoder).join()
-          .timeout(const Duration(seconds: 10));
+      final bytes = BytesBuilder(copy: false);
+      await response.timeout(const Duration(seconds: 10)).forEach((chunk) {
+        bytes.add(chunk);
+        if (bytes.length > maxPayloadBytes) {
+          throw Exception('Sync payload exceeds $maxPayloadBytes bytes');
+        }
+      });
+      return utf8.decode(bytes.takeBytes());
     } finally {
-      client.close();
+      client.close(force: true);
     }
   }
 }

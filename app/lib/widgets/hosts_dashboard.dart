@@ -1334,6 +1334,7 @@ class _HostCardState extends State<_HostCard> {
       protocol: widget.host.protocol,
       domain: widget.host.domain,
       rdpSecurity: widget.host.rdpSecurity,
+      remoteClipboard: widget.host.remoteClipboard,
       authType: widget.host.authType,
       keyId: widget.host.keyId,
       group: widget.host.group,

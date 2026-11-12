@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
@@ -6,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../models/audit_event.dart';
+import '../util/private_temp.dart';
 import 'audit_redactor.dart';
 
 /// Query filter; null fields mean "no constraint".
@@ -77,7 +79,16 @@ CREATE TABLE IF NOT EXISTS audit_events (
     try {
       final path = dbPath ??
           p.join((await getApplicationSupportDirectory()).path, 'audit.db');
+      // Create the file 0600 first so SQLite derives the -wal/-shm modes from
+      // it, then re-assert on whatever sidecars exist after opening.
+      final dbFile = File(path);
+      if (!await dbFile.exists()) await dbFile.create(recursive: true);
+      await restrictToOwner(file: dbFile);
       _open(sqlite3.open(path));
+      for (final suffix in const ['-wal', '-shm']) {
+        final side = File('$path$suffix');
+        if (await side.exists()) await restrictToOwner(file: side);
+      }
     } catch (e) {
       initError = '$e';
       debugPrint('[AuditService] init failed: $e');
