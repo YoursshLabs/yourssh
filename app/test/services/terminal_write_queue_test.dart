@@ -296,6 +296,35 @@ void main() {
       expect(q.isIdle, isTrue);
     });
 
+    test('defaults repaint a flood at 60 fps', () {
+      // A flood frame is cheap with the glyph atlas: no 30 fps flood throttle.
+      final q = TerminalWriteQueue(
+        write: (s) {
+          written.add(s);
+          now += 2000; // 2 ms per 16 KiB piece
+        },
+        commit: () => commits++,
+        clockMicros: () => now,
+        scheduleNext: scheduled.add,
+        scheduleAfter: (d, run) => timers.add((delay: d, run: run)),
+      );
+      q.add('x');
+      commits = 0;
+      final commitTimes = <int>[];
+      q.add('a' * (2 * 1024 * 1024));
+      while (scheduled.isNotEmpty) {
+        final before = commits;
+        runScheduled();
+        if (commits > before) commitTimes.add(now);
+      }
+      expect(commitTimes.length, greaterThan(5));
+      for (var i = 1; i < commitTimes.length; i++) {
+        final gap = commitTimes[i] - commitTimes[i - 1];
+        expect(gap, greaterThanOrEqualTo(16000));
+        expect(gap, lessThan(20000), reason: 'flood repaint every ~16 ms');
+      }
+    });
+
     test('flood volume switches to the slower floodInterval', () {
       final q = make(
         pieceSize: 10,

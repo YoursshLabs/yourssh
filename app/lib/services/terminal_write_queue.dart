@@ -18,8 +18,8 @@ import 'package:flutter/foundation.dart';
 /// source delivers, while the terminal is told to repaint ([commit]) at a
 /// steady, throttled rate: at most once per [commitInterval], or once per
 /// [floodInterval] when more than [floodChars] arrive within a window (a
-/// repaint re-records every visible line, so rendering a flood at full frame
-/// rate only steals parse time).
+/// flood repaint re-records every visible line; with the glyph atlas that is
+/// ~1 ms build + ~1 ms raster at 121x40, so floods repaint at 60 fps too).
 ///
 /// Backpressure: [onPressure] fires `true` when [pendingChars] reaches
 /// [highWater] and `false` once it falls to [lowWater]; callers pause/resume
@@ -46,7 +46,7 @@ class TerminalWriteQueue {
     void Function(bool paused)? onPressure,
     this.budget = const Duration(microseconds: 250),
     this.commitInterval = const Duration(milliseconds: 16),
-    this.floodInterval = const Duration(milliseconds: 33),
+    this.floodInterval = const Duration(milliseconds: 16),
     this.floodChars = 32 * 1024,
     this.pieceSize = 16 * 1024,
     this.highWater = 1024 * 1024,
@@ -78,7 +78,8 @@ class TerminalWriteQueue {
   final Duration commitInterval;
 
   /// Spacing used instead while a flood (>= [floodChars] per window) lasts.
-  /// Never above ~33 ms (30 fps).
+  /// 16 ms (60 fps) by default, like [commitInterval]; was 33 ms while every
+  /// flood frame cost ~6 ms of paragraph recording. Never above ~33 ms.
   final Duration floodInterval;
   final int floodChars;
 
