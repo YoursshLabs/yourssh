@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/widgets/permissions_dialog.dart';
 import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
-import 'package:yourssh_ui/yourssh_ui.dart' show FButton, showYsDialog;
+import 'package:yourssh_ui/yourssh_ui.dart' show FButton, FCheckbox, showYsDialog;
 
 Future<({int mode, bool recursive})?> _open(
   WidgetTester tester, {
@@ -33,15 +33,19 @@ Future<({int mode, bool recursive})?> _open(
   return result;
 }
 
+Finder _octal(String text) => find.byWidgetPredicate(
+      (w) => w is EditableText && w.controller.text == text,
+    );
+
 void main() {
   testWidgets('preloads octal field and checkboxes from initialMode',
       (tester) async {
     await _open(tester, initialMode: 0x1A4); // 0o644
-    expect(find.widgetWithText(TextField, '644'), findsOneWidget);
+    expect(_octal('644'), findsOneWidget);
     final ownerWrite =
-        tester.widget<Checkbox>(find.byKey(const Key('perm_u_w')));
+        tester.widget<FCheckbox>(find.byKey(const Key('perm_u_w')));
     final otherWrite =
-        tester.widget<Checkbox>(find.byKey(const Key('perm_o_w')));
+        tester.widget<FCheckbox>(find.byKey(const Key('perm_o_w')));
     expect(ownerWrite.value, isTrue);
     expect(otherWrite.value, isFalse);
   });
@@ -50,16 +54,16 @@ void main() {
     await _open(tester, initialMode: 0x1A4); // 0o644
     await tester.tap(find.byKey(const Key('perm_u_x')));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(TextField, '744'), findsOneWidget);
+    expect(_octal('744'), findsOneWidget);
   });
 
   testWidgets('editing the octal field updates the checkboxes',
       (tester) async {
     await _open(tester, initialMode: 0x1A4);
-    await tester.enterText(find.byType(TextField), '777');
+    await tester.enterText(find.byType(EditableText), '777');
     await tester.pumpAndSettle();
     final otherWrite =
-        tester.widget<Checkbox>(find.byKey(const Key('perm_o_w')));
+        tester.widget<FCheckbox>(find.byKey(const Key('perm_o_w')));
     expect(otherWrite.value, isTrue);
   });
 
@@ -84,7 +88,7 @@ void main() {
     ));
     await tester.tap(find.text('go'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '755');
+    await tester.enterText(find.byType(EditableText), '755');
     await tester.tap(find.text('Apply'));
     await tester.pumpAndSettle();
     expect(result, (mode: 0x1ED, recursive: false));
@@ -97,12 +101,12 @@ void main() {
   testWidgets('Apply is disabled while the octal text is incomplete',
       (tester) async {
     await _open(tester, initialMode: 0x1A4); // 0o644
-    await tester.enterText(find.byType(TextField), '64'); // half-typed
+    await tester.enterText(find.byType(EditableText), '64'); // half-typed
     await tester.pump();
     expect(applyButton(tester).onPress, isNull);
     expect(find.text('3–4 octal digits'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField), '640');
+    await tester.enterText(find.byType(EditableText), '640');
     await tester.pump();
     expect(applyButton(tester).onPress, isNotNull);
   });
@@ -110,10 +114,10 @@ void main() {
   testWidgets('non-octal characters are filtered out of the field',
       (tester) async {
     await _open(tester, initialMode: 0x1A4);
-    await tester.enterText(find.byType(TextField), '9a8b');
+    await tester.enterText(find.byType(EditableText), '9a8b');
     await tester.pump();
-    final field = tester.widget<TextField>(find.byType(TextField));
-    expect(field.controller!.text, isEmpty); // everything non-octal dropped
+    final field = tester.widget<EditableText>(find.byType(EditableText));
+    expect(field.controller.text, isEmpty); // everything non-octal dropped
     expect(applyButton(tester).onPress, isNull);
   });
 
@@ -127,8 +131,9 @@ void main() {
 
     await tester.tap(find.byKey(const Key('perm_u_r')));
     await tester.pump();
-    expect(find.widgetWithText(TextField, '400'), findsOneWidget);
+    expect(_octal('400'), findsOneWidget);
     expect(applyButton(tester).onPress, isNotNull);
+    await tester.pump(const Duration(milliseconds: 500)); // drain FTappable press timers
   });
 
   testWidgets('recursive checkbox only shown for directories',

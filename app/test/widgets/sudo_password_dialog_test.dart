@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/widgets/sudo_password_dialog.dart';
 import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
-import 'package:yourssh_ui/yourssh_ui.dart' show showYsDialog;
+import 'package:yourssh_ui/yourssh_ui.dart' show FCheckbox, FTextField, showYsDialog;
 
 /// Holder so tests can observe the dialog result after it pops.
 class _Result {
@@ -40,8 +41,8 @@ void main() {
   testWidgets('submits password and remember flag', (tester) async {
     final result = await pumpAndOpen(tester);
 
-    await tester.enterText(find.byType(TextField), 's3cret');
-    await tester.tap(find.byType(Checkbox));
+    await tester.enterText(find.byType(EditableText), 's3cret');
+    await tester.tap(find.byType(FCheckbox));
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
 
@@ -57,6 +58,31 @@ void main() {
 
     expect(result.popped, isFalse);
     expect(find.byType(SudoPasswordDialog), findsOneWidget);
+  });
+
+  testWidgets('field is focused, obscured and Enter submits', (tester) async {
+    final result = await pumpAndOpen(tester);
+
+    expect(find.byType(FTextField), findsOneWidget);
+    final editable = tester.widget<EditableText>(find.byType(EditableText));
+    expect(editable.obscureText, isTrue);
+    expect(editable.focusNode.hasFocus, isTrue);
+    expect(find.text('Remember in system keychain'), findsOneWidget);
+    expect(find.textContaining('needs the sudo password.'), findsOneWidget);
+
+    await tester.enterText(find.byType(EditableText), 'pw');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(result.value, (password: 'pw', remember: false));
+  });
+
+  testWidgets('Escape (safe path) returns null', (tester) async {
+    final result = await pumpAndOpen(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(result.popped, isTrue);
+    expect(result.value, isNull);
   });
 
   testWidgets('cancel returns null', (tester) async {

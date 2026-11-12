@@ -62,7 +62,7 @@ void main() {
 
     await tester.tap(find.descendant(
         of: find.byType(SourcePickerDialog), matching: find.text('Local')));
-    await tester.pump();
+    await tester.pump(_pressFeedback);
 
     expect(find.byType(LocalFilePanel), findsNWidgets(2));
     expect(find.byType(SftpPanel), findsNothing);

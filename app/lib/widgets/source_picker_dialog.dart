@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/host.dart';
 import '../models/panel_source.dart';
-import 'package:yourssh/theme/app_theme.dart';
+
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Picker for an SFTP panel slot's source: the local filesystem (pinned
@@ -24,30 +24,55 @@ class SourcePickerDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+              padding: const EdgeInsets.fromLTRB(
+                YsSpace.s4,
+                YsSpace.s3,
+                YsSpace.s2,
+                YsSpace.s2,
+              ),
               decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A)))),
-              child: Row(children: [
-                const Icon(Icons.dns_outlined, size: 15, color: Color(0xFF888888)),
-                const SizedBox(width: 8),
-                const Text('Select Source',
-                    style: TextStyle(
-                        color: Color(0xFFD4D4D4),
+                border: Border(bottom: BorderSide(color: YsColors.border)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    FLucideIcons.server,
+                    size: 15,
+                    color: YsColors.mutedForeground,
+                  ),
+                  const SizedBox(width: YsSpace.s2),
+                  const Expanded(
+                    child: Text(
+                      'Select Source',
+                      style: TextStyle(
+                        color: YsColors.foreground,
                         fontSize: 13,
-                        fontWeight: FontWeight.w600)),
-                const Spacer(),
-                GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(Icons.close, size: 14, color: Color(0xFF555555))),
-              ]),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Tooltip(
+                    message: 'Close',
+                    excludeFromSemantics: true,
+                    child: FButton.icon(
+                      variant: FButtonVariant.ghost,
+                      size: FButtonSizeVariant.xs,
+                      semanticsLabel: 'Close',
+                      onPress: () => Navigator.pop(context),
+                      child: const Icon(FLucideIcons.x),
+                    ),
+                  ),
+                ],
+              ),
             ),
             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 360),
               child: ListView(
                 shrinkWrap: true,
+                padding: const EdgeInsets.all(YsSpace.s2),
                 children: [
                   _SourceTile(
-                    icon: Icons.laptop_mac,
+                    icon: FLucideIcons.laptop,
                     title: 'Local',
                     subtitle: 'This computer',
                     active: current is LocalSource,
@@ -55,17 +80,17 @@ class SourcePickerDialog extends StatelessWidget {
                   ),
                   for (final h in hosts)
                     _SourceTile(
-                      icon: Icons.dns,
+                      icon: FLucideIcons.server,
                       title: h.label,
                       subtitle: '${h.username}@${h.host}:${h.port}',
-                      active: current is HostSource &&
+                      active:
+                          current is HostSource &&
                           (current as HostSource).host.id == h.id,
                       onTap: () => Navigator.pop(context, HostSource(h)),
                     ),
                 ],
               ),
             ),
-            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -90,40 +115,23 @@ class _SourceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        color: active ? AppColors.accent.withValues(alpha: 0.08) : Colors.transparent,
-        child: Row(children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Icon(icon, size: 14, color: AppColors.accent),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: TextStyle(
-                        color: active ? AppColors.accent : const Color(0xFFD4D4D4),
-                        fontSize: 13,
-                        fontWeight: active ? FontWeight.w600 : FontWeight.normal)),
-                Text(subtitle,
-                    style: const TextStyle(
-                        color: Color(0xFF555555), fontSize: 11, fontFamily: 'monospace')),
-              ],
-            ),
-          ),
-          if (active) const Icon(Icons.check, size: 14, color: AppColors.accent),
-        ]),
+    return FTile(
+      selected: active,
+      onPress: onTap,
+      prefix: Icon(icon, size: 16, color: YsColors.primary),
+      title: Text(title, overflow: TextOverflow.ellipsis),
+      subtitle: Text(
+        subtitle,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontFamily: kYsMonoFontFamily,
+          fontFamilyFallback: kYsMonoFontFallback,
+          fontSize: 11,
+        ),
       ),
+      suffix: active
+          ? const Icon(FLucideIcons.check, size: 14, color: YsColors.primary)
+          : null,
     );
   }
 }

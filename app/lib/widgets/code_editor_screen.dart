@@ -1,12 +1,14 @@
 // app/lib/widgets/code_editor_screen.dart
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+
 import '../models/host.dart';
 import '../models/sftp_entry.dart';
 import '../services/external_edit_service.dart';
@@ -14,6 +16,7 @@ import '../services/sftp_file_inspector.dart';
 import '../services/sftp_transfer_service.dart';
 import '../util/safe_local_path.dart';
 import '../util/webview_result.dart';
+
 import 'package:yourssh/theme/app_theme.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
@@ -49,11 +52,26 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   bool get _useWebView => _controller != null;
 
   static const _langMap = {
-    'dart': 'dart', 'py': 'python', 'js': 'javascript', 'ts': 'typescript',
-    'json': 'json', 'yaml': 'yaml', 'yml': 'yaml', 'md': 'markdown',
-    'sh': 'shell', 'bash': 'shell', 'zsh': 'shell', 'go': 'go',
-    'rs': 'rust', 'c': 'c', 'cpp': 'cpp', 'html': 'html', 'css': 'css',
-    'xml': 'xml', 'sql': 'sql', 'toml': 'ini',
+    'dart': 'dart',
+    'py': 'python',
+    'js': 'javascript',
+    'ts': 'typescript',
+    'json': 'json',
+    'yaml': 'yaml',
+    'yml': 'yaml',
+    'md': 'markdown',
+    'sh': 'shell',
+    'bash': 'shell',
+    'zsh': 'shell',
+    'go': 'go',
+    'rs': 'rust',
+    'c': 'c',
+    'cpp': 'cpp',
+    'html': 'html',
+    'css': 'css',
+    'xml': 'xml',
+    'sql': 'sql',
+    'toml': 'ini',
   };
 
   @override
@@ -109,7 +127,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       if (!mounted) return;
       final message = e is SftpStatusError
           ? 'Cannot open ${widget.entry.name}: the server refused to read it '
-              '(special file, broken link, or no permission).'
+                '(special file, broken link, or no permission).'
           : 'Cannot open ${widget.entry.name}: $e';
       AppSnack.error(context, message);
       Navigator.of(context).pop();
@@ -145,9 +163,10 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
     if (!mounted) return;
     if (open == true) {
       try {
-        await context
-            .read<ExternalEditService>()
-            .openExternal(widget.host, widget.entry);
+        await context.read<ExternalEditService>().openExternal(
+          widget.host,
+          widget.entry,
+        );
       } catch (e) {
         if (mounted) {
           AppSnack.error(context, 'Open externally failed: $e');
@@ -187,8 +206,9 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   Future<void> _saveCurrent() async {
     if (_saving) return;
     if (_useWebView) {
-      final content =
-          await _controller!.runJavaScriptReturningResult('getContent()');
+      final content = await _controller!.runJavaScriptReturningResult(
+        'getContent()',
+      );
       await _saveFile(decodeWebViewString(content));
     } else {
       await _saveFile(_textController.text);
@@ -201,16 +221,22 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       final service = context.read<SftpTransferService>();
       // Reuse the download location; path_provider only as a fallback when
       // the initial download never completed.
-      final tmpPath = _tmpPath ??
+      final tmpPath =
+          _tmpPath ??
           safeLocalChild(
-              (await getTemporaryDirectory()).path, widget.entry.name);
+            (await getTemporaryDirectory()).path,
+            widget.entry.name,
+          );
       await File(tmpPath).writeAsString(content);
       await service.uploadFile(widget.host, tmpPath, widget.entry.path);
       if (mounted) {
         setState(() => _isDirty = false);
-        showYsToast(context, 'Saved',
-            kind: YsToastKind.success,
-            duration: const Duration(seconds: 1));
+        showYsToast(
+          context,
+          'Saved',
+          kind: YsToastKind.success,
+          duration: const Duration(seconds: 1),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -253,43 +279,90 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
         if (!didPop) _showDiscardDialog();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF0F0F0F),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF141414),
-          title: Text(widget.entry.name,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 14)),
-          actions: [
-            if (widget.readOnly)
-              const Padding(
-                padding: EdgeInsets.all(12),
-                child: Icon(Icons.lock_outline,
-                    size: 16, color: Color(0xFF888888)),
-              )
-            else ...[
-              if (_saving)
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppColors.accent),
-                  ),
-                ),
-              IconButton(
-                icon: const Icon(Icons.save_outlined, size: 18),
-                tooltip: 'Save (Ctrl+S)',
-                onPressed: _saving ? null : _saveCurrent,
-              ),
-            ],
+        backgroundColor: YsColors.terminalSurface,
+        body: Column(
+          children: [
+            _buildHeader(context),
+            Expanded(
+              child: !_ready
+                  ? const Center(child: FCircularProgress())
+                  : _useWebView
+                  ? WebViewWidget(controller: _controller!)
+                  : _buildFallbackEditor(),
+            ),
           ],
         ),
-        body: !_ready
-            ? const Center(
-                child: CircularProgressIndicator(color: AppColors.accent))
-            : _useWebView
-                ? WebViewWidget(controller: _controller!)
-                : _buildFallbackEditor(),
+      ),
+    );
+  }
+
+  Widget _headerButton(IconData icon, String tooltip, VoidCallback? onPress) {
+    return Tooltip(
+      message: tooltip,
+      excludeFromSemantics: true,
+      child: FButton.icon(
+        variant: FButtonVariant.ghost,
+        size: FButtonSizeVariant.sm,
+        semanticsLabel: tooltip,
+        onPress: onPress,
+        child: Icon(icon),
+      ),
+    );
+  }
+
+  /// Editor header replacing the Material AppBar: back, file name, then the
+  /// read-only lock or the save button (with its saving spinner).
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s2),
+      decoration: const BoxDecoration(
+        color: YsColors.card,
+        border: Border(bottom: BorderSide(color: YsColors.border)),
+      ),
+      child: Row(
+        children: [
+          if (Navigator.of(context).canPop())
+            _headerButton(
+              FLucideIcons.arrowLeft,
+              'Back',
+              () => Navigator.of(context).maybePop(),
+            ),
+          const SizedBox(width: YsSpace.s2),
+          Expanded(
+            child: Text(
+              widget.entry.name,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: kYsMonoFontFamily,
+                fontFamilyFallback: kYsMonoFontFallback,
+                fontSize: 14,
+                color: YsColors.foreground,
+              ),
+            ),
+          ),
+          if (widget.readOnly)
+            const Padding(
+              padding: EdgeInsets.all(YsSpace.s3),
+              child: Icon(
+                FLucideIcons.lock,
+                size: 16,
+                color: YsColors.mutedForeground,
+              ),
+            )
+          else ...[
+            if (_saving)
+              const Padding(
+                padding: EdgeInsets.all(YsSpace.s3),
+                child: FCircularProgress(size: FCircularProgressSizeVariant.sm),
+              ),
+            _headerButton(
+              FLucideIcons.save,
+              'Save (Ctrl+S)',
+              _saving ? null : _saveCurrent,
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -304,9 +377,10 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       autofocus: !widget.readOnly,
       readOnly: widget.readOnly,
       style: const TextStyle(
-        fontFamily: 'monospace',
+        fontFamily: kYsMonoFontFamily,
+        fontFamilyFallback: kYsMonoFontFallback,
         fontSize: 13,
-        color: Color(0xFFD4D4D4),
+        color: Color(0xFFE7E5E4),
         height: 1.5,
       ),
       decoration: const InputDecoration(

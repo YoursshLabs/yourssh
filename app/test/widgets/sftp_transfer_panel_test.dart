@@ -6,7 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh/models/sftp_transfer_item.dart';
 import 'package:yourssh/providers/sftp_transfer_provider.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 import 'package:yourssh/widgets/sftp_transfer_panel.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show FDeterminateProgress;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -20,7 +22,8 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: tp,
-        child: const MaterialApp(
+        child: MaterialApp(
+          builder: ysRootBuilder,
           home: Scaffold(body: Column(children: [SftpTransferPanel()])),
         ),
       ),
@@ -37,7 +40,7 @@ void main() {
   testWidgets('hidden when there are no items', (tester) async {
     await pumpPanel(tester);
     expect(find.text('Cancel'), findsNothing);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.byType(FDeterminateProgress), findsNothing);
   });
 
   testWidgets('expanded by default: header, progress and file rows',
@@ -71,6 +74,7 @@ void main() {
     await tester.tap(find.byTooltip('Expand'));
     await tester.pump();
     expect(find.text('a.txt'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 500)); // drain FTappable press timers
   });
 
   testWidgets('auto-clears ~3s after a fully successful batch',
@@ -103,6 +107,28 @@ void main() {
     await tester.tap(find.byTooltip('Close'));
     await tester.pump();
     expect(tp.items, isEmpty);
+    await tester.pump(const Duration(milliseconds: 500)); // drain FTappable press timers
+  });
+
+  testWidgets('900x600 with 60-char names: no overflow, uses forui progress',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final long = '${'f' * 60}.tar.gz';
+    tp.startBatch([
+      item('1', long, status: TransferStatus.inProgress),
+      item('2', '${'g' * 60}.zip', status: TransferStatus.error),
+      item('3', '${'h' * 60}.bin', status: TransferStatus.done),
+    ]);
+    await pumpPanel(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.byType(FDeterminateProgress), findsWidgets);
+
+    await tester.tap(find.byTooltip('Minimize'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(milliseconds: 500)); // drain FTappable press timers
   });
 
   testWidgets('Cancel wires to provider.cancel', (tester) async {

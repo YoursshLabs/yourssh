@@ -508,7 +508,7 @@ void main() {
       await tester.tap(find.text('Select host'));
       await tester.pump(_pressFeedback);
       await tester.tap(find.text('h' * 60));
-      await tester.pump();
+      await tester.pump(_pressFeedback);
       expect(tester.takeException(), isNull);
       // Both transfer buttons keep their tooltips.
       expect(find.byTooltip('Copy →'), findsOneWidget);

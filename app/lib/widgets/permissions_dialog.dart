@@ -1,8 +1,10 @@
 // app/lib/widgets/permissions_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../theme/app_theme.dart';
 import '../util/file_mode.dart';
+
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// chmod dialog: a 9-checkbox rwx grid (owner/group/others) two-way synced
@@ -33,7 +35,8 @@ class PermissionsDialog extends StatefulWidget {
 class _PermissionsDialogState extends State<PermissionsDialog> {
   late int _mode = (widget.initialMode ?? 0) & 0xFFF;
   late final TextEditingController _octalCtrl = TextEditingController(
-      text: widget.initialMode == null ? '' : modeToOctal(_mode));
+    text: widget.initialMode == null ? '' : modeToOctal(_mode),
+  );
   bool _recursive = false;
 
   /// Whether the user has set a mode themselves (checkbox or valid octal).
@@ -97,166 +100,149 @@ class _PermissionsDialogState extends State<PermissionsDialog> {
         _octalCtrl.text.isNotEmpty && parseOctal(_octalCtrl.text) == null;
     return YsDialog(
       title: 'Permissions — ${widget.entryName}',
-      body: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (widget.initialMode == null) ...[
-            const Row(
-              children: [
-                Icon(
-                  Icons.warning_amber_rounded,
-                  size: 14,
-                  color: AppColors.orange,
-                ),
-                SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Current permissions unknown — set them before applying.',
-                    style: TextStyle(color: AppColors.orange, fontSize: 11),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-          ],
-          Table(
-            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-            columnWidths: const {0: FixedColumnWidth(64)},
-            children: [
-              const TableRow(
+      body: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.initialMode == null) ...[
+              const Row(
                 children: [
-                  SizedBox.shrink(),
-                  Text(
-                    'Read',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
-                    ),
+                  Icon(
+                    FLucideIcons.triangleAlert,
+                    size: 14,
+                    color: AppColors.orange,
                   ),
-                  Text(
-                    'Write',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
-                    ),
-                  ),
-                  Text(
-                    'Execute',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Current permissions unknown — set them before applying.',
+                      style: TextStyle(color: AppColors.orange, fontSize: 11),
                     ),
                   ),
                 ],
               ),
-              for (final (i, row) in _rows.indexed)
-                TableRow(
-                  children: [
-                    Text(
-                      row.$1,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 12,
-                      ),
-                    ),
-                    for (final (j, bit) in [row.$2, row.$3, row.$4].indexed)
-                      Checkbox(
-                        key: Key('perm_${_rowKeys[i]}_${'rwx'[j]}'),
-                        value: _mode & bit != 0,
-                        onChanged: (v) => _setBit(bit, v ?? false),
-                        side: const BorderSide(color: Color(0xFF444444)),
-                        activeColor: AppColors.accent,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                  ],
-                ),
+              const SizedBox(height: 10),
             ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Text(
-                'Octal',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 72,
-                child: TextField(
-                  controller: _octalCtrl,
-                  onChanged: _onOctalChanged,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp('[0-7]')),
-                    LengthLimitingTextInputFormatter(4),
-                  ],
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                    fontFamily: 'monospace',
-                  ),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    enabledBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: octalInvalid ? AppColors.red : AppColors.border,
-                      ),
-                    ),
-                    focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: octalInvalid ? AppColors.red : AppColors.accent,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (octalInvalid) ...[
-                const SizedBox(width: 8),
-                const Text(
-                  '3–4 octal digits',
-                  style: TextStyle(color: AppColors.red, fontSize: 10),
-                ),
-              ],
-            ],
-          ),
-          if (widget.isDirectory) ...[
-            const SizedBox(height: 8),
-            Row(
+            Table(
+              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+              columnWidths: const {0: FixedColumnWidth(64)},
               children: [
-                Checkbox(
-                  key: const Key('perm_recursive'),
-                  value: _recursive,
-                  onChanged: (v) => setState(() => _recursive = v ?? false),
-                  side: const BorderSide(color: Color(0xFF444444)),
-                  activeColor: AppColors.accent,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
+                const TableRow(
+                  children: [
+                    SizedBox.shrink(),
+                    Text(
+                      'Read',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                    Text(
+                      'Write',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                    Text(
+                      'Execute',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
-                const Text(
-                  'Apply recursively',
-                  style: TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                ),
+                for (final (i, row) in _rows.indexed)
+                  TableRow(
+                    children: [
+                      Text(
+                        row.$1,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      for (final (j, bit) in [row.$2, row.$3, row.$4].indexed)
+                        Center(
+                          child: FCheckbox(
+                            key: Key('perm_${_rowKeys[i]}_${'rwx'[j]}'),
+                            value: _mode & bit != 0,
+                            onChange: (v) => _setBit(bit, v),
+                            semanticsLabel:
+                                '${row.$1} ${const ['read', 'write', 'execute'][j]}',
+                          ),
+                        ),
+                    ],
+                  ),
               ],
             ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Text(
+                  'Octal',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 72,
+                  child: FTextField(
+                    control: FTextFieldControl.managed(
+                      controller: _octalCtrl,
+                      onChange: (v) => _onOctalChanged(v.text),
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp('[0-7]')),
+                      LengthLimitingTextInputFormatter(4),
+                    ],
+                  ),
+                ),
+                if (octalInvalid) ...[
+                  const SizedBox(width: 8),
+                  const Text(
+                    '3–4 octal digits',
+                    style: TextStyle(color: AppColors.red, fontSize: 10),
+                  ),
+                ],
+              ],
+            ),
+            if (widget.isDirectory) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  FCheckbox(
+                    key: const Key('perm_recursive'),
+                    value: _recursive,
+                    onChange: (v) => setState(() => _recursive = v),
+                    label: const Text('Apply recursively'),
+                  ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
       actions: [
         FButton(
           variant: FButtonVariant.outline,
           onPress: () => Navigator.pop(context),
-          child: Text('Cancel'),
+          child: const Text('Cancel'),
         ),
         FButton(
           variant: FButtonVariant.primary,
           onPress: _canApply
-              ? () => Navigator.pop(context, (mode: _mode, recursive: _recursive))
+              ? () =>
+                    Navigator.pop(context, (mode: _mode, recursive: _recursive))
               : null,
-          child: Text('Apply'),
+          child: const Text('Apply'),
         ),
       ],
     );

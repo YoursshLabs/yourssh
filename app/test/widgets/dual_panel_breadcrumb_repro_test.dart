@@ -54,7 +54,7 @@ void main() {
     await tester.tap(find.text('Select host'));
     await tester.pump(_pressFeedback);
     await tester.tap(find.text('alpha'));
-    await tester.pump();
+    await tester.pump(_pressFeedback);
 
     // Remote panel path bar must show a breadcrumb too (issue #41).
     expect(find.byType(PathBreadcrumb), findsNWidgets(2));
