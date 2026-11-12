@@ -147,6 +147,8 @@ void main() {
     // No native lib under test: the tab starts in error; put it in the
     // connecting state a real probe is in so a failure would be audited.
     s.status = RdpSessionStatus.connecting;
+    // Test drives the state change a real Connecting event would make.
+    // ignore: invalid_use_of_protected_member
     s.notifyState();
     final ev = StreamController<frb.RdpEvent>();
     s.attach(ev.stream);
