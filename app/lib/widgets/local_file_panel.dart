@@ -30,9 +30,17 @@ class LocalFilePanel extends StatefulWidget {
   /// Why copy-to-target is unavailable for [entry] (null = available).
   final String? Function(LocalEntry entry)? copyToTargetBlockReason;
 
+  /// Opens a file in the OS default app. Injectable for tests.
+  final Future<bool> Function(String path) launcher;
+
+  /// `Platform.operatingSystem` value used to detect executables (tests).
+  final String? platform;
+
   const LocalFilePanel({
     super.key,
     required this.provider,
+    this.launcher = launchFileDefault,
+    this.platform,
     this.onChangeSource,
     this.onCopyToTarget,
     this.copyToTargetBlockReason,
@@ -163,7 +171,21 @@ class _LocalFilePanelState extends State<LocalFilePanel>
       widget.provider.loadDirectory(entry.path);
       return;
     }
-    final ok = await launchFileDefault(entry.path);
+    // Files here are often fresh downloads: never run server-supplied code
+    // on a stray double-click / Enter.
+    if (isExecutableExtension(
+        entry.name, widget.platform ?? Platform.operatingSystem)) {
+      final go = await showYsConfirm(
+        context,
+        title: 'Run this file?',
+        message: '${entry.name} can run programs on this computer. '
+            'Only open it if you trust where it came from.',
+        confirmLabel: 'Open anyway',
+        destructive: true,
+      );
+      if (!go || !mounted) return;
+    }
+    final ok = await widget.launcher(entry.path);
     if (!ok && mounted) _showError('Could not open ${entry.name}');
   }
 
