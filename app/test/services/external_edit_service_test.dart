@@ -90,7 +90,9 @@ void main() {
     await local.writeAsString('edited');
     local.setLastModifiedSync(DateTime.now().add(const Duration(seconds: 2)));
 
-    await _waitFor(() => transfer.uploads.isNotEmpty);
+    // onUploaded fires after the upload completes, which can lag the moment
+    // the upload is recorded — wait for the callback, not just the transfer.
+    await _waitFor(() => uploadedNames.isNotEmpty);
     expect(transfer.uploads.single.$2, '/srv/data.bin');
     expect(uploadedNames, ['data.bin']);
   });
