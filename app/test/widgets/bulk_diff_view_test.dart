@@ -4,6 +4,8 @@ import 'package:yourssh/models/bulk_result.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/widgets/bulk/bulk_diff_view.dart';
 
+import '../helpers/ys_test_app.dart';
+
 BulkHostResult _ok(String label, String stdout) => BulkHostResult(
       host: Host(label: label, host: '$label.x', username: 'u'),
       status: BulkHostStatus.success,
@@ -11,8 +13,8 @@ BulkHostResult _ok(String label, String stdout) => BulkHostResult(
       stdout: stdout,
     );
 
-Widget _wrap(Widget child) => MaterialApp(
-    home: Scaffold(body: SizedBox(width: 900, height: 600, child: child)));
+Widget _wrap(Widget child) =>
+    ysTestApp(SizedBox(width: 900, height: 600, child: child));
 
 void main() {
   testWidgets('groups outputs, baseline is the largest group',
@@ -65,7 +67,8 @@ void main() {
     ])));
     await tester.tap(find.text('COMPARE TWO HOSTS'));
     await tester.pumpAndSettle();
-    expect(find.byType(DropdownButton<String>), findsNWidgets(2));
+    expect(find.byKey(const ValueKey('bulk-compare-a')), findsOneWidget);
+    expect(find.byKey(const ValueKey('bulk-compare-b')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

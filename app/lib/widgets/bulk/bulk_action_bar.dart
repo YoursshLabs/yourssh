@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import '../../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Replaces the hosts-dashboard top bar while selection mode is active.
 class BulkActionBar extends StatelessWidget {
@@ -29,24 +28,27 @@ class BulkActionBar extends StatelessWidget {
     return Container(
       height: 52,
       decoration: const BoxDecoration(
-        color: AppColors.sidebar,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+        color: YsColors.sidebar,
+        border: Border(bottom: BorderSide(color: YsColors.border)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s5),
       child: Row(
         children: [
-          Text('$selectedCount selected',
-              style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500)),
-          const SizedBox(width: 16),
-          _BarBtn(label: 'SELECT ALL', onTap: onSelectAll),
-          const SizedBox(width: 8),
-          _BarBtn(label: 'CLEAR', onTap: onClear, enabled: hasSelection),
+          Text(
+            '$selectedCount selected',
+            style: const TextStyle(
+              color: YsColors.foreground,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: YsSpace.s4),
+          _BarBtn(label: 'Select all', onPress: onSelectAll),
+          const SizedBox(width: YsSpace.s2),
+          _BarBtn(label: 'Clear', onPress: hasSelection ? onClear : null),
           Expanded(
             // reverse anchors the action cluster to the right edge; when the
-            // bar is too narrow it scrolls with DONE still visible.
+            // bar is too narrow it scrolls with Done still visible.
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               reverse: true,
@@ -54,24 +56,24 @@ class BulkActionBar extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _BarBtn(
-                      icon: Icons.cable,
-                      label: 'CONNECT ALL',
-                      onTap: onConnectAll,
-                      enabled: hasSelection),
-                  const SizedBox(width: 8),
+                    icon: FLucideIcons.cable,
+                    label: 'Connect all',
+                    onPress: hasSelection ? onConnectAll : null,
+                  ),
+                  const SizedBox(width: YsSpace.s2),
                   _BarBtn(
-                      icon: Icons.terminal,
-                      label: 'RUN COMMAND',
-                      onTap: onRunCommand,
-                      enabled: hasSelection),
-                  const SizedBox(width: 8),
+                    icon: FLucideIcons.squareTerminal,
+                    label: 'Run command',
+                    onPress: hasSelection ? onRunCommand : null,
+                  ),
+                  const SizedBox(width: YsSpace.s2),
                   _BarBtn(
-                      icon: Icons.upload_file,
-                      label: 'PUSH FILES',
-                      onTap: onPushFiles,
-                      enabled: hasSelection),
-                  const SizedBox(width: 16),
-                  _BarBtn(label: 'DONE', onTap: onDone, accent: true),
+                    icon: FLucideIcons.upload,
+                    label: 'Push files',
+                    onPress: hasSelection ? onPushFiles : null,
+                  ),
+                  const SizedBox(width: YsSpace.s4),
+                  _BarBtn(label: 'Done', onPress: onDone, primary: true),
                 ],
               ),
             ),
@@ -82,48 +84,26 @@ class BulkActionBar extends StatelessWidget {
   }
 }
 
+/// One bar button; a null [onPress] disables it.
 class _BarBtn extends StatelessWidget {
   final IconData? icon;
   final String label;
-  final VoidCallback onTap;
-  final bool enabled;
-  final bool accent;
-  const _BarBtn(
-      {this.icon,
-      required this.label,
-      required this.onTap,
-      this.enabled = true,
-      this.accent = false});
+  final VoidCallback? onPress;
+  final bool primary;
+  const _BarBtn({
+    this.icon,
+    required this.label,
+    required this.onPress,
+    this.primary = false,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    final color = !enabled
-        ? AppColors.textTertiary
-        : accent
-            ? AppColors.accent
-            : AppColors.textSecondary;
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          border: Border.all(
-              color: accent && enabled ? AppColors.accent : AppColors.border),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 13, color: color),
-              const SizedBox(width: 6),
-            ],
-            Text(label,
-                style: TextStyle(
-                    color: color, fontSize: 12, letterSpacing: 0.3)),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => FButton(
+    variant: primary ? .primary : .outline,
+    size: .sm,
+    mainAxisSize: MainAxisSize.min,
+    onPress: onPress,
+    prefix: icon == null ? null : Icon(icon),
+    child: Text(label),
+  );
 }

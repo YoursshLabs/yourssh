@@ -4,9 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../providers/host_provider.dart';
-import '../theme/app_theme.dart';
 import '../util/import_parsers.dart';
-import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast, YsToastKind;
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 // ── Public parser functions (also used by tests) ──────────
 
@@ -69,7 +68,6 @@ class ImportSourceDef {
   final ImportSource source;
   final String label;
   final IconData icon;
-  final Color iconColor;
   final List<String> fileExtensions;
   final String hint;
   final ImportParser parser;
@@ -78,7 +76,6 @@ class ImportSourceDef {
     required this.source,
     required this.label,
     required this.icon,
-    required this.iconColor,
     required this.fileExtensions,
     required this.hint,
     required this.parser,
@@ -88,8 +85,7 @@ class ImportSourceDef {
     ImportSourceDef(
       source: ImportSource.sshConfig,
       label: '~/.ssh',
-      icon: Icons.terminal,
-      iconColor: Colors.blue,
+      icon: FLucideIcons.terminal,
       fileExtensions: ['config', 'conf', 'txt'],
       hint: 'Paste your ~/.ssh/config content or pick the file.',
       parser: const SshConfigParser(),
@@ -97,8 +93,7 @@ class ImportSourceDef {
     ImportSourceDef(
       source: ImportSource.csv,
       label: 'CSV',
-      icon: Icons.table_chart,
-      iconColor: Colors.green,
+      icon: FLucideIcons.table,
       fileExtensions: ['csv', 'txt'],
       hint: 'Columns: host, label, port, username, auth_type, group, tags.',
       parser: const CsvParser(),
@@ -106,8 +101,7 @@ class ImportSourceDef {
     ImportSourceDef(
       source: ImportSource.putty,
       label: 'PuTTY',
-      icon: Icons.computer,
-      iconColor: Colors.amber,
+      icon: FLucideIcons.monitor,
       fileExtensions: ['reg', 'txt'],
       hint: 'Export from PuTTY: Connection → SSH → Export all settings.',
       parser: const PuttyRegParser(),
@@ -115,8 +109,7 @@ class ImportSourceDef {
     ImportSourceDef(
       source: ImportSource.mobaXterm,
       label: 'MobaXterm',
-      icon: Icons.grid_view,
-      iconColor: Colors.purple,
+      icon: FLucideIcons.layoutGrid,
       fileExtensions: ['mxtsessions', 'txt'],
       hint: 'Export from MobaXterm: Tools → Export all sessions.',
       parser: const MobaXtermParser(),
@@ -124,8 +117,7 @@ class ImportSourceDef {
     ImportSourceDef(
       source: ImportSource.secureCrt,
       label: 'SecureCRT',
-      icon: Icons.lock,
-      iconColor: Colors.orange,
+      icon: FLucideIcons.lock,
       fileExtensions: ['xml', 'txt'],
       hint: 'Export from SecureCRT: Tools → Export Sessions as XML.',
       parser: const SecureCrtParser(),
@@ -133,8 +125,7 @@ class ImportSourceDef {
     ImportSourceDef(
       source: ImportSource.ansible,
       label: 'Ansible',
-      icon: Icons.settings_suggest,
-      iconColor: Colors.red,
+      icon: FLucideIcons.settings,
       fileExtensions: ['ini', 'yml', 'yaml', 'txt'],
       hint: 'Paste your Ansible INI inventory file.',
       parser: const AnsibleParser(),
@@ -142,8 +133,7 @@ class ImportSourceDef {
     ImportSourceDef(
       source: ImportSource.winScp,
       label: 'WinSCP',
-      icon: Icons.swap_horiz,
-      iconColor: Colors.teal,
+      icon: FLucideIcons.arrowLeftRight,
       fileExtensions: ['ini', 'txt'],
       hint: 'Export from WinSCP: Tools → Export/Backup Configuration.',
       parser: const WinScpParser(),
@@ -151,8 +141,7 @@ class ImportSourceDef {
     ImportSourceDef(
       source: ImportSource.termius,
       label: 'Termius',
-      icon: Icons.phonelink,
-      iconColor: Colors.indigo,
+      icon: FLucideIcons.smartphone,
       fileExtensions: ['termius', 'json', 'txt'],
       hint: 'Export from Termius: Settings → Export Hosts.',
       parser: const TermiusParser(),
@@ -160,8 +149,7 @@ class ImportSourceDef {
     ImportSourceDef(
       source: ImportSource.sshUri,
       label: 'SSH URI',
-      icon: Icons.link,
-      iconColor: Colors.cyan,
+      icon: FLucideIcons.link,
       fileExtensions: ['txt'],
       hint: 'One URI per line: ssh://user@host:port',
       parser: const SshUriParser(),
@@ -290,14 +278,20 @@ class _ImportPanelState extends State<ImportPanel> {
       })
       .length;
 
+  void _resetResult() {
+    _parsed = [];
+    _parseError = null;
+    _csvWarnings = [];
+  }
+
   @override
   Widget build(BuildContext context) {
     final existingHosts = context.read<HostProvider>().allHosts;
     return Container(
       width: 340,
       decoration: const BoxDecoration(
-        color: AppColors.sidebar,
-        border: Border(left: BorderSide(color: AppColors.border)),
+        color: YsColors.sidebar,
+        border: Border(left: BorderSide(color: YsColors.border)),
       ),
       child: Column(
         children: [
@@ -306,24 +300,27 @@ class _ImportPanelState extends State<ImportPanel> {
             child: _selectedSource == null
                 ? _buildSourcePicker()
                 : ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    padding: const EdgeInsets.fromLTRB(
+                        YsSpace.s4, YsSpace.s4, YsSpace.s4, YsSpace.s5),
                     children: [
                       _buildModeToggle(),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: YsSpace.s3),
                       if (_mode == _InputMode.file) _buildFileSection(),
                       if (_mode == _InputMode.paste) _buildPasteSection(),
                       if (_parseError != null) ...[
-                        const SizedBox(height: 8),
-                        Text(_parseError!, style: const TextStyle(color: AppColors.red, fontSize: 11)),
+                        const SizedBox(height: YsSpace.s2),
+                        Text(_parseError!,
+                            style: const TextStyle(
+                                color: YsColors.error, fontSize: 11)),
                       ],
                       if (_csvWarnings.isNotEmpty) ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: YsSpace.s2),
                         _buildWarnings(),
                       ],
                       if (_parsed.isNotEmpty) ...[
-                        const SizedBox(height: 16),
+                        const SizedBox(height: YsSpace.s4),
                         _buildPreview(existingHosts),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: YsSpace.s4),
                         _buildImportButton(context, existingHosts),
                       ],
                     ],
@@ -336,23 +333,22 @@ class _ImportPanelState extends State<ImportPanel> {
 
   Widget _buildSourcePicker() {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      padding: const EdgeInsets.fromLTRB(
+          YsSpace.s4, YsSpace.s4, YsSpace.s4, YsSpace.s5),
       children: [
         GridView.count(
           crossAxisCount: 3,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           childAspectRatio: 1.0,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
+          mainAxisSpacing: YsSpace.s2,
+          crossAxisSpacing: YsSpace.s2,
           children: ImportSourceDef.all
               .map((def) => _SourceCard(
                     def: def,
                     onTap: () => setState(() {
                       _selectedSource = def.source;
-                      _parsed = [];
-                      _parseError = null;
-                      _csvWarnings = [];
+                      _resetResult();
                     }),
                   ))
               .toList(),
@@ -369,39 +365,46 @@ class _ImportPanelState extends State<ImportPanel> {
     return Container(
       height: 52,
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+        border: Border(bottom: BorderSide(color: YsColors.border)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s4),
       child: Row(
         children: [
           if (sourceDef != null) ...[
-            GestureDetector(
-              onTap: () => setState(() {
-                _selectedSource = null;
-                _parsed = [];
-                _parseError = null;
-                _csvWarnings = [];
-              }),
-              child: const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: Icon(Icons.arrow_back, size: 16, color: AppColors.textSecondary),
+            Tooltip(
+              message: 'Back',
+              excludeFromSemantics: true,
+              child: FButton.icon(
+                variant: .ghost,
+                size: .sm,
+                semanticsLabel: 'Back',
+                onPress: () => setState(() {
+                  _selectedSource = null;
+                  _resetResult();
+                }),
+                child: const Icon(FLucideIcons.arrowLeft),
               ),
             ),
+            const SizedBox(width: YsSpace.s2),
           ],
           Expanded(
             child: Text(title,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: YsColors.foreground,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600)),
           ),
-          GestureDetector(
-            onTap: widget.onClose,
-            child: Container(
-              width: 28, height: 28,
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Icon(Icons.close, size: 14, color: AppColors.textSecondary),
+          Tooltip(
+            message: 'Close',
+            excludeFromSemantics: true,
+            child: FButton.icon(
+              variant: .ghost,
+              size: .sm,
+              semanticsLabel: 'Close',
+              onPress: widget.onClose,
+              child: const Icon(FLucideIcons.x),
             ),
           ),
         ],
@@ -409,46 +412,24 @@ class _ImportPanelState extends State<ImportPanel> {
     );
   }
 
+  /// From file / Paste text: [FTabs] used as a segmented control (the tabs
+  /// carry no content of their own).
   Widget _buildModeToggle() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          _modeTab('From file', _InputMode.file),
-          _modeTab('Paste text', _InputMode.paste),
-        ],
-      ),
-    );
-  }
-
-  Widget _modeTab(String label, _InputMode mode) {
-    final selected = _mode == mode;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() {
-          _mode = mode;
-          _parsed = [];
-          _parseError = null;
-          _csvWarnings = [];
+    return FTabs(
+      key: const Key('import-mode-tabs'),
+      control: .lifted(
+        index: _mode.index,
+        onChange: (i) => setState(() {
+          _mode = _InputMode.values[i];
+          _resetResult();
         }),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.textPrimary.withValues(alpha: 0.08) : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          alignment: Alignment.center,
-          child: Text(label,
-              style: TextStyle(
-                  color: selected ? AppColors.textPrimary : AppColors.textSecondary,
-                  fontSize: 12,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal)),
-        ),
       ),
+      children: [
+        FTabEntry(
+            label: const Text('From file'), child: const SizedBox.shrink()),
+        FTabEntry(
+            label: const Text('Paste text'), child: const SizedBox.shrink()),
+      ],
     );
   }
 
@@ -462,29 +443,21 @@ class _ImportPanelState extends State<ImportPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        GestureDetector(
-          onTap: _pickFile,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.upload_file_outlined, size: 16, color: AppColors.textSecondary),
-                const SizedBox(width: 8),
-                Text('Choose file ($extLabel)',
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-              ],
-            ),
+        FButton(
+          key: const Key('import-choose-file'),
+          variant: .outline,
+          onPress: _pickFile,
+          prefix: const Icon(FLucideIcons.upload),
+          child: Flexible(
+            child: Text('Choose file ($extLabel)',
+                maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
         ),
         if (sourceDef != null) ...[
           const SizedBox(height: 6),
-          Text(sourceDef.hint, style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+          Text(sourceDef.hint,
+              style: const TextStyle(
+                  color: YsColors.mutedForeground, fontSize: 11)),
         ],
       ],
     );
@@ -497,64 +470,60 @@ class _ImportPanelState extends State<ImportPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: TextField(
-            controller: _pasteCtrl,
-            maxLines: 10,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontFamily: 'monospace'),
-            decoration: const InputDecoration(
-              hintText: 'Paste SSH config, JSON, or CSV...',
-              hintStyle: TextStyle(color: AppColors.textTertiary, fontSize: 12),
-              contentPadding: EdgeInsets.all(12),
-              border: InputBorder.none,
-            ),
+        FTextField.multiline(
+          key: const Key('import-paste-field'),
+          control: FTextFieldControl.managed(controller: _pasteCtrl),
+          minLines: 10,
+          maxLines: 10,
+          autocorrect: false,
+          enableSuggestions: false,
+          hint: 'Paste SSH config, JSON, or CSV...',
+          style: .delta(
+            contentTextStyle: .delta([
+              .all(.delta(
+                fontFamily: kYsMonoFontFamily,
+                fontFamilyFallback: kYsMonoFontFallback,
+              )),
+            ]),
           ),
         ),
         if (hint != null) ...[
           const SizedBox(height: 6),
-          Text(hint, style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+          Text(hint,
+              style: const TextStyle(
+                  color: YsColors.mutedForeground, fontSize: 11)),
         ],
-        const SizedBox(height: 8),
-        GestureDetector(
-          onTap: _parsePaste,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: AppColors.border),
-            ),
-            alignment: Alignment.center,
-            child: const Text('Parse', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          ),
+        const SizedBox(height: YsSpace.s2),
+        FButton(
+          variant: .outline,
+          onPress: _parsePaste,
+          child: const Text('Parse'),
         ),
       ],
     );
   }
 
   Widget _buildWarnings() {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        title: Text(
-          '${_csvWarnings.length} row${_csvWarnings.length == 1 ? '' : 's'} skipped — click to expand',
-          style: const TextStyle(color: Colors.orange, fontSize: 11),
+    return FAccordion(
+      children: [
+        FAccordionItem(
+          title: Text(
+            '${_csvWarnings.length} row${_csvWarnings.length == 1 ? '' : 's'} skipped — click to expand',
+            style: const TextStyle(color: YsColors.warn, fontSize: 11),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: _csvWarnings
+                .map((w) => Padding(
+                      padding: const EdgeInsets.only(bottom: YsSpace.s1),
+                      child: Text(w,
+                          style: const TextStyle(
+                              color: YsColors.mutedForeground, fontSize: 11)),
+                    ))
+                .toList(),
+          ),
         ),
-        children: _csvWarnings
-            .map((w) => Padding(
-                  padding: const EdgeInsets.only(left: 8, bottom: 4),
-                  child: Text(w,
-                      style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 11)),
-                ))
-            .toList(),
-      ),
+      ],
     );
   }
 
@@ -564,14 +533,18 @@ class _ImportPanelState extends State<ImportPanel> {
       children: [
         Text(
           '${_parsed.length} host${_parsed.length == 1 ? '' : 's'} found',
-          style: const TextStyle(color: AppColors.textTertiary, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 0.8),
+          style: const TextStyle(
+              color: YsColors.mutedForeground,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: YsSpace.s2),
         Container(
           decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.border),
+            color: YsColors.card,
+            borderRadius: BorderRadius.circular(YsRadius.card),
+            border: Border.all(color: YsColors.border),
           ),
           child: Column(
             children: List.generate(_parsed.length, (i) {
@@ -595,20 +568,11 @@ class _ImportPanelState extends State<ImportPanel> {
 
   Widget _buildImportButton(BuildContext context, List<Host> existingHosts) {
     final count = _effectiveImportCount(existingHosts);
-    return GestureDetector(
-      onTap: count == 0 ? null : () => _doImport(context),
-      child: Container(
-        height: 44,
-        decoration: BoxDecoration(
-          color: count == 0 ? AppColors.accentDim : AppColors.accent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          'IMPORT $count HOST${count == 1 ? '' : 'S'}',
-          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 1),
-        ),
-      ),
+    return FButton(
+      key: const Key('import-submit'),
+      variant: .primary,
+      onPress: count == 0 ? null : () => _doImport(context),
+      child: Text('IMPORT $count HOST${count == 1 ? '' : 'S'}'),
     );
   }
 
@@ -649,52 +613,41 @@ class _ImportPanelState extends State<ImportPanel> {
 
 // ── Source Card ───────────────────────────────────────────
 
-class _SourceCard extends StatefulWidget {
+class _SourceCard extends StatelessWidget {
   final ImportSourceDef def;
   final VoidCallback onTap;
   const _SourceCard({required this.def, required this.onTap});
 
   @override
-  State<_SourceCard> createState() => _SourceCardState();
-}
-
-class _SourceCardState extends State<_SourceCard> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: _hovered
-                ? AppColors.textPrimary.withValues(alpha: 0.06)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: AppColors.textPrimary.withValues(alpha: 0.15),
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(widget.def.icon, color: widget.def.iconColor, size: 28),
-              const SizedBox(height: 6),
-              Text(
-                widget.def.label,
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: AppColors.textSecondary,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
+    return FTappable(
+      semanticsLabel: 'Import from ${def.label}',
+      onPress: onTap,
+      builder: (context, variants, child) => Container(
+        decoration: BoxDecoration(
+          color: variants.contains(FTappableVariant.hovered) ||
+                  variants.contains(FTappableVariant.focused)
+              ? YsColors.secondary
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(YsRadius.card),
+          border: Border.all(color: YsColors.border),
         ),
+        child: child,
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(def.icon, color: YsColors.accentText, size: 28),
+          const SizedBox(height: 6),
+          Text(
+            def.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+                fontSize: 11, color: YsColors.mutedForeground),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
@@ -726,76 +679,53 @@ class _PreviewRow extends StatelessWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(
+              horizontal: YsSpace.s3 - 2, vertical: YsSpace.s2),
           child: Row(
             children: [
-              Checkbox(
+              FCheckbox(
                 value: included,
-                onChanged: (v) => onToggleInclude(v ?? true),
-                side: const BorderSide(color: AppColors.textSecondary),
-                activeColor: AppColors.accent,
-                checkColor: Colors.black,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
+                semanticsLabel: 'Include ${host.label}',
+                onChange: onToggleInclude,
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: YsSpace.s2),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(host.label,
-                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                            color: YsColors.foreground,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                     Text(
                       '${host.username}@${host.host}:${host.port}',
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+                      style: const TextStyle(
+                          color: YsColors.mutedForeground, fontSize: 10),
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
               if (isDuplicate && included) ...[
-                const SizedBox(width: 4),
-                _DuplicateBadge(
-                    overwrite: overwrite,
-                    onToggle: () => onToggleOverwrite(!overwrite)),
+                const SizedBox(width: YsSpace.s1),
+                FButton(
+                  key: const Key('import-duplicate-toggle'),
+                  variant: overwrite ? .secondary : .outline,
+                  size: .xs,
+                  mainAxisSize: MainAxisSize.min,
+                  onPress: () => onToggleOverwrite(!overwrite),
+                  child: Text(overwrite ? 'Overwrite' : 'Skip dup'),
+                ),
               ],
             ],
           ),
         ),
-        if (showDivider) const Divider(height: 1, color: AppColors.border, indent: 10),
+        if (showDivider) const FDivider(),
       ],
-    );
-  }
-}
-
-class _DuplicateBadge extends StatelessWidget {
-  final bool overwrite;
-  final VoidCallback onToggle;
-
-  const _DuplicateBadge({required this.overwrite, required this.onToggle});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onToggle,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        decoration: BoxDecoration(
-          color: overwrite ? AppColors.blue.withValues(alpha: 0.15) : Colors.orange.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: overwrite ? AppColors.blue.withValues(alpha: 0.5) : Colors.orange.withValues(alpha: 0.5),
-          ),
-        ),
-        child: Text(
-          overwrite ? 'Overwrite' : 'Skip dup',
-          style: TextStyle(
-              color: overwrite ? AppColors.blue : Colors.orange,
-              fontSize: 9,
-              fontWeight: FontWeight.w600),
-        ),
-      ),
     );
   }
 }

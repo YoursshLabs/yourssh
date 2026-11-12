@@ -7,16 +7,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/services/bulk_action_service.dart';
 import 'package:yourssh/widgets/bulk/bulk_run_dialog.dart';
-import 'package:yourssh_snippets/yourssh_snippets.dart';
 import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
-import 'package:yourssh_ui/yourssh_ui.dart' show showYsDialog;
+import 'package:yourssh_snippets/yourssh_snippets.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show showYsDialog, YsDialogFrame;
+
+import '../helpers/ys_test_app.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   Widget wrap(Widget child) => ChangeNotifierProvider(
         create: (_) => SnippetProvider(),
-        child: MaterialApp(builder: ysRootBuilder, home: Scaffold(body: child)),
+        child: ysTestApp(child),
       );
 
   testWidgets('runs a command and shows per-host results', (tester) async {
@@ -108,5 +110,51 @@ dialogCtx, barrierDismissible: false, builder: (_) => BulkRunDialog(
 
     gate.complete((stdout: '', stderr: '', exitCode: 0));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('Enter in the command field starts the run', (tester) async {
+    var execCount = 0;
+    final service = BulkActionService(exec: (h, c) async {
+      execCount++;
+      return (stdout: 'ok', stderr: '', exitCode: 0);
+    });
+    await tester.pumpWidget(wrap(BulkRunDialog(
+        hosts: [Host(label: 'a', host: 'a.x', username: 'u')],
+        serviceOverride: service)));
+    await tester.tap(find.byKey(const Key('bulk-command-field')));
+    await tester.enterText(
+        find.byKey(const Key('bulk-command-field')), 'uptime');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(execCount, 1);
+    expect(find.textContaining('1 ok'), findsOneWidget);
+  });
+
+  testWidgets('does not overflow at 900x600 with long host labels',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final long = 'h' * 60;
+    final service = BulkActionService(
+        exec: (h, c) async => (stdout: 'x\n' * 5, stderr: '', exitCode: 0));
+    await tester.pumpWidget(wrap(BulkRunDialog(hosts: [
+      Host(label: long, host: 'a.x', username: 'u'),
+      Host(label: '${long}b', host: 'b.x', username: 'u'),
+    ], serviceOverride: service)));
+    await tester.pumpAndSettle();
+    final box = tester.getRect(find.byType(YsDialogFrame));
+    expect(box.height, lessThanOrEqualTo(600),
+        reason: 'dialog fits the 900x600 window');
+    expect(box.width, lessThanOrEqualTo(900));
+    expect(tester.takeException(), isNull);
+    await tester.enterText(
+        find.byKey(const Key('bulk-command-field')), 'uptime');
+    await tester.tap(find.text('RUN'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('DIFF'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 }

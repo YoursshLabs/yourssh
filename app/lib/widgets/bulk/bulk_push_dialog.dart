@@ -11,8 +11,9 @@ import '../../services/bulk_action_service.dart';
 import '../../services/sftp_file_ops_service.dart';
 import '../../services/sftp_transfer_service.dart';
 import '../../services/ssh_service.dart';
-import '../../theme/app_theme.dart';
+import '../../theme/app_theme.dart' show AppSnack;
 import '../../util/bulk_format.dart';
+import 'bulk_dialog_chrome.dart';
 import 'bulk_host_status_list.dart';
 import 'bulk_run_controller.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
@@ -161,189 +162,176 @@ class _BulkPushDialogState extends State<BulkPushDialog> {
       child: YsDialogFrame(
         maxWidth: 760,
         padding: EdgeInsets.zero,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: SizedBox(
-            width: 760,
-            height: 600,
-            child: Column(
-              children: [
-                Container(
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: const BoxDecoration(
-                    color: AppColors.sidebar,
-                    border:
-                        Border(bottom: BorderSide(color: AppColors.border)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.upload_file,
-                          size: 15, color: AppColors.textSecondary),
-                      const SizedBox(width: 8),
-                      Text('Push files to ${widget.hosts.length} hosts',
-                          style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.close,
-                            size: 16, color: AppColors.textSecondary),
-                        onPressed: _close,
+        child: BulkDialogBody(
+          width: 760,
+          height: 600,
+          child: Column(
+            children: [
+              BulkDialogHeader(
+                icon: FLucideIcons.upload,
+                title: 'Push files to ${widget.hosts.length} hosts',
+                onClose: _close,
+              ),
+              Padding(
+                padding: const EdgeInsets.all(YsSpace.s3),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: YsSpace.s2,
+                      runSpacing: YsSpace.s2,
+                      children: [
+                        FButton(
+                          variant: .outline,
+                          size: .sm,
+                          mainAxisSize: MainAxisSize.min,
+                          onPress: running ? null : _addFiles,
+                          prefix: const Icon(FLucideIcons.file),
+                          child: const Text('ADD FILES'),
+                        ),
+                        FButton(
+                          variant: .outline,
+                          size: .sm,
+                          mainAxisSize: MainAxisSize.min,
+                          onPress: running ? null : _addFolder,
+                          prefix: const Icon(FLucideIcons.folder),
+                          child: const Text('ADD FOLDER'),
+                        ),
+                      ],
+                    ),
+                    if (_sources.isNotEmpty) ...[
+                      const SizedBox(height: YsSpace.s2),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 120),
+                        child: SingleChildScrollView(
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final s in _sources)
+                                _SourceChip(
+                                  source: s,
+                                  onRemove: running
+                                      ? null
+                                      : () => setState(() => _sources.remove(s)),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: running ? null : _addFiles,
-                            icon: const Icon(Icons.insert_drive_file_outlined,
-                                size: 14),
-                            label: const Text('ADD FILES',
-                                style: TextStyle(fontSize: 11)),
-                          ),
-                          const SizedBox(width: 8),
-                          OutlinedButton.icon(
-                            onPressed: running ? null : _addFolder,
-                            icon:
-                                const Icon(Icons.folder_outlined, size: 14),
-                            label: const Text('ADD FOLDER',
-                                style: TextStyle(fontSize: 11)),
-                          ),
-                        ],
-                      ),
-                      if (_sources.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 120),
-                          child: SingleChildScrollView(
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (final s in _sources)
-                                  Chip(
-                                    backgroundColor: AppColors.card,
-                                    side: const BorderSide(
-                                        color: AppColors.border),
-                                    label: Text(
-                                        '${s.isDirectory ? '📁 ' : ''}${s.name} · ${formatByteSize(s.bytes)}',
-                                        style: const TextStyle(
-                                            color: AppColors.textPrimary,
-                                            fontSize: 11)),
-                                    deleteIcon:
-                                        const Icon(Icons.close, size: 12),
-                                    onDeleted: running
-                                        ? null
-                                        : () =>
-                                            setState(() => _sources.remove(s)),
-                                  ),
-                              ],
+                    const SizedBox(height: YsSpace.s3 - 2),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: YsSpace.s2 + 2),
+                          child: Text('Destination',
+                              style: TextStyle(
+                                  color: YsColors.mutedForeground,
+                                  fontSize: 12)),
+                        ),
+                        const SizedBox(width: YsSpace.s2),
+                        Expanded(
+                          child: FTextField(
+                            key: const Key('bulk-dest-field'),
+                            control: FTextFieldControl.managed(
+                              controller: _destController,
+                              onChange: (_) => setState(() {}),
+                            ),
+                            enabled: !running,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            hint: '/absolute/remote/path',
+                            error: _destValid
+                                ? null
+                                : const Text('Must be an absolute path'),
+                            style: .delta(
+                              contentTextStyle: .delta([
+                                .all(.delta(
+                                  fontFamily: kYsMonoFontFamily,
+                                  fontFamilyFallback: kYsMonoFontFallback,
+                                )),
+                              ]),
                             ),
                           ),
                         ),
+                        const SizedBox(width: YsSpace.s2),
+                        FButton(
+                          variant: running ? .destructive : .primary,
+                          mainAxisSize: MainAxisSize.min,
+                          onPress: running
+                              ? _controller.cancel
+                              : (_canPush ? _push : null),
+                          child: Text(running ? 'CANCEL' : 'PUSH'),
+                        ),
                       ],
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          const Text('Destination',
-                              style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 12)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              key: const Key('bulk-dest-field'),
-                              controller: _destController,
-                              enabled: !running,
-                              onChanged: (_) => setState(() {}),
-                              style: const TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontSize: 13,
-                                  fontFamily: 'monospace'),
-                              decoration: InputDecoration(
-                                hintText: '/absolute/remote/path',
-                                hintStyle: const TextStyle(
-                                    color: AppColors.textTertiary,
-                                    fontSize: 12),
-                                errorText: _destValid
-                                    ? null
-                                    : 'Must be an absolute path',
-                                isDense: true,
-                                filled: true,
-                                fillColor: AppColors.card,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: const BorderSide(
-                                      color: AppColors.border),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  running ? AppColors.red : AppColors.accent,
-                              foregroundColor: Colors.black,
-                            ),
-                            onPressed: running
-                                ? _controller.cancel
-                                : (_canPush ? _push : null),
-                            child: Text(running ? 'CANCEL' : 'PUSH',
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600)),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      const Text('Existing remote files will be overwritten.',
-                          style: TextStyle(
-                              color: AppColors.orange, fontSize: 11)),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: YsSpace.s2 - 2),
+                    const Text('Existing remote files will be overwritten.',
+                        style: TextStyle(color: YsColors.warn, fontSize: 11)),
+                  ],
                 ),
-                const Divider(height: 1, color: AppColors.border),
-                Expanded(
-                    child:
-                        BulkHostStatusList(results: _controller.results)),
-                Container(
-                  height: 36,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: const BoxDecoration(
-                    color: AppColors.sidebar,
-                    border: Border(top: BorderSide(color: AppColors.border)),
-                  ),
-                  child: Row(
-                    children: [
-                      if (_controller.hasRun)
-                        Text(
-                            '$ok ok · $failed failed${cancelled > 0 ? ' · $cancelled cancelled' : ''}',
-                            style: const TextStyle(
-                                color: AppColors.textSecondary, fontSize: 11)),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: _close,
-                        child: const Text('CLOSE',
-                            style: TextStyle(
-                                color: AppColors.textSecondary, fontSize: 11)),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const FDivider(),
+              Expanded(child: BulkHostStatusList(results: _controller.results)),
+              BulkDialogFooter(
+                summary: _controller.hasRun
+                    ? '$ok ok · $failed failed${cancelled > 0 ? ' · $cancelled cancelled' : ''}'
+                    : null,
+                onClose: _close,
+              ),
+            ],
           ),
         ),
       ),
     );
   }
+}
+
+/// A picked source: icon, `name · size` and a tooltipped remove button.
+class _SourceChip extends StatelessWidget {
+  final BulkPushSource source;
+  final VoidCallback? onRemove;
+  const _SourceChip({required this.source, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.only(left: YsSpace.s2 + 2),
+    decoration: BoxDecoration(
+      color: YsColors.secondary,
+      borderRadius: BorderRadius.circular(YsRadius.control),
+      border: Border.all(color: YsColors.border),
+    ),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 320),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(source.isDirectory ? FLucideIcons.folder : FLucideIcons.file,
+              size: 12, color: YsColors.mutedForeground),
+          const SizedBox(width: YsSpace.s1 + 2),
+          Flexible(
+            child: Text(
+              '${source.name} · ${formatByteSize(source.bytes)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: YsColors.foreground, fontSize: 11),
+            ),
+          ),
+          Tooltip(
+            message: 'Remove ${source.name}',
+            excludeFromSemantics: true,
+            child: FButton.icon(
+              variant: .ghost,
+              size: .xs,
+              semanticsLabel: 'Remove ${source.name}',
+              onPress: onRemove,
+              child: const Icon(FLucideIcons.x),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }

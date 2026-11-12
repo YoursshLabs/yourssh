@@ -4,8 +4,9 @@ import 'package:yourssh/models/bulk_result.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/widgets/bulk/bulk_host_status_list.dart';
 
-Widget _wrap(Widget child) =>
-    MaterialApp(home: Scaffold(body: child));
+import '../helpers/ys_test_app.dart';
+
+Widget _wrap(Widget child) => ysTestApp(child);
 
 void main() {
   final host = Host(label: 'web-1', host: 'w1.x', username: 'root');

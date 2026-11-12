@@ -6,7 +6,7 @@ import '../../models/bulk_result.dart';
 import '../../models/host.dart';
 import '../../services/bulk_action_service.dart';
 import '../../services/ssh_service.dart';
-import '../../theme/app_theme.dart';
+import 'bulk_dialog_chrome.dart';
 import 'bulk_diff_view.dart';
 import 'bulk_host_status_list.dart';
 import 'bulk_run_controller.dart';
@@ -118,169 +118,88 @@ class _BulkRunDialogState extends State<BulkRunDialog> {
       child: YsDialogFrame(
         maxWidth: 900,
         padding: EdgeInsets.zero,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: SizedBox(
-            width: 900,
-            height: 650,
-            child: Column(
-              children: [
-                // Header
-                Container(
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: const BoxDecoration(
-                    color: AppColors.sidebar,
-                    border:
-                        Border(bottom: BorderSide(color: AppColors.border)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.terminal,
-                          size: 15, color: AppColors.textSecondary),
-                      const SizedBox(width: 8),
-                      Text('Run command on ${widget.hosts.length} hosts',
-                          style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.close,
-                            size: 16, color: AppColors.textSecondary),
-                        onPressed: _close,
-                      ),
-                    ],
-                  ),
-                ),
-                // Command row
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          key: const Key('bulk-command-field'),
-                          controller: _commandController,
-                          onSubmitted: (_) => _run(),
-                          style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 13,
-                              fontFamily: 'monospace'),
-                          decoration: InputDecoration(
-                            hintText: 'Command to run on every host…',
-                            hintStyle: const TextStyle(
-                                color: AppColors.textTertiary, fontSize: 13),
-                            isDense: true,
-                            filled: true,
-                            fillColor: AppColors.card,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide:
-                                  const BorderSide(color: AppColors.border),
-                            ),
-                          ),
+        child: BulkDialogBody(
+          width: 900,
+          height: 650,
+          child: Column(
+            children: [
+              BulkDialogHeader(
+                icon: FLucideIcons.squareTerminal,
+                title: 'Run command on ${widget.hosts.length} hosts',
+                onClose: _close,
+              ),
+              Padding(
+                padding: const EdgeInsets.all(YsSpace.s3),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: FTextField(
+                        key: const Key('bulk-command-field'),
+                        control: FTextFieldControl.managed(
+                            controller: _commandController),
+                        onSubmit: (_) => _run(),
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        hint: 'Command to run on every host…',
+                        style: .delta(
+                          contentTextStyle: .delta([
+                            .all(.delta(
+                              fontFamily: kYsMonoFontFamily,
+                              fontFamilyFallback: kYsMonoFontFallback,
+                            )),
+                          ]),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      PopupMenuButton<Snippet>(
-                        tooltip: 'Insert snippet',
-                        color: AppColors.card,
-                        icon: const Icon(Icons.data_object,
-                            size: 18, color: AppColors.textSecondary),
-                        itemBuilder: (_) => [
-                          for (final s in snippets)
-                            PopupMenuItem(
-                              value: s,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(s.label,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                          color: AppColors.textPrimary,
-                                          fontSize: 12)),
-                                  Text(s.command,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                          color: AppColors.textTertiary,
-                                          fontSize: 10,
-                                          fontFamily: 'monospace')),
-                                ],
-                              ),
-                            ),
-                        ],
-                        onSelected: (s) =>
-                            setState(() => _commandController.text = s.command),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              running ? AppColors.red : AppColors.accent,
-                          foregroundColor: Colors.black,
-                        ),
-                        onPressed: running ? _controller.cancel : _run,
-                        child: Text(running ? 'CANCEL' : 'RUN',
-                            style: const TextStyle(
-                                fontSize: 12, fontWeight: FontWeight.w600)),
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: YsSpace.s2),
+                    _SnippetMenu(
+                      snippets: snippets,
+                      onSelected: (s) =>
+                          setState(() => _commandController.text = s.command),
+                    ),
+                    const SizedBox(width: YsSpace.s2),
+                    FButton(
+                      variant: running ? .destructive : .primary,
+                      mainAxisSize: MainAxisSize.min,
+                      onPress: running ? _controller.cancel : _run,
+                      child: Text(running ? 'CANCEL' : 'RUN'),
+                    ),
+                  ],
                 ),
-                // Tabs
-                Container(
-                  decoration: const BoxDecoration(
-                    border:
-                        Border(bottom: BorderSide(color: AppColors.border)),
-                  ),
-                  child: Row(
-                    children: [
-                      _TabBtn(
-                          label: 'RESULTS',
-                          active: !_showDiff,
-                          onTap: () => setState(() => _showDiff = false)),
-                      _TabBtn(
-                          label: 'DIFF',
-                          active: _showDiff,
-                          enabled: diffReady,
-                          onTap: () => setState(() => _showDiff = true)),
-                    ],
-                  ),
+              ),
+              FTabs(
+                key: const Key('bulk-run-tabs'),
+                control: .lifted(
+                  index: _showDiff ? 1 : 0,
+                  onChange: (i) {
+                    // DIFF stays inert until a run has finished.
+                    if (i == 1 && !diffReady) return;
+                    setState(() => _showDiff = i == 1);
+                  },
                 ),
-                Expanded(
-                  child: _showDiff
-                      ? BulkDiffView(results: _controller.results)
-                      : BulkHostStatusList(results: _controller.results),
-                ),
-                // Footer
-                Container(
-                  height: 36,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: const BoxDecoration(
-                    color: AppColors.sidebar,
-                    border: Border(top: BorderSide(color: AppColors.border)),
-                  ),
-                  child: Row(
-                    children: [
-                      if (_controller.hasRun)
-                        Text(_summary,
-                            style: const TextStyle(
-                                color: AppColors.textSecondary, fontSize: 11)),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: _close,
-                        child: const Text('CLOSE',
-                            style: TextStyle(
-                                color: AppColors.textSecondary, fontSize: 11)),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                children: [
+                  FTabEntry(
+                      label: const Text('RESULTS'),
+                      child: const SizedBox.shrink()),
+                  FTabEntry(
+                      label: Text('DIFF',
+                          style: diffReady
+                              ? null
+                              : const TextStyle(color: YsColors.off)),
+                      child: const SizedBox.shrink()),
+                ],
+              ),
+              const FDivider(),
+              Expanded(
+                child: _showDiff
+                    ? BulkDiffView(results: _controller.results)
+                    : BulkHostStatusList(results: _controller.results),
+              ),
+              BulkDialogFooter(
+                summary: _controller.hasRun ? _summary : null,
+                onClose: _close,
+              ),
+            ],
           ),
         ),
       ),
@@ -288,43 +207,49 @@ class _BulkRunDialogState extends State<BulkRunDialog> {
   }
 }
 
-class _TabBtn extends StatelessWidget {
-  final String label;
-  final bool active;
-  final bool enabled;
-  final VoidCallback onTap;
-  const _TabBtn(
-      {required this.label,
-      required this.active,
-      this.enabled = true,
-      required this.onTap});
+/// Icon button opening the saved snippets; picking one fills the command.
+class _SnippetMenu extends StatelessWidget {
+  final List<Snippet> snippets;
+  final ValueChanged<Snippet> onSelected;
+  const _SnippetMenu({required this.snippets, required this.onSelected});
 
   @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: active ? AppColors.accent : Colors.transparent,
-              width: 2,
+  Widget build(BuildContext context) => FPopoverMenu(
+    menuAnchor: Alignment.topRight,
+    childAnchor: Alignment.bottomRight,
+    menuBuilder: (context, controller, _) => [
+      FItemGroup(
+        children: [
+          for (final s in snippets)
+            FItem(
+              title: Text(s.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(
+                s.command,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: kYsMonoFontFamily,
+                  fontFamilyFallback: kYsMonoFontFallback,
+                ),
+              ),
+              onPress: () {
+                controller.hide();
+                onSelected(s);
+              },
             ),
-          ),
-        ),
-        child: Text(label,
-            style: TextStyle(
-              color: !enabled
-                  ? AppColors.textTertiary
-                  : active
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            )),
+        ],
       ),
-    );
-  }
+    ],
+    builder: (context, controller, _) => Tooltip(
+      message: 'Insert snippet',
+      excludeFromSemantics: true,
+      child: FButton.icon(
+        variant: .outline,
+        semanticsLabel: 'Insert snippet',
+        // Nothing to pick from: the old empty popup is just inert here.
+        onPress: snippets.isEmpty ? null : controller.toggle,
+        child: const Icon(FLucideIcons.braces),
+      ),
+    ),
+  );
 }

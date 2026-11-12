@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../models/bulk_result.dart';
-import '../../theme/app_theme.dart';
 import '../../util/bulk_diff.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Diff tab of the bulk Run-command dialog: groups identical outputs
 /// (largest group = default baseline), shows a unified diff of any group
@@ -31,7 +31,7 @@ class _BulkDiffViewState extends State<BulkDiffView> {
     if (groups.isEmpty) {
       return const Center(
         child: Text('No successful output to compare.',
-            style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+            style: TextStyle(color: YsColors.mutedForeground, fontSize: 12)),
       );
     }
     // Normalize stale indices when a re-run produced fewer groups.
@@ -44,16 +44,16 @@ class _BulkDiffViewState extends State<BulkDiffView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          width: 250,
+          width: 280,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(YsSpace.s3),
                 child: Text(
                     '${groups.length} distinct output${groups.length == 1 ? '' : 's'}',
                     style: const TextStyle(
-                        color: AppColors.textPrimary,
+                        color: YsColors.foreground,
                         fontSize: 12,
                         fontWeight: FontWeight.w600)),
               ),
@@ -74,7 +74,7 @@ class _BulkDiffViewState extends State<BulkDiffView> {
                         padding: const EdgeInsets.fromLTRB(12, 16, 12, 4),
                         child: Text('Failed (${failed.length})',
                             style: const TextStyle(
-                                color: AppColors.red,
+                                color: YsColors.error,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600)),
                       ),
@@ -86,15 +86,17 @@ class _BulkDiffViewState extends State<BulkDiffView> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(r.host.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                      color: AppColors.textPrimary,
+                                      color: YsColors.foreground,
                                       fontSize: 11)),
                               if (r.error != null)
                                 Text(r.error!,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
-                                        color: AppColors.textTertiary,
+                                        color: YsColors.mutedForeground,
                                         fontSize: 10)),
                             ],
                           ),
@@ -104,18 +106,23 @@ class _BulkDiffViewState extends State<BulkDiffView> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.all(8),
-                child: OutlinedButton(
-                  onPressed: () => setState(() => _compare = !_compare),
-                  child: Text(
-                      _compare ? 'BACK TO GROUPS' : 'COMPARE TWO HOSTS',
-                      style: const TextStyle(fontSize: 11)),
+                padding: const EdgeInsets.all(YsSpace.s2),
+                child: FButton(
+                  variant: .outline,
+                  size: .sm,
+                  onPress: () => setState(() => _compare = !_compare),
+                  child: Flexible(
+                    child: Text(
+                        _compare ? 'BACK TO GROUPS' : 'COMPARE TWO HOSTS',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ),
                 ),
               ),
             ],
           ),
         ),
-        const VerticalDivider(width: 1, color: AppColors.border),
+        const FDivider(axis: Axis.vertical),
         Expanded(
           child: _compare
               ? _HostCompare(
@@ -152,16 +159,17 @@ class _GroupTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final preview = group.hostLabels.take(3).join(', ') +
         (group.size > 3 ? ' +${group.size - 3}' : '');
-    return InkWell(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        padding: const EdgeInsets.all(10),
+        margin: const EdgeInsets.symmetric(horizontal: YsSpace.s2, vertical: 3),
+        padding: const EdgeInsets.all(YsSpace.s3 - 2),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.cardHover : AppColors.card,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-              color: isSelected ? AppColors.accent : AppColors.border),
+          color: isSelected ? YsColors.secondary : YsColors.card,
+          borderRadius: BorderRadius.circular(YsRadius.control),
+          border:
+              Border.all(color: isSelected ? YsColors.primary : YsColors.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -172,29 +180,22 @@ class _GroupTile extends StatelessWidget {
                   child: Text(
                       '${group.size} host${group.size == 1 ? '' : 's'}',
                       style: const TextStyle(
-                          color: AppColors.textPrimary,
+                          color: YsColors.foreground,
                           fontSize: 12,
                           fontWeight: FontWeight.w600)),
                 ),
                 if (isBaseline)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: AppColors.accent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text('BASELINE',
-                        style: TextStyle(
-                            color: AppColors.accent, fontSize: 9)),
-                  )
+                  const YsStatusBadge('BASELINE', status: YsStatus.accent)
                 else
                   Tooltip(
                     message: 'Set as baseline',
-                    child: InkWell(
-                      onTap: onSetBaseline,
-                      child: const Icon(Icons.flag_outlined,
-                          size: 13, color: AppColors.textTertiary),
+                    excludeFromSemantics: true,
+                    child: FButton.icon(
+                      variant: .ghost,
+                      size: .xs,
+                      semanticsLabel: 'Set as baseline',
+                      onPress: onSetBaseline,
+                      child: const Icon(FLucideIcons.flag),
                     ),
                   ),
               ],
@@ -204,7 +205,7 @@ class _GroupTile extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    color: AppColors.textSecondary, fontSize: 10)),
+                    color: YsColors.mutedForeground, fontSize: 10)),
           ],
         ),
       ),
@@ -219,12 +220,9 @@ class _PlainOutput extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(YsSpace.s3),
       child: SelectableText(output.isEmpty ? '(empty output)' : output,
-          style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 12,
-              fontFamily: 'monospace')),
+          style: _mono(YsColors.foreground)),
     );
   }
 }
@@ -241,18 +239,16 @@ class _UnifiedDiff extends StatelessWidget {
       itemBuilder: (_, i) {
         final l = lines[i];
         final (prefix, color, bg) = switch (l.op) {
-          DiffOp.added => ('+ ', AppColors.success,
-              AppColors.success.withValues(alpha: 0.08)),
-          DiffOp.removed => ('- ', AppColors.red,
-              AppColors.red.withValues(alpha: 0.08)),
-          DiffOp.same => ('  ', AppColors.textSecondary, null),
+          DiffOp.added =>
+            ('+ ', YsColors.ok, YsColors.ok.withValues(alpha: 0.08)),
+          DiffOp.removed =>
+            ('- ', YsColors.error, YsColors.error.withValues(alpha: 0.08)),
+          DiffOp.same => ('  ', YsColors.mutedForeground, null),
         };
         return Container(
           color: bg,
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Text('$prefix${l.text}',
-              style: TextStyle(
-                  color: color, fontSize: 12, fontFamily: 'monospace')),
+          child: Text('$prefix${l.text}', style: _mono(color)),
         );
       },
     );
@@ -277,36 +273,47 @@ class _HostCompare extends StatelessWidget {
     final a = ok.where((r) => r.host.id == hostAId).firstOrNull;
     final b = ok.where((r) => r.host.id == hostBId).firstOrNull;
 
-    DropdownButton<String> picker(String? value, bool isA) =>
-        DropdownButton<String>(
-          value: value,
-          hint: Text(isA ? 'Host A' : 'Host B',
-              style: const TextStyle(
-                  color: AppColors.textTertiary, fontSize: 12)),
-          dropdownColor: AppColors.card,
-          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-          items: [
-            for (final r in ok)
-              DropdownMenuItem(value: r.host.id, child: Text(r.host.label)),
-          ],
-          onChanged: (v) => onPick(isA ? v : hostAId, isA ? hostBId : v),
+    Widget picker(String? value, bool isA) => SizedBox(
+          width: 200,
+          child: FSelect<String>.rich(
+            // Re-created when the options change so a stale pick never
+            // lingers (a re-run can drop hosts).
+            key: ValueKey(isA ? 'bulk-compare-a' : 'bulk-compare-b'),
+            control: .lifted(
+              value: ok.any((r) => r.host.id == value) ? value : null,
+              onChange: (v) => onPick(isA ? v : hostAId, isA ? hostBId : v),
+            ),
+            format: (id) =>
+                ok.firstWhere((r) => r.host.id == id).host.label,
+            hint: isA ? 'Host A' : 'Host B',
+            children: [
+              for (final r in ok)
+                FSelectItem<String>(
+                    title: Text(r.host.label,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    value: r.host.id),
+            ],
+          ),
         );
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              picker(hostAId, true),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Icon(Icons.compare_arrows,
-                    size: 16, color: AppColors.textSecondary),
-              ),
-              picker(hostBId, false),
-            ],
+          padding: const EdgeInsets.all(YsSpace.s2),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                picker(hostAId, true),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: YsSpace.s3),
+                  child: Icon(FLucideIcons.arrowLeftRight,
+                      size: 16, color: YsColors.mutedForeground),
+                ),
+                picker(hostBId, false),
+              ],
+            ),
           ),
         ),
         Expanded(
@@ -314,7 +321,7 @@ class _HostCompare extends StatelessWidget {
               ? const Center(
                   child: Text('Pick two hosts to compare.',
                       style: TextStyle(
-                          color: AppColors.textTertiary, fontSize: 12)))
+                          color: YsColors.mutedForeground, fontSize: 12)))
               : _SideBySide(
                   rows: sideBySideRows(lineDiff(
                       a.stdout.trimRight(), b.stdout.trimRight()))),
@@ -330,23 +337,21 @@ class _SideBySide extends StatelessWidget {
 
   Widget _cell(DiffLine? line) {
     final color = switch (line?.op) {
-      DiffOp.removed => AppColors.red,
-      DiffOp.added => AppColors.success,
-      DiffOp.same => AppColors.textSecondary,
+      DiffOp.removed => YsColors.error,
+      DiffOp.added => YsColors.ok,
+      DiffOp.same => YsColors.mutedForeground,
       null => Colors.transparent,
     };
     final bg = switch (line?.op) {
-      DiffOp.removed => AppColors.red.withValues(alpha: 0.08),
-      DiffOp.added => AppColors.success.withValues(alpha: 0.08),
+      DiffOp.removed => YsColors.error.withValues(alpha: 0.08),
+      DiffOp.added => YsColors.ok.withValues(alpha: 0.08),
       _ => null,
     };
     return Expanded(
       child: Container(
         color: bg,
         padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Text(line?.text ?? '',
-            style: TextStyle(
-                color: color, fontSize: 12, fontFamily: 'monospace')),
+        child: Text(line?.text ?? '', style: _mono(color)),
       ),
     );
   }
@@ -361,7 +366,7 @@ class _SideBySide extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _cell(rows[i].left),
-            Container(width: 1, color: AppColors.border),
+            Container(width: 1, color: YsColors.border),
             _cell(rows[i].right),
           ],
         ),
@@ -369,3 +374,9 @@ class _SideBySide extends StatelessWidget {
     );
   }
 }
+
+TextStyle _mono(Color color) => TextStyle(
+    color: color,
+    fontSize: 12,
+    fontFamily: kYsMonoFontFamily,
+    fontFamilyFallback: kYsMonoFontFallback);
