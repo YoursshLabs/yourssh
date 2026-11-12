@@ -156,13 +156,17 @@ class _AuditScreenState extends State<AuditScreen> {
             ])
               Padding(
                 padding: const EdgeInsets.only(right: 6),
-                child: FButton(
+                child: Semantics(
+                  selected: provider.rangeDays == days,
+                  button: true,
+                  child: FButton(
                   key: ValueKey('audit-range-$days'),
                   variant: provider.rangeDays == days ? .primary : .outline,
                   size: .xs,
                   mainAxisSize: MainAxisSize.min,
                   onPress: () => provider.setRange(days),
                   child: Text(label),
+                  ),
                 ),
               ),
             const SizedBox(width: 10),

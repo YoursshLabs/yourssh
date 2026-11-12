@@ -155,7 +155,7 @@ class _LibraryList extends StatelessWidget {
           child: groups.isEmpty
               ? const YsEmptyState(
                   icon: FLucideIcons.clapperboard,
-                  title: 'No recordings yet.',
+                  title: 'No recordings yet',
                   message: 'Start a session and press REC.',
                 )
               : ListView(
@@ -214,7 +214,7 @@ class _HostGroup extends StatelessWidget {
               Text(
                 '${recordings.length} recording${recordings.length == 1 ? '' : 's'}',
                 maxLines: 1,
-                style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+                style: const TextStyle(color: YsColors.mutedForeground, fontSize: 11),
               ),
             ],
           ),
@@ -270,14 +270,14 @@ FTile _recordingTile(
                 Text(
                   _fmtSize(entry.fileSize),
                   maxLines: 1,
-                  style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+                  style: const TextStyle(color: YsColors.mutedForeground, fontSize: 11),
                 ),
             ],
           ),
         ),
         SettingsIconButton(
           icon: FLucideIcons.play,
-          tooltip: 'Play',
+          tooltip: 'Play recording',
           onPress: onPlay,
         ),
         const SizedBox(width: YsSpace.s1),

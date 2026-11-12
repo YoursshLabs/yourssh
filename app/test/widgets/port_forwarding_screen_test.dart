@@ -303,7 +303,7 @@ void main() {
     await tester.tap(find.text('Add Rule'));
     await tester.pumpAndSettle();
     expect(find.text('Required'), findsWidgets);
-    expect(find.text('Invalid'), findsWidgets);
+    expect(find.textContaining('Invalid'), findsWidgets);
     expect(provider.forwards, isEmpty);
 
     // Dynamic SOCKS5 hides the remote fields.
@@ -340,5 +340,123 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Edit Port Forward Rule'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  Future<void> fill(WidgetTester tester, Map<String, String> v) async {
+    for (final e in v.entries) {
+      await tester.enterText(find.byKey(ValueKey(e.key)), e.value);
+    }
+  }
+
+  testWidgets('Enter on an invalid form shows errors and adds no rule',
+      (tester) async {
+    final (provider, widget) = await build();
+    await tester.pumpWidget(widget);
+    await tester.pump();
+    await tester.tap(find.text('+ New Rule'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('pf-label')), 'x');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.text('Required'), findsWidgets);
+    expect(find.textContaining('Invalid'), findsWidgets);
+    expect(provider.forwards, isEmpty);
+    expect(find.text('New Port Forward Rule'), findsOneWidget);
+  });
+
+  testWidgets('Enter on the Dynamic type saves without remote fields',
+      (tester) async {
+    final (provider, widget) = await build();
+    await tester.pumpWidget(widget);
+    await tester.pump();
+    await tester.tap(find.text('+ New Rule'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('pf-type')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dynamic SOCKS5').last);
+    await tester.pumpAndSettle();
+    await fill(tester, {'pf-label': 'socks', 'pf-local-port': '1080'});
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(provider.forwards.single.type, ForwardType.dynamic);
+    expect(provider.forwards.single.localPort, 1080);
+  });
+
+  testWidgets('validation: whitespace label, ports 0 and 65536 rejected',
+      (tester) async {
+    final (provider, widget) = await build();
+    await tester.pumpWidget(widget);
+    await tester.pump();
+    await tester.tap(find.text('+ New Rule'));
+    await tester.pumpAndSettle();
+
+    await fill(tester, {
+      'pf-label': '   ',
+      'pf-local-port': '0',
+      'pf-remote-host': 'db',
+      'pf-remote-port': '65536',
+    });
+    await tester.tap(find.text('Add Rule'));
+    await tester.pumpAndSettle();
+    expect(find.text('Required'), findsOneWidget, reason: 'whitespace label');
+    expect(find.text('Invalid (1–65535)'), findsNWidgets(2));
+    expect(provider.forwards, isEmpty);
+
+    await fill(tester, {
+      'pf-label': 'ok',
+      'pf-local-port': '65535',
+      'pf-remote-port': '1',
+    });
+    await tester.ensureVisible(find.text('Add Rule'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add Rule'));
+    await tester.pumpAndSettle();
+    expect(provider.forwards, hasLength(1));
+  });
+
+  testWidgets('keyboard: Tab to Start reveals Delete, Tab reaches it',
+      (tester) async {
+    final (provider, widget) = await build();
+    await provider.add(PortForward(
+        label: 'kbd',
+        type: ForwardType.local,
+        localPort: 8085,
+        remoteHost: 'db',
+        remotePort: 1));
+    await tester.pumpWidget(widget);
+    await tester.pump();
+
+    bool visible() => tester
+        .widget<Visibility>(find.ancestor(
+            of: find.byTooltip('Delete'), matching: find.byType(Visibility)))
+        .visible;
+    expect(visible(), isFalse);
+
+    String? focusedTooltip() {
+      final ctx = FocusManager.instance.primaryFocus?.context;
+      if (ctx == null) return null;
+      String? found;
+      ctx.visitAncestorElements((e) {
+        if (e.widget is Tooltip) {
+          found = (e.widget as Tooltip).message;
+          return false;
+        }
+        return true;
+      });
+      return found;
+    }
+
+    for (var i = 0; i < 6 && focusedTooltip() != 'Start'; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+    }
+    expect(focusedTooltip(), 'Start');
+    expect(visible(), isTrue, reason: 'focus inside row shows Delete');
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(focusedTooltip(), 'Delete');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(provider.forwards, isEmpty);
   });
 }

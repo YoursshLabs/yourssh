@@ -66,7 +66,7 @@ void main() {
   testWidgets('empty library shows the hint', (tester) async {
     await pumpLibrary(tester);
     expect(find.text('Recording Library'), findsOneWidget);
-    expect(find.textContaining('No recordings yet.'), findsOneWidget);
+    expect(find.text('No recordings yet'), findsOneWidget);
     expect(find.byTooltip('Refresh'), findsOneWidget);
   });
 
@@ -79,7 +79,7 @@ void main() {
     expect(find.text('web-1'), findsOneWidget);
     expect(find.text('2 recordings'), findsOneWidget);
     expect(find.text('2026-01-02 03:04'), findsOneWidget);
-    expect(find.byTooltip('Play'), findsNWidgets(2));
+    expect(find.byTooltip('Play recording'), findsNWidgets(2));
     expect(find.byTooltip('Delete'), findsNWidgets(2));
   });
 
@@ -88,7 +88,7 @@ void main() {
     final path = addCast('web-1', 'session_2026-01-02_03-04-05.cast');
     await pumpLibrary(tester);
 
-    await tester.tap(find.byTooltip('Play').first);
+    await tester.tap(find.byTooltip('Play recording').first);
     await tester.pump();
     expect(find.byType(RecordingPlayerWidget), findsOneWidget);
     expect(
@@ -138,7 +138,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await pumpLibrary(tester);
     expect(tester.takeException(), isNull);
-    await tester.tap(find.byTooltip('Play'));
+    await tester.tap(find.byTooltip('Play recording'));
     await tester.pump();
     await realIo(tester);
     await tester.pump(const Duration(milliseconds: 200)); // tap timer

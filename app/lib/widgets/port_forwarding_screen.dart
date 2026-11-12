@@ -155,6 +155,7 @@ class _ForwardTile extends StatefulWidget {
 
 class _ForwardTileState extends State<_ForwardTile> {
   bool _hovered = false;
+  bool _hasFocus = false;
 
   Future<void> _duplicate() async {
     final fwd = widget.forward;
@@ -227,7 +228,11 @@ class _ForwardTileState extends State<_ForwardTile> {
       padding: const EdgeInsets.only(bottom: YsSpace.s2),
       child: GestureDetector(
         onSecondaryTapUp: (details) => _showContextMenu(details.globalPosition),
-        child: settingsTileGroup(
+        child: Focus(
+         canRequestFocus: false,
+         skipTraversal: true,
+         onFocusChange: (f) => setState(() => _hasFocus = f),
+         child: settingsTileGroup(
           children: [
             FTile.raw(
               onPress: () => widget.onEdit(fwd),
@@ -322,19 +327,26 @@ class _ForwardTileState extends State<_ForwardTile> {
                       }
                     },
                   ),
-                  if (_hovered) ...[
-                    const SizedBox(width: 6),
-                    _IconAction(
+                  // Space is always reserved so hover/focus never reflows
+                  // the title; shown on hover or focus inside the row.
+                  const SizedBox(width: 6),
+                  Visibility(
+                    visible: _hovered || _hasFocus,
+                    maintainSize: true,
+                    maintainAnimation: true,
+                    maintainState: true,
+                    child: _IconAction(
                       icon: FLucideIcons.trash2,
                       color: YsColors.error,
                       tooltip: 'Delete',
                       onPress: _delete,
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
           ],
+         ),
         ),
       ),
     );
@@ -425,9 +437,11 @@ class _ForwardPanelState extends State<_ForwardPanel> {
 
   bool _validate() {
     String? required(TextEditingController c) =>
-        c.text.isEmpty ? 'Required' : null;
-    String? number(TextEditingController c) =>
-        int.tryParse(c.text) == null ? 'Invalid' : null;
+        c.text.trim().isEmpty ? 'Required' : null;
+    String? number(TextEditingController c) {
+      final n = int.tryParse(c.text);
+      return n == null || n < 1 || n > 65535 ? 'Invalid (1–65535)' : null;
+    }
     final found = <String, String?>{
       'label': required(_label),
       'localHost': required(_localHost),
