@@ -48,4 +48,18 @@ void main() {
     expect(c.domain, 'DOM');
     expect(c.rdpSecurity, RdpSecurityMode.auto);
   });
+
+  test('remoteClipboard defaults on and round-trips through JSON/copyWith', () {
+    final h = Host(label: 'w', host: 'h', username: 'u');
+    expect(h.remoteClipboard, isTrue);
+    expect(h.toJson()['remoteClipboard'], true);
+    final off = h.copyWith(remoteClipboard: false);
+    expect(off.remoteClipboard, isFalse);
+    expect(Host.fromJson(off.toJson()).remoteClipboard, isFalse);
+    // Older payloads without the key keep the current behavior (on).
+    expect(
+        Host.fromJson({'host': 'h', 'username': 'u'}).remoteClipboard, isTrue);
+    // copyWith without the arg preserves it.
+    expect(off.copyWith(label: 'x').remoteClipboard, isFalse);
+  });
 }

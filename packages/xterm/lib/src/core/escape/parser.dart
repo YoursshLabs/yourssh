@@ -192,6 +192,7 @@ class EscapeParser {
   bool _escHandleCSI() {
     final consumed = _consumeCsi();
     if (!consumed) return false;
+    if (_csiDropped) return true;
 
     final csiHandler = _csiHandlers[_csi.finalByte];
 
@@ -208,6 +209,19 @@ class EscapeParser {
   /// object allocations.
   final _csi = _Csi(finalByte: 0, params: []);
 
+  /// Largest numeric CSI parameter kept; bigger values are clamped so they
+  /// can neither overflow negative nor drive huge loops/allocations.
+  static const _maxCsiParam = 65535;
+
+  /// Longest CSI body (after `ESC [`) scanned before the sequence is dropped.
+  static const _maxCsiLength = 4096;
+
+  /// Longest OSC body (after `ESC ]`) scanned before the sequence is dropped.
+  static const _maxOscLength = 64 * 1024;
+
+  /// Set by [_consumeCsi] when the sequence was dropped for being too long.
+  bool _csiDropped = false;
+
   /// Parse a CSI from the head of the queue. Return false if the CSI isn't
   /// complete. After a CSI is successfully parsed, [_csi] is updated.
   bool _consumeCsi() {
@@ -216,6 +230,8 @@ class EscapeParser {
     }
 
     _csi.params.clear();
+    _csiDropped = false;
+    var scanned = 0;
 
     // test whether the csi is a `CSI ? Ps ...` or `CSI Ps ...`
     final prefix = _queue.peek();
@@ -236,6 +252,12 @@ class EscapeParser {
 
       final char = _queue.consume();
 
+      if (++scanned > _maxCsiLength) {
+        _csi.params.clear();
+        _csiDropped = true;
+        return true;
+      }
+
       if (char == Ascii.semicolon) {
         if (hasParam) {
           _csi.params.add(param);
@@ -246,8 +268,8 @@ class EscapeParser {
 
       if (char >= Ascii.num0 && char <= Ascii.num9) {
         hasParam = true;
-        param *= 10;
-        param += char - Ascii.num0;
+        param = param * 10 + (char - Ascii.num0);
+        if (param > _maxCsiParam) param = _maxCsiParam;
         continue;
       }
 
@@ -678,9 +700,8 @@ class EscapeParser {
         if (_csi.params.length != 3) {
           return;
         }
-        final rows = _csi.params[1];
-        final cols = _csi.params[2];
-        handler.resize(cols, rows);
+        // Deliberately ignored: a remote peer must not be able to drive the
+        // local buffer size (rows x cols allocation); the view owns it.
         return;
       // Window handling is currently no in the scope of the package.
       case 9: // Maximize Terminal Window
@@ -1086,6 +1107,7 @@ class EscapeParser {
   bool _consumeOsc() {
     _osc.clear();
     final param = StringBuffer();
+    var scanned = 0;
 
     while (true) {
       if (_queue.isEmpty) {
@@ -1093,6 +1115,13 @@ class EscapeParser {
       }
 
       final char = _queue.consume();
+
+      // Unterminated and oversized: drop it so it is neither rescanned on
+      // every write nor buffered without bound.
+      if (++scanned > _maxOscLength) {
+        _osc.clear();
+        return true;
+      }
 
       // OSC terminates with BEL
       if (char == Ascii.BEL) {

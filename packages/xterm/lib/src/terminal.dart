@@ -489,7 +489,9 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
       return;
     }
 
-    for (var i = 0; i < count; i++) {
+    final limit = _viewWidth * _viewHeight;
+    final n = count > limit ? limit : count;
+    for (var i = 0; i < n; i++) {
       _buffer.writeChar(_precedingCodepoint);
     }
   }

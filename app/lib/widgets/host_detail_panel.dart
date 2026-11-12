@@ -91,6 +91,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   late HostProtocol _protocol;
   late final TextEditingController _domainCtrl;
   late RdpSecurityMode _rdpSecurity;
+  bool _remoteClipboard = true;
 
   bool get _isNew => widget.existing == null;
   bool get _isRdp => _protocol == HostProtocol.rdp;
@@ -105,6 +106,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     _protocol = h?.protocol ?? widget.initialProtocol ?? HostProtocol.ssh;
     _domainCtrl = TextEditingController(text: h?.domain ?? '');
     _rdpSecurity = h?.rdpSecurity ?? RdpSecurityMode.auto;
+    _remoteClipboard = h?.remoteClipboard ?? true;
     _hostCtrl = TextEditingController(text: h?.host ?? widget.initialHost ?? '');
     _labelCtrl = TextEditingController(text: h?.label ?? widget.initialLabel ?? '');
     _groupCtrl = TextEditingController(text: h?.group ?? widget.initialGroup ?? '');
@@ -193,8 +195,10 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     // torn down in the same frame, context.read would throw on a dead element.
     if (!mounted) return Future.value(const AgentProbeNothing());
     final loader = context.read<SshService>().keychainIdentitiesLoader;
+    final keyId = _authType == AuthType.privateKey ? _selectedKeyId : null;
     return probeAgentStatus(
-        loadKeychainIdentities: loader ?? () async => const []);
+        loadKeychainIdentities: () async =>
+            await loader?.call(keyId) ?? const []);
   }
 
   static String _fmtFontSize(double? v) => v == null
@@ -253,6 +257,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
           ? _domainCtrl.text.trim()
           : null,
       rdpSecurity: _rdpSecurity,
+      remoteClipboard: _remoteClipboard,
       authType: _isGraphical ? AuthType.password : _authType,
       keyId: !_isGraphical && _authType == AuthType.privateKey ? _selectedKeyId : null,
       group: _groupCtrl.text.trim(),
@@ -576,6 +581,36 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
                           onChanged: (v) =>
                               setState(() => _rdpSecurity = v!),
                         ),
+                      ),
+                    ]),
+                  ],
+
+                  if (_isGraphical) ...[
+                    const SizedBox(height: 16),
+                    _sectionLabel('CLIPBOARD'),
+                    const SizedBox(height: 6),
+                    _Card(children: [
+                      SwitchListTile(
+                        key: const ValueKey('remote-clipboard-switch'),
+                        value: _remoteClipboard,
+                        onChanged: (v) =>
+                            setState(() => _remoteClipboard = v),
+                        title: const Text(
+                          'Accept remote clipboard',
+                          style: TextStyle(
+                              color: AppColors.textPrimary, fontSize: 13),
+                        ),
+                        subtitle: const Text(
+                          'Let the remote desktop replace your local '
+                          'clipboard (max 1 MiB). Turn off for untrusted '
+                          'hosts.',
+                          style: TextStyle(
+                              color: AppColors.textTertiary, fontSize: 11),
+                        ),
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 2),
+                        activeThumbColor: AppColors.accent,
                       ),
                     ]),
                   ],
