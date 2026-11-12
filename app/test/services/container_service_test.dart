@@ -124,9 +124,9 @@ void main() {
     });
     test('kubectl exec includes namespace and container', () {
       final cmd = ContainerService.kubectlExecCommand('web-0', 'prod', 'app');
-      expect(cmd, contains('kubectl exec -it web-0'));
-      expect(cmd, contains('-n prod'));
-      expect(cmd, contains('-c app'));
+      expect(cmd, contains("kubectl exec -it 'web-0'"));
+      expect(cmd, contains("-n 'prod'"));
+      expect(cmd, contains("-c 'app'"));
       expect(cmd, contains('--'));
     });
     test('kubectl exec omits -c when container is null', () {

@@ -88,4 +88,22 @@ void main() {
     input.add(Uint8List.fromList([0x01, 0x01])); // auth fail
     await expectLater(future, throwsA(isA<ProxyException>()));
   });
+
+  for (final long in ['user', 'pass']) {
+    test('SOCKS5 $long longer than 255 bytes is rejected, nothing sent',
+        () async {
+      final input = StreamController<Uint8List>();
+      final sink = _ListSink();
+      final reader = ByteReader(input.stream);
+      final big = 'a' * 256;
+      await expectLater(
+          socks5Handshake(reader, sink,
+              targetHost: 'h',
+              targetPort: 22,
+              username: long == 'user' ? big : 'u',
+              password: long == 'pass' ? big : 'p'),
+          throwsA(isA<ProxyException>()));
+      expect(sink.bytes, isEmpty);
+    });
+  }
 }
