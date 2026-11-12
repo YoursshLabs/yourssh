@@ -98,6 +98,19 @@ Newline-delimited JSON over the stream, one request per connection:
 
 The CLI launches it (macOS `open -b com.thangnm.yourssh`; Windows/Linux the installed executable path, recorded by the app in the run dir), then waits up to 15 s for the socket and token to appear. `ls --json` and `export` also work this way (no separate storage reader).
 
+## MCP server (phase 4)
+
+`yourssh mcp` runs a Model Context Protocol server over stdio inside the CLI binary and proxies every tool call to the running app over the same authenticated IPC (token + peer uid / pipe DACL) — no new listener, no network port. MCP clients (Claude Code, Claude Desktop, Cursor…) configure `{"command": "yourssh", "args": ["mcp"]}`. The agent never sees passwords or keys; the app keeps them.
+
+| Tool | Default | Notes |
+|---|---|---|
+| `list_hosts` | on | same secret-free summary as `ls --json` |
+| `list_dir`, `read_file` (SFTP) | per-host opt-in | size cap (e.g. 1 MiB), binary refused |
+| `run_command` | **off**; per-host opt-in | every call shows a confirmation sheet in the app (command, host, requesting client) before it runs; timeout and output cap |
+| `tunnel_list`, `tunnel_start`, `tunnel_stop` | start/stop need confirmation | saved rules only |
+
+Safety requirements: an "AI access" section per host (off by default) plus a global kill switch in Settings → Integrations; output passes `AuditRedactor` and a size cap before it is returned; every call is audited with `source: mcp` and the client name; prompt-injection is assumed — the model can be tricked by remote output, so destructive actions are never auto-approved.
+
 ## Packaging and install
 
 - macOS: `yourssh` binary in `YourSSH.app/Contents/MacOS/` (universal: lipo arm64 + x86_64), signed with the same Developer ID and covered by notarization. Settings → Integrations → "Install command-line tool" creates a symlink in `/usr/local/bin` (admin prompt via AuthorizationExecute alternative: `osascript … with administrator privileges`) or, without admin, in `~/.local/bin` with a hint to add it to PATH.
@@ -118,6 +131,7 @@ The CLI launches it (macOS `open -b com.thangnm.yourssh`; Windows/Linux the inst
 1. IPC + single instance + `connect`, `ls`, `version`, `yourssh://connect` (most daily value).
 2. `sftp`, `tunnel`, `import`, `export`, `yourssh://sftp`, install-CLI button, packaging in `release.yml`.
 3. Optional `ssh://` handler; v2 `exec`.
+4. `yourssh mcp` (MCP server over the CLI IPC) with per-host AI access, confirmations and audit.
 
 ## Decided here (owner delegated these)
 
@@ -125,6 +139,7 @@ The CLI launches it (macOS `open -b com.thangnm.yourssh`; Windows/Linux the inst
 - URL scheme limited to saved hosts and non-destructive actions.
 - Token + OS permission/peer checks on the IPC endpoint.
 - Commands and phasing above.
+- MCP as phase 4 on top of the CLI IPC (owner approved 2026-11-12).
 
 ## Left to the builder
 
