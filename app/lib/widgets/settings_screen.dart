@@ -1027,12 +1027,12 @@ class _AiProvidersSectionState extends State<_AiProvidersSection> {
     if (key.isEmpty) return;
     final ai = context.read<AiChatProvider>();
     await ai.setProviderConfig(p, apiKey: key);
-    if (!mounted) return;
     final err = ai.lastError;
-    if (err != null) {
-      ai.clearError();
-      AppSnack.info(context, err);
-    }
+    if (err == null) return;
+    // Clear even when unmounted so the stale error is not shown later.
+    ai.clearError();
+    if (!mounted) return;
+    AppSnack.info(context, err);
   }
 
   String _label(AiProvider p) => switch (p) {
