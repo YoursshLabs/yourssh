@@ -26,7 +26,7 @@ CliEndpoint? resolveCliEndpoint() {
 /// host; anything else just raises the running window.
 ({String cmd, Map<String, Object?> args}) requestForArgs(List<String> args) {
   for (final a in args) {
-    if (a.startsWith('yourssh://')) {
+    if (a.toLowerCase().startsWith('yourssh://')) {
       return (cmd: 'open', args: {'url': a});
     }
   }

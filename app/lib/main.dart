@@ -563,22 +563,32 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
       // works too). Opens wait until the saved hosts are loaded.
       final urls = UrlChannel(
         server: CliServer(handlers: handlers, token: generateToken()),
-        ready: _hostProvider.ready,
+        ready: Future.wait<void>([
+          _hostProvider.ready,
+          _knownHostsProvider.ready,
+          _keyProvider.ready,
+        ]),
       );
-      final ep = resolveCliEndpoint();
-      if (ep != null) {
-        final owner = await startCliEndpoint(ep, handlers, _launchArgs);
-        if (owner == null) {
-          exit(0); // another instance owns the endpoint and got the request
+      try {
+        final ep = resolveCliEndpoint();
+        if (ep != null) {
+          final owner = await startCliEndpoint(ep, handlers, _launchArgs);
+          if (owner == null) {
+            exit(0); // another instance owns the endpoint and got the request
+          }
+          if (!mounted) {
+            await owner.stop();
+          } else {
+            _cliOwner = owner;
+          }
         }
-        if (!mounted) {
-          await owner.stop();
-          return;
-        }
-        _cliOwner = owner;
+      } on UnsupportedError catch (e) {
+        debugPrint('[main] CLI endpoint unsupported here: $e');
+      } catch (e) {
+        debugPrint('[main] CLI endpoint failed to start: $e');
       }
-      // Only the owner listens, so a lost start-up race never swallows the
-      // queued macOS URL events.
+      // The trusted URL path needs no endpoint. Reached only when this
+      // process stays alive (a lost single-instance race exits above).
       urls.attach();
       unawaited(urls.openLaunchUrl(_launchArgs));
     } on UnsupportedError catch (e) {

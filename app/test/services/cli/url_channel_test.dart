@@ -29,7 +29,9 @@ void main() {
   late _Fake fake;
 
   setUp(() => fake = _Fake());
-  tearDown(() => ch.setMockMethodCallHandler(null));
+  tearDown(() => TestDefaultBinaryMessengerBinding
+      .instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(ch, null));
 
   Future<void> send(String url) => TestDefaultBinaryMessengerBinding
       .instance.defaultBinaryMessenger
@@ -75,7 +77,8 @@ void main() {
 
   test('attach tells native the Dart side is listening', () async {
     final calls = <String>[];
-    ch.setMockMethodCallHandler((c) async => calls.add(c.method));
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(ch, (c) async => calls.add(c.method));
     UrlChannel(server: CliServer(handlers: fake, token: 't'), channel: ch)
         .attach();
     await pumpEventQueue();
@@ -91,5 +94,50 @@ void main() {
     fake.calls.clear();
     await u.openLaunchUrl(['nothing']);
     expect(fake.calls, isEmpty);
+  });
+
+  group('hardening', () {
+    UrlChannel mk({Future<void>? ready, DateTime Function()? now}) =>
+        UrlChannel(
+            server: CliServer(handlers: fake, token: 't'),
+            channel: ch,
+            ready: ready,
+            now: now ?? DateTime.now);
+
+    test('hostile and unknown URLs open nothing; scheme is case-insensitive',
+        () async {
+      final u = mk();
+      for (final url in [
+        'yourssh://connect/a/b',
+        'yourssh://connect/x?cmd=1',
+        'yourssh://connect/a%2Fb',
+        'yourssh://connect/user@evil.example',
+        'yourssh://connect/no-such-host',
+      ]) {
+        await u.open(url);
+      }
+      expect(fake.calls, isEmpty);
+      await u.open('YOURSSH://connect/web-1');
+      expect(fake.calls, ['connect:web-1:url']);
+    });
+
+    test('a repeat of the same URL within 2 s is dropped, then allowed',
+        () async {
+      var t = DateTime(2026, 1, 1);
+      final u = mk(now: () => t);
+      await u.open('yourssh://connect/web-1');
+      t = t.add(const Duration(seconds: 1));
+      await u.open('yourssh://connect/web-1');
+      expect(fake.calls, ['connect:web-1:url']);
+      t = t.add(const Duration(seconds: 2));
+      await u.open('yourssh://connect/web-1');
+      expect(fake.calls.length, 2);
+    });
+
+    test('a failing ready gate drops the URL without throwing', () async {
+      final u = mk(ready: Future<void>.error(StateError('load failed')));
+      await u.open('yourssh://connect/web-1');
+      expect(fake.calls, isEmpty);
+    });
   });
 }

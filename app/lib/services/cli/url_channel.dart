@@ -15,31 +15,43 @@ import 'cli_server.dart';
 class UrlChannel {
   UrlChannel({
     required this.server,
-    MethodChannel channel = const MethodChannel('yourssh/url'),
+    this.channel = const MethodChannel('yourssh/url'),
     Future<void>? ready,
-  })  : _channel = channel,
-        _ready = ready ?? Future<void>.value();
+    this.now = DateTime.now,
+  }) : _ready = ready ?? Future<void>.value();
 
   final CliServer server;
-  final MethodChannel _channel;
+  final MethodChannel channel;
+  
+  /// Clock, injectable for tests.
+  final DateTime Function() now;
+
+  /// A repeat of the same URL inside this window is dropped (drive-by flood).
+  static const dedupeWindow = Duration(seconds: 2);
+  final Map<String, DateTime> _recent = {};
 
   /// Completes when saved hosts are loaded; opens wait for it.
   final Future<void> _ready;
 
   void attach() {
-    _channel.setMethodCallHandler((call) async {
+    channel.setMethodCallHandler((call) async {
       if (call.method == 'open' && call.arguments is String) {
         await open(call.arguments as String);
       }
     });
     // Flush URLs the native side queued. No native side (Windows/Linux)
     // throws MissingPluginException: nothing to flush.
-    _channel.invokeMethod<void>('ready').catchError((Object _) {});
+    channel.invokeMethod<void>('ready').catchError((Object _) {});
   }
 
   /// Opens [url] (saved hosts only; the server rejects everything else).
   /// Never throws.
   Future<void> open(String url) async {
+    final key = url.toLowerCase();
+    final t = now();
+    _recent.removeWhere((_, at) => t.difference(at) >= dedupeWindow);
+    if (_recent.containsKey(key)) return;
+    _recent[key] = t;
     try {
       await _ready;
       final line = CliRequest(
@@ -56,7 +68,7 @@ class UrlChannel {
   /// Cold start: the launch argv carried a URL.
   Future<void> openLaunchUrl(List<String> args) async {
     for (final a in args) {
-      if (a.startsWith('yourssh://')) return open(a);
+      if (a.toLowerCase().startsWith('yourssh://')) return open(a);
     }
   }
 }

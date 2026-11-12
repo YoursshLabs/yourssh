@@ -101,7 +101,7 @@ void main() {
       // ── Launch the real app ────────────────────────────────────────────
       // main() is `void` (async internally) — give it real time to finish
       // window setup + provider wiring and render the first frames.
-      app.main();
+      app.main(const <String>[]);
       await tester.pump(const Duration(seconds: 2));
       await _waitFor(
         tester,

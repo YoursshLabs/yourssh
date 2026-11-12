@@ -27,7 +27,12 @@ class KnownHostsProvider extends ChangeNotifier {
   bool _matches(KnownHost h, String host, int port, String keyType) =>
       h.protocol == KnownHost.protocolSsh && h.host == host && h.port == port && h.keyType == keyType;
 
-  Future<void> load() async {
+  /// Completes when the last [load] finished (immediately before the first).
+  Future<void> ready = Future<void>.value();
+
+  Future<void> load() => ready = _load();
+
+  Future<void> _load() async {
     if (_storage == null) return;
     _hosts = await _storage.loadKnownHosts();
     notifyListeners();

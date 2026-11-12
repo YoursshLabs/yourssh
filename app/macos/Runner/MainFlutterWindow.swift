@@ -120,11 +120,13 @@ class MainFlutterWindow: NSWindow {
     _ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor
   ) {
     guard let url = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
-          url.hasPrefix("yourssh://") else { return }
+          url.lowercased().hasPrefix("yourssh://") else { return }
     if urlDartReady {
       urlChannel?.invokeMethod("open", arguments: url)
     } else {
+      // Bounded: a flood before Dart listens keeps only the newest 8.
       pendingUrls.append(url)
+      if pendingUrls.count > 8 { pendingUrls.removeFirst(pendingUrls.count - 8) }
     }
   }
 }

@@ -215,7 +215,7 @@ void main() {
       // storage before the app connects.
       await StorageService().savePassword(hosts.first.id, _demoPassword);
 
-      app.main();
+      app.main(const <String>[]);
       await tester.pump(const Duration(seconds: 3));
       // Android renders into a SurfaceView the test process cannot read; this
       // swaps it for an offscreen-image surface takeScreenshot can capture.
