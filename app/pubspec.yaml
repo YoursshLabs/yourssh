@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 0.3.0+3
 
 environment:
-  sdk: ^3.12.0
+  sdk: ^3.13.0
 
 dependencies:
   flutter:
@@ -86,6 +86,8 @@ dependencies:
     path: ../packages/yourssh_rdp
   yourssh_vnc:
     path: ../packages/yourssh_vnc
+  yourssh_ui:
+    path: ../packages/yourssh_ui
 
   # Cryptography utilities
   cryptography: ^2.7.0

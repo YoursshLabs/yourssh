@@ -62,6 +62,25 @@ jobs:
         working-directory: app
         run: flutter test
 
+  # forui-based UI kit: pure Dart widgets, no native bridge, so a small job.
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install dependencies
+        working-directory: packages/yourssh_ui
+        run: flutter pub get
+
+      - name: Test (yourssh_ui)
+        working-directory: packages/yourssh_ui
+        run: flutter test
+
   # One job per Rust crate. The cargo tests, build.sh and the Dart bridge tests
   # stay together on purpose: both cargo invocations use --release, so the
   # library build reuses the test build's compilation. Splitting them across jobs
@@ -105,12 +124,13 @@ jobs:
   # forever instead of failing.
   test:
     name: test
-    needs: [app, bridge]
+    needs: [app, ui, bridge]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
         run: |
-          echo "app=${{ needs.app.result }} bridge=${{ needs.bridge.result }}"
+          echo "app=${{ needs.app.result }} ui=${{ needs.ui.result }} bridge=${{ needs.bridge.result }}"
           [ "${{ needs.app.result }}" = "success" ] || exit 1
+          [ "${{ needs.ui.result }}" = "success" ] || exit 1
           [ "${{ needs.bridge.result }}" = "success" ] || exit 1
