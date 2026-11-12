@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
 import 'package:yourssh/mobile/theme/mobile_tokens.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 void main() {
-  test('mobile theme primary is amber', () {
-    expect(buildMobileTheme().colorScheme.primary, MobileColors.accent);
+  test('mobile theme primary is the Amber Brand primary', () {
+    expect(buildMobileTheme().colorScheme.primary, YsColors.primary);
     expect(buildMobileTheme().brightness, Brightness.dark);
   });
   test('section label token is faint + spaced', () {

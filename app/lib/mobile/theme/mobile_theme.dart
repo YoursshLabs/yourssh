@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Color palette for the mobile UI. Desktop theme ([AppColors]) is untouched.
 abstract final class MobileColors {
@@ -23,31 +23,17 @@ abstract final class MobileColors {
   static const tabInactive = Color(0xFF6D6D72);
 }
 
-/// Builds the dark [ThemeData] used by the mobile UI.
-/// Desktop theme is untouched; this is mobile-only.
-ThemeData buildMobileTheme() {
-  final base = ColorScheme.fromSeed(
-    seedColor: MobileColors.accent,
-    brightness: Brightness.dark,
-  ).copyWith(
-    primary: MobileColors.accent,
-    surface: MobileColors.surface,
-  );
+/// Builds the dark [ThemeData] used by the mobile UI (shared Amber Brand
+/// Material theme).
+ThemeData buildMobileTheme() => ysMaterialTheme();
 
-  return ThemeData(
-    colorScheme: base,
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: MobileColors.bg,
-    useMaterial3: true,
-  );
-}
-
-/// Manrope — headings.
+/// Inter 600 — headings.
 TextStyle mobileHeading({
   double size = 17,
   FontWeight weight = FontWeight.w600,
 }) =>
-    GoogleFonts.manrope(
+    TextStyle(
+      fontFamily: kYsFontFamily,
       fontSize: size,
       fontWeight: weight,
       color: MobileColors.textPrimary,
@@ -59,19 +45,21 @@ TextStyle mobileBody({
   Color? color,
   FontWeight? weight,
 }) =>
-    GoogleFonts.inter(
+    TextStyle(
+      fontFamily: kYsFontFamily,
       fontSize: size,
       fontWeight: weight ?? FontWeight.w400,
       color: color ?? MobileColors.textPrimary,
     );
 
-/// Roboto Mono — monospace / code.
+/// Roboto Mono for Powerline (bundled) — monospace / code.
 TextStyle mobileMono({
   double size = 13,
   Color? color,
   FontWeight? weight,
 }) =>
-    GoogleFonts.robotoMono(
+    TextStyle(
+      fontFamily: 'Roboto Mono for Powerline',
       fontSize: size,
       fontWeight: weight ?? FontWeight.w400,
       color: color ?? MobileColors.textPrimary,

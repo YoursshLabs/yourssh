@@ -168,6 +168,16 @@ flutter:
     - assets/bundled_plugins/snippets/index.js
     - assets/bundled_plugins/snippets/panel/index.html
   fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/inter/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/inter/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/inter/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/inter/Inter-Bold.ttf
+          weight: 700
     - family: DejaVu Sans Mono for Powerline
       fonts:
         - asset: assets/fonts/powerline/DejaVu Sans Mono for Powerline.ttf

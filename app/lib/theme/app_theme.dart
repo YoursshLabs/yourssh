@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class AppColors {
   static const bg = Color(0xFF0F0F0F);
@@ -94,24 +95,16 @@ class AppSnack {
   }
 }
 
-ThemeData buildAppTheme() {
-  return ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: AppColors.bg,
-    colorScheme: const ColorScheme.dark(
-      surface: AppColors.bg,
-      primary: AppColors.accent,
-      onPrimary: Colors.black,
-      secondary: AppColors.accent,
-    ),
-    fontFamily: 'SF Pro Display',
-    textTheme: const TextTheme(
-      bodyMedium: TextStyle(color: AppColors.textPrimary, fontSize: 13),
-      bodySmall: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-      labelMedium: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-    ),
-    dividerColor: AppColors.border,
-    dividerTheme: const DividerThemeData(color: AppColors.border, thickness: 1, space: 1),
-  );
-}
+ThemeData buildAppTheme() => ysMaterialTheme();
+
+/// `MaterialApp.builder` for desktop: puts forui's [FTheme] and [FToaster]
+/// above the Navigator so dialogs, routes and toasts all inherit them.
+Widget ysRootBuilder(BuildContext context, Widget? child) =>
+    _wrap(ysThemeData(), child);
+
+/// Same as [ysRootBuilder] with touch sizing, for the mobile app.
+Widget ysRootBuilderTouch(BuildContext context, Widget? child) =>
+    _wrap(ysThemeDataTouch(), child);
+
+Widget _wrap(FThemeData data, Widget? child) =>
+    FTheme(data: data, child: FToaster(child: child ?? const SizedBox.shrink()));

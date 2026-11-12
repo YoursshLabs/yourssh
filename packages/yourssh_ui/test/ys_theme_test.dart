@@ -25,6 +25,10 @@ void main() {
     expect(ysThemeData().colors.primary, YsColors.primary);
     expect(ysThemeData().colors.background, YsColors.background);
     expect(ysThemeDataTouch().colors.primary, YsColors.primary);
+    expect(ysThemeData().colors.error, YsColors.error);
+    expect(ysThemeData().colors.errorForeground, YsColors.foreground);
+    expect(ysThemeData().colors.destructive, YsColors.error);
+    expect(ysThemeData().colors.destructiveForeground, YsColors.foreground);
     expect(ysThemeData().typography.body.fontFamily, kYsFontFamily);
   });
 

@@ -595,6 +595,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
         navigatorKey: _navigatorKey,
         theme: buildAppTheme(),
         darkTheme: buildAppTheme(),
+        builder: ysRootBuilder,
         themeMode: ThemeMode.dark,
         home: const MainScreen(),
       ),

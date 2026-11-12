@@ -18,6 +18,9 @@ FColors _ysColors(FColors base) => base.copyWith(
   border: YsColors.border,
   card: YsColors.card,
   destructive: YsColors.error,
+  destructiveForeground: YsColors.foreground,
+  error: YsColors.error,
+  errorForeground: YsColors.foreground,
 );
 
 FThemeData _build({required bool touch}) {
