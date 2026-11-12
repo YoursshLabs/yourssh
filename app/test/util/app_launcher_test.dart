@@ -21,8 +21,16 @@ void main() {
       for (final n in ['a.app', 'a.command', 'a.pkg', 'a.terminal', 'a.jar']) {
         expect(isExecutableExtension(n, 'macos'), isTrue, reason: n);
       }
-      for (final n in ['a.desktop', 'a.sh', 'a.run', 'a.bin', 'a.AppImage']) {
+      for (final n in ['a.desktop', 'a.sh', 'a.run', 'a.AppImage']) {
         expect(isExecutableExtension(n, 'linux'), isTrue, reason: n);
+      }
+    });
+
+    test('generic binary data (.bin) is not an executable type', () {
+      // xdg-open hands .bin (application/octet-stream) to a viewer, never runs
+      // it; blocking it broke opening ordinary binary files on Linux.
+      for (final p in ['windows', 'macos', 'linux']) {
+        expect(isExecutableExtension('data.bin', p), isFalse, reason: p);
       }
     });
 

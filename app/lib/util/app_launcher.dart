@@ -17,7 +17,7 @@ const _macosExecutableExts = {
   'jar',
 };
 const _linuxExecutableExts = {
-  'desktop', 'sh', 'run', 'bin', 'appimage', 'jar',
+  'desktop', 'sh', 'run', 'appimage', 'jar',
 };
 
 /// Whether the OS default handler would execute [name] rather than display
