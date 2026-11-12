@@ -94,9 +94,22 @@ int qjs_eval(QjsContext* q, const char* source, const char* filename) {
 
 char* qjs_get_exception(QjsContext* q) {
   JSValue exc = JS_GetException(q->ctx);
+  // A thrown object's toString() is plugin code too: bound it by a fresh
+  // deadline, but keep an earlier timeout visible to the caller.
+  int earlier_timeout = q->timed_out;
+  arm_deadline(q);
   const char* str = JS_ToCString(q->ctx, exc);
-  char* result = str ? strdup(str) : strdup("unknown error");
-  JS_FreeCString(q->ctx, str);
+  disarm_deadline(q);
+  q->timed_out |= earlier_timeout;
+  char* result;
+  if (str) {
+    result = strdup(str);
+    JS_FreeCString(q->ctx, str);
+  } else {
+    // The conversion itself threw (or was interrupted): drop that exception.
+    JS_FreeValue(q->ctx, JS_GetException(q->ctx));
+    result = strdup(q->timed_out ? "timeout" : "unknown error");
+  }
   JS_FreeValue(q->ctx, exc);
   return result;
 }
@@ -153,13 +166,24 @@ char* qjs_call_fn(QjsContext* q, const char* fn_name, const char* arg_json) {
   JSValue arg = JS_NewString(q->ctx, arg_json ? arg_json : "null");
   arm_deadline(q);
   JSValue ret = JS_Call(q->ctx, fn, JS_UNDEFINED, 1, &arg);
-  disarm_deadline(q);
   JS_FreeValue(q->ctx, fn);
   JS_FreeValue(q->ctx, arg);
-  if (JS_IsException(ret)) { JS_FreeValue(q->ctx, ret); return NULL; }
+  if (JS_IsException(ret)) {
+    disarm_deadline(q);
+    JS_FreeValue(q->ctx, ret);
+    return NULL;
+  }
+  // Converting a non-string result runs plugin code (toString/valueOf/
+  // Symbol.toPrimitive), so the deadline stays armed until it is done.
   const char* str = JS_ToCString(q->ctx, ret);
-  char* result = str ? strdup(str) : NULL;
-  JS_FreeCString(q->ctx, str);
+  disarm_deadline(q);
+  char* result = NULL;
+  if (str) {
+    result = strdup(str);
+    JS_FreeCString(q->ctx, str);
+  } else {
+    JS_FreeValue(q->ctx, JS_GetException(q->ctx));
+  }
   JS_FreeValue(q->ctx, ret);
   return result;
 }

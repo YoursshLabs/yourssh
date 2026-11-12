@@ -71,6 +71,39 @@ void main() {
     rt.dispose();
   });
 
+  test('a returned object whose toString loops cannot outlive the deadline',
+      () {
+    final rt = QuickJsRuntime();
+    rt.eval(
+        'var plugin = {_dispatch: function(){'
+        ' return {toString: function(){ while(true){} }}; }};',
+        filename: 't.js');
+    final sw = Stopwatch()..start();
+    // Dispatch serializes the result in JS; either way the call must come
+    // back (value or timeout) instead of hanging the UI isolate.
+    try {
+      rt.callDispatch('terminal.output', {'sessionId': 's', 'data': 'x'},
+          timeout: const Duration(milliseconds: 100));
+    } on QuickJsException {
+      // acceptable
+    }
+    expect(sw.elapsedMilliseconds, lessThan(3000));
+    rt.dispose();
+  });
+
+  test('a thrown object whose toString loops cannot hang error reporting', () {
+    final rt = QuickJsRuntime();
+    final sw = Stopwatch()..start();
+    expect(
+      () => rt.eval('throw {toString: function(){ while(true){} }};',
+          filename: 't.js', timeout: const Duration(milliseconds: 100)),
+      throwsA(isA<QuickJsException>()),
+    );
+    expect(sw.elapsedMilliseconds, lessThan(3000));
+    rt.eval('var stillUsable = 1;', filename: 't.js');
+    rt.dispose();
+  });
+
   test('memory limit stops runaway allocation', () {
     final rt = QuickJsRuntime();
     expect(
