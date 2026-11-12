@@ -333,6 +333,9 @@ class TerminalPainter {
   void paintCellForeground(Canvas canvas, Offset offset, CellData cellData) {
     final charCode = cellData.content & CellContent.codepointMask;
     if (charCode == 0) return;
+    // A plain space has no ink: skip the paragraph lookup and draw call (a
+    // large share of cells in typical output). Underlined spaces still draw.
+    if (charCode == 0x20 && cellData.flags & CellFlags.underline == 0) return;
 
     final cacheKey = cellData.getHash() ^ _textScaler.hashCode;
     var paragraph = _paragraphCache.getLayoutFromCache(cacheKey);
