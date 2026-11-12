@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,7 @@ import 'package:yourssh/models/port_forward.dart';
 import 'package:yourssh/providers/port_forward_provider.dart';
 import 'package:yourssh/widgets/web_tools/port_forward_browser.dart';
 
+import '../helpers/tab_to_control.dart';
 import '../helpers/ys_test_app.dart';
 
 void main() {
@@ -94,6 +96,16 @@ void main() {
     final opened = await pump(tester, [fwd('Web')]);
     Focus.of(tester.element(find.text('Open'))).requestFocus();
     await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(opened, ['http://127.0.0.1:8080']);
+  });
+
+  testWidgets('Tab reaches Open after Copy URL (2 presses); Enter opens',
+      (tester) async {
+    final opened = await pump(tester, [fwd('Web')]);
+    final n = await tabToControl(tester, find.widgetWithText(FButton, 'Open'));
+    expect(n, 2);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
     expect(opened, ['http://127.0.0.1:8080']);

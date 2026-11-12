@@ -279,11 +279,13 @@ class _TunnelPanel extends StatefulWidget {
 class _TunnelPanelState extends State<_TunnelPanel> {
   final _labelCtrl = TextEditingController(text: 'My Service');
   final _portCtrl = TextEditingController(text: '3000');
+  final _portFocus = FocusNode();
 
   @override
   void dispose() {
     _labelCtrl.dispose();
     _portCtrl.dispose();
+    _portFocus.dispose();
     super.dispose();
   }
 
@@ -350,6 +352,8 @@ class _TunnelPanelState extends State<_TunnelPanel> {
                   controller: _labelCtrl,
                   label: 'Label',
                   autofocus: true,
+                  textInputAction: TextInputAction.next,
+                  onSubmit: _portFocus.requestFocus,
                 ),
                 const SizedBox(height: YsSpace.s3),
                 DevopsTextField(
@@ -357,6 +361,8 @@ class _TunnelPanelState extends State<_TunnelPanel> {
                   controller: _portCtrl,
                   label: 'Local Port',
                   number: true,
+                  focusNode: _portFocus,
+                  onSubmit: _submit,
                 ),
                 const SizedBox(height: YsSpace.s5),
                 FButton(

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/widgets/mail_catcher_screen.dart';
 
 import '../helpers/fake_devops_ssh.dart';
+import '../helpers/tab_to_control.dart';
 
 String _smtpdLog(String subject, String from) => '''
 ---------- MESSAGE FOLLOWS ----------
@@ -14,6 +15,8 @@ To: bob@example.com
 X-Peer: 127.0.0.1
 
 hello body
+
+second para
 ------------ END MESSAGE ------------
 ''';
 
@@ -29,7 +32,12 @@ void main() {
     bool startOk = true,
   }) async {
     final fake = FakeDevopsSsh();
+    var cleared = false;
     fake.reply = (cmd) {
+      if (cmd.startsWith('> ')) {
+        cleared = true;
+        return (stdout: '', stderr: '', exitCode: 0);
+      }
       if (cmd.contains('mktemp')) {
         return (
           stdout: startOk ? 'started:/tmp/mc1' : 'ERR:exited:/tmp/mc1',
@@ -38,7 +46,11 @@ void main() {
         );
       }
       if (cmd.startsWith('cat ')) {
-        return (stdout: _smtpdLog(subject, from), stderr: '', exitCode: 0);
+        return (
+          stdout: cleared ? '' : _smtpdLog(subject, from),
+          stderr: '',
+          exitCode: 0,
+        );
       }
       return (stdout: '', stderr: '', exitCode: 0);
     };
@@ -86,11 +98,21 @@ void main() {
     expect(find.text('Subject: Welcome'), findsOneWidget);
     expect(find.text('From: alice@example.com'), findsOneWidget);
     expect(find.text('To: bob@example.com'), findsOneWidget);
+    expect(find.textContaining('hello body'), findsOneWidget);
+    expect(find.textContaining('second para'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Clear all'));
     await tester.pump();
+    await tester.pump();
     expect(find.text('No emails captured'), findsOneWidget);
     expect(find.text('Select an email'), findsOneWidget);
+    expect(fake.cmds.any((c) => c.startsWith("> ") && c.contains('mc1/log')),
+        isTrue);
+    // The next poll must not bring the cleared mail back.
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(find.text('No emails captured'), findsOneWidget);
+    expect(find.text('Welcome'), findsNothing);
 
     await tester.tap(find.byTooltip('Stop'));
     await tester.pump();
@@ -125,6 +147,18 @@ void main() {
             matching: find.byType(Icon))))
         .requestFocus();
     await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Listening on :1025'), findsOneWidget);
+    await stopAndDispose(tester);
+  });
+
+  testWidgets('Tab reaches the start button in one press; Enter starts',
+      (tester) async {
+    await pump(tester);
+    final n = await tabToControl(tester, find.byTooltip('Start on port 1025'));
+    expect(n, 1);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
     await tester.pump();

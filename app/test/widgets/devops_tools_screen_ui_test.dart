@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/widgets/devops_tools_screen.dart';
 
 import '../helpers/fake_devops_ssh.dart';
+import '../helpers/tab_to_control.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -107,6 +108,34 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(fake.cmds, hasLength(1));
+  });
+
+  testWidgets('Tab reaches the run button; Enter runs', (tester) async {
+    final fake = await pump(tester);
+    // Reading-order traversal: first tool, the input, then Run.
+    final n = await tabToControl(tester, find.byKey(const ValueKey('devops-run')));
+    expect(n, 3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(fake.cmds, hasLength(1));
+  });
+
+  testWidgets('long input is truncated to 24 chars in the tab label',
+      (tester) async {
+    final fake = await pump(tester);
+    final long = 'h' * 60;
+    await tester.enterText(find.byKey(const ValueKey('devops-input')), long);
+    await tester.tap(find.byKey(const ValueKey('devops-run')));
+    await tester.pumpAndSettle();
+    // The command still gets the full value; only the label is shortened.
+    expect(fake.cmds.single, contains(long));
+    expect(find.text('Ping ${'h' * 16}...'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+          (w) => w is Text && (w.data ?? '').contains(long)),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('900x600 with a 60-char input and many tabs does not overflow',

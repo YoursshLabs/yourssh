@@ -14,6 +14,8 @@ class DevopsTextField extends StatelessWidget {
     this.mono = false,
     this.number = false,
     this.autofocus = false,
+    this.focusNode,
+    this.textInputAction = TextInputAction.done,
     this.onSubmit,
   });
 
@@ -24,6 +26,8 @@ class DevopsTextField extends StatelessWidget {
   final bool mono;
   final bool number;
   final bool autofocus;
+  final FocusNode? focusNode;
+  final TextInputAction textInputAction;
   final VoidCallback? onSubmit;
 
   @override
@@ -32,9 +36,10 @@ class DevopsTextField extends StatelessWidget {
     label: label == null ? null : Text(label!),
     hint: hint,
     autofocus: autofocus,
+    focusNode: focusNode,
     autocorrect: false,
     enableSuggestions: false,
-    textInputAction: TextInputAction.done,
+    textInputAction: textInputAction,
     keyboardType: number ? TextInputType.number : null,
     inputFormatters: number ? [FilteringTextInputFormatter.digitsOnly] : null,
     onSubmit: onSubmit == null ? null : (_) => onSubmit!(),

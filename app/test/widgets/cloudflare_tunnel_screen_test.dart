@@ -8,6 +8,7 @@ import 'package:yourssh/widgets/cloudflare_tunnel_screen.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../helpers/fake_devops_ssh.dart';
+import '../helpers/tab_to_control.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -84,19 +85,56 @@ void main() {
     expect(find.text('No tunnels yet'), findsNothing);
   });
 
-  testWidgets('keyboard: label autofocused, Enter on Add Tunnel adds',
+  testWidgets('keyboard: Enter in label focuses port, Enter in port submits',
       (tester) async {
     seed([]);
     await pump(tester);
     await tester.tap(find.text('New Tunnel'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('tunnel-label')), 'Kbd');
-    Focus.of(tester.element(find.text('Add Tunnel'))).requestFocus();
+    await tester.testTextInput.receiveAction(TextInputAction.next);
     await tester.pump();
+    final portField = find.descendant(
+        of: find.byKey(const ValueKey('tunnel-port')),
+        matching: find.byType(EditableText));
+    expect(tester.widget<EditableText>(portField).focusNode.hasFocus, isTrue);
+    await tester.enterText(find.byKey(const ValueKey('tunnel-port')), '4040');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.text('New Cloudflare Tunnel'), findsNothing);
+    expect(find.text('Kbd'), findsOneWidget);
+    expect(find.text('Port: 4040'), findsOneWidget);
+  });
+
+  testWidgets('Enter in port with an empty label adds nothing, like the button',
+      (tester) async {
+    seed([]);
+    await pump(tester);
+    await tester.tap(find.text('New Tunnel'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('tunnel-label')), '  ');
+    await tester.enterText(find.byKey(const ValueKey('tunnel-port')), '4040');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.text('New Cloudflare Tunnel'), findsOneWidget);
+    expect(find.text('No tunnels yet'), findsOneWidget);
+  });
+
+  testWidgets('Tab reaches New Tunnel (1) and Add Tunnel (2 from label); Enter',
+      (tester) async {
+    seed([]);
+    await pump(tester);
+    expect(await tabToControl(tester, find.byKey(const ValueKey('tunnel-new'))), 1);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
-    expect(find.text('Kbd'), findsOneWidget);
-    expect(find.text('Port: 3000'), findsOneWidget);
+    expect(find.text('New Cloudflare Tunnel'), findsOneWidget);
+    // Label is autofocused: port, then Add Tunnel.
+    await tester.enterText(find.byKey(const ValueKey('tunnel-label')), 'Tab');
+    final n = await tabToControl(tester, find.byKey(const ValueKey('tunnel-add')));
+    expect(n, 2);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Tab'), findsOneWidget);
   });
 
   testWidgets('start shows URL + copy, stop returns to idle', (tester) async {
@@ -167,6 +205,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Web'), findsNothing);
     expect(find.text('No tunnels yet'), findsOneWidget);
+  });
+
+  testWidgets('900x600 with a long public URL and long error does not overflow',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final longHost = 'u' * 40;
+    seed([tunnel('Web'), tunnel('Broken', port: 4000)]);
+    final fake = await pump(tester);
+    fake.reply = (cmd) {
+      if (cmd.startsWith('which cloudflared')) {
+        return (stdout: '/usr/bin/cloudflared', stderr: '', exitCode: 0);
+      }
+      if (cmd.contains('--url http://localhost:3000')) {
+        return (
+          stdout: 'DIR:/tmp/cf1\nhttps://$longHost.trycloudflare.com\n',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      return (stdout: 'DIR:/tmp/cf2\n', stderr: '', exitCode: 0);
+    };
+    await tester.tap(find.byTooltip('Start tunnel').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Start tunnel').last);
+    await tester.pumpAndSettle();
+    expect(find.text('https://$longHost.trycloudflare.com'), findsOneWidget);
+    expect(find.textContaining('No trycloudflare URL in /tmp/cf2'),
+        findsOneWidget);
+    await tester.tap(find.text('New Tunnel'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('900x600 with a 60-char label and panel open does not overflow',

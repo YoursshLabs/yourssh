@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/widgets/mcp_server_screen.dart';
 
 import '../helpers/fake_devops_ssh.dart';
+import '../helpers/tab_to_control.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -97,6 +98,17 @@ void main() {
     final fake = await pump(tester);
     Focus.of(tester.element(find.text('Start MCP Server'))).requestFocus();
     await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(fake.cmds, hasLength(1));
+    expect(find.text('MCP Server Running'), findsOneWidget);
+  });
+
+  testWidgets('Tab reaches the start button (command, port, button); Enter starts',
+      (tester) async {
+    final fake = await pump(tester);
+    final n = await tabToControl(tester, find.byKey(const ValueKey('mcp-toggle')));
+    expect(n, 3);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(fake.cmds, hasLength(1));

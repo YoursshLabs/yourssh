@@ -59,6 +59,17 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
     setState(() => _running = false);
   }
 
+  Future<void> _clearAll() async {
+    final session = context.read<SessionProvider>().activeSshSession;
+    // Clear the remote log too, otherwise the next poll brings the mails back.
+    if (session != null) await _service.clearLog(session.host);
+    if (!mounted) return;
+    setState(() {
+      _emails = [];
+      _selected = null;
+    });
+  }
+
   Future<void> _poll() async {
     final session = context.read<SessionProvider>().activeSshSession;
     if (session == null) return;
@@ -113,10 +124,7 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
                       ContainerIconAction(
                         icon: FLucideIcons.listX,
                         tooltip: 'Clear all',
-                        onPress: () => setState(() {
-                          _emails = [];
-                          _selected = null;
-                        }),
+                        onPress: _clearAll,
                       ),
                     _running
                         ? ContainerIconAction(
