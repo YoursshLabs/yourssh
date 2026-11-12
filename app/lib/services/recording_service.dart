@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import '../util/private_temp.dart';
 import 'audit_redactor.dart';
 
 class RecordingService {
@@ -28,14 +29,27 @@ class RecordingService {
     required int width,
     required int height,
     required String title,
-    bool redact = false,
+    bool redact = true,
   }) async {
     if (_active.containsKey(sessionId)) return;
     IOSink? sink;
     try {
+      // Recordings can hold sensitive terminal output: every directory this
+      // call creates is 0700 and the file 0600 (no-op on Windows).
       final dir = File(filePath).parent;
-      if (!await dir.exists()) await dir.create(recursive: true);
-      sink = File(filePath).openWrite(mode: FileMode.write);
+      final created = <Directory>[];
+      for (var d = dir; !await d.exists(); d = d.parent) {
+        created.add(d);
+        if (d.parent.path == d.path) break;
+      }
+      if (created.isNotEmpty) await dir.create(recursive: true);
+      for (final d in created.reversed) {
+        await restrictToOwner(dir: d);
+      }
+      final file = File(filePath);
+      if (!await file.exists()) await file.create();
+      await restrictToOwner(dir: dir, file: file);
+      sink = file.openWrite(mode: FileMode.write);
       final header = {
         'version': 2,
         'width': width,

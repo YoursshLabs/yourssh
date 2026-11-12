@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/ai_provider_config.dart';
 import 'package:yourssh/providers/ai_chat_provider.dart';
@@ -9,14 +12,17 @@ void main() {
 
   const channel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
   final Map<String, String> secureStore = {};
+  var failWrites = false;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     secureStore.clear();
+    failWrites = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
       switch (call.method) {
         case 'write':
+          if (failWrites) throw PlatformException(code: '-34018');
           final key = call.arguments['key'] as String;
           final value = call.arguments['value'] as String?;
           if (value != null) secureStore[key] = value;
@@ -111,6 +117,67 @@ void main() {
       await provider.clearProviderConfig(AiProvider.openai);
       expect(provider.activeProvider, AiProvider.anthropic);
       expect(provider.configured, isFalse);
+    });
+  });
+
+  group('AiChatProvider hardening', () {
+    test('keychain write failure is surfaced via lastError, not thrown',
+        () async {
+      failWrites = true;
+      final provider = AiChatProvider();
+      addTearDown(provider.dispose);
+      await Future.delayed(Duration.zero);
+      await provider.setProviderConfig(AiProvider.openai, apiKey: 'sk-x');
+      expect(provider.lastError, isNotNull);
+      provider.clearError();
+      expect(provider.lastError, isNull);
+    });
+
+    test('keychain read failure during load does not throw', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        throw PlatformException(code: '-34018');
+      });
+      final provider = AiChatProvider();
+      addTearDown(provider.dispose);
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(provider.lastError, isNotNull);
+    });
+
+    test('macOS storage pins the legacy keychain', () {
+      expect(
+          AiChatProvider.macOsKeychainOptions
+              .toMap()['useDataProtectionKeyChain'],
+          'false');
+    });
+
+    test('Gemini key goes in x-goog-api-key header, not the URL', () async {
+      late http.Request captured;
+      final client = MockClient((req) async {
+        captured = req;
+        return http.Response(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {'text': 'hi'}
+                    ]
+                  }
+                }
+              ]
+            }),
+            200);
+      });
+      final provider = AiChatProvider(client: client);
+      addTearDown(provider.dispose);
+      await Future.delayed(Duration.zero);
+      await provider.setProviderConfig(AiProvider.gemini, apiKey: 'AIza-secret');
+      await provider.setActiveProvider(AiProvider.gemini);
+      await provider.send('hello');
+      expect(captured.url.toString(), isNot(contains('AIza-secret')));
+      expect(captured.url.query, isEmpty);
+      expect(captured.headers['x-goog-api-key'], 'AIza-secret');
     });
   });
 }

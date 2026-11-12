@@ -146,4 +146,26 @@ void main() {
       expect(events[0], contains('password=plain'));
     });
   });
+
+  group('permissions and defaults', () {
+    test('redact defaults to true', () async {
+      final path = '${tmpDir.path}/d1.cast';
+      await service.startRecording('s1',
+          filePath: path, width: 80, height: 24, title: 't');
+      service.writeOutput('s1', 'token=abc123\n');
+      await service.stopRecording('s1');
+      final events = (await File(path).readAsLines()).skip(1).toList();
+      expect(events.single, isNot(contains('abc123')));
+    });
+
+    test('recordings dir is 0700 and file is 0600 on POSIX', () async {
+      final path = '${tmpDir.path}/host/sub/p1.cast';
+      await service.startRecording('s1',
+          filePath: path, width: 80, height: 24, title: 't');
+      await service.stopRecording('s1');
+      expect(File(path).statSync().mode & 0x1FF, 0x180);
+      expect(Directory('${tmpDir.path}/host/sub').statSync().mode & 0x1FF, 0x1C0);
+      expect(Directory('${tmpDir.path}/host').statSync().mode & 0x1FF, 0x1C0);
+    }, skip: Platform.isWindows);
+  });
 }

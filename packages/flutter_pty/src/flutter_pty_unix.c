@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <pthread.h>
 #include <unistd.h>
@@ -186,6 +187,11 @@ FFI_PLUGIN_EXPORT PtyHandle *pty_create(PtyOptions *options)
         {
             perror("execvp");
         }
+
+        // Never fall through into the parent's code in the forked child:
+        // exec failed (or returned), so terminate without running atexit
+        // handlers or flushing stdio buffers inherited from the parent.
+        _exit(127);
     }
 
     PtyHandle *handle = (PtyHandle *)malloc(sizeof(PtyHandle));
