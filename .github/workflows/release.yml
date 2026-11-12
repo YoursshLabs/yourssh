@@ -11,11 +11,11 @@ on:
 permissions:
   contents: read
 
-# Flutter is pinned: the stable channel moved to 3.50, which deprecates
-# package:flutter/material.dart and requires Gradle >= 9.3.1 / AGP >= 9.1.1 /
-# Kotlin >= 2.4.10 for Android. Bump this together with that migration.
+# Flutter is pinned (also the git tag the ARM64 Windows/Linux jobs clone).
+# Keep it equal to pr-test.yml, whose `android` job proves the Android
+# toolchain in app/android still builds with this version.
 env:
-  FLUTTER_VERSION: 3.47.1
+  FLUTTER_VERSION: 3.50.0
 
 jobs:
   test:

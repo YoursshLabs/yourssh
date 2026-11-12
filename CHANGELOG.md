@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`yourssh://connect/<host-id-or-label>` links** — open a saved host from a browser or script; saved hosts only, repeats of the same link within 2 s are ignored. The scheme is registered by the macOS app, the Windows installer (current user) and the Linux .deb; the portable zip and tarball do not register it.
 - **Audit source for CLI and URL connects** — connect rows carry `meta.source` = `cli` / `url`.
 
+### Changed
+- Built with Flutter 3.50.
+
+---
+
 ## [0.3.0] — 2026-11-12
 
 ### Performance
