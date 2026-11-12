@@ -303,7 +303,9 @@ class SessionProvider extends ChangeNotifier {
     }
 
     _watchRdpStatus(session, auditSource: auditSource);
-    session.addListener(_safeNotify);
+    // State changes only: forwarding every frame would rebuild each
+    // SessionProvider listener (MainScreen, dashboard) at the frame rate.
+    session.stateChanges.addListener(_safeNotify);
     _sessions.add(session);
     _activeSessionId = session.id;
     if (session.isPinned) _sortSessions();
@@ -316,7 +318,8 @@ class SessionProvider extends ChangeNotifier {
   void _watchRdpStatus(RdpSession session, {String auditSource = 'app'}) {
     final via = auditSource == 'app' ? const <String, Object?>{} : {'via': auditSource};
     var last = session.status;
-    session.addListener(() {
+    // Every status change is a state change; frames are skipped.
+    session.stateChanges.addListener(() {
       final now = session.status;
       if (now == last) return;
       final was = last;
@@ -429,7 +432,9 @@ class SessionProvider extends ChangeNotifier {
     }
 
     _watchVncStatus(session, auditSource: auditSource);
-    session.addListener(_safeNotify);
+    // State changes only: forwarding every frame would rebuild each
+    // SessionProvider listener (MainScreen, dashboard) at the frame rate.
+    session.stateChanges.addListener(_safeNotify);
     _sessions.add(session);
     _activeSessionId = session.id;
     if (session.isPinned) _sortSessions();
@@ -442,7 +447,8 @@ class SessionProvider extends ChangeNotifier {
   void _watchVncStatus(VncSession session, {String auditSource = 'app'}) {
     final via = auditSource == 'app' ? const <String, Object?>{} : {'via': auditSource};
     var last = session.status;
-    session.addListener(() {
+    // Every status change is a state change; frames are skipped.
+    session.stateChanges.addListener(() {
       final now = session.status;
       if (now == last) return;
       final was = last;
@@ -733,7 +739,7 @@ class SessionProvider extends ChangeNotifier {
             sessionId: sessionId,
             meta: const {'source': 'rdp', 'reason': 'user-closed'}));
       }
-      session.removeListener(_safeNotify);
+      session.stateChanges.removeListener(_safeNotify);
       unawaited(session.close());
       _sessions.remove(session);
       if (_activeSessionId == sessionId) {
@@ -759,7 +765,7 @@ class SessionProvider extends ChangeNotifier {
             sessionId: sessionId,
             meta: const {'source': 'vnc', 'reason': 'user-closed'}));
       }
-      session.removeListener(_safeNotify);
+      session.stateChanges.removeListener(_safeNotify);
       unawaited(session.close());
       _sessions.remove(session);
       if (_activeSessionId == sessionId) {
