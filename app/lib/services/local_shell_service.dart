@@ -9,6 +9,7 @@ import '../models/shell_profile.dart';
 import 'notification_service.dart';
 import 'pty_runner.dart';
 import 'recording_service.dart';
+import 'terminal_write_queue.dart';
 
 typedef PtyFactory = PtyRunner Function(
   String shell,
@@ -17,6 +18,11 @@ typedef PtyFactory = PtyRunner Function(
   int rows,
   Map<String, String> environment,
 );
+
+/// Bytes the native PTY reader may have in flight (posted, not yet parsed)
+/// before it blocks. Bounds the output that keeps arriving after Ctrl+C:
+/// at ~100 MB/s parse speed 2 MiB is ~20 ms of output.
+const int kLocalPtyCreditBytes = 2 * 1024 * 1024;
 
 class LocalShellService {
   final Map<String, LocalSession> _sessions = {};
@@ -33,6 +39,12 @@ class LocalShellService {
   /// `localShell` setter.
   void Function()? onSessionStateChanged;
 
+  final Map<String, TerminalWriteQueue> _queues = {};
+
+  /// Synchronously drains pending output of [sessionId] into its terminal
+  /// (ordering barrier; used by tests and before out-of-band writes).
+  void flushOutput(String sessionId) => _queues[sessionId]?.flush();
+
   LocalShellService({PtyFactory? ptyFactory})
       : _ptyFactory = ptyFactory ?? _defaultFactory;
 
@@ -48,7 +60,9 @@ class LocalShellService {
             arguments: args,
             columns: columns,
             rows: rows,
-            environment: environment),
+            environment: environment,
+            ackRead: true,
+            creditBytes: kLocalPtyCreditBytes),
       );
 
   /// Picks the shell executable for the current platform. On Windows `SHELL`
@@ -96,21 +110,71 @@ class LocalShellService {
 
       session.attachPty(pty);
 
-      pty.output
-          .transform(const Utf8Decoder(allowMalformed: true))
-          .listen((data) {
-            terminal.write(data);
-            recordingService?.writeOutput(session.id, data);
-            try {
-              NotificationService.instance.onTerminalData(
-                data,
-                sessionId: session.id,
-                sessionLabel: 'Local Shell',
-              );
-            } catch (e) {
-              debugPrint('[LocalShellService] notification handler threw: $e');
-            }
-          });
+      _queues.remove(session.id)?.dispose();
+      final ackable = pty is AckablePty ? pty as AckablePty : null;
+      // Credit based flow control (preferred): chunks go to the parser as raw
+      // bytes and credit is returned by bytes parsed, once per queue slice.
+      final credit = pty is CreditPty ? pty as CreditPty : null;
+      var ackWithheld = false;
+      final queue = TerminalWriteQueue(
+        // Small high-water: the kernel pty buffer plus this is all that can
+        // pile up after Ctrl+C, and the shell stalls as soon as it is hit.
+        highWater: 256 * 1024,
+        lowWater: 64 * 1024,
+        onPressure: (paused) {
+          if (!paused && ackWithheld) {
+            ackWithheld = false;
+            ackable?.ackRead();
+          }
+        },
+        write: terminal.writeNoNotify,
+        writeBytes: terminal.writeBytesNoNotify,
+        onConsumed: credit?.ackBytes,
+        commit: terminal.flushWrites,
+        onBatch: (batch) {
+          recordingService?.writeOutput(session.id, batch);
+          try {
+            NotificationService.instance.onTerminalData(
+              batch,
+              sessionId: session.id,
+              sessionLabel: 'Local Shell',
+            );
+          } catch (e) {
+            debugPrint('[LocalShellService] notification handler threw: $e');
+          }
+        },
+      );
+      _queues[session.id] = queue;
+
+      if (credit != null) {
+        // Nothing is decoded here: no String is built on the hot path. The
+        // native reader blocks only when the credit budget is in flight.
+        pty.output.listen((bytes) {
+          queue.addBytes(
+              bytes is Uint8List ? bytes : Uint8List.fromList(bytes));
+        });
+      } else {
+        // Legacy one-chunk-then-wait ackRead: the native reader blocks until
+        // each chunk is acked. Ack on arrival (acking at slice cadence would
+        // cap throughput at one chunk per frame) but withhold the ack while
+        // the backlog is above the high-water mark: the shell then blocks in
+        // write(2) until the UI has drained below the low-water mark.
+        final decoder = const Utf8Decoder(allowMalformed: true);
+        var decoded = '';
+        // Stateful decoding (multi-byte sequences may straddle chunks).
+        final byteSink = decoder
+            .startChunkedConversion(_CollectingSink((s) => decoded += s));
+        pty.output.listen((bytes) {
+          decoded = '';
+          byteSink.add(bytes);
+          if (decoded.isNotEmpty) queue.add(decoded);
+          if (queue.isPaused) {
+            ackWithheld = true;
+          } else {
+            ackable?.ackRead();
+          }
+        });
+      }
 
       terminal.onOutput = (data) {
         pty.write(const Utf8Encoder().convert(data));
@@ -122,6 +186,7 @@ class LocalShellService {
 
       pty.exitCode.then((code) {
         session.status = LocalSessionStatus.exited;
+        _queues.remove(session.id)?.flush();
         terminal.write('\r\n[Process exited with code $code]\r\n');
         recordingService?.onShellClosed(session.id);
         NotificationService.instance.removeSession(session.id);
@@ -138,8 +203,18 @@ class LocalShellService {
     recordingService?.onShellClosed(sessionId);
     _sessions[sessionId]?.kill();
     _sessions.remove(sessionId);
+    _queues.remove(sessionId)?.dispose();
     NotificationService.instance.removeSession(sessionId);
   }
 
   LocalSession? getSession(String sessionId) => _sessions[sessionId];
+}
+
+class _CollectingSink implements Sink<String> {
+  _CollectingSink(this._onData);
+  final void Function(String) _onData;
+  @override
+  void add(String data) => _onData(data);
+  @override
+  void close() {}
 }

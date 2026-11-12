@@ -510,3 +510,7 @@ class UnicodeV11 {
 }
 
 final unicodeV11 = UnicodeV11();
+
+/// [UnicodeV11.wcwidth] of every BMP code point (`table[c] == wcwidth(c)` for
+/// `c < 0x10000`), for callers that look widths up in a hot loop.
+Uint8List get unicodeV11Table => table;

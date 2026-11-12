@@ -131,6 +131,26 @@ void main() {
             'fast output once scrollback is full)');
   });
 
+  testWidgets('trim compensation survives an overscrolled (negative) offset',
+      (tester) async {
+    // Bouncing scroll physics can leave the offset above the top while the
+    // buffer is trimming; the compensation clamped to [0, pixels] and threw.
+    final terminal = Terminal(maxLines: 500);
+    fillLines(terminal, 600);
+    final sc = await pumpTerminal(tester, terminal);
+    final center = tester.getCenter(find.byType(TerminalView));
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    pointer.hover(center);
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, -300)));
+    await tester.pump();
+
+    sc.jumpTo(-20);
+    fillLines(terminal, 10, 'stream');
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(sc.offset, lessThanOrEqualTo(0));
+  });
+
   testWidgets('Shift+PageUp / Shift+PageDown page through scrollback',
       (tester) async {
     final terminal = Terminal(maxLines: 10000);

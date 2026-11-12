@@ -1,10 +1,10 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:xterm/src/core/color.dart';
 import 'package:xterm/src/core/mouse/mode.dart';
 import 'package:xterm/src/core/escape/handler.dart';
 import 'package:xterm/src/utils/ascii.dart';
-import 'package:xterm/src/utils/byte_consumer.dart';
-import 'package:xterm/src/utils/char_code.dart';
-import 'package:xterm/src/utils/lookup_table.dart';
 
 /// [EscapeParser] translates control characters and escape sequences into
 /// function calls that the terminal can handle.
@@ -12,202 +12,380 @@ import 'package:xterm/src/utils/lookup_table.dart';
 /// Design goals:
 ///  * Zero object allocation during processing.
 ///  * No internal state. Same input will always produce same output.
+///
+/// YOURSSH PATCH (throughput): input is decoded once into a reusable code
+/// point buffer and scanned by index; runs of printable text go to an
+/// [EscapeTextSink] in one call when the handler implements it. An
+/// incomplete trailing sequence stays buffered and is re-scanned from its
+/// ESC on the next [write], and when a handler throws, the rest of the chunk
+/// is kept and processed by the next [write] — both exactly like the
+/// previous queue-based implementation.
 class EscapeParser {
   final EscapeHandler handler;
 
-  EscapeParser(this.handler);
+  EscapeParser(this.handler)
+      : _sink = handler is EscapeTextSink ? handler as EscapeTextSink : null;
 
-  final _queue = ByteConsumer();
+  final EscapeTextSink? _sink;
+
+  /// Decoded code points. `[0, _length)` is input left over from earlier
+  /// writes (an incomplete sequence, or the rest of a chunk whose handler
+  /// threw); new input is appended after it.
+  Uint32List _buf = Uint32List(4096);
+
+  var _length = 0;
+
+  /// Scan position in [_buf]; kept up to date before every handler call so
+  /// [tokenEnd] and exception recovery see the consumed prefix.
+  var _pos = 0;
+
+  /// Number of code points consumed before `_buf[0]`.
+  var _consumedBase = 0;
+
+  /// Whether [_sink] is currently inside [EscapeTextSink.writeChars].
+  var _inSink = false;
 
   /// Start of sequence or character being processed. Useful for debugging.
   var tokenBegin = 0;
 
   /// End of sequence or character being processed. Useful for debugging.
-  int get tokenEnd => _queue.totalConsumed;
+  int get tokenEnd => _consumedBase + _pos;
 
   void write(String chunk) {
-    _queue.unrefConsumedBlocks();
-    _queue.add(chunk);
-    _process();
+    final n = chunk.length;
+    var w = _length;
+    if (w + n > _buf.length) {
+      _grow(w + n);
+    }
+    final buf = _buf;
+    // Same code points as `chunk.runes`: a surrogate pair is combined only
+    // when both halves are in this chunk; lone surrogates pass through.
+    for (var i = 0; i < n; i++) {
+      var c = chunk.codeUnitAt(i);
+      if (c >= 0xD800 && c <= 0xDBFF && i + 1 < n) {
+        final d = chunk.codeUnitAt(i + 1);
+        if (d >= 0xDC00 && d <= 0xDFFF) {
+          c = 0x10000 + ((c - 0xD800) << 10) + (d - 0xDC00);
+          i++;
+        }
+      }
+      buf[w++] = c;
+    }
+    _process(w);
   }
 
-  void _process() {
-    while (_queue.isNotEmpty) {
-      tokenBegin = _queue.totalConsumed;
-      final char = _queue.consume();
+  /// Up to three bytes of a UTF-8 sequence cut short by the end of the last
+  /// [writeBytes] chunk.
+  final _carry = Uint8List(4);
 
-      if (char == Ascii.ESC) {
-        final processed = _processEscape();
-        if (!processed) {
-          _queue.rollback(tokenEnd - tokenBegin);
-          return;
+  var _carryLength = 0;
+
+  /// Whether [writeBytes] has decoded any byte yet (a byte order mark is only
+  /// dropped at the very start of the byte stream).
+  var _bytesStarted = false;
+
+  static const _utf8 = Utf8Decoder(allowMalformed: true);
+
+  /// Writes UTF-8 encoded input. Equivalent to feeding the byte stream to one
+  /// chunked `Utf8Decoder(allowMalformed: true)` and calling [write] with
+  /// every string it produces — malformed bytes become U+FFFD exactly as
+  /// that decoder reports them, a byte order mark at the start of the stream
+  /// is dropped, and a sequence split across chunks is joined — but without
+  /// building the intermediate strings.
+  void writeBytes(Uint8List bytes) {
+    var data = bytes;
+    var end = bytes.length;
+    if (_carryLength > 0) {
+      data = Uint8List(_carryLength + end)
+        ..setRange(0, _carryLength, _carry)
+        ..setRange(_carryLength, _carryLength + end, bytes);
+      end = data.length;
+      _carryLength = 0;
+    }
+
+    // Hold back a sequence that the end of this chunk cut short.
+    var stop = end;
+    for (var k = end - 1; k >= 0 && k >= end - 3; k--) {
+      final b = data[k];
+      if (b < 0x80) break;
+      if (b >= 0xC0) {
+        final need = b >= 0xF0 ? 4 : (b >= 0xE0 ? 3 : 2);
+        if (b >= 0xC2 && b <= 0xF4 && end - k < need) stop = k;
+        break;
+      }
+    }
+    for (var k = stop; k < end; k++) {
+      _carry[_carryLength++] = data[k];
+    }
+
+    var i = 0;
+    if (!_bytesStarted && stop > 0) {
+      _bytesStarted = true;
+      if (stop >= 3 &&
+          data[0] == 0xEF &&
+          data[1] == 0xBB &&
+          data[2] == 0xBF) {
+        i = 3;
+      }
+    }
+
+    var w = _length;
+    if (w + (stop - i) > _buf.length) {
+      _grow(w + (stop - i));
+    }
+    final buf = _buf;
+
+    while (i < stop) {
+      var b0 = data[i];
+      if (b0 < 0x80) {
+        do {
+          buf[w++] = b0;
+          if (++i == stop) break;
+          b0 = data[i];
+        } while (b0 < 0x80);
+        continue;
+      }
+      if (b0 >= 0xC2) {
+        if (b0 < 0xE0) {
+          if (i + 1 < stop) {
+            final b1 = data[i + 1];
+            if (b1 & 0xC0 == 0x80) {
+              buf[w++] = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
+              i += 2;
+              continue;
+            }
+          }
+        } else if (b0 < 0xF0) {
+          if (i + 2 < stop) {
+            final b1 = data[i + 1];
+            final b2 = data[i + 2];
+            if (b1 >= (b0 == 0xE0 ? 0xA0 : 0x80) &&
+                b1 <= (b0 == 0xED ? 0x9F : 0xBF) &&
+                b2 & 0xC0 == 0x80) {
+              buf[w++] = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
+              i += 3;
+              continue;
+            }
+          }
+        } else if (b0 <= 0xF4) {
+          if (i + 3 < stop) {
+            final b1 = data[i + 1];
+            final b2 = data[i + 2];
+            final b3 = data[i + 3];
+            if (b1 >= (b0 == 0xF0 ? 0x90 : 0x80) &&
+                b1 <= (b0 == 0xF4 ? 0x8F : 0xBF) &&
+                b2 & 0xC0 == 0x80 &&
+                b3 & 0xC0 == 0x80) {
+              buf[w++] = ((b0 & 0x07) << 18) |
+                  ((b1 & 0x3F) << 12) |
+                  ((b2 & 0x3F) << 6) |
+                  (b3 & 0x3F);
+              i += 4;
+              continue;
+            }
+          }
         }
-      } else {
-        _processChar(char);
+      }
+      // Malformed: let the platform decoder report the bytes up to the next
+      // ASCII byte (always a sequence boundary for it), so replacement
+      // characters match it exactly.
+      var k = i + 1;
+      while (k < stop && data[k] >= 0x80) {
+        k++;
+      }
+      final text = _utf8.convert(data, i, k);
+      for (var j = 0; j < text.length; j++) {
+        var c = text.codeUnitAt(j);
+        if (c >= 0xD800 && c <= 0xDBFF && j + 1 < text.length) {
+          final d = text.codeUnitAt(j + 1);
+          if (d >= 0xDC00 && d <= 0xDFFF) {
+            c = 0x10000 + ((c - 0xD800) << 10) + (d - 0xDC00);
+            j++;
+          }
+        }
+        buf[w++] = c;
+      }
+      i = k;
+    }
+    _process(w);
+  }
+
+  void _grow(int needed) {
+    var capacity = _buf.length * 2;
+    while (capacity < needed) {
+      capacity *= 2;
+    }
+    final grown = Uint32List(capacity);
+    grown.setRange(0, _length, _buf);
+    _buf = grown;
+  }
+
+  /// Processes `_buf[0, end)` and keeps whatever was not consumed.
+  void _process(int end) {
+    _pos = 0;
+    try {
+      _run(end);
+    } finally {
+      if (_inSink) {
+        _inSink = false;
+        _pos = _sink!.writeCharsFailedAt + 1;
+      }
+      final rest = end - _pos;
+      if (rest > 0 && _pos > 0) {
+        _buf.setRange(0, rest, _buf, _pos);
+      }
+      _consumedBase += _pos;
+      _length = rest;
+      _pos = 0;
+      if (_buf.length > _maxIdleBuffer && rest < _maxIdleBuffer ~/ 2) {
+        final shrunk = Uint32List(_maxIdleBuffer ~/ 2);
+        shrunk.setRange(0, rest, _buf);
+        _buf = shrunk;
       }
     }
   }
 
+  /// Buffers larger than this (in code points) are released after a write.
+  static const _maxIdleBuffer = 1 << 20;
+
+  void _run(int end) {
+    final buf = _buf;
+    final sink = _sink;
+    var i = 0;
+    while (i < end) {
+      final c = buf[i];
+
+      if (c >= 0x10 && c != Ascii.ESC) {
+        // A run of characters the parser hands to writeChar.
+        if (sink != null) {
+          tokenBegin = _consumedBase + i;
+          _inSink = true;
+          i = sink.writeChars(buf, i, end);
+          _inSink = false;
+          continue;
+        }
+        do {
+          tokenBegin = _consumedBase + i;
+          _pos = i + 1;
+          handler.writeChar(buf[i]);
+          i++;
+        } while (i < end && buf[i] >= 0x10 && buf[i] != Ascii.ESC);
+        continue;
+      }
+
+      tokenBegin = _consumedBase + i;
+
+      if (c == Ascii.ESC) {
+        final next = _processEscape(i + 1, end);
+        if (next < 0) {
+          // Incomplete sequence: keep it (from the ESC) for the next write.
+          _pos = i;
+          return;
+        }
+        i = next;
+        continue;
+      }
+
+      _pos = ++i;
+      _processChar(c);
+    }
+    _pos = end;
+  }
+
+  /// Handles a C0 control character (`char < 0x10`).
   void _processChar(int char) {
-    if (char > _sbcHandlers.maxIndex) {
-      handler.writeChar(char);
-      return;
+    switch (char) {
+      case 0x07:
+        return handler.bell();
+      case 0x08:
+        return handler.backspaceReturn();
+      case 0x09:
+        return handler.tab();
+      case 0x0a:
+      case 0x0b:
+      case 0x0c:
+        return handler.lineFeed();
+      case 0x0d:
+        return handler.carriageReturn();
+      case 0x0e:
+        return handler.shiftOut();
+      case 0x0f:
+        return handler.shiftIn();
+      default:
+        return handler.unkownEscape(char);
     }
+  }
 
-    final sbcHandler = _sbcHandlers[char];
-    if (sbcHandler == null) {
-      handler.unkownEscape(char);
-      return;
+  /// Processes a sequence that starts with the ESC before `_buf[i]`. Returns
+  /// the index after the sequence, or -1 if the sequence is not complete.
+  int _processEscape(int i, int end) {
+    if (i >= end) return -1;
+
+    final escapeChar = _buf[i++];
+
+    switch (escapeChar) {
+      case 0x5b: // [
+        return _escHandleCSI(i, end);
+      case 0x5d: // ]
+        return _escHandleOSC(i, end);
+      case 0x37: // 7 — Save Cursor (DECSC)
+        _pos = i;
+        handler.saveCursor();
+        return i;
+      case 0x38: // 8 — Restore Cursor (DECRC)
+        _pos = i;
+        handler.restoreCursor();
+        return i;
+      case 0x44: // D — Index (IND)
+        _pos = i;
+        handler.index();
+        return i;
+      case 0x45: // E — Next Line (NEL)
+        _pos = i;
+        handler.nextLine();
+        return i;
+      case 0x48: // H — Horizontal Tab Set (HTS)
+        _pos = i;
+        handler.setTapStop();
+        return i;
+      case 0x4d: // M — Reverse Index (RI)
+        _pos = i;
+        handler.reverseIndex();
+        return i;
+      case 0x28: // ( — SCS G0
+      case 0x29: // ) — SCS G1
+        if (i >= end) return -1;
+        final name = _buf[i++];
+        _pos = i;
+        handler.designateCharset(escapeChar == 0x28 ? 0 : 1, name);
+        return i;
+      case 0x3e: // > — Normal Keypad (DECKPNM)
+        _pos = i;
+        handler.setAppKeypadMode(false);
+        return i;
+      case 0x3d: // = — Application Keypad (DECKPAM)
+        _pos = i;
+        handler.setAppKeypadMode(true);
+        return i;
+      default:
+        _pos = i;
+        handler.unkownEscape(escapeChar);
+        return i;
     }
-
-    sbcHandler();
   }
 
-  /// Processes a sequence of characters that starts with an escape character.
-  /// Returns [true] if the sequence was processed, [false] if it was not.
-  bool _processEscape() {
-    if (_queue.isEmpty) return false;
+  int _escHandleCSI(int i, int end) {
+    final next = _consumeCsi(i, end);
+    if (next < 0 || _csiDropped) return next;
 
-    final escapeChar = _queue.consume();
-    final escapeHandler = _escHandlers[escapeChar];
-
-    if (escapeHandler == null) {
-      handler.unkownEscape(escapeChar);
-      return true;
-    }
-
-    return escapeHandler();
-  }
-
-  late final _sbcHandlers = FastLookupTable<_SbcHandler>({
-    0x07: handler.bell,
-    0x08: handler.backspaceReturn,
-    0x09: handler.tab,
-    0x0a: handler.lineFeed,
-    0x0b: handler.lineFeed,
-    0x0c: handler.lineFeed,
-    0x0d: handler.carriageReturn,
-    0x0e: handler.shiftOut,
-    0x0f: handler.shiftIn,
-  });
-
-  late final _escHandlers = FastLookupTable<_EscHandler>({
-    '['.charCode: _escHandleCSI,
-    ']'.charCode: _escHandleOSC,
-    '7'.charCode: _escHandleSaveCursor,
-    '8'.charCode: _escHandleRestoreCursor,
-    'D'.charCode: _escHandleIndex,
-    'E'.charCode: _escHandleNextLine,
-    'H'.charCode: _escHandleTabSet,
-    'M'.charCode: _escHandleReverseIndex,
-    // 'P'.charCode: _unsupportedHandler, // Sixel
-    // 'c'.charCode: _unsupportedHandler,
-    // '#'.charCode: _unsupportedHandler,
-    '('.charCode: _escHandleDesignateCharset0, //  SCS - G0
-    ')'.charCode: _escHandleDesignateCharset1, //  SCS - G1
-    // '*'.charCode: _voidHandler(1), // TODO: G2 (vt220)
-    // '+'.charCode: _voidHandler(1), // TODO: G3 (vt220)
-    '>'.charCode: _escHandleResetAppKeypadMode, // TODO: Normal Keypad
-    '='.charCode: _escHandleSetAppKeypadMode, // TODO: Application Keypad
-  });
-
-  /// `ESC 7` Save Cursor (DECSC)
-  ///
-  /// https://terminalguide.namepad.de/seq/a_esc_a7/
-  bool _escHandleSaveCursor() {
-    handler.saveCursor();
-    return true;
-  }
-
-  /// `ESC 8` Restore Cursor (DECRC)
-  ///
-  /// https://terminalguide.namepad.de/seq/a_esc_a8/
-  bool _escHandleRestoreCursor() {
-    handler.restoreCursor();
-    return true;
-  }
-
-  /// `ESC D` Index (IND)
-  ///
-  /// https://terminalguide.namepad.de/seq/a_esc_cd/
-  bool _escHandleIndex() {
-    handler.index();
-    return true;
-  }
-
-  /// `ESC E` Next Line (NEL)
-  ///
-  /// https://terminalguide.namepad.de/seq/a_esc_ce/
-  bool _escHandleNextLine() {
-    handler.nextLine();
-    return true;
-  }
-
-  /// `ESC H` Horizontal Tab Set (HTS)
-  ///
-  /// https://terminalguide.namepad.de/seq/a_esc_ch/
-  bool _escHandleTabSet() {
-    handler.setTapStop();
-    return true;
-  }
-
-  /// `ESC M` Reverse Index (RI)
-  ///
-  /// https://terminalguide.namepad.de/seq/a_esc_cm/
-  bool _escHandleReverseIndex() {
-    handler.reverseIndex();
-    return true;
-  }
-
-  bool _escHandleDesignateCharset0() {
-    if (_queue.isEmpty) return false;
-    int name = _queue.consume();
-    handler.designateCharset(0, name);
-    return true;
-  }
-
-  bool _escHandleDesignateCharset1() {
-    if (_queue.isEmpty) return false;
-    int name = _queue.consume();
-    handler.designateCharset(1, name);
-    return true;
-  }
-
-  /// `ESC >` Reset Application Keypad Mode (DECKPNM)
-  ///
-  /// https://terminalguide.namepad.de/seq/a_esc_x3c_greater_than/
-  bool _escHandleSetAppKeypadMode() {
-    handler.setAppKeypadMode(true);
-    return true;
-  }
-
-  /// `ESC =` Set Application Keypad Mode (DECKPAM)
-  ///
-  /// https://terminalguide.namepad.de/seq/a_esc_x3d_equals/
-  bool _escHandleResetAppKeypadMode() {
-    handler.setAppKeypadMode(false);
-    return true;
-  }
-
-  bool _escHandleCSI() {
-    final consumed = _consumeCsi();
-    if (!consumed) return false;
-    if (_csiDropped) return true;
-
-    final csiHandler = _csiHandlers[_csi.finalByte];
-
-    if (csiHandler == null) {
-      handler.unknownCSI(_csi.finalByte);
-    } else {
-      csiHandler();
-    }
-
-    return true;
+    _pos = next;
+    _dispatchCsi(_csi.finalByte);
+    return next;
   }
 
   /// The last parsed [_Csi]. This is a mutable singletion by design to reduce
   /// object allocations.
-  final _csi = _Csi(finalByte: 0, params: []);
+  final _csi = _Csi();
 
   /// Largest numeric CSI parameter kept; bigger values are clamped so they
   /// can neither overflow negative nor drive huge loops/allocations.
@@ -222,22 +400,25 @@ class EscapeParser {
   /// Set by [_consumeCsi] when the sequence was dropped for being too long.
   bool _csiDropped = false;
 
-  /// Parse a CSI from the head of the queue. Return false if the CSI isn't
-  /// complete. After a CSI is successfully parsed, [_csi] is updated.
-  bool _consumeCsi() {
-    if (_queue.isEmpty) {
-      return false;
+  /// Parses a CSI starting at `_buf[i]` (after `ESC [`). Returns the index
+  /// after it, or -1 if the CSI isn't complete. After a CSI is successfully
+  /// parsed, [_csi] is updated.
+  int _consumeCsi(int i, int end) {
+    if (i >= end) {
+      return -1;
     }
 
-    _csi.params.clear();
+    final buf = _buf;
+    final params = _csi.params;
+    params.clear();
     _csiDropped = false;
     var scanned = 0;
 
     // test whether the csi is a `CSI ? Ps ...` or `CSI Ps ...`
-    final prefix = _queue.peek();
+    final prefix = buf[i];
     if (prefix >= Ascii.colon && prefix <= Ascii.questionMark) {
       _csi.prefix = prefix;
-      _queue.consume();
+      i++;
     } else {
       _csi.prefix = null;
     }
@@ -246,21 +427,21 @@ class EscapeParser {
     var hasParam = false;
     while (true) {
       // The sequence isn't completed, just ignore it.
-      if (_queue.isEmpty) {
-        return false;
+      if (i >= end) {
+        return -1;
       }
 
-      final char = _queue.consume();
+      final char = buf[i++];
 
       if (++scanned > _maxCsiLength) {
-        _csi.params.clear();
+        params.clear();
         _csiDropped = true;
-        return true;
+        return i;
       }
 
       if (char == Ascii.semicolon) {
         if (hasParam) {
-          _csi.params.add(param);
+          params.add(param);
         }
         param = 0;
         continue;
@@ -280,46 +461,78 @@ class EscapeParser {
 
       if (char >= Ascii.atSign && char <= Ascii.tilde) {
         if (hasParam) {
-          _csi.params.add(param);
+          params.add(param);
         }
 
         _csi.finalByte = char;
-        return true;
+        return i;
       }
     }
   }
 
-  late final _csiHandlers = FastLookupTable<_CsiHandler>({
-    // 'a'.codeUnitAt(0): _csiHandleCursorHorizontalRelative,
-    'b'.codeUnitAt(0): _csiHandleRepeatPreviousCharacter,
-    'c'.codeUnitAt(0): _csiHandleSendDeviceAttributes,
-    'd'.codeUnitAt(0): _csiHandleLinePositionAbsolute,
-    'f'.codeUnitAt(0): _csiHandleCursorPosition,
-    'g'.codeUnitAt(0): _csiHandelClearTabStop,
-    'h'.codeUnitAt(0): _csiHandleMode,
-    'l'.codeUnitAt(0): _csiHandleMode,
-    'm'.codeUnitAt(0): _csiHandleSgr,
-    'n'.codeUnitAt(0): _csiHandleDeviceStatusReport,
-    'r'.codeUnitAt(0): _csiHandleSetMargins,
-    't'.codeUnitAt(0): _csiWindowManipulation,
-    'A'.codeUnitAt(0): _csiHandleCursorUp,
-    'B'.codeUnitAt(0): _csiHandleCursorDown,
-    'C'.codeUnitAt(0): _csiHandleCursorForward,
-    'D'.codeUnitAt(0): _csiHandleCursorBackward,
-    'E'.codeUnitAt(0): _csiHandleCursorNextLine,
-    'F'.codeUnitAt(0): _csiHandleCursorPrecedingLine,
-    'G'.codeUnitAt(0): _csiHandleCursorHorizontalAbsolute,
-    'H'.codeUnitAt(0): _csiHandleCursorPosition,
-    'J'.codeUnitAt(0): _csiHandleEraseDisplay,
-    'K'.codeUnitAt(0): _csiHandleEraseLine,
-    'L'.codeUnitAt(0): _csiHandleInsertLines,
-    'M'.codeUnitAt(0): _csiHandleDeleteLines,
-    'P'.codeUnitAt(0): _csiHandleDelete,
-    'S'.codeUnitAt(0): _csiHandleScrollUp,
-    'T'.codeUnitAt(0): _csiHandleScrollDown,
-    'X'.codeUnitAt(0): _csiHandleEraseCharacters,
-    '@'.codeUnitAt(0): _csiHandleInsertBlankCharacters,
-  });
+  void _dispatchCsi(int finalByte) {
+    switch (finalByte) {
+      // case 0x61: // a
+      //   return _csiHandleCursorHorizontalRelative();
+      case 0x62: // b
+        return _csiHandleRepeatPreviousCharacter();
+      case 0x63: // c
+        return _csiHandleSendDeviceAttributes();
+      case 0x64: // d
+        return _csiHandleLinePositionAbsolute();
+      case 0x66: // f
+        return _csiHandleCursorPosition();
+      case 0x67: // g
+        return _csiHandelClearTabStop();
+      case 0x68: // h
+      case 0x6c: // l
+        return _csiHandleMode();
+      case 0x6d: // m
+        return _csiHandleSgr();
+      case 0x6e: // n
+        return _csiHandleDeviceStatusReport();
+      case 0x72: // r
+        return _csiHandleSetMargins();
+      case 0x74: // t
+        return _csiWindowManipulation();
+      case 0x41: // A
+        return _csiHandleCursorUp();
+      case 0x42: // B
+        return _csiHandleCursorDown();
+      case 0x43: // C
+        return _csiHandleCursorForward();
+      case 0x44: // D
+        return _csiHandleCursorBackward();
+      case 0x45: // E
+        return _csiHandleCursorNextLine();
+      case 0x46: // F
+        return _csiHandleCursorPrecedingLine();
+      case 0x47: // G
+        return _csiHandleCursorHorizontalAbsolute();
+      case 0x48: // H
+        return _csiHandleCursorPosition();
+      case 0x4a: // J
+        return _csiHandleEraseDisplay();
+      case 0x4b: // K
+        return _csiHandleEraseLine();
+      case 0x4c: // L
+        return _csiHandleInsertLines();
+      case 0x4d: // M
+        return _csiHandleDeleteLines();
+      case 0x50: // P
+        return _csiHandleDelete();
+      case 0x53: // S
+        return _csiHandleScrollUp();
+      case 0x54: // T
+        return _csiHandleScrollDown();
+      case 0x58: // X
+        return _csiHandleEraseCharacters();
+      case 0x40: // @
+        return _csiHandleInsertBlankCharacters();
+      default:
+        return handler.unknownCSI(finalByte);
+    }
+  }
 
   /// `ESC [ Ps a` Cursor Horizontal Position Relative (HPR)
   ///
@@ -415,13 +628,14 @@ class EscapeParser {
 
     final isDecModes = _csi.prefix == Ascii.questionMark;
 
+    final params = _csi.params;
     if (isDecModes) {
-      for (var mode in _csi.params) {
-        _setDecMode(mode, isEnabled);
+      for (var i = 0; i < params.length; i++) {
+        _setDecMode(params[i], isEnabled);
       }
     } else {
-      for (var mode in _csi.params) {
-        _setMode(mode, isEnabled);
+      for (var i = 0; i < params.length; i++) {
+        _setMode(params[i], isEnabled);
       }
     }
   }
@@ -519,18 +733,20 @@ class EscapeParser {
           handler.setForegroundColor16(NamedColor.white);
           continue;
         case 38:
-          final mode = params[i + 1];
-          switch (mode) {
+          // A truncated extended color (`ESC [ 38 m`, `ESC [ 38 ; 5 m`,
+          // `ESC [ 38 ; 2 ; 1 m`) is ignored along with the rest of the sequence,
+          // as xterm does.
+          if (i + 1 >= params.length) return;
+          switch (params[i + 1]) {
             case 2:
-              final r = params[i + 2];
-              final g = params[i + 3];
-              final b = params[i + 4];
-              handler.setForegroundColorRgb(r, g, b);
+              if (i + 4 >= params.length) return;
+              handler.setForegroundColorRgb(
+                  params[i + 2], params[i + 3], params[i + 4]);
               i += 4;
               break;
             case 5:
-              final index = params[i + 2];
-              handler.setForegroundColor256(index);
+              if (i + 2 >= params.length) return;
+              handler.setForegroundColor256(params[i + 2]);
               i += 2;
               break;
           }
@@ -564,18 +780,20 @@ class EscapeParser {
           handler.setBackgroundColor16(NamedColor.white);
           continue;
         case 48:
-          final mode = params[i + 1];
-          switch (mode) {
+          // A truncated extended color (`ESC [ 48 m`, `ESC [ 48 ; 5 m`,
+          // `ESC [ 48 ; 2 ; 1 m`) is ignored along with the rest of the sequence,
+          // as xterm does.
+          if (i + 1 >= params.length) return;
+          switch (params[i + 1]) {
             case 2:
-              final r = params[i + 2];
-              final g = params[i + 3];
-              final b = params[i + 4];
-              handler.setBackgroundColorRgb(r, g, b);
+              if (i + 4 >= params.length) return;
+              handler.setBackgroundColorRgb(
+                  params[i + 2], params[i + 3], params[i + 4]);
               i += 4;
               break;
             case 5:
-              final index = params[i + 2];
-              handler.setBackgroundColor256(index);
+              if (i + 2 >= params.length) return;
+              handler.setBackgroundColor256(params[i + 2]);
               i += 2;
               break;
           }
@@ -685,7 +903,7 @@ class EscapeParser {
     }
     // Most the commands in this group are either of the scope of this package,
     // or should be disabled for security risks.
-    switch (_csi.params.first) {
+    switch (_csi.params[0]) {
       // Window handling is currently not in the scope of the package.
       case 1: // Restore Terminal Window (show window if minimized)
       case 2: // Minimize Terminal Window
@@ -1065,16 +1283,18 @@ class EscapeParser {
     }
   }
 
-  /// Parse a OSC sequence from the queue. Returns true if a sequence was
-  /// found and handled.
-  bool _escHandleOSC() {
-    final consumed = _consumeOsc();
-    if (!consumed) {
-      return false;
+  /// Parses and dispatches an OSC starting at `_buf[i]` (after `ESC ]`).
+  /// Returns the index after it, or -1 if the sequence isn't complete.
+  int _escHandleOSC(int i, int end) {
+    final next = _consumeOsc(i, end);
+    if (next < 0) {
+      return -1;
     }
 
+    _pos = next;
+
     if (_osc.isEmpty) {
-      return true;
+      return next;
     }
 
     // Common OSCs
@@ -1086,60 +1306,63 @@ class EscapeParser {
         case '0':
           handler.setTitle(pt);
           handler.setIconName(pt);
-          return true;
+          return next;
         case '1':
           handler.setIconName(pt);
-          return true;
+          return next;
         case '2':
           handler.setTitle(pt);
-          return true;
+          return next;
       }
     }
 
     // Private extensions
     handler.unknownOSC(_osc[0], _osc.sublist(1));
 
-    return true;
+    return next;
   }
 
   final _osc = <String>[];
 
-  bool _consumeOsc() {
+  final _oscParam = StringBuffer();
+
+  int _consumeOsc(int i, int end) {
     _osc.clear();
-    final param = StringBuffer();
+    final param = _oscParam..clear();
+    final buf = _buf;
     var scanned = 0;
 
     while (true) {
-      if (_queue.isEmpty) {
-        return false;
+      if (i >= end) {
+        return -1;
       }
 
-      final char = _queue.consume();
+      final char = buf[i++];
 
       // Unterminated and oversized: drop it so it is neither rescanned on
       // every write nor buffered without bound.
       if (++scanned > _maxOscLength) {
         _osc.clear();
-        return true;
+        return i;
       }
 
       // OSC terminates with BEL
       if (char == Ascii.BEL) {
         _osc.add(param.toString());
-        return true;
+        return i;
       }
 
       /// OSC terminates with ST
       if (char == Ascii.ESC) {
-        if (_queue.isEmpty) {
-          return false;
+        if (i >= end) {
+          return -1;
         }
 
-        if (_queue.consume() == Ascii.backslash) {
+        if (buf[i++] == Ascii.backslash) {
           _osc.add(param.toString());
         }
 
-        return true;
+        return i;
       }
 
       /// Parse next parameter
@@ -1155,29 +1378,50 @@ class EscapeParser {
 }
 
 class _Csi {
-  _Csi({
-    required this.params,
-    required this.finalByte,
-    // required this.intermediates,
-  });
-
   int? prefix;
 
-  List<int> params;
+  final params = _CsiParams();
 
-  int finalByte;
-  // final List<int> intermediates;
+  int finalByte = 0;
 
   @override
   String toString() {
-    return params.join(';') + String.fromCharCode(finalByte);
+    return params.toString() + String.fromCharCode(finalByte);
   }
 }
 
-/// Function that handles a sequence of characters that starts with an escape.
-/// Returns [true] if the sequence was processed, [false] if it was not.
-typedef _EscHandler = bool Function();
+/// Fixed-capacity, allocation-free parameter list of a CSI. Reading past
+/// [length] throws a [RangeError], like the growable list it replaces.
+class _CsiParams {
+  // A CSI body is at most EscapeParser._maxCsiLength code points, so it
+  // cannot hold more parameters than that.
+  final _values = Int32List(EscapeParser._maxCsiLength + 1);
 
-typedef _SbcHandler = void Function();
+  var _length = 0;
 
-typedef _CsiHandler = void Function();
+  int get length => _length;
+
+  bool get isEmpty => _length == 0;
+
+  bool get isNotEmpty => _length != 0;
+
+  int operator [](int index) {
+    if (index < 0 || index >= _length) {
+      throw RangeError.range(index, 0, _length - 1, 'index');
+    }
+    return _values[index];
+  }
+
+  void add(int value) {
+    _values[_length++] = value;
+  }
+
+  void clear() {
+    _length = 0;
+  }
+
+  @override
+  String toString() {
+    return [for (var i = 0; i < _length; i++) _values[i]].join(';');
+  }
+}

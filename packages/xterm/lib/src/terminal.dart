@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:math' show max;
+import 'dart:typed_data';
 
 import 'package:xterm/src/base/observable.dart';
 import 'package:xterm/src/core/buffer/buffer.dart';
@@ -25,7 +27,9 @@ import 'package:xterm/src/utils/circular_buffer.dart';
 /// [buffer] and events such as [onTitleChange] or [onBell], as well as
 /// translating user input into escape sequences that the application can
 /// understand.
-class Terminal with Observable implements TerminalState, EscapeHandler {
+class Terminal
+    with Observable
+    implements TerminalState, EscapeHandler, EscapeTextSink {
   /// The number of lines that the scrollback buffer can hold. If the buffer
   /// exceeds this size, the lines at the top of the buffer will be removed.
   final int maxLines;
@@ -226,8 +230,36 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
   /// [onTitleChange] when the escape sequences in [data] request it.
   void write(String data) {
     _parser.write(data);
+    _writeDirty = true;
+    flushWrites();
+  }
+
+  /// Like [write] but does not notify listeners. Pair with [flushWrites] so a
+  /// batch of writes triggers a single repaint.
+  void writeNoNotify(String data) {
+    _parser.write(data);
+    _writeDirty = true;
+  }
+
+  /// Notifies listeners once if anything was written since the last
+  /// notification, unless synchronized output (DEC private mode 2026) is
+  /// active, in which case the repaint is deferred until the mode is reset or
+  /// [synchronizedOutputTimeout] elapses.
+  void flushWrites() {
+    if (!_writeDirty || _synchronizedOutput) return;
+    _writeDirty = false;
     notifyListeners();
   }
+
+  /// Whether DEC private mode 2026 (synchronized output) is set.
+  bool get synchronizedOutput => _synchronizedOutput;
+
+  /// Safety net: repaint even if the application never resets mode 2026.
+  static const synchronizedOutputTimeout = Duration(milliseconds: 150);
+
+  bool _writeDirty = false;
+  bool _synchronizedOutput = false;
+  Timer? _syncOutputTimer;
 
   /// Sends a key event to the underlying program.
   ///
@@ -387,6 +419,45 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
   void writeChar(int char) {
     _precedingCodepoint = char;
     _buffer.writeChar(char);
+  }
+
+  var _writeCharsFailedAt = 0;
+
+  @override
+  int get writeCharsFailedAt => _writeCharsFailedAt;
+
+  /// Writes UTF-8 encoded data from the underlying program. Same as decoding
+  /// the byte stream with one chunked `Utf8Decoder(allowMalformed: true)` and
+  /// calling [write] with every string it produces (malformed bytes become
+  /// U+FFFD, a byte order mark at the start of the stream is dropped, a
+  /// sequence split across calls is joined), but decodes straight into the
+  /// parser without building strings. Use one or the other for a stream.
+  void writeBytes(Uint8List data) {
+    _parser.writeBytes(data);
+    notifyListeners();
+  }
+
+  /// Like [writeBytes] but does not notify listeners. Pair with [flushWrites]
+  /// so a batch of writes triggers a single repaint.
+  void writeBytesNoNotify(Uint8List data) {
+    _parser.writeBytes(data);
+    _writeDirty = true;
+  }
+
+  /// Bulk form of [writeChar] used by the parser for runs of text.
+  @override
+  int writeChars(Uint32List runes, int start, int end) {
+    final int stop;
+    try {
+      stop = _buffer.writeChars(runes, start, end);
+    } catch (_) {
+      // Same state as a writeChar loop that threw on this code point.
+      _writeCharsFailedAt = _buffer.writeCharsFailedAt;
+      _precedingCodepoint = runes[_writeCharsFailedAt];
+      rethrow;
+    }
+    _precedingCodepoint = runes[stop - 1];
+    return stop;
   }
 
   /* SBC */
@@ -768,7 +839,18 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
   @override
   void setUnknownDecMode(int mode, bool enabled) {
-    // no-op
+    if (mode == 2026) {
+      _syncOutputTimer?.cancel();
+      _syncOutputTimer = null;
+      _synchronizedOutput = enabled;
+      if (enabled) {
+        _syncOutputTimer = Timer(synchronizedOutputTimeout, () {
+          _syncOutputTimer = null;
+          _synchronizedOutput = false;
+          flushWrites();
+        });
+      }
+    }
   }
 
   /* Select Graphic Rendition (SGR) */

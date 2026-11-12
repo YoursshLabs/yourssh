@@ -1,3 +1,5 @@
+import 'dart:math' show min;
+
 import 'package:xterm/src/core/buffer/line.dart';
 import 'package:xterm/src/utils/circular_buffer.dart';
 
@@ -62,7 +64,9 @@ class _LineReflow {
   /// Adds a line to the reflow operation. This method will try to reuse the
   /// given line if possible.
   void add(BufferLine line) {
-    final trimmedLength = line.getTrimmedLength(oldWidth);
+    // A wide char whose first cell is the last column reports one cell more
+    // than the line holds.
+    final trimmedLength = min(line.getTrimmedLength(oldWidth), oldWidth);
 
     // A fast path for empty lines
     if (trimmedLength == 0) {
@@ -122,6 +126,15 @@ class _LineReflow {
       // Leave the last cell to the next iteration if it's a wide char.
       if (lineFilled && line.getWidth(from + cellsToCopy - 1) == 2) {
         cellsToCopy--;
+
+        // A wide char can never fit a 1 column line: drop it instead of
+        // looping forever on an empty line.
+        if (cellsToCopy == 0 && _builder.isEmpty) {
+          final skip = min(2, cellsLeft);
+          from += skip;
+          cellsLeft -= skip;
+          continue;
+        }
       }
 
       for (var anchor in line.anchors.toList()) {

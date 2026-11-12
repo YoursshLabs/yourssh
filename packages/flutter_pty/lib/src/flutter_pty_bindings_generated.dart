@@ -420,6 +420,22 @@ class FlutterPtyBindings {
   late final _pty_ack_read =
       _pty_ack_readPtr.asFunction<void Function(ffi.Pointer<PtyHandle>)>();
 
+  void pty_ack_bytes(
+    ffi.Pointer<PtyHandle> handle,
+    int bytes,
+  ) {
+    return _pty_ack_bytes(
+      handle,
+      bytes,
+    );
+  }
+
+  late final _pty_ack_bytesPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<PtyHandle>, ffi.Int64)>>('pty_ack_bytes');
+  late final _pty_ack_bytes =
+      _pty_ack_bytesPtr.asFunction<void Function(ffi.Pointer<PtyHandle>, int)>();
+
   int pty_resize(
     ffi.Pointer<PtyHandle> handle,
     int rows,
@@ -772,6 +788,9 @@ final class PtyOptions extends ffi.Struct {
 
   @ffi.Bool()
   external bool ackRead;
+
+  @ffi.Int64()
+  external int credit_bytes;
 }
 
 final class PtyHandle extends ffi.Opaque {}
