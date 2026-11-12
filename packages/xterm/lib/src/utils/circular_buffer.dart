@@ -277,6 +277,10 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
   /// trimmed.
   bool get isFull => length == maxLength;
 
+  /// The element the next [push] will trim (the first one when the list is
+  /// full), or null. Never throws, even on a slot left empty.
+  T? get pushVictim => _length == _array.length ? _array[_startIndex] : null;
+
   /// Returns a list containing all elements in the list.
   List<T> toList() {
     return List<T>.generate(length, (index) => this[index]);

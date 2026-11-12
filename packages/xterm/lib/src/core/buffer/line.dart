@@ -156,6 +156,25 @@ class BufferLine with IndexedItem {
     return written;
   }
 
+  /// Turns this line back into the exact state of a new `BufferLine(length)`
+  /// (all cells zero, not wrapped) so a line that scrolled out of the buffer
+  /// can be reused instead of allocated. Returns false and leaves the line
+  /// untouched when it cannot be: it still carries anchors (whose holders
+  /// must keep seeing it detached) or a backing store of a different size.
+  /// [version] keeps increasing, so caches keyed on it never match stale
+  /// content.
+  bool tryRecycle(int length) {
+    if (_anchors.isNotEmpty ||
+        _data.length != _calcCapacity(length) * _cellSize) {
+      return false;
+    }
+    _data.fillRange(0, _data.length, 0);
+    _length = length;
+    isWrapped = false;
+    _version++;
+    return true;
+  }
+
   void setCellData(int index, CellData cellData) {
     _version++;
     final offset = index * _cellSize;

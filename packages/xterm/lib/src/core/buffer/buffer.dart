@@ -418,7 +418,8 @@ class Buffer {
     if (isInVerticalMargin) {
       if (_cursorY == _marginBottom) {
         if (marginTop == 0 && !isAltBuffer) {
-          lines.insert(absoluteMarginBottom + 1, _newEmptyLine());
+          final at = absoluteMarginBottom + 1;
+          lines.insert(at, at == lines.length ? _lineForPush() : _newEmptyLine());
         } else {
           scrollUp(1);
         }
@@ -434,7 +435,7 @@ class Buffer {
       if (isAltBuffer) {
         scrollUp(1);
       } else {
-        lines.push(_newEmptyLine());
+        lines.push(_lineForPush());
       }
     } else {
       // there're still lines so we simply move cursor down.
@@ -677,6 +678,18 @@ class Buffer {
   BufferLine _newEmptyLine([int? width]) {
     final line = BufferLine(width ?? viewWidth);
     return line;
+  }
+
+  /// An empty line for [IndexAwareCircularBuffer.push]. Once the scrollback
+  /// is full every push trims the oldest line; that line is reset and reused
+  /// (when nothing else can observe it, see [BufferLine.tryRecycle]) instead
+  /// of allocating a new one per line feed.
+  BufferLine _lineForPush() {
+    final victim = lines.pushVictim;
+    if (victim != null && victim.tryRecycle(viewWidth)) {
+      return victim;
+    }
+    return _newEmptyLine();
   }
 
   static final defaultWordSeparators = <int>{
