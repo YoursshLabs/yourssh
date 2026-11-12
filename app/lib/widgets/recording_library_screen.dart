@@ -5,6 +5,7 @@ import '../models/recording_entry.dart';
 import '../providers/recording_provider.dart';
 import '../theme/app_theme.dart';
 import 'recording_player_widget.dart';
+import 'settings/settings_tiles.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 class RecordingLibraryScreen extends StatefulWidget {
@@ -49,7 +50,7 @@ class _RecordingLibraryScreenState extends State<RecordingLibraryScreen> {
             playingPath: _playing!.filePath,
           ),
         ),
-        const VerticalDivider(width: 1, color: AppColors.border),
+        const VerticalDivider(width: 1, color: YsColors.border),
         Expanded(
           child: Column(
             children: [
@@ -80,26 +81,27 @@ class _PlayerHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 38,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s3),
       decoration: const BoxDecoration(
-        color: AppColors.sidebar,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+        color: YsColors.sidebar,
+        border: Border(bottom: BorderSide(color: YsColors.border)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.play_circle_outline, size: 14, color: AppColors.accent),
-          const SizedBox(width: 8),
+          const Icon(FLucideIcons.circlePlay, size: 14, color: YsColors.primary),
+          const SizedBox(width: YsSpace.s2),
           Expanded(
             child: Text(
               entry.fileName,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              style: const TextStyle(color: YsColors.foreground, fontSize: 13),
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 14, color: AppColors.textSecondary),
-            onPressed: onClose,
-            visualDensity: VisualDensity.compact,
+          SettingsIconButton(
+            icon: FLucideIcons.x,
+            tooltip: 'Close player',
+            onPress: onClose,
           ),
         ],
       ),
@@ -122,36 +124,45 @@ class _LibraryList extends StatelessWidget {
       children: [
         Container(
           height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: YsSpace.s4),
           alignment: Alignment.centerLeft,
           decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: AppColors.border)),
+            border: Border(bottom: BorderSide(color: YsColors.border)),
           ),
           child: Row(
             children: [
-              const Text('Recording Library',
-                  style: TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 14, color: AppColors.textSecondary),
-                onPressed: () => provider.refreshLibrary(),
-                visualDensity: VisualDensity.compact,
+              const Expanded(
+                child: Text(
+                  'Recording Library',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: YsColors.foreground,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              SettingsIconButton(
+                icon: FLucideIcons.refreshCw,
                 tooltip: 'Refresh',
+                onPress: () => provider.refreshLibrary(),
               ),
             ],
           ),
         ),
         Expanded(
           child: groups.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No recordings yet.\nStart a session and press REC.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
-                  ),
+              ? const YsEmptyState(
+                  icon: FLucideIcons.clapperboard,
+                  title: 'No recordings yet.',
+                  message: 'Start a session and press REC.',
                 )
               : ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: YsSpace.s2,
+                    horizontal: YsSpace.s3,
+                  ),
                   children: groups.entries
                       .map((e) => _HostGroup(
                             hostTitle: e.key,
@@ -177,118 +188,123 @@ class _HostGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          padding: const EdgeInsets.fromLTRB(YsSpace.s1, YsSpace.s3, YsSpace.s1, YsSpace.s1),
           child: Row(
             children: [
-              const Icon(Icons.dns_outlined, size: 12, color: AppColors.textTertiary),
+              const Icon(FLucideIcons.server, size: 12, color: YsColors.mutedForeground),
               const SizedBox(width: 6),
-              Text(hostTitle, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+              Flexible(
+                child: Text(
+                  hostTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: YsColors.mutedForeground,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: kYsMonoFontFamily,
+                    fontFamilyFallback: kYsMonoFontFallback,
+                  ),
+                ),
+              ),
               const SizedBox(width: 6),
-              Text('${recordings.length} recording${recordings.length == 1 ? '' : 's'}',
-                  style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+              Text(
+                '${recordings.length} recording${recordings.length == 1 ? '' : 's'}',
+                maxLines: 1,
+                style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+              ),
             ],
           ),
         ),
-        ...recordings.map((r) => _RecordingRow(
-              entry: r,
-              isPlaying: r.filePath == playingPath,
-              onPlay: () => onPlay(r),
-            )),
+        settingsTileGroup(
+          children: [
+            for (final r in recordings)
+              _recordingTile(context, r, r.filePath == playingPath, () => onPlay(r)),
+          ],
+        ),
       ],
     );
   }
 }
 
-class _RecordingRow extends StatelessWidget {
-  final RecordingEntry entry;
-  final bool isPlaying;
-  final VoidCallback onPlay;
-  const _RecordingRow({required this.entry, required this.isPlaying, required this.onPlay});
+String _fmtSize(int? bytes) {
+  if (bytes == null) return '';
+  if (bytes < 1024) return '${bytes}B';
+  return '${(bytes / 1024).round()} KB';
+}
 
-  String _fmtSize(int? bytes) {
-    if (bytes == null) return '';
-    if (bytes < 1024) return '${bytes}B';
-    return '${(bytes / 1024).round()} KB';
-  }
+String _pad(int n) => n.toString().padLeft(2, '0');
 
-  String _fmtDate(DateTime dt) {
-    return '${dt.year}-${_pad(dt.month)}-${_pad(dt.day)} ${_pad(dt.hour)}:${_pad(dt.minute)}';
-  }
+String _fmtDate(DateTime dt) =>
+    '${dt.year}-${_pad(dt.month)}-${_pad(dt.day)} ${_pad(dt.hour)}:${_pad(dt.minute)}';
 
-  String _pad(int n) => n.toString().padLeft(2, '0');
+FTile _recordingTile(
+  BuildContext context,
+  RecordingEntry entry,
+  bool isPlaying,
+  VoidCallback onPlay,
+) {
+  return FTile.raw(
+    selected: isPlaying,
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _fmtDate(entry.recordedAt),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isPlaying ? YsColors.accentText : YsColors.foreground,
+                  fontSize: 12,
+                  fontWeight: isPlaying ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+              if (entry.fileSize != null)
+                Text(
+                  _fmtSize(entry.fileSize),
+                  maxLines: 1,
+                  style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+                ),
+            ],
+          ),
+        ),
+        SettingsIconButton(
+          icon: FLucideIcons.play,
+          tooltip: 'Play',
+          onPress: onPlay,
+        ),
+        const SizedBox(width: YsSpace.s1),
+        SettingsIconButton(
+          icon: FLucideIcons.trash2,
+          tooltip: 'Delete',
+          onPress: () => _confirmDelete(context, entry),
+        ),
+      ],
+    ),
+  );
+}
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      color: isPlaying ? AppColors.accent.withValues(alpha: 0.08) : Colors.transparent,
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_fmtDate(entry.recordedAt),
-                    style: TextStyle(
-                      color: isPlaying ? AppColors.accent : AppColors.textPrimary,
-                      fontSize: 12,
-                      fontWeight: isPlaying ? FontWeight.w600 : FontWeight.normal,
-                    )),
-                if (entry.fileSize != null)
-                  Text(_fmtSize(entry.fileSize),
-                      style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: Icon(isPlaying ? Icons.play_circle : Icons.play_circle_outline,
-                size: 18, color: isPlaying ? AppColors.accent : AppColors.textSecondary),
-            onPressed: onPlay,
-            tooltip: 'Play',
-            visualDensity: VisualDensity.compact,
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.textTertiary),
-            onPressed: () => _confirmDelete(context),
-            tooltip: 'Delete',
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _confirmDelete(BuildContext context) async {
-    final confirmed = await showYsDialog<bool>(
-      context,
-      builder: (_) => YsDialog(
-        title: 'Delete recording?',
-        body: Text(entry.fileName),
-        actions: [
-          FButton(
-            autofocus: true,
-            variant: FButtonVariant.outline,
-            onPress: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FButton(
-            variant: FButtonVariant.destructive,
-            onPress: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && context.mounted) {
-      try {
-        await context.read<RecordingProvider>().deleteRecording(entry.filePath);
-      } catch (e) {
-        if (!context.mounted) return;
-        AppSnack.error(context, 'Could not delete recording: $e');
-      }
+Future<void> _confirmDelete(BuildContext context, RecordingEntry entry) async {
+  final confirmed = await showYsConfirm(
+    context,
+    title: 'Delete recording?',
+    message: entry.fileName,
+    confirmLabel: 'Delete',
+    destructive: true,
+  );
+  if (confirmed && context.mounted) {
+    try {
+      await context.read<RecordingProvider>().deleteRecording(entry.filePath);
+    } catch (e) {
+      if (!context.mounted) return;
+      AppSnack.error(context, 'Could not delete recording: $e');
     }
   }
 }

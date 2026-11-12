@@ -4,9 +4,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 import 'package:provider/provider.dart';
-import '../theme/app_theme.dart';
 import '../theme/terminal_themes.dart';
 import '../providers/settings_provider.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import 'settings/settings_tiles.dart';
 
 class RecordingPlayerWidget extends StatefulWidget {
   final String filePath;
@@ -124,10 +125,16 @@ class _RecordingPlayerWidgetState extends State<RecordingPlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const Center(child: FCircularProgress());
     if (_error != null) {
       return Center(
-        child: Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+        child: Padding(
+          padding: const EdgeInsets.all(YsSpace.s4),
+          child: Text(
+            _error!,
+            style: const TextStyle(color: YsColors.error, fontSize: 13),
+          ),
+        ),
       );
     }
 
@@ -135,6 +142,12 @@ class _RecordingPlayerWidgetState extends State<RecordingPlayerWidget> {
     final theme = terminalThemeByName(settings.terminalTheme);
     final progress = _events.isEmpty ? 0.0 : _currentIndex / _events.length;
     final keywordRules = settings.xtermKeywordRules;
+    const timeStyle = TextStyle(
+      color: YsColors.mutedForeground,
+      fontSize: 11,
+      fontFamily: kYsMonoFontFamily,
+      fontFamilyFallback: kYsMonoFontFallback,
+    );
 
     return Column(
       children: [
@@ -150,60 +163,39 @@ class _RecordingPlayerWidgetState extends State<RecordingPlayerWidget> {
           ),
         ),
         Container(
-          color: AppColors.sidebar,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: const BoxDecoration(
+            color: YsColors.sidebar,
+            border: Border(top: BorderSide(color: YsColors.border)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: YsSpace.s3, vertical: YsSpace.s2),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 children: [
-                  Text(
-                    _formatDuration(_currentPosition),
-                    style: const TextStyle(
-                        color: AppColors.textSecondary, fontSize: 11, fontFamily: 'monospace'),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      backgroundColor: AppColors.border,
-                      color: AppColors.accent,
-                      minHeight: 3,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _formatDuration(_totalDuration),
-                    style: const TextStyle(
-                        color: AppColors.textSecondary, fontSize: 11, fontFamily: 'monospace'),
-                  ),
+                  Text(_formatDuration(_currentPosition), style: timeStyle),
+                  const SizedBox(width: YsSpace.s2),
+                  Expanded(child: FDeterminateProgress(value: progress)),
+                  const SizedBox(width: YsSpace.s2),
+                  Text(_formatDuration(_totalDuration), style: timeStyle),
                 ],
               ),
               const SizedBox(height: 6),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  IconButton(
-                    icon: Icon(
-                      _playing ? Icons.pause : Icons.play_arrow,
-                      color: AppColors.textPrimary,
-                    ),
-                    onPressed: _playing ? _pause : _play,
-                    iconSize: 20,
-                    visualDensity: VisualDensity.compact,
+                  SettingsIconButton(
+                    icon: _playing ? FLucideIcons.pause : FLucideIcons.play,
+                    tooltip: _playing ? 'Pause' : 'Play',
+                    onPress: _playing ? _pause : _play,
                   ),
-                  const SizedBox(width: 12),
-                  DropdownButton<double>(
+                  const SizedBox(width: YsSpace.s3),
+                  SettingsSelect<double>(
+                    key: const ValueKey('player-speed'),
+                    width: 90,
                     value: _speed,
-                    dropdownColor: AppColors.sidebar,
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                    underline: const SizedBox.shrink(),
-                    isDense: true,
-                    items: _speeds
-                        .map((s) => DropdownMenuItem(value: s, child: Text('${s}x')))
-                        .toList(),
+                    options: [for (final s in _speeds) (s, '${s}x')],
                     onChanged: (v) {
-                      if (v == null) return;
                       final wasPlaying = _playing;
                       _pause();
                       setState(() => _speed = v);

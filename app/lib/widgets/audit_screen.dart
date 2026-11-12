@@ -8,7 +8,9 @@ import '../models/audit_event.dart';
 import '../providers/audit_provider.dart';
 import '../theme/app_theme.dart';
 import '../util/time_format.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'confirm_dialog.dart';
+import 'settings/settings_tiles.dart';
 
 /// Audit-log viewer: newest-first event table with type/time/search
 /// filters, CSV/JSON export of the filtered view, and clear-all.
@@ -72,9 +74,13 @@ class _AuditScreenState extends State<AuditScreen> {
 
     if (!provider.isAvailable) {
       return Center(
-        child: Text(
-          'Audit log unavailable: ${provider.initError ?? 'not initialized'}',
-          style: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
+        child: Padding(
+          padding: const EdgeInsets.all(YsSpace.s4),
+          child: Text(
+            'Audit log unavailable: ${provider.initError ?? 'not initialized'}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: YsColors.mutedForeground, fontSize: 13),
+          ),
         ),
       );
     }
@@ -83,50 +89,65 @@ class _AuditScreenState extends State<AuditScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(YsSpace.s4),
           child: Row(children: [
-            const Text('AUDIT LOG',
-                style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2)),
-            const Spacer(),
-            TextButton.icon(
-                onPressed: () => _export(context, csv: true),
-                icon: const Icon(Icons.download, size: 14),
-                label: const Text('CSV', style: TextStyle(fontSize: 12))),
-            TextButton.icon(
-                onPressed: () => _export(context, csv: false),
-                icon: const Icon(Icons.download, size: 14),
-                label: const Text('JSON', style: TextStyle(fontSize: 12))),
-            TextButton.icon(
-                onPressed: () => _confirmClear(context),
-                icon: const Icon(Icons.delete_outline,
-                    size: 14, color: Colors.red),
-                label: const Text('Clear',
-                    style: TextStyle(fontSize: 12, color: Colors.red))),
+            const Expanded(
+              child: Text('AUDIT LOG',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: YsColors.foreground,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2)),
+            ),
+            FButton(
+              key: const ValueKey('audit-export-csv'),
+              variant: .ghost,
+              size: .sm,
+              mainAxisSize: MainAxisSize.min,
+              prefix: const Icon(FLucideIcons.download),
+              onPress: () => _export(context, csv: true),
+              child: const Text('CSV'),
+            ),
+            const SizedBox(width: YsSpace.s1),
+            FButton(
+              key: const ValueKey('audit-export-json'),
+              variant: .ghost,
+              size: .sm,
+              mainAxisSize: MainAxisSize.min,
+              prefix: const Icon(FLucideIcons.download),
+              onPress: () => _export(context, csv: false),
+              child: const Text('JSON'),
+            ),
+            const SizedBox(width: YsSpace.s1),
+            FButton(
+              key: const ValueKey('audit-clear'),
+              variant: .destructive,
+              size: .sm,
+              mainAxisSize: MainAxisSize.min,
+              prefix: const Icon(FLucideIcons.trash2),
+              onPress: () => _confirmClear(context),
+              child: const Text('Clear'),
+            ),
           ]),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: YsSpace.s4),
           child: Row(children: [
-            DropdownButton<String?>(
+            // The value:null option ('All types') always matches, so the
+            // select never shows a hint.
+            SettingsSelect<String?>(
+              key: const ValueKey('audit-type'),
+              width: 140,
               value: provider.type,
-              // No hint: the value:null item ('All types') always renders,
-              // so a hint would be dead code suggesting fallback behavior.
-              dropdownColor: AppColors.card,
-              style:
-                  const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-              underline: const SizedBox(),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('All types')),
-                for (final t in AuditEventType.values)
-                  DropdownMenuItem(value: t.name, child: Text(t.name)),
+              options: [
+                (null, 'All types'),
+                for (final t in AuditEventType.values) (t.name, t.name),
               ],
               onChanged: provider.setType,
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: YsSpace.s4),
             for (final (label, days) in const [
               ('Today', 1),
               ('7d', 7),
@@ -135,45 +156,58 @@ class _AuditScreenState extends State<AuditScreen> {
             ])
               Padding(
                 padding: const EdgeInsets.only(right: 6),
-                child: ChoiceChip(
-                  label: Text(label, style: const TextStyle(fontSize: 11)),
-                  selected: provider.rangeDays == days,
-                  onSelected: (_) => provider.setRange(days),
+                child: FButton(
+                  key: ValueKey('audit-range-$days'),
+                  variant: provider.rangeDays == days ? .primary : .outline,
+                  size: .xs,
+                  mainAxisSize: MainAxisSize.min,
+                  onPress: () => provider.setRange(days),
+                  child: Text(label),
                 ),
               ),
             const SizedBox(width: 10),
             Expanded(
-              child: TextField(
-                controller: _searchCtrl,
-                style:
-                    const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                decoration: const InputDecoration(
-                  hintText: 'Search command or host…',
-                  hintStyle:
-                      TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                  prefixIcon: Icon(Icons.search, size: 14),
-                  isDense: true,
-                ),
-                onSubmitted: provider.setSearch,
+              child: FTextField(
+                key: const ValueKey('audit-search'),
+                control: .managed(controller: _searchCtrl),
+                size: .sm,
+                hint: 'Search command or host…',
+                textInputAction: TextInputAction.search,
+                autocorrect: false,
+                enableSuggestions: false,
+                onSubmit: provider.setSearch,
+                prefixBuilder: (context, style, variants) =>
+                    FTextField.prefixIconBuilder(
+                        context, style, variants, const Icon(FLucideIcons.search)),
               ),
             ),
           ]),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: YsSpace.s2),
         Expanded(
           child: provider.events.isEmpty
-              ? const Center(
-                  child: Text('No audit events',
-                      style: TextStyle(
-                          color: AppColors.textTertiary, fontSize: 13)))
+              ? const YsEmptyState(
+                  icon: FLucideIcons.scrollText,
+                  title: 'No audit events',
+                )
               : ListView.builder(
                   itemCount:
                       provider.events.length + (provider.hasMore ? 1 : 0),
                   itemBuilder: (context, i) {
                     if (i >= provider.events.length) {
-                      return TextButton(
-                          onPressed: provider.loadMore,
-                          child: const Text('Load more'));
+                      return Padding(
+                        padding: const EdgeInsets.all(YsSpace.s2),
+                        child: Center(
+                          child: FButton(
+                            key: const ValueKey('audit-load-more'),
+                            variant: .outline,
+                            size: .sm,
+                            mainAxisSize: MainAxisSize.min,
+                            onPress: provider.loadMore,
+                            child: const Text('Load more'),
+                          ),
+                        ),
+                      );
                     }
                     return _AuditRow(event: provider.events[i]);
                   },
@@ -188,40 +222,38 @@ class _AuditRow extends StatelessWidget {
   final AuditEvent event;
   const _AuditRow({required this.event});
 
-  Color get _typeColor => switch (event.type) {
-        AuditEventType.connect => AppColors.success,
-        AuditEventType.disconnect => Colors.orange,
-        AuditEventType.exec => Colors.blue,
-        AuditEventType.input => Colors.purple,
+  YsStatus get _status => switch (event.type) {
+        AuditEventType.connect => YsStatus.ok,
+        AuditEventType.disconnect => YsStatus.warn,
+        AuditEventType.exec => YsStatus.accent,
+        AuditEventType.input => YsStatus.neutral,
       };
 
   @override
   Widget build(BuildContext context) {
+    const mono = TextStyle(
+        fontFamily: kYsMonoFontFamily, fontFamilyFallback: kYsMonoFontFallback);
     final time = formatLocalTimestamp(event.ts);
     final source = event.meta['source'];
     final error = event.meta['error'];
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s4, vertical: 6),
       decoration: const BoxDecoration(
           border:
-              Border(bottom: BorderSide(color: AppColors.border, width: 0.5))),
+              Border(bottom: BorderSide(color: YsColors.border, width: 0.5))),
       child: Row(children: [
         SizedBox(
             width: 150,
             child: Text(time,
-                style: const TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 11,
-                    fontFamily: 'monospace'))),
-        Container(
+                maxLines: 1,
+                style: mono.copyWith(
+                    color: YsColors.mutedForeground, fontSize: 11))),
+        SizedBox(
           width: 84,
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(vertical: 1),
-          decoration: BoxDecoration(
-              color: _typeColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(4)),
-          child: Text(event.type.name,
-              style: TextStyle(color: _typeColor, fontSize: 11)),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: YsStatusBadge(event.type.name, status: _status),
+          ),
         ),
         const SizedBox(width: 10),
         SizedBox(
@@ -230,30 +262,35 @@ class _AuditRow extends StatelessWidget {
                 event.hostLabel == null
                     ? '—'
                     : '${event.username ?? ''}@${event.hostLabel}',
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    color: AppColors.textSecondary, fontSize: 12))),
+                    color: YsColors.mutedForeground, fontSize: 12))),
         Expanded(
             child: Text(event.command ?? (error != null ? 'error: $error' : ''),
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 12,
-                    fontFamily: 'monospace'))),
+                style: mono.copyWith(
+                    color: YsColors.foreground, fontSize: 12))),
         if (source != null)
           Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: Text('$source',
-                  style: const TextStyle(
-                      color: AppColors.textTertiary, fontSize: 11))),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 120),
+                child: Text('$source',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: YsColors.mutedForeground, fontSize: 11)),
+              )),
         if (event.exitCode != null)
           Padding(
             padding: const EdgeInsets.only(left: 8),
             child: Text('exit ${event.exitCode}',
-                style: TextStyle(
-                    color: event.exitCode == 0 ? AppColors.success : Colors.red,
-                    fontSize: 11,
-                    fontFamily: 'monospace')),
+                maxLines: 1,
+                style: mono.copyWith(
+                    color: event.exitCode == 0 ? YsColors.ok : YsColors.error,
+                    fontSize: 11)),
           ),
       ]),
     );
