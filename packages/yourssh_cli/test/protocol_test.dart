@@ -86,6 +86,17 @@ void main() {
       expect(r.error, 'amb');
       expect(r.candidates, hasLength(2));
     });
+    test('response over 64 KiB decodes', () {
+      final big = List.generate(2000, (i) => {'label': 'host-$i' * 10});
+      final line = CliResponse.success('i', big).encode();
+      expect(line.length, greaterThan(kMaxRequestBytes));
+      expect((CliResponse.decode(line).result as List), hasLength(2000));
+    });
+    test('response over the response cap fails', () {
+      final line =
+          CliResponse.success('i', 'x' * (kMaxResponseBytes + 1)).encode();
+      expect(catchProto(() => CliResponse.decode(line))?.code, CliExit.usage);
+    });
     test('unknown field rejected', () {
       expect(
           catchProto(() =>

@@ -3,6 +3,9 @@ import 'dart:convert';
 const int kCliProtocolVersion = 1;
 const int kMaxRequestBytes = 64 * 1024;
 
+/// Cap on a response line (an `ls` answer can be large; requests stay at 64 KiB).
+const int kMaxResponseBytes = 16 * 1024 * 1024;
+
 /// Process exit codes of the `yourssh` executable (also carried in responses).
 enum CliExit {
   ok(0),
@@ -39,8 +42,8 @@ const Set<String> kCliCommands = {
   'activate',
 };
 
-Map<String, Object?> _decodeObject(String line) {
-  if (utf8.encode(line).length > kMaxRequestBytes) {
+Map<String, Object?> _decodeObject(String line, int maxBytes) {
+  if (utf8.encode(line).length > maxBytes) {
     throw CliProtocolException(CliExit.usage, 'line too long');
   }
   final Object? decoded;
@@ -95,7 +98,7 @@ class CliRequest {
       });
 
   static CliRequest decode(String line) {
-    final m = _decodeObject(line);
+    final m = _decodeObject(line, kMaxRequestBytes);
     _checkKeys(m, {'v', 'id', 'token', 'cmd', 'args'}, const {});
     final id = m['id'];
     final token = m['token'];
@@ -162,7 +165,7 @@ class CliResponse {
   }
 
   static CliResponse decode(String line) {
-    final m = _decodeObject(line);
+    final m = _decodeObject(line, kMaxResponseBytes);
     final ok = m['ok'];
     final id = m['id'];
     if (ok is! bool || id is! String) {
