@@ -19,11 +19,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# Flutter is pinned: the stable channel moved to 3.50, which deprecates
-# package:flutter/material.dart and requires Gradle >= 9.3.1 / AGP >= 9.1.1 /
-# Kotlin >= 2.4.10 for Android. Bump this together with that migration.
+# Flutter is pinned so a new stable release never changes CI under an open PR.
+# Bump it together with release.yml and with the Android toolchain in
+# app/android (Gradle wrapper, AGP and Kotlin in settings.gradle.kts): each
+# Flutter release raises the minimum versions its Gradle plugin accepts, and
+# the `android` job below is what proves the pair still builds.
 env:
-  FLUTTER_VERSION: 3.47.1
+  FLUTTER_VERSION: 3.50.0
 
 jobs:
   # The app suite needs no Rust at all: nothing under app/test loads the native
@@ -117,6 +119,37 @@ jobs:
         working-directory: packages/${{ matrix.crate }}
         run: flutter test
 
+  # Debug APK only: proves the Android toolchain (Gradle / AGP / Kotlin in
+  # app/android) still satisfies the pinned Flutter's Gradle plugin and that
+  # every Android plugin module, including the flutter_pty fork's CMake build,
+  # still compiles. It needs no secrets: debug builds sign with the debug key
+  # the Android SDK generates, and the mobile UI is SSH-only, so no Rust
+  # libraries are built (same as release.yml's build-android).
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # AGP 9 needs JDK 17 or newer; 17 matches release.yml's build-android.
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Build debug APK
+        working-directory: app
+        run: flutter build apk --debug
+
   # Aggregate gate. master's branch protection requires a check literally named
   # "test", so that name has to survive the split — this job carries it, and it
   # is red unless every job above is green. `always()` matters: without it the
@@ -124,13 +157,14 @@ jobs:
   # forever instead of failing.
   test:
     name: test
-    needs: [app, ui, bridge]
+    needs: [app, ui, bridge, android]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
         run: |
-          echo "app=${{ needs.app.result }} ui=${{ needs.ui.result }} bridge=${{ needs.bridge.result }}"
+          echo "app=${{ needs.app.result }} ui=${{ needs.ui.result }} bridge=${{ needs.bridge.result }} android=${{ needs.android.result }}"
           [ "${{ needs.app.result }}" = "success" ] || exit 1
           [ "${{ needs.ui.result }}" = "success" ] || exit 1
           [ "${{ needs.bridge.result }}" = "success" ] || exit 1
+          [ "${{ needs.android.result }}" = "success" ] || exit 1
