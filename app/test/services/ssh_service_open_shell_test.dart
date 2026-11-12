@@ -526,13 +526,16 @@ void main() {
     shell.emitStdout('start\r\n');
     final line = 'x' * 78 + '\r\n';
     for (var i = 0; i < 20; i++) {
+      // Microtask turns only: the queue drains between event-loop turns, so
+      // the backlog only builds up in a burst.
       shell.emitStdout(line * 1000); // ~1.6 MB total, well past 1 MiB
-      await pumpEventQueue();
+      await Future<void>.value();
       if (shell.stdoutPaused) break;
     }
     expect(shell.stdoutPaused, isTrue);
 
     svc.flushShellOutput(session.id);
+    await pumpEventQueue();
     expect(shell.stdoutPaused, isFalse);
     shell.emitStdout('END\r\n'); // delivered after resume, still in order
     await pumpEventQueue();

@@ -6,6 +6,7 @@ import 'package:yourssh/services/terminal_write_queue.dart';
 void main() {
   late int now; // microseconds, advanced by fake writes
   late List<void Function()> scheduled;
+  late List<({Duration delay, void Function() run})> timers;
   late List<String> written;
   late int commits;
   late List<String> batches;
@@ -17,6 +18,9 @@ void main() {
     int high = 100,
     int low = 30,
     int writeCostMicros = 1000,
+    Duration commitInterval = Duration.zero,
+    Duration floodInterval = Duration.zero,
+    int floodChars = 1 << 30,
   }) {
     return TerminalWriteQueue(
       write: (s) {
@@ -31,8 +35,12 @@ void main() {
       highWater: high,
       lowWater: low,
       idleThreshold: const Duration(milliseconds: 16),
+      commitInterval: commitInterval,
+      floodInterval: floodInterval,
+      floodChars: floodChars,
       clockMicros: () => now,
       scheduleNext: scheduled.add,
+      scheduleAfter: (d, run) => timers.add((delay: d, run: run)),
     );
   }
 
@@ -44,6 +52,7 @@ void main() {
   setUp(() {
     now = 1000000;
     scheduled = [];
+    timers = [];
     written = [];
     commits = 0;
     batches = [];
@@ -228,5 +237,150 @@ void main() {
     q.flush();
     expect(calls, 3);
     expect(q.pendingChars, 0);
+  });
+
+  group('commit throttling', () {
+    test('sustained output commits at most once per commitInterval', () {
+      final q = make(
+        pieceSize: 10,
+        budget: const Duration(milliseconds: 3),
+        commitInterval: const Duration(milliseconds: 16),
+      );
+      q.add('x');
+      commits = 0;
+      written.clear();
+      q.add('a' * 400); // 40 pieces, 1 ms each -> ~14 slices of 3 ms
+      var slices = 0;
+      while (scheduled.isNotEmpty) {
+        runScheduled();
+        slices++;
+      }
+      expect(slices, greaterThan(10));
+      expect(written.join(), 'a' * 400);
+      // 40 ms of writing at 16 ms spacing: a handful of commits, not one per
+      // slice.
+      expect(commits, lessThanOrEqualTo(3));
+      expect(commits, greaterThanOrEqualTo(1));
+    });
+
+    test('a trailing commit is scheduled when the queue empties early', () {
+      final q = make(commitInterval: const Duration(milliseconds: 16));
+      q.add('x');
+      commits = 0;
+      q.add('abc'); // queued: inside the interval after the last commit
+      runScheduled(); // writes abc, only 1 ms after the last commit
+      expect(written, ['x', 'abc']);
+      expect(commits, 0);
+      expect(timers, hasLength(1));
+      expect(timers.single.delay.inMilliseconds, inInclusiveRange(10, 16));
+      now += 16000;
+      timers.removeAt(0).run();
+      expect(commits, 1);
+    });
+
+    test('new data arriving before the trailing commit shares one commit', () {
+      final q = make(commitInterval: const Duration(milliseconds: 16));
+      q.add('x');
+      commits = 0;
+      q.add('a');
+      runScheduled();
+      q.add('b');
+      runScheduled();
+      now += 20000;
+      while (timers.isNotEmpty) {
+        timers.removeAt(0).run();
+      }
+      expect(commits, 1);
+      expect(q.isIdle, isTrue);
+    });
+
+    test('flood volume switches to the slower floodInterval', () {
+      final q = make(
+        pieceSize: 10,
+        budget: const Duration(milliseconds: 3),
+        commitInterval: const Duration(milliseconds: 16),
+        floodInterval: const Duration(milliseconds: 33),
+        floodChars: 100,
+        writeCostMicros: 2000,
+      );
+      q.add('x');
+      commits = 0;
+      final commitTimes = <int>[];
+      final base = now;
+      q.add('a' * 1000);
+      while (scheduled.isNotEmpty) {
+        final before = commits;
+        runScheduled();
+        if (commits > before) commitTimes.add(now - base);
+      }
+      expect(commitTimes.length, greaterThan(2));
+      for (var i = 1; i < commitTimes.length; i++) {
+        expect(commitTimes[i] - commitTimes[i - 1], greaterThanOrEqualTo(33000));
+      }
+    });
+
+    test('supply-bound flood (queue keeps emptying) still renders at 30 fps', () {
+      final q = make(
+        pieceSize: 1000,
+        budget: const Duration(milliseconds: 3),
+        commitInterval: const Duration(milliseconds: 16),
+        floodInterval: const Duration(milliseconds: 33),
+        floodChars: 500,
+        writeCostMicros: 100,
+      );
+      final base = now;
+      final commitTimes = <int>[];
+      var lastCommits = 0;
+      // 300 ms of 100-char chunks every 1 ms: the queue empties after every
+      // chunk, so only the volume per window reveals the flood.
+      for (var t = 0; t < 300; t++) {
+        q.add('c' * 100);
+        while (scheduled.isNotEmpty) {
+          runScheduled();
+        }
+        now += 1000;
+        if (timers.isNotEmpty && timers.first.delay.inMicroseconds <= 1000) {
+          timers.removeAt(0).run();
+        } else if (timers.isNotEmpty) {
+          final first = timers.removeAt(0);
+          timers.insert(
+              0,
+              (
+                delay: first.delay - const Duration(milliseconds: 1),
+                run: first.run
+              ));
+        }
+        if (commits > lastCommits) {
+          lastCommits = commits;
+          commitTimes.add(now - base);
+        }
+      }
+      // After the first (cold) windows every gap must be the flood interval.
+      final tail = commitTimes.skip(3).toList();
+      expect(tail.length, greaterThan(3));
+      for (var i = 1; i < tail.length; i++) {
+        expect(tail[i] - tail[i - 1], greaterThanOrEqualTo(32000));
+      }
+    });
+
+    test('flush commits uncommitted data even inside the interval', () {
+      final q = make(commitInterval: const Duration(milliseconds: 16));
+      q.add('x');
+      commits = 0;
+      q.add('abc');
+      runScheduled();
+      expect(commits, 0);
+      q.flush();
+      expect(commits, 1);
+      expect(q.isIdle, isTrue);
+    });
+
+    test('an idle queue still writes and commits synchronously', () {
+      final q = make(commitInterval: const Duration(milliseconds: 16));
+      now += 100000;
+      q.add('k');
+      expect(written, ['k']);
+      expect(commits, 1);
+    });
   });
 }
