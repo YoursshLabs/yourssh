@@ -198,11 +198,7 @@ class _SftpScreenState extends State<SftpScreen> {
                     color: YsColors.mutedForeground, fontSize: 12),
               ),
             ),
-          Expanded(
-            child: _loading
-                ? const Center(child: FCircularProgress())
-                : _buildFileList(),
-          ),
+          Expanded(child: _buildFileList()),
         ],
       ),
     );
@@ -259,16 +255,18 @@ class _SftpScreenState extends State<SftpScreen> {
   }
 
   Widget _buildFileList() {
-    if (_sftp == null) {
-      return const FilePanelMessage('Not connected');
-    }
-    if (_remoteEntries.isEmpty) {
-      return const FilePanelMessage('Empty directory');
-    }
+    // The table stays mounted while a folder loads so it keeps keyboard
+    // focus across Enter / double-click navigation.
+    final ready = _sftp != null && !_loading;
     return Padding(
       padding: const EdgeInsets.all(YsSpace.s2),
       child: YsFileTable<SftpName>(
-        rows: _remoteEntries,
+        rows: ready ? _remoteEntries : const <SftpName>[],
+        rowKey: (e) => e.filename,
+        emptyState: _loading
+            ? const Center(child: FCircularProgress())
+            : FilePanelMessage(
+                _sftp == null ? 'Not connected' : 'Empty directory'),
         columns: _columns,
         selected: {?_selected},
         onSelect: (e, {additive = false, range = false}) =>

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
@@ -526,15 +528,63 @@ class FileMetaCell extends StatelessWidget {
   );
 }
 
-/// "Today 09:12" for today, "11/3/2026, 14:20" otherwise.
-String formatEntryDate(DateTime dt) {
-  final now = DateTime.now();
+/// Clock behind the "Today" labels and [MidnightRefresh]; tests replace it.
+@visibleForTesting
+DateTime Function() fileDateNow = DateTime.now;
+
+/// "Today 09:12" for today, "11/3/2026, 14:20" otherwise, "—" when unknown.
+String formatEntryDate(DateTime? dt) {
+  if (dt == null) return '—';
+  final now = fileDateNow();
   final time =
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
     return 'Today $time';
   }
   return '${dt.month}/${dt.day}/${dt.year}, $time';
+}
+
+/// Rebuilds a panel just after local midnight, and gives it [dayColumns] —
+/// a column list kept while the day stays the same — so the file table's
+/// reused rows drop their "Today" labels when the date changes.
+mixin MidnightRefresh<W extends StatefulWidget> on State<W> {
+  Timer? _midnight;
+  DateTime? _columnsDay;
+  Object? _columns;
+
+  static DateTime _dayOf(DateTime t) => DateTime(t.year, t.month, t.day);
+
+  @override
+  void initState() {
+    super.initState();
+    _arm();
+  }
+
+  void _arm() {
+    final now = fileDateNow();
+    final next = _dayOf(now).add(const Duration(days: 1));
+    _midnight = Timer(next.difference(now) + const Duration(seconds: 1), () {
+      if (!mounted) return;
+      setState(() {});
+      _arm();
+    });
+  }
+
+  /// [build] for today's date; the same list is returned all day.
+  List<YsColumn<E>> dayColumns<E>(List<YsColumn<E>> Function() build) {
+    final today = _dayOf(fileDateNow());
+    if (_columns is! List<YsColumn<E>> || _columnsDay != today) {
+      _columnsDay = today;
+      _columns = build();
+    }
+    return _columns! as List<YsColumn<E>>;
+  }
+
+  @override
+  void dispose() {
+    _midnight?.cancel();
+    super.dispose();
+  }
 }
 
 /// `drwxr-xr-x`-style permissions from a raw st_mode; "—" when unknown.

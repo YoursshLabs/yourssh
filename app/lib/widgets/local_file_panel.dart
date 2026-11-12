@@ -42,13 +42,20 @@ class LocalFilePanel extends StatefulWidget {
   State<LocalFilePanel> createState() => _LocalFilePanelState();
 }
 
-class _LocalFilePanelState extends State<LocalFilePanel> {
+class _LocalFilePanelState extends State<LocalFilePanel>
+    with MidnightRefresh {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.provider.reload();
     });
+  }
+
+  @override
+  void dispose() {
+    EntryContextMenu.dismissOwnedBy(context);
+    super.dispose();
   }
 
   // ── Actions ─────────────────────────────────────────────
@@ -194,9 +201,10 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
 
   // ── Build ────────────────────────────────────────────────
 
-  /// Columns of the file table. Built once so unchanged rows are reused
-  /// across selection changes; cells depend only on the entry.
-  late final List<YsColumn<LocalEntry>> _columns = [
+  /// Columns of the file table. Kept for the day so unchanged rows are
+  /// reused across selection changes; cells depend only on the entry (and
+  /// the date, through the "Today" labels).
+  List<YsColumn<LocalEntry>> get _columns => dayColumns(() => [
     YsColumn<LocalEntry>(
       id: EntrySortColumn.name,
       label: 'Name',
@@ -236,7 +244,7 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
       minTableWidth: 500,
       cell: (_, e) => FileMetaCell(e.permissions, mono: true),
     ),
-  ];
+  ]);
 
   @override
   Widget build(BuildContext context) {
@@ -303,17 +311,11 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
   }
 
   Widget _buildContent(LocalFilePanelProvider prov, Set<LocalEntry> selected) {
-    if (prov.loadState == LocalFilePanelLoadState.loading) {
-      return const Center(child: FCircularProgress());
-    }
-    if (prov.loadState == LocalFilePanelLoadState.error) {
-      return FilePanelError(prov.errorMessage ?? 'Error', onRetry: prov.reload);
-    }
-    final entries = prov.filteredEntries;
-    if (entries.isEmpty) {
-      return FilePanelMessage(
-          prov.filterQuery.isNotEmpty ? 'No matches' : 'Empty directory');
-    }
+    // The table stays mounted through loading / error / empty listings so
+    // it keeps keyboard focus across a folder change.
+    final loaded = prov.loadState != LocalFilePanelLoadState.loading &&
+        prov.loadState != LocalFilePanelLoadState.error;
+    final entries = loaded ? prov.filteredEntries : const <LocalEntry>[];
     return YsFileTable<LocalEntry>(
       rows: entries,
       columns: _columns,
@@ -322,13 +324,20 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
       onSort: (s) => prov.setSort(s.column, ascending: s.ascending),
       onSelect: prov.select,
       onSelectAll: (all) => all ? prov.selectAll() : prov.deselectAll(),
-      // Double-click / Enter navigates into folders (files open from the
-      // context menu, as before).
-      onOpen: (entry) {
-        if (entry.isDirectory) prov.loadDirectory(entry.path);
-      },
+      // Double-click / Enter: the menu's Open (folders navigate in, files
+      // open in the default application).
+      onOpen: _openEntry,
       onContextMenu: (entry, position) =>
           _entryMenu(entry).show(context, position),
+      rowKey: (e) => e.path,
+      emptyState: switch (prov.loadState) {
+        LocalFilePanelLoadState.loading =>
+          const Center(child: FCircularProgress()),
+        LocalFilePanelLoadState.error =>
+          FilePanelError(prov.errorMessage ?? 'Error', onRetry: prov.reload),
+        _ => FilePanelMessage(
+            prov.filterQuery.isNotEmpty ? 'No matches' : 'Empty directory'),
+      },
       checkboxes: true,
       selectAllKey: const Key('local_select_all'),
       draggable: true,

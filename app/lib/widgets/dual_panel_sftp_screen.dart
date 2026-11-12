@@ -501,9 +501,11 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
 
   /// One resizable half: the slot plus its half of the gutter that holds
   /// the transfer buttons ([_TransferBar.width] split evenly).
+  /// Each half keeps at least 35 % of the width (minFlex / total flex =
+  /// 14 / 40): about 245 px at the 900 px window minimum.
   FResizableRegion _region(bool left) => FResizableRegion.flex(
         flex: 20,
-        minFlex: 7,
+        minFlex: 14,
         builder: (_, _, child) => Padding(
           padding: left
               ? const EdgeInsets.only(right: _TransferBar.width / 2)

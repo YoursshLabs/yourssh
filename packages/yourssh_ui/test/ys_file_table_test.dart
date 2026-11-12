@@ -84,29 +84,80 @@ YsFileTable<_Row> _table(
   Set<_Row> selected = const {},
   YsSort? sort,
   bool checkboxes = false,
-  bool openOnTap = false,
   bool draggable = false,
   bool autofocus = false,
   ScrollController? controller,
+  Widget? emptyState,
+  Object Function(_Row)? rowKey,
+  void Function(_Row row, bool additive, bool range)? apply,
 }) => YsFileTable<_Row>(
   rows: rows,
   columns: columns ?? _columns,
   selected: selected,
   sort: sort,
   checkboxes: checkboxes,
-  openOnTap: openOnTap,
   draggable: draggable,
   autofocus: autofocus,
   controller: controller,
+  emptyState: emptyState,
+  rowKey: rowKey,
   rowLabel: (r) => r.name,
   selectAllKey: const Key('select-all'),
-  onSelect: (r, {additive = false, range = false}) =>
-      log.selects.add((name: r.name, additive: additive, range: range)),
+  onSelect: (r, {additive = false, range = false}) {
+    log.selects.add((name: r.name, additive: additive, range: range));
+    apply?.call(r, additive, range);
+  },
   onOpen: (r) => log.opens.add(r.name),
   onContextMenu: (r, p) => log.menus.add((r.name, p)),
   onSort: log.sorts.add,
   onSelectAll: log.selectAll.add,
 );
+
+/// A table whose selection follows its own gestures (plain = only that
+/// row, additive = toggle, range = add), like a real caller.
+class _Host extends StatefulWidget {
+  const _Host(
+    this.log, {
+    this.rows = _rows,
+    this.autofocus = false,
+    this.emptyState,
+    this.rowKey,
+  });
+
+  final _Log log;
+  final List<_Row> rows;
+  final bool autofocus;
+  final Widget? emptyState;
+  final Object Function(_Row)? rowKey;
+
+  @override
+  State<_Host> createState() => _HostState();
+}
+
+class _HostState extends State<_Host> {
+  final Set<_Row> selected = {};
+
+  @override
+  Widget build(BuildContext context) => _table(
+    widget.log,
+    rows: widget.rows,
+    selected: {...selected},
+    autofocus: widget.autofocus,
+    emptyState: widget.emptyState,
+    rowKey: widget.rowKey,
+    apply: (row, additive, range) => setState(() {
+      if (range) {
+        selected.add(row);
+      } else if (additive) {
+        if (!selected.remove(row)) selected.add(row);
+      } else {
+        selected
+          ..clear()
+          ..add(row);
+      }
+    }),
+  );
+}
 
 /// forui controls (checkboxes, sortable headers) settle their press
 /// feedback 100 ms after the tap.
@@ -196,7 +247,7 @@ void main() {
     testWidgets('plain click selects only; Cmd/Ctrl-click adds; '
         'Shift-click selects a range', (tester) async {
       final log = _Log();
-      await tester.pumpWidget(_wrap(_table(log)));
+      await tester.pumpWidget(_wrap(_Host(log)));
 
       await tester.tap(find.text('bravo'));
       await tester.pump();
@@ -241,17 +292,20 @@ void main() {
       expect(log.selects.length, 2);
     });
 
-    testWidgets('openOnTap opens on a single click without selecting', (
-      tester,
-    ) async {
+    testWidgets('Shift-click with nothing selected selects the range from '
+        'the cursor', (tester) async {
       final log = _Log();
-      await tester.pumpWidget(_wrap(_table(log, openOnTap: true)));
+      await tester.pumpWidget(_wrap(_table(log))); // selection stays empty
 
-      await tester.tap(find.text('charlie'));
-      await tester.pump();
+      await tester.tap(find.text('bravo'));
+      await tester.pump(const Duration(milliseconds: 500));
+      log.clear();
+      await _modTap(tester, LogicalKeyboardKey.shiftLeft, 'delta');
 
-      expect(log.opens, ['charlie']);
-      expect(log.selects, isEmpty);
+      expect(log.selects, [
+        (name: 'bravo', additive: false, range: false),
+        (name: 'delta', additive: false, range: true),
+      ]);
     });
 
     testWidgets('right-click reports the row and the pointer position '
@@ -305,24 +359,128 @@ void main() {
   });
 
   group('keyboard', () {
-    testWidgets('Down then Enter opens the first row (keyboard only)', (
+    testWidgets('focus puts the cursor on the first row: Enter opens it, '
+        'Down moves on (keyboard only)', (tester) async {
+      final log = _Log();
+      await tester.pumpWidget(_wrap(_table(log, autofocus: true)));
+      await tester.pump();
+
+      await _press(tester, LogicalKeyboardKey.enter);
+      await _press(tester, LogicalKeyboardKey.arrowDown);
+      await _press(tester, LogicalKeyboardKey.enter);
+
+      expect(log.opens, ['alpha', 'bravo']);
+      expect(log.selects, isEmpty, reason: 'arrows move the cursor only');
+    });
+
+    testWidgets('focus shows the cursor on the first selected row', (
+      tester,
+    ) async {
+      final log = _Log();
+      await tester.pumpWidget(
+        _wrap(_table(log, autofocus: true, selected: {_charlie})),
+      );
+      await tester.pump();
+
+      final surface = tester.widget<DecoratedBox>(
+        find.descendant(
+          of: find.byKey(const ValueKey('ys-file-row-2')),
+          matching: find.byKey(const ValueKey('ys-file-row-surface')),
+        ),
+      );
+      expect(
+        (surface.decoration as BoxDecoration).border,
+        isNotNull,
+        reason: 'focus indicator visible without pressing an arrow',
+      );
+      await _press(tester, LogicalKeyboardKey.enter);
+      expect(log.opens, ['charlie']);
+    });
+
+    testWidgets('Shift+Down with nothing selected selects from the cursor', (
       tester,
     ) async {
       final log = _Log();
       await tester.pumpWidget(_wrap(_table(log, autofocus: true)));
       await tester.pump();
 
-      await _press(tester, LogicalKeyboardKey.arrowDown);
+      await _press(tester, LogicalKeyboardKey.arrowDown); // bravo
+      await _chord(
+        tester,
+        LogicalKeyboardKey.shiftLeft,
+        LogicalKeyboardKey.arrowDown,
+      ); // charlie
+
+      expect(log.selects, [
+        (name: 'bravo', additive: false, range: false),
+        (name: 'charlie', additive: false, range: true),
+      ]);
+    });
+
+    testWidgets('stays mounted and focused while the rows are empty '
+        '(loading); the next listing gets the cursor on its first row', (
+      tester,
+    ) async {
+      final log = _Log();
+      const loading = Text('Loading…');
+      await tester.pumpWidget(
+        _wrap(_Host(log, autofocus: true, emptyState: loading)),
+      );
+      await tester.pump();
+      await _press(tester, LogicalKeyboardKey.enter); // opens alpha
+
+      await tester.pumpWidget(
+        _wrap(_Host(log, rows: const [], autofocus: true, emptyState: loading)),
+      );
+      expect(find.text('Loading…'), findsOneWidget);
+      expect(find.text('Name'), findsOneWidget, reason: 'header stays');
+
+      final next = [const _Row('x'), const _Row('y')];
+      await tester.pumpWidget(
+        _wrap(_Host(log, rows: next, autofocus: true, emptyState: loading)),
+      );
+      await tester.pump();
       await _press(tester, LogicalKeyboardKey.enter);
 
-      expect(log.opens, ['alpha']);
-      expect(log.selects, isEmpty, reason: 'arrows move the cursor only');
+      expect(log.opens, ['alpha', 'x']);
+    });
+
+    testWidgets('rowKey keeps the cursor on the same entry across a reload '
+        'with new row objects', (tester) async {
+      List<_Row> reload() => [for (final r in _rows) _Row(r.name, size: 1)];
+      for (final keyed in [true, false]) {
+        final log = _Log();
+        Object key(_Row r) => r.name;
+        await tester.pumpWidget(
+          _wrap(_Host(log, autofocus: true, rowKey: keyed ? key : null)),
+        );
+        await tester.pump();
+        await _press(tester, LogicalKeyboardKey.arrowDown);
+        await _press(tester, LogicalKeyboardKey.arrowDown); // charlie
+
+        await tester.pumpWidget(
+          _wrap(
+            _Host(
+              log,
+              rows: reload(),
+              autofocus: true,
+              rowKey: keyed ? key : null,
+            ),
+          ),
+        );
+        await tester.pump();
+        await _press(tester, LogicalKeyboardKey.enter);
+        expect(log.opens, [
+          keyed ? 'charlie' : 'alpha',
+        ], reason: 'keyed: $keyed');
+        await tester.pumpWidget(const SizedBox());
+      }
     });
 
     testWidgets('arrows move the cursor, Space toggles, Shift+arrow extends, '
         'Enter opens', (tester) async {
       final log = _Log();
-      await tester.pumpWidget(_wrap(_table(log)));
+      await tester.pumpWidget(_wrap(_Host(log)));
 
       await tester.tap(find.text('alpha')); // focus + cursor on row 0
       await tester.pump(const Duration(milliseconds: 500));
@@ -381,7 +539,7 @@ void main() {
       await tester.pumpWidget(_wrap(_table(log, autofocus: true)));
       await tester.pump();
 
-      await _press(tester, LogicalKeyboardKey.arrowDown);
+      // The cursor starts on row 0 when the table takes focus.
       await _press(tester, LogicalKeyboardKey.arrowDown);
       await _chord(
         tester,
@@ -405,7 +563,8 @@ void main() {
       );
       await tester.pump();
 
-      for (var i = 0; i < 30; i++) {
+      // From the cursor on row 0 (placed when the table takes focus).
+      for (var i = 0; i < 29; i++) {
         await _press(tester, LogicalKeyboardKey.arrowDown);
       }
       expect(find.text('row 29'), findsOneWidget);
@@ -439,6 +598,23 @@ void main() {
       );
       expect(find.byIcon(FLucideIcons.arrowDown), findsOneWidget);
       expect(find.byIcon(FLucideIcons.arrowUp), findsNothing);
+    });
+
+    testWidgets('semantics: the sort header says its direction, a row is '
+        'named once', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _wrap(_table(_Log(), sort: const YsSort('size', ascending: false))),
+      );
+      expect(
+        find.bySemanticsLabel('Sort by Size, sorted descending'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('Sort by Name'), findsOneWidget);
+      // The row node reads its cells ("bravo, 10 B, file"): the name once.
+      expect(find.bySemanticsLabel(RegExp(r'^bravo\n')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp(r'bravo[\s\S]*bravo')), findsNothing);
+      handle.dispose();
     });
 
     test('YsSort.next flips the same column and resets for another', () {

@@ -103,7 +103,9 @@ void main() {
     final provider = SftpPanelProvider();
     final fake = await pumpPanel(tester, provider);
 
-    // Navigate into /a/b by tapping the directory entry.
+    // Navigate into /a/b by double-clicking the directory entry (a single
+    // click selects).
+    await tester.tap(find.text('b'));
     await tester.tap(find.text('b'));
     await tester.pump();
     await tester.pump();

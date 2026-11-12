@@ -10,13 +10,14 @@ abstract final class EntrySortColumn {
 /// first, then [column] in the given direction; ties fall back to the name
 /// (case-insensitive, then exact) so the order is total and stable across
 /// reloads. Name ascending is the listings' historical order (`sortKey`).
+/// An unknown (null) modified time sorts last in both directions.
 Comparator<T> entryComparator<T>(
   String column, {
   required bool ascending,
   required bool Function(T) isDirectory,
   required String Function(T) name,
   required int Function(T) size,
-  required DateTime Function(T) modified,
+  required DateTime? Function(T) modified,
   required String Function(T) kind,
 }) {
   int byName(T a, T b) {
@@ -27,9 +28,17 @@ Comparator<T> entryComparator<T>(
   return (a, b) {
     final aDir = isDirectory(a);
     if (aDir != isDirectory(b)) return aDir ? -1 : 1;
+    if (column == EntrySortColumn.modified) {
+      final (ma, mb) = (modified(a), modified(b));
+      if ((ma == null) != (mb == null)) return ma == null ? 1 : -1;
+      if (ma != null && mb != null) {
+        final c = ma.compareTo(mb);
+        if (c != 0) return ascending ? c : -c;
+      }
+      return byName(a, b);
+    }
     final c = switch (column) {
       EntrySortColumn.size => size(a).compareTo(size(b)),
-      EntrySortColumn.modified => modified(a).compareTo(modified(b)),
       EntrySortColumn.kind => kind(a).compareTo(kind(b)),
       _ => byName(a, b),
     };

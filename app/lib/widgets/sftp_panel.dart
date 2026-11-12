@@ -53,7 +53,8 @@ class SftpPanel extends StatefulWidget {
   State<SftpPanel> createState() => _SftpPanelState();
 }
 
-class _SftpPanelState extends State<SftpPanel> {
+class _SftpPanelState extends State<SftpPanel>
+    with MidnightRefresh {
   @override
   void initState() {
     super.initState();
@@ -81,6 +82,12 @@ class _SftpPanelState extends State<SftpPanel> {
       if (!mounted) return;
       AppSnack.error(context, 'Upload of $name failed: $e');
     };
+  }
+
+  @override
+  void dispose() {
+    EntryContextMenu.dismissOwnedBy(context);
+    super.dispose();
   }
 
   // No didUpdateWidget host handling: the dual-panel screen keys this panel
@@ -237,9 +244,10 @@ class _SftpPanelState extends State<SftpPanel> {
     }
   }
 
-  /// Columns of the file table. Built once so unchanged rows are reused
-  /// across selection changes; cells depend only on the entry.
-  late final List<YsColumn<SftpEntry>> _columns = [
+  /// Columns of the file table. Kept for the day so unchanged rows are
+  /// reused across selection changes; cells depend only on the entry (and
+  /// the date, through the "Today" labels).
+  List<YsColumn<SftpEntry>> get _columns => dayColumns(() => [
     YsColumn<SftpEntry>(
       id: EntrySortColumn.name,
       label: 'Name',
@@ -273,7 +281,7 @@ class _SftpPanelState extends State<SftpPanel> {
           formatEntryMode(e.mode, isDirectory: e.isDirectory),
           mono: true),
     ),
-  ];
+  ]);
 
   @override
   Widget build(BuildContext context) {
@@ -385,19 +393,11 @@ class _SftpPanelState extends State<SftpPanel> {
   }
 
   Widget _buildContent(SftpPanelProvider prov) {
-    if (prov.loadState == SftpPanelLoadState.loading) {
-      return const Center(child: FCircularProgress());
-    }
-    if (prov.loadState == SftpPanelLoadState.error) {
-      return FilePanelError(prov.errorMessage ?? 'Error');
-    }
-    final entries = prov.filteredEntries;
-    if (entries.isEmpty) {
-      // Distinguish a genuinely empty directory from a filter with no hits
-      // (mirrors LocalFilePanel).
-      return FilePanelMessage(
-          prov.filterQuery.isNotEmpty ? 'No matches' : 'Empty directory');
-    }
+    // The table stays mounted through loading / error / empty listings so
+    // it keeps keyboard focus across a folder change.
+    final loaded = prov.loadState != SftpPanelLoadState.loading &&
+        prov.loadState != SftpPanelLoadState.error;
+    final entries = loaded ? prov.filteredEntries : const <SftpEntry>[];
     return YsFileTable<SftpEntry>(
       rows: entries,
       columns: _columns,
@@ -406,12 +406,21 @@ class _SftpPanelState extends State<SftpPanel> {
       onSort: (s) => prov.setSort(s.column, ascending: s.ascending),
       onSelect: prov.select,
       onSelectAll: (all) => all ? prov.selectAll() : prov.deselectAll(),
-      // A click opens (folders navigate in, files open in the editor);
-      // Cmd/Ctrl/Shift-click and the checkboxes select.
-      openOnTap: true,
+      // Double-click / Enter: the menu's Open (folders navigate in, files
+      // open in the editor or, when refused, externally).
       onOpen: _onEntryTap,
       onContextMenu: (entry, position) =>
           _entryMenu(prov, entry).show(context, position),
+      rowKey: (e) => e.path,
+      emptyState: switch (prov.loadState) {
+        SftpPanelLoadState.loading => const Center(child: FCircularProgress()),
+        SftpPanelLoadState.error =>
+          FilePanelError(prov.errorMessage ?? 'Error'),
+        // Distinguish a genuinely empty directory from a filter with no
+        // hits (mirrors LocalFilePanel).
+        _ => FilePanelMessage(
+            prov.filterQuery.isNotEmpty ? 'No matches' : 'Empty directory'),
+      },
       checkboxes: true,
       draggable: true,
       rowLabel: (e) => e.name,

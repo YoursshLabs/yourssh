@@ -80,11 +80,28 @@ class EntryContextMenu extends StatelessWidget {
   /// The menu currently open (any panel); a new one replaces it.
   static OverlayEntry? _open;
 
+  /// The context [show] was called with for [_open].
+  static BuildContext? _openOwner;
+
+  /// Closes the open menu if [owner] opened it — panels call this from
+  /// `dispose` so a menu never outlives the panel whose actions it runs.
+  static void dismissOwnedBy(BuildContext owner) {
+    if (!identical(_openOwner, owner)) return;
+    final entry = _open;
+    _open = null;
+    _openOwner = null;
+    if (entry == null) return;
+    // Still inserted (cleared from [_open] whenever it is removed); also
+    // fine when its overlay is already gone.
+    entry
+      ..remove()
+      ..dispose();
+  }
+
   /// Opens this menu with its top-left corner at [globalPosition] (flipped
   /// to stay on screen) in the nearest overlay of [context].
   void show(BuildContext context, Offset globalPosition) {
-    _open?.remove();
-    _open = null;
+    if (_openOwner case final owner?) dismissOwnedBy(owner);
     final overlay = Overlay.of(context);
     final box = overlay.context.findRenderObject() as RenderBox?;
     final local = box?.globalToLocal(globalPosition) ?? globalPosition;
@@ -92,15 +109,20 @@ class EntryContextMenu extends StatelessWidget {
     entry = OverlayEntry(
       builder: (_) => _EntryMenuOverlay(
         menu: this,
+        owner: context,
         position: local,
         onClosed: () {
-          if (identical(_open, entry)) _open = null;
-          if (entry.mounted) entry.remove();
-          entry.dispose();
+          if (!identical(_open, entry)) return; // already dismissed
+          _open = null;
+          _openOwner = null;
+          entry
+            ..remove()
+            ..dispose();
         },
       ),
     );
     _open = entry;
+    _openOwner = context;
     overlay.insert(entry);
   }
 
@@ -114,11 +136,15 @@ class EntryContextMenu extends StatelessWidget {
 class _EntryMenuOverlay extends StatefulWidget {
   const _EntryMenuOverlay({
     required this.menu,
+    required this.owner,
     required this.position,
     required this.onClosed,
   });
 
   final EntryContextMenu menu;
+
+  /// Where the menu was opened from; actions only run while it is mounted.
+  final BuildContext owner;
   final Offset position;
   final VoidCallback onClosed;
 
@@ -201,10 +227,10 @@ class _EntryMenuOverlayState extends State<_EntryMenuOverlay>
     super.dispose();
   }
 
-  /// Closes the menu, then runs [action].
+  /// Closes the menu, then runs [action] if its panel is still there.
   VoidCallback _run(VoidCallback action) => () {
         unawaited(_controller.hide());
-        action();
+        if (widget.owner.mounted) action();
       };
 
   FItem _item(

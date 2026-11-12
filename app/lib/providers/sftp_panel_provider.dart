@@ -20,7 +20,7 @@ class SftpPanelProvider extends ChangeNotifier {
   String? errorMessage;
   String _sortColumn = EntrySortColumn.name;
   bool _sortAscending = true;
-  SftpEntry? _anchor;
+  String? _anchor; // path of the range anchor
   List<SftpEntry>? _filtered;
 
   String get currentPath => _currentPath;
@@ -146,10 +146,11 @@ class SftpPanelProvider extends ChangeNotifier {
   /// [additive] toggles it, [range] selects the visible run from the last
   /// anchor to it.
   void select(SftpEntry entry, {bool additive = false, bool range = false}) {
-    final (next, anchor) = applyTableSelection<SftpEntry, SftpEntry>(
-      visible: filteredEntries,
-      keyOf: (e) => e,
-      selected: _selected,
+    final visible = filteredEntries;
+    final (next, anchor) = applyTableSelection<SftpEntry, String>(
+      visible: visible,
+      keyOf: (e) => e.path,
+      selected: {for (final e in _selected) e.path},
       anchor: _anchor,
       entry: entry,
       additive: additive,
@@ -157,7 +158,7 @@ class SftpPanelProvider extends ChangeNotifier {
     );
     _selected
       ..clear()
-      ..addAll(next);
+      ..addAll(visible.where((e) => next.contains(e.path)));
     _anchor = anchor;
     notifyListeners();
   }

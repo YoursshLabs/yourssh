@@ -96,14 +96,21 @@ class YsColumn<T> {
 ///
 /// Mouse: a click selects the row (`onSelect(row)`), Cmd/Ctrl-click adds or
 /// removes it (`additive`), Shift-click selects the range from the last
-/// anchor (`range`), a double click opens it; with [openOnTap] a plain click
-/// opens instead. A right-click reports the row and the pointer's global
-/// position to [onContextMenu] without changing the selection.
+/// anchor (`range`), a double click opens it. A right-click reports the row
+/// and the pointer's global position to [onContextMenu] without changing the
+/// selection.
 ///
 /// Keyboard (while the table has focus): Up/Down move the cursor row
 /// (Shift extends the selection to it), Space toggles the cursor row,
 /// Enter opens it, Cmd/Ctrl+A selects all, Shift+F10 or the menu key opens
-/// the context menu at the cursor row.
+/// the context menu at the cursor row. When the table gains focus, or a new
+/// listing arrives while it has focus, the cursor starts on the first
+/// selected row (else the first row). A range with no anchor starts at the
+/// cursor: the table first selects the cursor row, then the range.
+///
+/// While [rows] is empty the table stays mounted (and keeps its focus) and
+/// shows [emptyState] under the header — use it for loading, error and
+/// empty-folder messages so keyboard navigation survives a reload.
 ///
 /// Only visible rows are built, and a rebuild of the table rebuilds only the
 /// rows whose selected/cursor state changed, as long as the same [columns]
@@ -121,8 +128,9 @@ class YsFileTable<T extends Object> extends StatefulWidget {
     this.onSort,
     this.onSelectAll,
     this.checkboxes = false,
-    this.openOnTap = false,
     this.draggable = false,
+    this.rowKey,
+    this.emptyState,
     this.rowLabel,
     this.dragFeedback,
     this.selectAllKey,
@@ -152,13 +160,18 @@ class YsFileTable<T extends Object> extends StatefulWidget {
   /// selects all).
   final bool checkboxes;
 
-  /// A plain click opens the row instead of selecting it.
-  final bool openOnTap;
-
   /// Rows are [Draggable]s carrying the row value.
   final bool draggable;
 
-  /// Accessible name of a row (checkbox label, drag chip).
+  /// Identity of a row across reloads (e.g. its path), so the cursor and
+  /// the anchor stay on the same entry when the listing is rebuilt with new
+  /// row objects. Defaults to the row itself.
+  final Object Function(T row)? rowKey;
+
+  /// Shown under the header while [rows] is empty.
+  final Widget? emptyState;
+
+  /// Name of a row for the checkbox label and the drag chip.
   final String Function(T row)? rowLabel;
   final Widget Function(T row)? dragFeedback;
   final Key? selectAllKey;
@@ -198,6 +211,13 @@ class _YsFileTableState<T extends Object> extends State<YsFileTable<T>> {
       widget.controller ?? (_ownScroll ??= ScrollController());
 
   int _cursor = -1;
+
+  /// Key ([YsFileTable.rowKey]) of the cursor row; survives listings that
+  /// replace the row objects, and empty (loading) phases.
+  Object? _cursorKey;
+
+  /// Key of the row a Shift range starts from.
+  Object? _anchorKey;
   bool _focused = false;
 
   Timer? _clickTimer;
@@ -206,6 +226,17 @@ class _YsFileTableState<T extends Object> extends State<YsFileTable<T>> {
   final Map<T, _RowCache<T>> _cache = HashMap<T, _RowCache<T>>();
   int _generation = 0;
   List<YsColumn<T>> _visible = const [];
+
+  Object _keyOf(T row) => widget.rowKey?.call(row) ?? row;
+
+  int _indexOfKey(Object? key) {
+    if (key == null) return -1;
+    final rows = widget.rows;
+    for (var i = 0; i < rows.length; i++) {
+      if (_keyOf(rows[i]) == key) return i;
+    }
+    return -1;
+  }
 
   @override
   void didUpdateWidget(YsFileTable<T> old) {
@@ -217,14 +248,21 @@ class _YsFileTableState<T extends Object> extends State<YsFileTable<T>> {
     }
     if (!identical(old.rows, widget.rows) &&
         !listEquals(old.rows, widget.rows)) {
-      // Keep the cursor on the same row when it is still listed (re-sort,
-      // filter); a new listing has no cursor until the next arrow key.
-      final cursorRow = _cursor >= 0 && _cursor < old.rows.length
-          ? old.rows[_cursor]
-          : null;
-      _cursor = cursorRow == null ? -1 : widget.rows.indexOf(cursorRow);
       _lastClickIndex = -1;
       _cache.clear();
+      // Keep the cursor on the same entry when it is still listed (reload,
+      // re-sort, filter). While the list is empty (loading) the key is kept;
+      // a new listing puts the cursor on its first row if the table is
+      // focused, so the keyboard flow continues.
+      final index = _indexOfKey(_cursorKey);
+      if (index >= 0) {
+        _cursor = index;
+      } else if (widget.rows.isEmpty) {
+        _cursor = -1;
+      } else {
+        _cursor = -1;
+        if (_focus.hasFocus) _placeCursor(rebuild: false);
+      }
     }
   }
 
@@ -241,12 +279,64 @@ class _YsFileTableState<T extends Object> extends State<YsFileTable<T>> {
     _cache.clear();
   }
 
-  // ── Gestures ──────────────────────────────────────────
+  // ── Cursor ────────────────────────────────────────────
 
-  void _setCursor(int index) {
+  void _setCursor(int index, {bool rebuild = true}) {
+    final key = index >= 0 && index < widget.rows.length
+        ? _keyOf(widget.rows[index])
+        : null;
+    _cursorKey = key;
     if (_cursor == index) return;
-    setState(() => _cursor = index);
+    if (rebuild) {
+      setState(() => _cursor = index);
+    } else {
+      _cursor = index;
+    }
   }
+
+  /// With no cursor, puts it on the first selected row, else the first row.
+  void _placeCursor({bool rebuild = true}) {
+    final rows = widget.rows;
+    if (_cursor >= 0 || rows.isEmpty) return;
+    final selected = rows.indexWhere(widget.selected.contains);
+    final index = selected < 0 ? 0 : selected;
+    _setCursor(index, rebuild: rebuild);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _cursor == index) _ensureVisible(index);
+    });
+  }
+
+  void _handleFocusChange(bool focused) {
+    setState(() {
+      _focused = focused;
+      if (focused) _placeCursor(rebuild: false);
+    });
+  }
+
+  // ── Selection ─────────────────────────────────────────
+
+  void _select(T row, {bool additive = false}) {
+    _anchorKey = _keyOf(row);
+    widget.onSelect?.call(row, additive: additive);
+  }
+
+  /// Selects from the anchor to [index]. Without a usable anchor (nothing
+  /// selected, or the anchor row is gone) the range starts at [from], the
+  /// cursor before the move.
+  void _selectRange(int index, {required int from, bool additive = false}) {
+    final rows = widget.rows;
+    final anchored =
+        _anchorKey != null &&
+        widget.selected.isNotEmpty &&
+        _indexOfKey(_anchorKey) >= 0;
+    if (!anchored) {
+      final start = from >= 0 && from < rows.length ? from : index;
+      _select(rows[start]);
+    }
+    widget.onSelect?.call(rows[index], additive: additive, range: true);
+  }
+
+  // ── Gestures ──────────────────────────────────────────
 
   void _handleTap(int index) {
     if (index >= widget.rows.length) return;
@@ -259,16 +349,19 @@ class _YsFileTableState<T extends Object> extends State<YsFileTable<T>> {
         (_clickTimer?.isActive ?? false) && _lastClickIndex == index;
     _clickTimer?.cancel();
     _lastClickIndex = -1;
+    final from = _cursor;
     _setCursor(index);
 
-    if (additive || range) {
-      widget.onSelect?.call(row, additive: additive, range: range);
-    } else if (widget.openOnTap || isDoubleClick) {
+    if (range) {
+      _selectRange(index, from: from, additive: additive);
+    } else if (additive) {
+      _select(row, additive: true);
+    } else if (isDoubleClick) {
       widget.onOpen?.call(row);
     } else {
       _lastClickIndex = index;
       _clickTimer = Timer(kDoubleTapTimeout, () {});
-      widget.onSelect?.call(row);
+      _select(row);
     }
   }
 
@@ -282,7 +375,7 @@ class _YsFileTableState<T extends Object> extends State<YsFileTable<T>> {
   void _handleCheckbox(int index) {
     if (index >= widget.rows.length) return;
     _setCursor(index);
-    widget.onSelect?.call(widget.rows[index], additive: true);
+    _select(widget.rows[index], additive: true);
   }
 
   // ── Keyboard ──────────────────────────────────────────
@@ -300,10 +393,11 @@ class _YsFileTableState<T extends Object> extends State<YsFileTable<T>> {
         key == LogicalKeyboardKey.arrowUp) {
       if (rows.isEmpty) return KeyEventResult.handled;
       final step = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
-      final next = _cursor < 0 ? 0 : (_cursor + step).clamp(0, rows.length - 1);
+      final from = _cursor;
+      final next = from < 0 ? 0 : (from + step).clamp(0, rows.length - 1);
       _setCursor(next);
       _ensureVisible(next);
-      if (keys.isShiftPressed) widget.onSelect?.call(rows[next], range: true);
+      if (keys.isShiftPressed) _selectRange(next, from: from);
       return KeyEventResult.handled;
     }
 
@@ -316,7 +410,7 @@ class _YsFileTableState<T extends Object> extends State<YsFileTable<T>> {
     }
     if (key == LogicalKeyboardKey.space) {
       if (!hasCursor) return KeyEventResult.ignored;
-      if (!repeat) widget.onSelect?.call(rows[_cursor], additive: true);
+      if (!repeat) _select(rows[_cursor], additive: true);
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.keyA &&
@@ -405,7 +499,7 @@ class _YsFileTableState<T extends Object> extends State<YsFileTable<T>> {
       focusNode: _focus,
       autofocus: widget.autofocus,
       onKeyEvent: _handleKey,
-      onFocusChange: (focused) => setState(() => _focused = focused),
+      onFocusChange: _handleFocusChange,
       child: DefaultTextStyle.merge(
         style: const TextStyle(fontSize: 13, color: YsColors.foreground),
         maxLines: 1,
@@ -440,14 +534,20 @@ class _YsFileTableState<T extends Object> extends State<YsFileTable<T>> {
                       : null,
                 ),
                 Expanded(
-                  child: ListView.builder(
-                    controller: _scroll,
-                    primary: false,
-                    padding: EdgeInsets.zero,
-                    itemExtent: kYsFileTableRowHeight,
-                    itemCount: widget.rows.length,
-                    itemBuilder: _row,
-                  ),
+                  child: widget.rows.isEmpty && widget.emptyState != null
+                      ? DefaultTextStyle.merge(
+                          maxLines: null,
+                          softWrap: true,
+                          child: widget.emptyState!,
+                        )
+                      : ListView.builder(
+                          controller: _scroll,
+                          primary: false,
+                          padding: EdgeInsets.zero,
+                          itemExtent: kYsFileTableRowHeight,
+                          itemCount: widget.rows.length,
+                          itemBuilder: _row,
+                        ),
                 ),
               ],
             );
@@ -545,8 +645,14 @@ class _YsFileTableHeader<T> extends StatelessWidget {
     );
     final onSort = this.onSort;
     if (!column.sortable || onSort == null) return text;
+    final state = !sorted
+        ? ''
+        : sort!.ascending
+        ? ', sorted ascending'
+        : ', sorted descending';
     return FTappable.static(
-      semanticsLabel: 'Sort by ${column.label}',
+      semanticsLabel: 'Sort by ${column.label}$state',
+      excludeSemantics: true,
       onPress: () => onSort(sort?.next(column.id) ?? YsSort(column.id)),
       child: text,
     );
@@ -626,12 +732,8 @@ class _YsFileRow<T extends Object> extends StatelessWidget {
         child: content,
       );
     }
-    return Semantics(
-      container: true,
-      selected: selected,
-      label: label,
-      child: content,
-    );
+    // The cells already name the row; only the selected state is added.
+    return Semantics(container: true, selected: selected, child: content);
   }
 }
 
