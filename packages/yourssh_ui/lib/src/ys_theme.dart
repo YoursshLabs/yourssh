@@ -1,4 +1,6 @@
-import 'package:material_ui/material_ui.dart';
+// Migrating the app to material_ui is a separate later step.
+// ignore: deprecated_member_use
+import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
 import 'ys_colors.dart';

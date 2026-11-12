@@ -1,8 +1,26 @@
-import 'package:material_ui/material_ui.dart';
+// Migrating the app to material_ui is a separate later step.
+// ignore: deprecated_member_use
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 void main() {
+  testWidgets("ysMaterialTheme() is flutter's ThemeData", (tester) async {
+    late Color primary;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ysMaterialTheme(),
+        home: Builder(
+          builder: (context) {
+            primary = Theme.of(context).colorScheme.primary;
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+    expect(primary, YsColors.primary);
+  });
+
   test('forui theme uses Amber tokens', () {
     expect(ysThemeData().colors.primary, YsColors.primary);
     expect(ysThemeData().colors.background, YsColors.background);
