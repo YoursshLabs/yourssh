@@ -1,10 +1,12 @@
 // Behavior snapshot for the xterm output path (EscapeParser + Buffer +
-// BufferLine). Every digest below was recorded with the parser/buffer code
+// BufferLine). The corpus digests were recorded with the parser/buffer code
 // as it was BEFORE the throughput work (fork patch 10), so any optimization
 // of Terminal.write must reproduce the exact same terminal state — every
 // cell's codepoint/width/fg/bg/attrs, wrap flags, cursor, margins, modes,
-// scrollback trimming, callbacks, and even the exceptions the old code threw
-// on malformed input.
+// scrollback trimming and callbacks. The fuzz and generic digests were
+// re-recorded after the robustness fixes (malformed SGR/erase no longer
+// throw, scroll-region lines stay attached, restored cursors are clamped,
+// width resizes after the scrollback wrapped keep their order).
 //
 // Inputs are generated deterministically (own PRNG, no dart:math Random):
 //   * four corpora mirroring the throughput benchmark (plain log, SGR-heavy,
@@ -85,87 +87,89 @@ const _corpusExpectations = <String, int>{
 const _fuzzCases = 240;
 
 const _fuzzExpectations = <int>[
-  0x38faf5cfdefaaba0, 0x760efb8d93dcc829, 0x28405cfcdacef1f0,
-  0x6fb40c2fcd8506c8, 0x3389a4ed1155d184, 0x68657b8b531282bb,
-  0x721e0b93320f272f, 0x3bbb94e22bf6271, 0x2a204bb3553cf217,
-  0x15b66ee925ac28cf, 0x2a66d99a5fccca4c, 0x463adea89ecbafcd,
-  0x6dfde6ef1b5f8690, 0x5753e218a383f861, 0x7499e40311df3ca9,
-  0x27e3c0c0ee7b414d, 0x3526145af8e32f9b, 0x6f3cc78e0aaf5653,
-  0x4bd2380d0230070b, 0x2161880ab3cf017, 0xaa51ce825b9d9c7, 0x7fbe58901578bf1f,
-  0x40b497ad0f6aea49, 0x3a8b45844a1222c, 0x4a50d1b6015ec13a,
-  0x181f7d29cea5f6fe, 0x7295eb9cfac1fa90, 0x92aabd9ee418946,
-  0x1b538812d044b986, 0x2967cb705cd5c855, 0x18978e534fa906c8,
-  0xa36571a22b6a192, 0xf7f1d3933c8d2c7, 0x3d7f067af5125331, 0x109baa932e3fed88,
-  0x3def6b1bf56b1481, 0x64b6f4fce5439d6f, 0x6bc53bd6918cbe05,
-  0x6856969835f89acc, 0x12a88b57507c7f0c, 0x68e16dee9840f48b,
-  0x4ec9ad9945a9fbb, 0x579762bae630d1d3, 0x7d81007c8e7c95dc,
-  0x69c510ae409d3af5, 0x3936af7e7d499971, 0x448798d89f0b8f25,
-  0x213cbe1d08061b3e, 0xd1856aa99ee4cae, 0x77eb070c6c9fce4c,
-  0x537b882ff9c2072e, 0x7869e247c58a672, 0x603d74987a98bc63,
-  0x435e7adc6c3f20a3, 0x7c0f0a8fba8ed1e2, 0x476ef0ab1c7a1ee0,
-  0x46264dffc6f4deb0, 0x37e6fc5dcdfa3c48, 0x1eb8ace7a22bf478,
-  0x57c2b80e367f3a17, 0x5e0acfcd364257b5, 0x635fea8e5b99fd7, 0x371eef555933964,
-  0x4c237d4761fd2107, 0x18a099de95b09da0, 0x7038c82e40140101,
-  0x691ccf49dce338cc, 0x112e2c12ed76660, 0x319c856b71be8dfa,
-  0x44efe57686deb55f, 0xa349cd869f7ab22, 0x54f1e34049b9d650,
-  0x5987c1a6d418cc5b, 0x49f80c5e20cfd3aa, 0x5e227ae983a58dc6,
-  0x1fa680a44e79d315, 0x7b731e0bb693ee6a, 0x2e2f3fee1340b8ea,
-  0x67b938ba14f0fa61, 0x7480007da57f3c20, 0x7050b0d25813e752,
-  0x611a1736eae672e1, 0x182b969adf0f71db, 0x6fe7154d529ae278,
-  0x1885e852ed4a40cb, 0x6ed48747a5b6730a, 0x4f99b0b0854c5b31,
-  0x505999ce0cdaa8d5, 0x16fa9732e9aaf717, 0x62a0c71fa36e966c,
-  0x2f4be639edef9890, 0x36f0369ab8bd9024, 0x236cd426fe6a82c, 0xa730d453f831f66,
-  0x7ae8c6148768165f, 0x62c2d0f35b0a5c35, 0x63c80f83bf04c5f3,
-  0x62b0b0578a25dd36, 0x785df5a8dd2d6c16, 0x6428377edd7c8cdf,
-  0x5246ab9c3a750e6, 0x1ca828a16baa3c3b, 0x6e3a9b1c16bcd6b2,
-  0x6e4f81032ba893f7, 0x68536c4bffd8b398, 0x437c6503930eeafd,
-  0x159544499dcdd197, 0x234af4ef13c0f783, 0x14b5e75a78d4e9f8,
-  0x4337c884e55fe4e5, 0x296f8e2503156158, 0x8238728844c86ee,
-  0x5216b01b5f2a9001, 0x7d39727daedfcb5, 0x12c4ae00efff1a3e,
-  0x34e4b0bdd7fc6231, 0x74891e9cf03a926e, 0x7e9e85e429e4ca7c,
-  0xce0581f79e685c7, 0x129ac952365979c4, 0x4b331afbab6b4264, 0xeddee841a4e85ce,
-  0x5dbc894d2d3c4042, 0x6648e39175d80717, 0x2c9142f224e2ebe1,
-  0x5f59ed65f4b116fa, 0x69b4da178c49d60d, 0x44f86aa246bbf606,
-  0x40439664334fba39, 0x34b6b47d729d9aaa, 0x4a9d91750b30652f,
-  0x75b13dde2f1aa87e, 0x2bd6f6b7a2b1f0bf, 0x360862b01d56425e,
-  0x53f976130cf667fb, 0x44c89759e127561f, 0x75c643b0a7ea3f39,
-  0x7409052a0046d046, 0x1e5260e4b93b6d06, 0x772254de29204dc0,
-  0x719bee4378eacd6c, 0xd413a6a58cf9dc6, 0x5ee5edc41ca58ec2,
-  0x5458cb82305c2ce3, 0x7409569ba7661523, 0x27845c4ad6469aa6,
-  0x78a5e6461cf8cff4, 0x76f439de732ed30e, 0x5772eb2d36508b99,
-  0xb9e864fad5550dd, 0x310a4c2332158a13, 0x6c83af87d0f7044b,
-  0x1224e770d1273007, 0x548ca5dc2bfba52c, 0x5217f73e84c8980b,
-  0x79292ac4404a0cfd, 0x929e84aca98cdf0, 0x65f77f8ea4d979ae,
-  0x6bfbec295c0f5aeb, 0x1cadeef7b1f7e235, 0x3b00979851fad456,
-  0x785169e15aa35a76, 0x3f2001936322d7f0, 0x5243df08758d3375,
-  0x17252f7622e65bcb, 0x328e887705499700, 0x7fa162a52cf8f324,
-  0x5b1ce045076ab073, 0x741b5003c840644a, 0x2db6ad994565c657,
-  0x3d7285ad47231801, 0x21283a06f062ba2d, 0x76724b1a9c5f1b74,
-  0x2133481dd92d0f71, 0xd5612f8b8ffd929, 0x50f6abdfa032522, 0x413408c204fa3f95,
-  0x76807c424492aed0, 0x60618c9ff1f69922, 0x7abe27713678a787,
-  0x286424c333a624e9, 0x6d6184dc42e1ccec, 0x344e886c15e74ee4,
-  0x4fd2d2299f77826c, 0xa74143c47b57fd8, 0x34cee42e804f0b90,
-  0x2396871458527a08, 0x10f135c6c9a90de9, 0x166124ca9c77a02,
-  0x36e5acfd21d51a73, 0x15b9f1316628c1d6, 0x15d15be0b61cc758,
-  0x22378ad34007c1d3, 0x1c6a2ebace1cc053, 0x1ddbe94c06202dcc,
-  0x1221b79195f24f47, 0x21982fcd5783d6fe, 0x3e47cd5f303ecb31,
-  0x4bc07668aa449862, 0x558b5d2444514d1f, 0x4417b377c47498eb,
-  0x7e346a0d386d6ce, 0x575f6a4e81a11988, 0x3b0d4c897df7c94d,
-  0x795df1280750e505, 0x28aa706455d42cfa, 0x2311956432849a46,
-  0x1936f4989503eb0a, 0x47d6255e33caeeed, 0x77cc77d21699812d,
-  0x4291534884b3fb92, 0x5b67d9569591d840, 0x1c47abbb7d420111,
-  0x2b489e270c194aea, 0x78e67fa0435d8262, 0x4763904fca959bd5,
-  0x3e9fa892bb38a00c, 0x2f557878daef08ce, 0x4fdc7f9cb2167a03,
-  0x55770460bac98aba, 0x20502b6f9c45b8b2, 0x691edb47f3046bdb,
-  0x130dbf81abbdf48, 0x3b77962696f0abf0, 0x25068051b12c59d4,
-  0x3360bb67c2cfa3f3, 0x32c9d59e3b01d5d0, 0x4ce0a6d94305cfde,
-  0x1021b3fe54908124, 0x5a500761ab560ad9, 0x29ec34055f4f70ce,
-  0x381f19ffcd65c422, 0x3b83ecfb66296101, 0x458c9ecab989b01b,
-  0x7408fab15528c7f9, 0x7899f78ec2cac41e, 0x684d8bec8b67b0bb,
-  0xf7f0dde76afe484, 0x7eff00b1db085fa3, 0x248027d7ba6549e8,
+  0x10d365e934ab734c, 0x5178c120bf674633, 0x1d0ebe689b5a420a,
+  0x4e9e81ae1ac6fb8a, 0x4d94e0263306be46, 0x749d415cf37378dc,
+  0x571b56d717715b18, 0xb6db49b25d92875, 0x4c9f3d1fb3959157,
+  0x1cbf16231bf0a9b, 0x4af43cc586e331c2, 0x5d10fda4f49bacb4,
+  0x5a85c2069291520, 0xf1b39b9521beb45, 0x8e30df2168bdb95,
+  0x3dc0997b4df8cdac, 0x197efe79f724c513, 0x7d3c73f4ee72f898,
+  0x2529a65559871a22, 0x71c67f653e85ec9f, 0x633dee9d7732fd50,
+  0x25fa42c8a9a5e526, 0x65e1d41dc1ed8458, 0x118130fbdb6909ba,
+  0x3f0996f6f1eeea2a, 0x4084c299513e38b1, 0x47ce6c3f7b44fab5,
+  0x5aa666c67a064f11, 0x239842e1dbd85cb5, 0x24716658bc41d540,
+  0x37912a0cbb7fbec2, 0x1b3bbed8d32376a1, 0x57c7f4074e3d2688,
+  0x4db44504a29a40c2, 0x2ac9816d6ed16579, 0x5fc1a4f50f515b71,
+  0x9451dc3eec15341, 0x3ad4cb1dbc7fba0c, 0x755d3aa40ade6b3c,
+  0x698d0173513c0147, 0x413a850fa86301ab, 0x768499bcb2bb3fed,
+  0x2fed3786fe683e18, 0x65f0439485e32b0, 0x33f8326ab18893df,
+  0x23e0d82eb6d770cc, 0x3a5c222543920854, 0x4edcec0f6f8dacb5,
+  0xf389a63f77d2235, 0x31ee4ab870c41985, 0x62dd1d3d270c00a6,
+  0x76337a55ea9258d4, 0x4367a4e88c75c8e2, 0xb36b05d425f0966,
+  0x484a4de2cdc7bf6b, 0x1ad50771c76c1115, 0xdb7472f55e345ab,
+  0x22e9ccccaae5e152, 0x78ad16116c2f5bf8, 0x2f9e54c361ae2764,
+  0xe4e5cc2501a6230, 0x199bfbb5b40bba44, 0x42b9c2307da6c052,
+  0x74560a523335a8e2, 0x3eff991bed92f2d3, 0x561cbcb6b2de119a,
+  0x4c8034c132aae3f2, 0x2a8f98ca255fdc27, 0x31678cfff883e1de,
+  0x29424eb0592fd617, 0x1b4c54c292bf70b5, 0x1902673499211b3b,
+  0x566ff3e1aa44a11, 0x75cc6f0fcc0f9fcb, 0x252fa1272cfecdd0,
+  0x1eff1f698b809397, 0x74d7df8f676f82bd, 0xfc2e305f7011a4c,
+  0x68740856a5e94141, 0x5d1edbb4198e7850, 0x24c273712a8d3c70,
+  0x277f1f5864344769, 0x31fec18f5ab03085, 0x439dca7bc79e63b9,
+  0x4501f35c41815d91, 0x3401d5de68f30c76, 0x5daedc4d59bf23ab,
+  0x607359ee457e4ff6, 0x75bc264bdb30791f, 0x4302fe5be1155e6d,
+  0x6967af2bcb15e984, 0xd162d38563b6ded, 0x2027c46244c9bfad,
+  0x6da3b8ab76bb1a84, 0x4736fd455dceaa78, 0x4683aaa6a87b9d22,
+  0x47abdf13b0861f4a, 0xab1e103dc2e7379, 0x27e8c3cc58843603,
+  0x2f7f31d870a528bd, 0x6f71ec1e7b0c8407, 0x346f7bcdd8bad16e,
+  0x7d08553b511a0922, 0x739f5818db1e3fb3, 0x5606ce1ab4b8c4a,
+  0x1b6b09e446cd0f50, 0x507b78a76f656ba5, 0x11ebd33ec59399f3,
+  0x1dfdaf9b36ae3950, 0x58bf76e1c26110ee, 0x68bf1d9f1046d7cf,
+  0xcc14b198c2c9abc, 0x24038a015eccf7b4, 0x6b0458031041107,
+  0x4979112c56624bf5, 0xafb4fc693011bba, 0x2da9791ef24882ec,
+  0x761a1af51c59c6ac, 0x2af59ee994fcd461, 0xce3dee19bff5b5,
+  0x5f5ea0e71bc8c22d, 0xc966f8381002718, 0x2b3bfb6128529abf,
+  0x1584eb317524b6fb, 0x51ff0498bd3c2024, 0x2ed8a0e38a69ed0b,
+  0x6cdc0e61f00d25bd, 0x7448ec00f9f2c94c, 0x5f3a80473df0bef5,
+  0x2b190cc6f6d09ffe, 0x3186da30d367bff9, 0x7a5d3b4710b4e3ed,
+  0x653f4007fdf0ec19, 0x6c9cd76bbb5d825c, 0x3577e74706684e2c,
+  0x6ff9d256f69af4f1, 0x236b504d21f24f6e, 0x13af4d9a97839e1e,
+  0x18093c12c3068d9f, 0x5c670f80370b17ce, 0x2983fc78dd532efe,
+  0x1d6f560240d56f1e, 0x3ddee258f7c53ed2, 0xae6934037836160,
+  0x117eec41c4f763cb, 0x3db8e15c52b68eb0, 0x68aab0d6eb57d69d,
+  0x362fa69cf391331a, 0x4ecee3fbdeace4ab, 0x40bbb27c335e6dc1,
+  0x41f48e68f429f20a, 0x2b89650285a2107a, 0x1224e770d1273007,
+  0x52bc0e49871b08d3, 0x1d67133950b07600, 0x6a4a36bf7615193c,
+  0x106e791b997dafd2, 0x1141eb1c3a13dc8c, 0x381dffba3894488c,
+  0x62746e3bbd5c4755, 0x4b036afd5ace551f, 0x5a862ea8fb941c9e,
+  0x36a87c932ad38dc2, 0x60995f7208aee8c9, 0x1b4bad1f3f13c6c1,
+  0x4355f005489dc45c, 0x67c649b7d21d10b9, 0x616f9ad91deb5bfd,
+  0x22e4ee73ce99505c, 0x524abba0451e2e33, 0x5102d09a25c131b1,
+  0x1cea862e24392385, 0x6b11e6215b44233e, 0x52506e8d84714ddf,
+  0x67510bbcd773568c, 0x701c052c39b4bcd4, 0x6b3501863b5da451,
+  0x80ad3282b13b822, 0x5887a3fbb68229f9, 0x427b444f16c67e68,
+  0x4fc00a923e8bdf36, 0xa4be2da843e2041, 0x6e4dca33b3b6f1a,
+  0x4ae7c5be8d7273c7, 0x7fc9cc69f56571ef, 0x1ebe975b8bcf8b83,
+  0x419226930ec5dbba, 0x2f9ed2a2baa5c21d, 0xd673051e43d55a0,
+  0x6a6bef5799446b56, 0x7beda403d5692c1f, 0x126e6357e4ffe54,
+  0x49d804c1ae799772, 0x3f28c15c6d53d750, 0x3b0c0051a13c727,
+  0x518991111f8761b5, 0x75081ca14d7db397, 0x325837e4f0d2993b,
+  0x153d10af3f5d89f9, 0x7837b3e81a4acdfb, 0x2635d6231174d513,
+  0x25cf42eaad424714, 0x4abe721e66337d36, 0x420b6a78ec3da1c4,
+  0x511f06de8b6e5e50, 0x235f4e2eff9538e2, 0x261c4b9421a45410,
+  0x3028e342239c569a, 0x5d7c41ee3dcb937c, 0xc81753e556b987d,
+  0x53af728bf2ae7f15, 0x5a15c4cddfb89d84, 0x5209bff8b7e193e0,
+  0x3d5e6a1ddabb1876, 0x529fd91cc6e5c8c4, 0x210c12c0557cfc6a,
+  0x3cf9cc13bab2144b, 0xfd7e69d814125aa, 0x63b24dbd11cc5815,
+  0x2c314b9072227d4a, 0x674af4dbc5d3c8a3, 0x2801a7eafcb8c269,
+  0x20a789b04ecdfb50, 0x42d0796c573750c6, 0x37d59fbc262f9484,
+  0x6552001134e6578f, 0x32c5b9aca72c4757, 0x39dc5fc0581ce0e4,
+  0x58716a1094d94fd0, 0x7ac12eb6988c9e2, 0x2f74b8f63f983a2e,
+  0x7429707316935ee3, 0x1fdc613f950a23c1, 0x7dd22ce375f8d26c,
+  0x756cb87282f5b2e8, 0x4bd3ee62cb10d2a2, 0x2bde2431a34fe914,
+  0x7a005821ecebf09e, 0x29cdfe612d10a0fa, 0x23b4af3edbecf4e0,
 ];
 
-const _genericExpectation = 0x2fc6b4e2857b5df5;
+const _genericExpectation = 0x78df8e7902adebc1;
 
 // ---------------------------------------------------------------------------
 // Deterministic PRNG (xorshift32) — independent of the SDK's Random.
@@ -224,8 +228,7 @@ class _Digest {
     add(b.marginTop);
     add(b.marginBottom);
     for (var i = 0; i < b.lines.length; i++) {
-      // Pre-existing bookkeeping bugs in scroll/insert can leave holes in
-      // the circular buffer; those are part of the recorded behavior.
+      // Defensive: a hole in the circular buffer is recorded, not thrown.
       BufferLine? line;
       try {
         line = b.lines[i];
@@ -675,15 +678,13 @@ int _runFuzzCase(int seed) {
     i = end;
     writes++;
     if (r.chance(2)) {
-      // Heights above maxLines are invalid input for Buffer.resize. With
-      // reflow on, only the height changes: a width change after the
-      // scrollback wrapped around hits a pre-existing reflow bug
-      // (IndexAwareCircularBuffer.replaceWith ignores _startIndex) that
-      // scrambles the scrollback, which is not what this test is about.
+      // Heights above maxLines are invalid input for Buffer.resize. Width
+      // changes after the scrollback wrapped around are covered too (they
+      // scrambled the scrollback before the replaceWith fix).
       final s = r.pick(_sizes);
       if (s[1] <= maxLines) {
         try {
-          t.resize(t.reflowEnabled ? t.viewWidth : s[0], s[1]);
+          t.resize(s[0], s[1]);
         } catch (e) {
           d.addError(e);
         }

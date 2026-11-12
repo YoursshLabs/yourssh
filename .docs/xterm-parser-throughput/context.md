@@ -19,9 +19,8 @@
 - Benchmark: `packages/xterm/benchmark/write_benchmark.dart` (compile with `--packages=../../app/.dart_tool/package_config.json`; the xterm package cannot resolve its own dev_dependencies).
 - Tests: `app/test/widgets/xterm_write_snapshot_test.dart`, `xterm_line_recycling_test.dart`, `xterm_write_bytes_test.dart`.
 
-## Pre-existing bugs found (left unchanged — behavior-preserving task)
-- `IndexAwareCircularBuffer.replaceWith` adopts at the old `_startIndex` and then resets it to 0: a width change (reflow) after the scrollback has wrapped scrambles the scrollback order, or leaves null slots when the reflow result is shorter than the capacity.
-- `Buffer.scrollUp/scrollDown/deleteLines` move lines with `lines[i] = lines[i + n]`, which detaches the moved line (its slot is later overwritten); a later `insert` through such a line throws a null-check error and leaves a hole in the buffer.
-- `ESC [ 1 K` / `ESC [ 1 J` at column 0 call `eraseRange(0, 0)`, which reads cell -1 and throws a RangeError out of `Terminal.write`.
-- SGR `38`/`48` with missing sub-parameters throws a RangeError out of `Terminal.write`.
+## Pre-existing bugs
+Fixed afterwards (see `app/test/widgets/xterm_robustness_test.dart` and `xterm_fuzz_test.dart`): replaceWith/reflow scrambling the scrollback, scroll/deleteLines detaching lines, `ESC[1K`/`ESC[1J` at column 0 and truncated SGR 38/48 throwing, plus fuzz finds (insert start-index wrap, trimStart absolute index, reflow at width 1 / wide char in the last column / mixed grow, DECRC out of bounds, DCH at pending wrap).
+
+Still open:
 - `Buffer.resize` asserts when the scrollback (`maxLines`) is smaller than the 24 rows the buffers are created with.
