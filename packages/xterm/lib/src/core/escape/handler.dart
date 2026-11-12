@@ -223,9 +223,12 @@ abstract class EscapeHandler {
 /// pass to [EscapeHandler.writeChar] one at a time (every code point >= 0x10
 /// except ESC), so the handler can write them in bulk.
 abstract class EscapeTextSink {
-  /// Must behave exactly like calling [EscapeHandler.writeChar] for each of
-  /// `runes[start]` .. `runes[end - 1]` in order.
-  void writeChars(Uint32List runes, int start, int end);
+  /// Writes `runes[start]`, `runes[start + 1]`, ... up to (not including)
+  /// the first code point below 0x10 or ESC, or [end], and returns the index
+  /// where it stopped. Must behave exactly like calling
+  /// [EscapeHandler.writeChar] for each written code point in order.
+  /// `runes[start]` is always a code point to write.
+  int writeChars(Uint32List runes, int start, int end);
 
   /// When [writeChars] throws: the index (into the `runes` it was given) of
   /// the code point that was being written. The parser resumes after it on

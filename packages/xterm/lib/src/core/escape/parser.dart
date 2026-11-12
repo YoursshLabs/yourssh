@@ -120,26 +120,19 @@ class EscapeParser {
 
       if (c >= 0x10 && c != Ascii.ESC) {
         // A run of characters the parser hands to writeChar.
-        var j = i + 1;
-        while (j < end) {
-          final d = buf[j];
-          if (d < 0x10 || d == Ascii.ESC) break;
-          j++;
-        }
         if (sink != null) {
           tokenBegin = _consumedBase + i;
-          _pos = j;
           _inSink = true;
-          sink.writeChars(buf, i, j);
+          i = sink.writeChars(buf, i, end);
           _inSink = false;
-        } else {
-          for (var k = i; k < j; k++) {
-            tokenBegin = _consumedBase + k;
-            _pos = k + 1;
-            handler.writeChar(buf[k]);
-          }
+          continue;
         }
-        i = j;
+        do {
+          tokenBegin = _consumedBase + i;
+          _pos = i + 1;
+          handler.writeChar(buf[i]);
+          i++;
+        } while (i < end && buf[i] >= 0x10 && buf[i] != Ascii.ESC);
         continue;
       }
 

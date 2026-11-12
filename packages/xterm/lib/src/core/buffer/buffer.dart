@@ -153,12 +153,13 @@ class Buffer {
   /// being written when [writeChars] threw.
   int writeCharsFailedAt = 0;
 
-  /// Writes `runes[start, end)` with exactly the effect of calling
-  /// [writeChar] for each of them in order, but without the per-character
-  /// overhead: runs of printable ASCII go straight into the line's cell
-  /// storage, and the cursor line is looked up once per line instead of
-  /// once per character.
-  void writeChars(Uint32List runes, int start, int end) {
+  /// Writes `runes[start]`, `runes[start + 1]`, ... up to (not including) the
+  /// first code point below 0x10 or ESC (0x1b), or [end], with exactly the
+  /// effect of calling [writeChar] for each of them in order, and returns
+  /// the index where it stopped. Avoids the per-character overhead: runs of
+  /// printable ASCII go straight into the line's cell storage, and the
+  /// cursor line is looked up once per line instead of once per character.
+  int writeChars(Uint32List runes, int start, int end) {
     final width = terminal.viewWidth;
     final cursor = terminal.cursor;
     final fg = cursor.foreground;
@@ -189,6 +190,10 @@ class Buffer {
         x += written;
         i += written;
         continue;
+      }
+
+      if (codePoint < 0x10 || codePoint == 0x1b) {
+        break; // C0 control or ESC: back to the parser
       }
 
       // Everything else follows writeChar step by step.
@@ -266,6 +271,7 @@ class Buffer {
     }
 
     _cursorX = x;
+    return i;
   }
 
   /// Results of NFC-composing a (base, mark) pair: the precomposed code point,

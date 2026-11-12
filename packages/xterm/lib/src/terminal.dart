@@ -399,16 +399,18 @@ class Terminal
 
   /// Bulk form of [writeChar] used by the parser for runs of text.
   @override
-  void writeChars(Uint32List runes, int start, int end) {
+  int writeChars(Uint32List runes, int start, int end) {
+    final int stop;
     try {
-      _buffer.writeChars(runes, start, end);
+      stop = _buffer.writeChars(runes, start, end);
     } catch (_) {
       // Same state as a writeChar loop that threw on this code point.
       _writeCharsFailedAt = _buffer.writeCharsFailedAt;
       _precedingCodepoint = runes[_writeCharsFailedAt];
       rethrow;
     }
-    _precedingCodepoint = runes[end - 1];
+    _precedingCodepoint = runes[stop - 1];
+    return stop;
   }
 
   /* SBC */
