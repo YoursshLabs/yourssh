@@ -8,7 +8,6 @@ import 'package:yourssh_cli/yourssh_cli.dart';
 import 'cli_handlers.dart';
 import 'cli_listener.dart';
 import 'cli_server.dart';
-import 'peer_cred.dart';
 
 /// The CLI endpoint for this machine, or null where it is not supported yet
 /// (Windows named pipes arrive in a later task).

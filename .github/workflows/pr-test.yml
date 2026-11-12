@@ -117,6 +117,10 @@ jobs:
         working-directory: packages/yourssh_cli
         run: dart test
 
+      - name: Compile smoke (yourssh_cli)
+        working-directory: packages/yourssh_cli
+        run: dart compile exe bin/yourssh.dart -o "$RUNNER_TEMP/yourssh"
+
   # Aggregate gate. master's branch protection requires a check literally named
   # "test", so that name has to survive the split — this job carries it, and it
   # is red unless every job above is green. `always()` matters: without it the
