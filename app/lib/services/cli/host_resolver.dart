@@ -30,7 +30,9 @@ class UnknownHost extends HostResolution {
 
 String _norm(String s) => unorm.nfc(s.trim()).toLowerCase();
 
-final _target = RegExp(r'^([^@\s]+)@([^@:\s]+)(?::(\d{1,5}))?$');
+// user: [A-Za-z0-9._-]+; host: DNS name / IPv4 (no underscore) or [IPv6].
+final _target = RegExp(
+    r'^([A-Za-z0-9._-]+)@(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(?::(\d{1,5}))?$');
 
 /// Order: exact id, label (case-insensitive, NFC, trimmed),
 /// `user@hostname[:port]` matching a saved host, ad-hoc (if allowed), unknown.
@@ -50,7 +52,10 @@ HostResolution resolveHost(String query, List<Host> hosts,
   final m = _target.firstMatch(query.trim());
   if (m != null) {
     final user = m.group(1)!;
-    final hostname = m.group(2)!;
+    var hostname = m.group(2)!;
+    if (hostname.startsWith('[')) {
+      hostname = hostname.substring(1, hostname.length - 1);
+    }
     final port = m.group(3) == null ? 22 : int.parse(m.group(3)!);
     if (port >= 1 && port <= 65535) {
       final matches = hosts

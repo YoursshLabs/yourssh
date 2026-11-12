@@ -8,9 +8,11 @@ import 'package:yourssh/services/cli/host_resolver.dart';
 import 'package:yourssh_cli/yourssh_cli.dart';
 
 class FakeHandlers implements CliHandlers {
-  FakeHandlers(this.hosts);
+  FakeHandlers(this._hosts);
   @override
-  final List<Host> hosts;
+  List<Host> get hosts => hostsGetter != null ? hostsGetter!() : _hosts;
+  final List<Host> _hosts;
+  List<Host> Function()? hostsGetter;
   final calls = <String>[];
   Object? connectError;
 
@@ -64,9 +66,9 @@ void main() {
   });
 
   test('trusted call ignores the token', () async {
-    final r = await call(req('connect', {'host': 'web-1'}, token: ''), trusted: true);
+    final r = await call(req('open', {'url': 'yourssh://connect/web-1'}, token: ''), trusted: true);
     expect(r.ok, isTrue);
-    expect(fake.calls, ['connect:web-1:cli']);
+    expect(fake.calls, ['connect:web-1:url']);
   });
 
   test('connect via socket path passes source cli', () async {
@@ -113,7 +115,7 @@ void main() {
   });
 
   test('open percent-decodes once', () async {
-    fake.hosts.add(h('Prod DB', id: 'p'));
+    fake._hosts.add(h('Prod DB', id: 'p'));
     final r = await call(req('open', {'url': 'yourssh://connect/Prod%20DB'}));
     expect(r.ok, isTrue);
     expect(fake.calls, ['connect:Prod DB:url']);
@@ -176,4 +178,60 @@ void main() {
       expect(raw, isNot(contains(k)));
     }
   });
+
+  test('handler exception text never reaches the response', () async {
+    fake.connectError = Exception('secret /path/key');
+    final line = await server.handleLine(req('connect', {'host': 'web-1'}), trusted: false);
+    expect(line, isNot(contains('secret')));
+    expect(line, isNot(contains('/path/key')));
+    expect(CliResponse.decode(line).code, CliExit.runtime);
+  });
+
+  test('throwing hosts getter is contained', () async {
+    fake.hostsGetter = () => throw StateError('secret hosts');
+    for (final r in [req('ls', {}), req('connect', {'host': 'x'})]) {
+      final line = await server.handleLine(r, trusted: false);
+      expect(line, isNot(contains('secret')));
+      expect(CliResponse.decode(line).code, CliExit.runtime);
+    }
+  });
+
+  test('trusted path only allows open and activate', () async {
+    for (final r in [
+      req('connect', {'host': 'web-1'}),
+      req('ls', {}),
+      req('version', {}),
+    ]) {
+      expect((await call(r, trusted: true)).code, CliExit.denied);
+    }
+    expect(fake.calls, isEmpty);
+    expect((await call(req('activate', {}), trusted: true)).ok, isTrue);
+    expect((await call(req('open', {'url': 'yourssh://connect/web-1'}), trusted: true)).ok, isTrue);
+  });
+
+  test('invalid UTF-8 percent encoding is code 2', () async {
+    final r = await call(req('open', {'url': 'yourssh://connect/%FF'}));
+    expect(r.code, CliExit.usage);
+    expect(r.error, contains('encoding'));
+  });
+
+  test('open accepts uppercase authority', () async {
+    final r = await call(req('open', {'url': 'yourssh://CONNECT/web-1'}));
+    expect(r.ok, isTrue);
+  });
+
+  test('open decodes only once', () async {
+    fake._hosts.add(h('a%2Fb', id: 'z'));
+    final r = await call(req('open', {'url': 'yourssh://connect/a%252Fb'}));
+    expect(r.ok, isTrue);
+    expect(fake.calls, ['connect:a%2Fb:url']);
+  });
+
+  for (final url in ['yourssh:connect/x', 'yourssh://connect/web-1/']) {
+    test('open rejects $url', () async {
+      final r = await call(req('open', {'url': url}));
+      expect(r.code, CliExit.usage);
+      expect(fake.calls, isEmpty);
+    });
+  }
 }

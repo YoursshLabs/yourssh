@@ -50,4 +50,18 @@ void main() {
     expect(resolveHost('u@-h', [], allowAdHoc: true), isA<UnknownHost>());
     expect(resolveHost('-u@h:22', [], allowAdHoc: true), isA<UnknownHost>());
   });
+
+  test('ad hoc rejects whitespace, control chars and odd users/hosts', () {
+    for (final q in ['a b@h', 'u@h\nx', 'u@h x', 'u@h_x', 'u\n@h', 'u@']) {
+      expect(resolveHost(q, [], allowAdHoc: true), isA<UnknownHost>(), reason: q);
+    }
+  });
+
+  test('ad hoc accepts bracketed IPv6 and dotted users', () {
+    final t = resolveHost('u@[::1]:22', [], allowAdHoc: true) as AdHocTarget;
+    expect([t.user, t.hostname, t.port], ['u', '::1', 22]);
+    final d = resolveHost('first.last@Host-1.example.com', [], allowAdHoc: true)
+        as AdHocTarget;
+    expect(d.hostname, 'Host-1.example.com');
+  });
 }

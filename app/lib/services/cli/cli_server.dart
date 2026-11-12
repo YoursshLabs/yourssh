@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:yourssh_cli/yourssh_cli.dart';
 
 import '../../models/host.dart';
@@ -31,6 +32,9 @@ class CliServer {
       if (!trusted && !tokensEqual(req.token, _token)) {
         return CliResponse.failure(req.id, CliExit.denied, 'denied').encode();
       }
+      if (trusted && req.cmd != 'open' && req.cmd != 'activate') {
+        return CliResponse.failure(req.id, CliExit.denied, 'denied').encode();
+      }
       validateArgs(req.cmd, req.args);
       final result = await _dispatch(req, source);
       return CliResponse.success(req.id, result).encode();
@@ -41,7 +45,9 @@ class CliServer {
     } on CliProtocolException catch (e) {
       return CliResponse.failure(req.id, e.code, e.message).encode();
     } catch (e) {
-      return CliResponse.failure(req.id, CliExit.runtime, 'internal error: $e')
+      // Detail stays local: it can contain hostnames, key paths, proxy info.
+      debugPrint('CliServer: ${req.cmd} failed: $e');
+      return CliResponse.failure(req.id, CliExit.runtime, 'internal error')
           .encode();
     }
   }
@@ -127,6 +133,8 @@ class CliServer {
     final String decoded;
     try {
       decoded = Uri.decodeComponent(raw);
+    } on FormatException {
+      throw _Failure(CliExit.usage, 'invalid URL encoding');
     } on ArgumentError {
       throw _Failure(CliExit.usage, 'invalid URL encoding');
     }
