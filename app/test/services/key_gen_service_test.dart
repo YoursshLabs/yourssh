@@ -54,6 +54,25 @@ void main() {
       }
     });
 
+    test('refuses to overwrite an existing key file', () async {
+      final existing = File('${tmp.path}/mykey')..writeAsStringSync('precious');
+      await expectLater(
+          svc.generateEd25519(name: 'mykey', dir: tmp.path), throwsException);
+      expect(existing.readAsStringSync(), 'precious');
+    });
+
+    test('key is restricted before key material is written; chmod failure '
+        'leaves no key file', () async {
+      final order = <String>[];
+      final failing = KeyGenService(chmod: (path, mode) async {
+        order.add('chmod:${File(path).lengthSync()}');
+        throw Exception('chmod boom');
+      });
+      await expectLater(
+          failing.generateEd25519(name: 'k2', dir: tmp.path), throwsException);
+      expect(order, ['chmod:0'], reason: 'chmod runs while file is empty');
+      expect(File('${tmp.path}/k2').existsSync(), isFalse);
+    }, skip: Platform.isWindows);
     test('passphrase produces an encrypted PEM that decrypts', () async {
       final r = await svc.generateEd25519(
           name: 'enc', passphrase: 's3cret', dir: tmp.path);

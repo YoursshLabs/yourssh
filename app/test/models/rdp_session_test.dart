@@ -147,4 +147,45 @@ void main() {
     s.customLabel = 'prod';
     expect(s.tabLabel, 'prod');
   });
+
+  test('oversized negotiated desktop is rejected, no allocation', () async {
+    final events = StreamController<frb.RdpEvent>();
+    final s = RdpSession(host: _host(), client: _client(), width: 800, height: 600);
+    s.attach(events.stream);
+    events.add(frb.RdpEvent.connected(
+        cert: const frb.RdpCertInfo(sha256Fingerprint: 'ab', subject: 's'),
+        desktopWidth: 65535,
+        desktopHeight: 65535));
+    await Future<void>.delayed(Duration.zero);
+    expect(s.status, RdpSessionStatus.error);
+    expect(s.lastMessage, contains('desktop size'));
+    expect(s.framebuffer.length, 800 * 600 * 4);
+  });
+
+  group('remote clipboard', () {
+    Future<String?> push(Host host, String text) async {
+      final events = StreamController<frb.RdpEvent>();
+      final s = RdpSession(host: host, client: _client(), width: 8, height: 8);
+      String? got;
+      s.onRemoteClipboardText = (t) => got = t;
+      s.attach(events.stream);
+      events.add(frb.RdpEvent.clipboardText(text: text));
+      await Future<void>.delayed(Duration.zero);
+      await events.close();
+      return got;
+    }
+
+    test('delivered by default', () async {
+      expect(await push(_host(), 'hi'), 'hi');
+    });
+
+    test('dropped when host.remoteClipboard is off', () async {
+      expect(await push(_host().copyWith(remoteClipboard: false), 'hi'), isNull);
+    });
+
+    test('dropped above 1 MiB, accepted at exactly 1 MiB', () async {
+      expect(await push(_host(), 'a' * (1024 * 1024 + 1)), isNull);
+      expect((await push(_host(), 'a' * (1024 * 1024)))?.length, 1024 * 1024);
+    });
+  });
 }

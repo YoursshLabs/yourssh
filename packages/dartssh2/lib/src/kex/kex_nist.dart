@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:dartssh2/src/ssh_errors.dart';
 import 'package:dartssh2/src/ssh_kex.dart';
 import 'package:dartssh2/src/utils/bigint.dart';
 import 'package:dartssh2/src/utils/list.dart';
@@ -40,8 +41,12 @@ class SSHKexNist implements SSHKexECDH {
   /// Compute shared secret.
   @override
   BigInt computeSecret(Uint8List remotePubilcKey) {
-    final s = curve.curve.decodePoint(remotePubilcKey)!;
-    return (s * privateKey)!.x!.toBigInteger()!;
+    final s = curve.curve.decodePoint(remotePubilcKey);
+    final shared = s == null ? null : (s * privateKey)?.x?.toBigInteger();
+    if (shared == null) {
+      throw SSHHandshakeError('Invalid ECDH public key from server');
+    }
+    return shared;
   }
 
   BigInt _generatePrivateKey() {

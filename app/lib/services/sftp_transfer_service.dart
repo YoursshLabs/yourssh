@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../models/host.dart';
 import '../models/sftp_entry.dart';
+import '../util/private_temp.dart';
 import '../util/safe_local_path.dart';
 import 'ssh_service.dart';
 
@@ -136,15 +137,25 @@ class SftpTransferService {
       throw UnsafeRemotePathException(entry.name);
     }
     final sftp = await _sshService.openSftp(host);
-    final tmpDir = await getTemporaryDirectory();
+    final tmpDir = await createPrivateTempDir(
+        await getTemporaryDirectory(), 'yourssh_dl_');
     final localPath = safeLocalChild(tmpDir.path, entry.name);
     SftpFile? file;
-    final sink = File(localPath).openWrite();
+    IOSink? sink;
     try {
+      // Create empty and restrict to 0600 before any remote bytes land.
+      final local = File(localPath);
+      await local.create(exclusive: true);
+      await restrictToOwner(file: local);
+      sink = local.openWrite();
       file = await sftp.open(entry.path);
       await _pipeToSink(file, sink);
+    } catch (_) {
+      await sink?.close().catchError((_) {});
+      await tmpDir.delete(recursive: true).catchError((_) => tmpDir);
+      rethrow;
     } finally {
-      await sink.close();
+      await sink?.close().catchError((_) {});
       await file?.close();
       sftp.close();
     }

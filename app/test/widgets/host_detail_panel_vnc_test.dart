@@ -13,7 +13,12 @@ import 'package:yourssh/widgets/host_detail_panel.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  Host? saved;
+
+  setUp(() {
+    saved = null;
+    SharedPreferences.setMockInitialValues({});
+  });
 
   Future<void> pumpPanel(WidgetTester tester,
       {Host? existing, List<Host> allHosts = const []}) async {
@@ -37,7 +42,7 @@ void main() {
               initialProtocol: existing == null ? HostProtocol.vnc : null,
               agentProbe: () async => const AgentProbeSystem(1),
               onClose: () {},
-              onSave: (host, _) async {},
+              onSave: (host, _) async => saved = host,
             ),
           ),
         ),
@@ -72,5 +77,23 @@ void main() {
         id: 'b1', label: 'bastion', host: '10.0.0.1', port: 22, username: 'u');
     await pumpPanel(tester, existing: vncHost(), allHosts: [bastion]);
     expect(find.text('SSH TUNNEL'), findsOneWidget);
+  });
+
+  testWidgets('remote clipboard switch defaults on and saves off when toggled',
+      (tester) async {
+    await pumpPanel(tester, existing: vncHost());
+    final toggle = find.byKey(const ValueKey('remote-clipboard-switch'));
+    await tester.ensureVisible(toggle);
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    final save = find.text('SAVE ONLY');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    expect(saved, isNotNull);
+    expect(saved!.remoteClipboard, isFalse);
   });
 }

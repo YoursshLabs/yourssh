@@ -330,11 +330,26 @@ class SystemAgentProxy {
     return pairs;
   }
 
+  /// SSH_AGENT_FAILURE — the reply for any request that is not relayed.
+  static final Uint8List agentFailure = Uint8List.fromList([5]);
+
+  /// Only SSH_AGENTC_REQUEST_IDENTITIES (11) and SSH_AGENTC_SIGN_REQUEST (13)
+  /// may be relayed for a forwarded agent. Everything else (add/remove
+  /// identity, lock/unlock, smartcard and extension messages) would let a
+  /// remote server modify or probe the user's real agent.
+  static bool isForwardableRequest(Uint8List requestBody) =>
+      requestBody.isNotEmpty &&
+      (requestBody[0] == 11 || requestBody[0] == 13);
+
   /// Sends one raw (unframed) agent-protocol request and returns the raw
   /// (unframed) response body. Length-prefix framing is handled internally.
-  /// Used by AgentForwardingHandler to relay forwarded agent requests
-  /// verbatim — the payload is never parsed, so agent extensions work.
+  /// Used by AgentForwardingHandler to relay forwarded agent requests. Only
+  /// allowlisted message types ([isForwardableRequest]) reach the agent; any
+  /// other request is answered with SSH_AGENT_FAILURE without touching it.
   Future<Uint8List> roundtrip(Uint8List requestBody) async {
+    if (!isForwardableRequest(requestBody)) {
+      return Uint8List.fromList(agentFailure);
+    }
     final header = Uint8List(4);
     ByteData.view(header.buffer).setUint32(0, requestBody.length, Endian.big);
     _session.write(Uint8List.fromList([...header, ...requestBody]));

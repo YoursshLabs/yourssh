@@ -7,75 +7,197 @@
 #include "include/dart_api_dl.h"
 #include "include/dart_native_api.h"
 
+// Growable UTF-16 buffer used to assemble the command line.
+typedef struct WBuf
+{
+    WCHAR *data;
+    size_t len;
+    size_t cap;
+    BOOL failed;
+} WBuf;
+
+static void wbuf_push(WBuf *b, WCHAR c)
+{
+    if (b->failed)
+    {
+        return;
+    }
+
+    if (b->len + 1 >= b->cap)
+    {
+        size_t new_cap = b->cap == 0 ? 64 : b->cap * 2;
+        WCHAR *grown = realloc(b->data, new_cap * sizeof(WCHAR));
+
+        if (grown == NULL)
+        {
+            b->failed = TRUE;
+            return;
+        }
+
+        b->data = grown;
+        b->cap = new_cap;
+    }
+
+    b->data[b->len++] = c;
+}
+
+// Converts a NUL-terminated UTF-8 string to a newly allocated UTF-16 string.
+// Returns NULL on allocation or conversion failure.
+static WCHAR *utf8_to_wide(const char *s)
+{
+    int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
+
+    if (n <= 0)
+    {
+        return NULL;
+    }
+
+    WCHAR *wide = malloc((size_t)n * sizeof(WCHAR));
+
+    if (wide == NULL)
+    {
+        return NULL;
+    }
+
+    if (MultiByteToWideChar(CP_UTF8, 0, s, -1, wide, n) <= 0)
+    {
+        free(wide);
+        return NULL;
+    }
+
+    return wide;
+}
+
+// Appends [arg] quoted per the CommandLineToArgvW / MSVCRT rules so the child
+// recovers exactly the same argument: wrap in double quotes when the argument
+// is empty or contains whitespace or a quote, double backslashes that precede
+// a quote (or the closing quote), and escape embedded quotes with a backslash.
+static void wbuf_push_quoted(WBuf *b, const WCHAR *arg)
+{
+    BOOL needs_quotes = arg[0] == 0;
+
+    for (const WCHAR *c = arg; *c != 0 && !needs_quotes; c++)
+    {
+        if (*c == L' ' || *c == L'\t' || *c == L'\n' || *c == L'\v' || *c == L'"')
+        {
+            needs_quotes = TRUE;
+        }
+    }
+
+    if (!needs_quotes)
+    {
+        for (const WCHAR *c = arg; *c != 0; c++)
+        {
+            wbuf_push(b, *c);
+        }
+        return;
+    }
+
+    wbuf_push(b, L'"');
+
+    for (const WCHAR *c = arg;; c++)
+    {
+        size_t backslashes = 0;
+
+        while (*c == L'\\')
+        {
+            backslashes++;
+            c++;
+        }
+
+        if (*c == 0)
+        {
+            // Backslashes before the closing quote must be doubled.
+            for (size_t i = 0; i < backslashes * 2; i++)
+            {
+                wbuf_push(b, L'\\');
+            }
+            break;
+        }
+
+        if (*c == L'"')
+        {
+            // Double the backslashes and escape the quote itself.
+            for (size_t i = 0; i < backslashes * 2 + 1; i++)
+            {
+                wbuf_push(b, L'\\');
+            }
+            wbuf_push(b, L'"');
+        }
+        else
+        {
+            for (size_t i = 0; i < backslashes; i++)
+            {
+                wbuf_push(b, L'\\');
+            }
+            wbuf_push(b, *c);
+        }
+    }
+
+    wbuf_push(b, L'"');
+}
+
 // YOURSSH PATCH (upstream issue #19): the Dart side always puts the
 // executable at arguments[0] (Unix execvp convention), but the command line
 // for CreateProcessW already starts with `executable`. Appending arguments
 // from index 0 duplicated the program name (e.g. "powershell.exe
 // powershell.exe"), which PowerShell parsed as -Command and spawned a nested
-// shell that never received ConPTY input. Both loops below skip arguments[0].
+// shell that never received ConPTY input. The loop below skips arguments[0].
+//
+// Every piece is converted from UTF-8 to UTF-16 and quoted individually, so
+// arguments with spaces or quotes stay one argument and non-ASCII text is not
+// mangled by a (WCHAR)char cast. Returns NULL on failure; caller frees.
 static LPWSTR build_command(char *executable, char **arguments)
 {
-    int command_length = 0;
+    WBuf buf = {0};
+    BOOL first = TRUE;
 
     if (executable != NULL)
     {
-        command_length += (int)strlen(executable);
+        WCHAR *wide = utf8_to_wide(executable);
+
+        if (wide == NULL)
+        {
+            return NULL;
+        }
+
+        wbuf_push_quoted(&buf, wide);
+        free(wide);
+        first = FALSE;
     }
 
     if (arguments != NULL && arguments[0] != NULL)
     {
-        int i = 1;
-
-        while (arguments[i] != NULL)
+        for (int j = 1; arguments[j] != NULL; j++)
         {
-            command_length += (int)strlen(arguments[i]) + 1;
-            i++;
+            WCHAR *wide = utf8_to_wide(arguments[j]);
+
+            if (wide == NULL)
+            {
+                free(buf.data);
+                return NULL;
+            }
+
+            if (!first)
+            {
+                wbuf_push(&buf, L' ');
+            }
+
+            wbuf_push_quoted(&buf, wide);
+            free(wide);
+            first = FALSE;
         }
     }
 
-    LPWSTR command = malloc((command_length + 1) * sizeof(WCHAR));
+    wbuf_push(&buf, 0);
 
-    if (command != NULL)
+    if (buf.failed)
     {
-        int i = 0;
-
-        if (executable != NULL)
-        {
-            int j = 0;
-
-            while (executable[j] != 0)
-            {
-                command[i] = (WCHAR)executable[j];
-                i++;
-                j++;
-            }
-        }
-
-        if (arguments != NULL && arguments[0] != NULL)
-        {
-            int j = 1;
-
-            while (arguments[j] != NULL)
-            {
-                command[i++] = ' ';
-
-                int k = 0;
-
-                while (arguments[j][k] != 0)
-                {
-                    command[i] = (WCHAR)arguments[j][k];
-                    i++;
-                    k++;
-                }
-
-                j++;
-            }
-        }
-
-        command[i] = 0;
+        free(buf.data);
+        return NULL;
     }
 
-    return command;
+    return buf.data;
 }
 
 static LPWSTR build_environment(char **environment)
@@ -134,25 +256,9 @@ static LPWSTR build_working_directory(char *working_directory)
         return NULL;
     }
 
-    int working_directory_length = (int)strlen(working_directory);
-
-    LPWSTR working_directory_block = malloc((working_directory_length + 1) * sizeof(WCHAR));
-
-    if (working_directory_block == NULL)
-    {
-        return NULL;
-    }
-
-    int i = 0;
-
-    while (working_directory[i] != 0)
-    {
-        working_directory_block[i] = (WCHAR)working_directory[i++];
-    }
-
-    working_directory_block[i] = 0;
-
-    return working_directory_block;
+    // UTF-8 -> UTF-16 (the old per-char cast broke non-ASCII paths and read
+    // and incremented `i` in one unsequenced expression).
+    return utf8_to_wide(working_directory);
 }
 
 typedef struct ReadLoopOptions

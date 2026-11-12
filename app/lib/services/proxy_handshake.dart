@@ -11,6 +11,9 @@ class ProxyException implements Exception {
   String toString() => 'ProxyException: $message';
 }
 
+/// Upper bound for buffered proxy response headers.
+const int kMaxProxyHeaderBytes = 64 * 1024;
+
 /// Buffered byte reader over a socket stream. Serves [readExactly]/[readUntil]
 /// during the handshake; afterwards [takeLeftover] returns the buffered tail
 /// and [release] hands the live remainder out as a stream. Single pending read
@@ -94,6 +97,10 @@ class ByteReader {
         _buf.removeRange(0, end);
         _wake = null;
         completer.complete(out);
+      } else if (_buf.length > kMaxProxyHeaderBytes) {
+        _wake = null;
+        completer.completeError(
+            const ProxyException('proxy response headers too large'));
       } else if (_done) {
         _wake = null;
         completer.completeError(
@@ -155,6 +162,9 @@ Future<Uint8List> httpConnectHandshake(
   String? username,
   String? password,
 }) async {
+  if (targetHost.contains('\r') || targetHost.contains('\n')) {
+    throw const ProxyException('invalid target host');
+  }
   final req = StringBuffer()
     ..write('CONNECT $targetHost:$targetPort HTTP/1.1\r\n')
     ..write('Host: $targetHost:$targetPort\r\n');
@@ -186,6 +196,13 @@ Future<Uint8List> socks5Handshake(
   String? password,
 }) async {
   final hasAuth = username != null && username.isNotEmpty;
+  // RFC 1929 length fields are one byte: reject instead of silently truncating.
+  if (hasAuth &&
+      (utf8.encode(username).length > 255 ||
+          utf8.encode(password ?? '').length > 255)) {
+    throw const ProxyException(
+        'SOCKS5 username/password must be at most 255 bytes');
+  }
   final methods = hasAuth ? [0x00, 0x02] : [0x00];
   sink.add(Uint8List.fromList([0x05, methods.length, ...methods]));
 

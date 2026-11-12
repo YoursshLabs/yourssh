@@ -75,6 +75,60 @@ void main() {
       expect(loaderCalls, 1);
     });
 
+    test('answers every message type except 11 and 13 with FAILURE without '
+        'touching the system agent', () async {
+      var connects = 0;
+      final handler = AgentForwardingHandler(
+        connectSystemAgent: () {
+          connects++;
+          return SystemAgentProxy.connectTo(socketPath);
+        },
+        loadKeychainIdentities: () async => const <SSHKeyPair>[],
+      );
+
+      // 17 add identity, 18 remove, 19 remove all, 20 lock, 21 unlock,
+      // 25/26 add/remove smartcard, 27 extension, 0 and 255 garbage.
+      for (final type in [0, 17, 18, 19, 20, 21, 25, 26, 27, 255]) {
+        final response = await handler
+            .handleRequest(Uint8List.fromList([type, 1, 2, 3]));
+        expect(response, equals([5]), reason: 'type $type');
+      }
+      final empty = await handler.handleRequest(Uint8List(0));
+      expect(empty, equals([5]));
+      expect(connects, 0);
+    });
+
+    test('still relays REQUEST_IDENTITIES (11) and SIGN_REQUEST (13)',
+        () async {
+      final seen = <int>[];
+      await server.close();
+      server = await ServerSocket.bind(
+        InternetAddress('$socketPath.2', type: InternetAddressType.unix),
+        0,
+      );
+      addTearDown(() async {
+        final f = File('$socketPath.2');
+        if (await f.exists()) await f.delete();
+      });
+      server.listen((client) {
+        client.listen((data) {
+          seen.add(data[4]);
+          client.add(agentMsg([data[4] == 13 ? 14 : 12, 0, 0, 0, 0]));
+        });
+      });
+      final handler = AgentForwardingHandler(
+        connectSystemAgent: () =>
+            SystemAgentProxy.connectTo('$socketPath.2'),
+        loadKeychainIdentities: () async => const <SSHKeyPair>[],
+      );
+
+      expect((await handler.handleRequest(Uint8List.fromList([11])))[0], 12);
+      expect(
+          (await handler.handleRequest(Uint8List.fromList([13, 0, 0, 0, 0])))[0],
+          14);
+      expect(seen, [11, 13]);
+    });
+
     test('retries the system agent on each request (recovers mid-session)',
         () async {
       var attempt = 0;
@@ -239,6 +293,57 @@ void main() {
       );
       expect(pairs, hasLength(1));
       expect(pairs.single.type, 'ssh-ed25519');
+    });
+  });
+
+  group('loadKeychainKeyPairsForHost', () {
+    SshKeyEntry entry(String id, String path) => SshKeyEntry(
+          id: id,
+          label: id,
+          algorithm: KeyAlgorithm.ed25519,
+          publicKey: '',
+          privateKeyPath: path,
+        );
+
+    final plain = entry('plain', 'test/fixtures/keys/id_ed25519');
+    final enc = entry('enc', 'test/fixtures/keys/id_ed25519_enc');
+
+    Future<String?> passphrase(String id) async =>
+        id == 'enc' ? 'test-passphrase' : null;
+
+    Future<Uint8List> blob(String path, String? pp) async =>
+        (await loadKeyPairsFromFile(path, pp)).single.toPublicKey().encode();
+
+    test('serves only the key linked to the host', () async {
+      final pairs = await loadKeychainKeyPairsForHost(
+        keyId: 'enc',
+        entries: [plain, enc],
+        loadPassphrase: passphrase,
+      );
+      expect(pairs, hasLength(1));
+      expect(pairs.single.toPublicKey().encode(),
+          await blob(enc.privateKeyPath, 'test-passphrase'));
+      expect(pairs.single.toPublicKey().encode(),
+          isNot(await blob(plain.privateKeyPath, null)));
+    });
+
+    test('serves nothing when the host has no linked key', () async {
+      final pairs = await loadKeychainKeyPairsForHost(
+        keyId: null,
+        entries: [plain, enc],
+        loadPassphrase: passphrase,
+      );
+      expect(pairs, isEmpty);
+    });
+
+    test('serves nothing when the linked key is not in the Keychain',
+        () async {
+      final pairs = await loadKeychainKeyPairsForHost(
+        keyId: 'gone',
+        entries: [plain, enc],
+        loadPassphrase: passphrase,
+      );
+      expect(pairs, isEmpty);
     });
   });
 }

@@ -43,8 +43,8 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
+        SnackBar(
+          content: Text(_service.lastError ??
               'Failed to start SMTP server. Ensure python3 is installed.'),
           backgroundColor: AppColors.red,
         ),

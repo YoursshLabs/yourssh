@@ -65,6 +65,9 @@ class Host {
   String? domain;
   RdpSecurityMode rdpSecurity;
 
+  /// RDP/VNC: let the remote desktop overwrite the local clipboard.
+  bool remoteClipboard;
+
   // ── Session template (per-host preset) ──────────────────────────────
   // All null/empty = no override; see
   // docs/superpowers/specs/2026-06-06-session-template-design.md.
@@ -104,6 +107,7 @@ class Host {
     this.protocol = HostProtocol.ssh,
     this.domain,
     this.rdpSecurity = RdpSecurityMode.auto,
+    this.remoteClipboard = true,
     this.workingDir,
     Map<String, String> envVars = const {},
     this.startupSnippet,
@@ -159,6 +163,7 @@ class Host {
         'protocol': protocol.name,
         'domain': domain,
         'rdpSecurity': rdpSecurity.name,
+        'remoteClipboard': remoteClipboard,
         'workingDir': workingDir,
         'envVars': envVars,
         'startupSnippet': startupSnippet,
@@ -259,6 +264,7 @@ class Host {
       protocol: parseProtocol(),
       domain: json['domain'] as String?,
       rdpSecurity: parseRdpSecurity(),
+      remoteClipboard: (json['remoteClipboard'] as bool?) ?? true,
       workingDir: json['workingDir'] as String?,
       envVars: parseEnvVars(),
       startupSnippet: json['startupSnippet'] as String?,
@@ -294,6 +300,7 @@ class Host {
     HostProtocol? protocol,
     Object? domain = const _Unset(),
     RdpSecurityMode? rdpSecurity,
+    bool? remoteClipboard,
     Object? workingDir = const _Unset(),
     Map<String, String>? envVars,
     Object? startupSnippet = const _Unset(),
@@ -332,6 +339,7 @@ class Host {
         protocol: protocol ?? this.protocol,
         domain: domain is _Unset ? this.domain : domain as String?,
         rdpSecurity: rdpSecurity ?? this.rdpSecurity,
+        remoteClipboard: remoteClipboard ?? this.remoteClipboard,
         workingDir:
             workingDir is _Unset ? this.workingDir : workingDir as String?,
         envVars: envVars ?? this.envVars,

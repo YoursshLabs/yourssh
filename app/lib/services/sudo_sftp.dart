@@ -182,7 +182,9 @@ class SudoSftpOrchestrator<TClient> {
   }) async {
     final probe = await runExec(buildPathProbeCommand());
     final path = probe.stdout.trim();
-    if (path.isEmpty) {
+    // The path runs under `sudo -S` with the user's password: only ever a
+    // known sftp-server location, never whatever the server printed.
+    if (!kSftpServerPaths.contains(path)) {
       throw SudoSftpException(SudoSftpFailureReason.binaryNotFound);
     }
 

@@ -43,8 +43,31 @@ class AiChatProvider extends ChangeNotifier {
       .where((p) => _configs[p]?.apiKey.isNotEmpty == true)
       .toList();
 
-  AiChatProvider({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage() {
+  /// Same legacy-Keychain pin as `StorageService.macOsKeychainOptions`: the
+  /// default data-protection Keychain fails with -34018 on ad-hoc-signed
+  /// builds (see CLAUDE.md, "Credential storage").
+  @visibleForTesting
+  static const macOsKeychainOptions = MacOsOptions(
+    accountName: 'yourssh',
+    useDataProtectionKeyChain: false,
+  );
+
+  final http.Client? _httpClient;
+  String? _lastError;
+
+  /// User-visible message for the last secure-storage failure, if any.
+  String? get lastError => _lastError;
+
+  void clearError() {
+    if (_lastError == null) return;
+    _lastError = null;
+    notifyListeners();
+  }
+
+  AiChatProvider({FlutterSecureStorage? storage, http.Client? client})
+      : _storage = storage ??
+            const FlutterSecureStorage(mOptions: macOsKeychainOptions),
+        _httpClient = client {
     _load();
   }
 
@@ -59,15 +82,24 @@ class AiChatProvider extends ChangeNotifier {
       );
     }
 
-    // Migrate legacy single Anthropic key
-    final legacyKey = await _storage.read(key: 'ai_api_key');
-    if (legacyKey != null && legacyKey.isNotEmpty) {
-      await _storage.write(key: 'ai_config_anthropic_key', value: legacyKey);
-      await _storage.delete(key: 'ai_api_key');
+    try {
+      // Migrate legacy single Anthropic key
+      final legacyKey = await _storage.read(key: 'ai_api_key');
+      if (legacyKey != null && legacyKey.isNotEmpty) {
+        await _storage.write(key: 'ai_config_anthropic_key', value: legacyKey);
+        await _storage.delete(key: 'ai_api_key');
+      }
+    } catch (e) {
+      _lastError = 'Could not access secure storage for the AI key: $e';
     }
 
     for (final p in AiProvider.values) {
-      final key = await _storage.read(key: 'ai_config_${p.name}_key');
+      String? key;
+      try {
+        key = await _storage.read(key: 'ai_config_${p.name}_key');
+      } catch (e) {
+        _lastError = 'Could not read the saved AI API key: $e';
+      }
       final model = prefs.getString('ai_config_${p.name}_model') ??
           presetModels[p]!.first;
       if (key != null && key.isNotEmpty) {
@@ -84,8 +116,14 @@ class AiChatProvider extends ChangeNotifier {
     final newModel = model ?? current?.model ?? presetModels[provider]!.first;
 
     if (newKey.isNotEmpty) {
-      await _storage.write(
-          key: 'ai_config_${provider.name}_key', value: newKey);
+      try {
+        await _storage.write(
+            key: 'ai_config_${provider.name}_key', value: newKey);
+      } catch (e) {
+        // Keep the key for this session, but tell the user it was not saved.
+        _lastError = 'Could not save the API key to secure storage '
+            '(it will be lost on restart): $e';
+      }
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('ai_config_${provider.name}_model', newModel);
@@ -100,7 +138,11 @@ class AiChatProvider extends ChangeNotifier {
   }
 
   Future<void> clearProviderConfig(AiProvider provider) async {
-    await _storage.delete(key: 'ai_config_${provider.name}_key');
+    try {
+      await _storage.delete(key: 'ai_config_${provider.name}_key');
+    } catch (e) {
+      _lastError = 'Could not remove the API key from secure storage: $e';
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('ai_config_${provider.name}_model');
     _configs.remove(provider);
@@ -173,7 +215,7 @@ class AiChatProvider extends ChangeNotifier {
       ..._historyForApi().map((m) => m.toApiMap()),
     ];
 
-    final response = await http.post(
+    final response = await _post(
       Uri.parse('https://api.anthropic.com/v1/messages'),
       headers: {
         'x-api-key': config.apiKey,
@@ -204,7 +246,7 @@ class AiChatProvider extends ChangeNotifier {
       ..._historyForApi().map((m) => m.toApiMap()),
     ];
 
-    final response = await http.post(
+    final response = await _post(
       Uri.parse('https://api.openai.com/v1/chat/completions'),
       headers: {
         'Authorization': 'Bearer ${config.apiKey}',
@@ -228,6 +270,11 @@ class AiChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<http.Response> _post(Uri url,
+          {Map<String, String>? headers, Object? body}) =>
+      (_httpClient?.post(url, headers: headers, body: body)) ??
+      http.post(url, headers: headers, body: body);
+
   Future<void> _sendGemini(AiProviderConfig config) async {
     final contents = _historyForApi()
         .map((m) => {
@@ -238,10 +285,13 @@ class AiChatProvider extends ChangeNotifier {
             })
         .toList();
 
-    final response = await http.post(
+    final response = await _post(
       Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}'),
-      headers: {'content-type': 'application/json'},
+          'https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent'),
+      headers: {
+        'content-type': 'application/json',
+        'x-goog-api-key': config.apiKey,
+      },
       body: jsonEncode({
         'systemInstruction': {
           'parts': [

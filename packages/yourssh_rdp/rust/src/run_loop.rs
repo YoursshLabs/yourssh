@@ -11,6 +11,21 @@ use crate::connect::{ConnectOutcome, Connected, rdp_connect_stage};
 use crate::input::InputState;
 use crate::session::SessionCmd;
 
+/// Largest server-negotiated desktop edge / pixel count accepted. The decoded
+/// image allocates `w * h * 4` bytes up front and an allocation failure aborts
+/// the whole process, so a hostile server must not choose an unbounded size.
+pub const MAX_DESKTOP_EDGE: u32 = 8192;
+pub const MAX_DESKTOP_PIXELS: u64 = 8192 * 8192;
+
+/// True when the negotiated desktop size is non-empty and within the caps.
+pub fn desktop_size_ok(width: u16, height: u16) -> bool {
+    width != 0
+        && height != 0
+        && u32::from(width) <= MAX_DESKTOP_EDGE
+        && u32::from(height) <= MAX_DESKTOP_EDGE
+        && u64::from(width) * u64::from(height) <= MAX_DESKTOP_PIXELS
+}
+
 /// Copies the `region` rect out of the full RGBA framebuffer into a tight buffer.
 pub fn extract_region(fb: &[u8], fb_width: u16, x: u16, y: u16, w: u16, h: u16) -> Vec<u8> {
     let stride = fb_width as usize * 4;
@@ -90,6 +105,11 @@ async fn run_session_inner(
         connection_result.desktop_size.width,
         connection_result.desktop_size.height,
     );
+    if !desktop_size_ok(desktop_width, desktop_height) {
+        anyhow::bail!(
+            "server negotiated an unsupported desktop size {desktop_width}x{desktop_height}"
+        );
+    }
     sink(RdpEvent::Connected { cert, desktop_width, desktop_height });
 
     let mut image = DecodedImage::new(
@@ -240,6 +260,16 @@ mod tests {
         assert_eq!(disconnect_ultimatum_reason(&frame), None);
         // Undecodable bytes must fall through too (active stage owns the error).
         assert_eq!(disconnect_ultimatum_reason(&[0u8; 4]), None);
+    }
+
+    #[test]
+    fn desktop_size_ok_rejects_oversized_or_empty() {
+        assert!(desktop_size_ok(1920, 1080));
+        assert!(desktop_size_ok(8192, 8192));
+        assert!(!desktop_size_ok(8193, 100));
+        assert!(!desktop_size_ok(100, 8193));
+        assert!(!desktop_size_ok(65535, 65535));
+        assert!(!desktop_size_ok(0, 600));
     }
 
     #[test]

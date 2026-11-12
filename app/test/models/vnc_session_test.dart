@@ -135,4 +135,38 @@ void main() {
     expect(s.lastMessage, 'SSH tunnel closed');
     await events.close();
   });
+
+  test('oversized desktop is rejected, no allocation', () async {
+    final events = StreamController<frb.VncEvent>();
+    final s = VncSession(host: _host(), client: _client());
+    s.attach(events.stream);
+    events.add(const frb.VncEvent.connected(width: 65535, height: 65535));
+    await Future<void>.delayed(Duration.zero);
+    expect(s.status, VncSessionStatus.error);
+    expect(s.lastMessage, contains('desktop size'));
+    expect(s.framebuffer.length, lessThan(1 << 20));
+  });
+
+  group('remote clipboard', () {
+    Future<String?> push(Host host, String text) async {
+      final events = StreamController<frb.VncEvent>();
+      final s = VncSession(host: host, client: _client());
+      String? got;
+      s.onRemoteClipboardText = (t) => got = t;
+      s.attach(events.stream);
+      events.add(frb.VncEvent.clipboardText(text: text));
+      await Future<void>.delayed(Duration.zero);
+      await events.close();
+      return got;
+    }
+
+    test('dropped when host.remoteClipboard is off', () async {
+      expect(await push(_host().copyWith(remoteClipboard: false), 'hi'), isNull);
+    });
+
+    test('dropped above 1 MiB, accepted at exactly 1 MiB', () async {
+      expect(await push(_host(), 'a' * (1024 * 1024 + 1)), isNull);
+      expect((await push(_host(), 'a' * (1024 * 1024)))?.length, 1024 * 1024);
+    });
+  });
 }

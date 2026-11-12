@@ -15,6 +15,19 @@ class QuickJsException implements Exception {
   String toString() => 'QuickJsException: $message';
 }
 
+/// Raised when a script exceeds its execution deadline.
+class QuickJsTimeoutException extends QuickJsException {
+  const QuickJsTimeoutException(super.message);
+  @override
+  String toString() => 'QuickJsTimeoutException: $message';
+}
+
+/// Budget for a hook dispatch or panel message.
+const Duration kHookTimeout = Duration(milliseconds: 250);
+
+/// Budget for evaluating a plugin's bootstrap and entry script.
+const Duration kLoadTimeout = Duration(seconds: 5);
+
 // ---------------------------------------------------------------------------
 // Native callback typedef — matches QjsHostCallback in qjs_bridge.h:
 //   char* callback(const char* arg_json, void* user_data)
@@ -78,16 +91,22 @@ class QuickJsRuntime implements JsRuntimeRegistrar {
   ///
   /// [filename] is used only for error messages.
   /// Throws [QuickJsException] if the script throws or contains a syntax error.
-  void eval(String source, {required String filename}) {
+  void eval(String source,
+      {required String filename, Duration timeout = kHookTimeout}) {
     _checkNotDisposed();
     final src = source.toNativeUtf8();
     final file = filename.toNativeUtf8();
     try {
+      ffi.qjsSetTimeoutMs(_ctx, timeout.inMilliseconds);
       final ok = ffi.qjsEval(_ctx, src, file);
       if (ok == 0) {
         final errPtr = ffi.qjsGetException(_ctx);
         final msg = errPtr.toDartString();
         ffi.qjsStringFree(errPtr);
+        if (ffi.qjsTimedOut(_ctx) != 0) {
+          throw QuickJsTimeoutException(
+              'Script exceeded ${timeout.inMilliseconds} ms ($filename)');
+        }
         throw QuickJsException(msg);
       }
     } finally {
@@ -120,11 +139,14 @@ class QuickJsRuntime implements JsRuntimeRegistrar {
           final arg = argPtr.address != 0 ? argPtr.toDartString() : 'null';
           final result = handler(arg);
           if (result == null) return Pointer<Utf8>.fromAddress(0);
-          // Allocate with malloc. The C bridge copies the string immediately
-          // into a JS value and does NOT call qjs_string_free on this pointer,
-          // so this is a one-per-call allocation.  Acceptable because the
-          // strings are small and the C side copies immediately.
-          return result.toNativeUtf8(allocator: malloc);
+          // The C bridge copies the string into a JS value and then free()s
+          // this buffer, so it must come from the bridge's own allocator.
+          final bytes = utf8.encode(result);
+          final buf = ffi.qjsAlloc(bytes.length + 1).cast<Uint8>();
+          final view = buf.asTypedList(bytes.length + 1);
+          view.setRange(0, bytes.length, bytes);
+          view[bytes.length] = 0;
+          return buf.cast<Utf8>();
         } catch (_) {
           return Pointer<Utf8>.fromAddress(0);
         }
@@ -146,18 +168,18 @@ class QuickJsRuntime implements JsRuntimeRegistrar {
 
   /// Call `plugin._dispatch(event, ctxJson)` in the JS runtime and return the
   /// JSON-encoded result, or `null` if dispatch fails or returns undefined.
-  String? callDispatch(String event, Map<String, dynamic> ctx) {
+  ///
+  /// Throws [QuickJsTimeoutException] / [QuickJsException] when the hook
+  /// exceeds [timeout] or throws.
+  String? callDispatch(String event, Map<String, dynamic> ctx,
+      {Duration timeout = kHookTimeout}) {
     _checkNotDisposed();
     final arg = json.encode(ctx);
 
     // Step 1: call dispatch and store in a global.
     final dispatchJs =
         'var __qjsBridgeResult = plugin._dispatch(${json.encode(event)}, ${json.encode(arg)});';
-    try {
-      eval(dispatchJs, filename: '<dispatch>');
-    } catch (_) {
-      return null;
-    }
+    eval(dispatchJs, filename: '<dispatch>', timeout: timeout);
 
     // Step 2: define a getter function (idempotent — redefining is harmless).
     try {
@@ -186,18 +208,15 @@ class QuickJsRuntime implements JsRuntimeRegistrar {
   ///
   /// Returns the JSON-encoded result string from the plugin's panel message
   /// handler, or `null` if no handler is set or an error occurs.
-  String? callPanelMessage(Map<String, dynamic> msg) {
+  String? callPanelMessage(Map<String, dynamic> msg,
+      {Duration timeout = kHookTimeout}) {
     _checkNotDisposed();
     final msgJson = json.encode(msg);
 
     // Store result in a global via eval.
     final invokeJs =
         'var __qjsPanelResult = plugin._invokePanelMessage(${json.encode(msgJson)});';
-    try {
-      eval(invokeJs, filename: '<panel-message>');
-    } catch (_) {
-      return null;
-    }
+    eval(invokeJs, filename: '<panel-message>', timeout: timeout);
 
     // Define getter (idempotent).
     try {
