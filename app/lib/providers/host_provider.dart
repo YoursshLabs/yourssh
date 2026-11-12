@@ -98,8 +98,7 @@ class HostProvider extends ChangeNotifier {
     onHostDeleted?.call(id);
     _hosts.removeWhere((h) => h.id == id);
     await _storage.saveHosts(_hosts);
-    await _storage.deletePassword(id);
-    await _storage.deleteSudoPassword(id);
+    await _storage.deleteHostSecrets(id);
     notifyListeners();
     await onMutation?.call();
   }
@@ -129,8 +128,7 @@ class HostProvider extends ChangeNotifier {
     _hosts = hosts;
     await _storage.saveHosts(_hosts);
     for (final id in removedIds) {
-      await _storage.deletePassword(id);
-      await _storage.deleteSudoPassword(id);
+      await _storage.deleteHostSecrets(id);
     }
     for (final entry in passwords.entries) {
       final hostId = entry.key.replaceFirst('pw_', '');

@@ -275,7 +275,10 @@ class SessionProvider extends ChangeNotifier {
           } else {
             s.markCertRejected();
           }
-        }, onError: (Object _) => s.markCertRejected()));
+        }, onError: (Object _) {
+          if (!_sessions.contains(s)) return;
+          s.markCertRejected();
+        }));
       };
     }
     final mismatchHandler = rdpCertMismatchHandler;
