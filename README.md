@@ -265,6 +265,23 @@ sudo dpkg -r yourssh
 
 ---
 
+## Command line
+
+```bash
+yourssh ls                          # list saved hosts
+yourssh ls --tag prod --json        # filter by tag, machine-readable
+yourssh connect prod-db             # open a saved host (id or label) in YourSSH
+yourssh connect deploy@10.0.0.5:2222  # ad-hoc user@host[:port]
+yourssh open yourssh://connect/prod-db
+yourssh version
+```
+
+`yourssh` starts YourSSH if it is not running. `yourssh://connect/<host>` links open saved hosts only (macOS registers the scheme today). Exit codes: 0 ok, 1 error, 2 usage/unknown or ambiguous host, 3 app unreachable, 4 denied.
+
+Availability: macOS and Linux, from source for now (`dart run packages/yourssh_cli/bin/yourssh.dart …`); release packaging is planned. On Windows the CLI is not available yet.
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
