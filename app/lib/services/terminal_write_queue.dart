@@ -44,7 +44,7 @@ class TerminalWriteQueue {
     void Function()? commit,
     void Function(String batch)? onBatch,
     void Function(bool paused)? onPressure,
-    this.budget = const Duration(milliseconds: 4),
+    this.budget = const Duration(microseconds: 250),
     this.commitInterval = const Duration(milliseconds: 16),
     this.floodInterval = const Duration(milliseconds: 33),
     this.floodChars = 32 * 1024,
@@ -68,8 +68,10 @@ class TerminalWriteQueue {
     _lastCommitMicros = _clockMicros() - idleThreshold.inMicroseconds - 1;
   }
 
-  /// Max time one slice may spend writing (checked between pieces). Kept well
-  /// under a frame so a vsync is never delayed by more than this.
+  /// Max time one slice may spend writing (checked between pieces). Measured
+  /// with a fast parser and a saturated UI isolate: 4 ms slices still delayed
+  /// frames by 10-25 ms (45% of flood frames over 16.7 ms), 250 us slices keep
+  /// the vsync -> build lag under ~1 ms at the same throughput.
   final Duration budget;
 
   /// Minimum spacing between repaints during sustained output.
