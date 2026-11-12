@@ -271,12 +271,14 @@ sudo dpkg -r yourssh
 yourssh ls                          # list saved hosts
 yourssh ls --tag prod --json        # filter by tag, machine-readable
 yourssh connect prod-db             # open a saved host (id or label) in YourSSH
-yourssh connect deploy@10.0.0.5:2222  # ad-hoc user@host[:port]
+yourssh connect deploy@10.0.0.5:2222  # unsaved user@host[:port], signs in with your SSH agent
 yourssh open yourssh://connect/prod-db
 yourssh version
 ```
 
-`yourssh` starts YourSSH if it is not running. `yourssh://connect/<host>` links open saved hosts only (registered by the macOS app, the Windows installer and the Linux .deb; not by the portable zip or tarball). Exit codes: 0 ok, 1 error, 2 usage/unknown or ambiguous host, 3 app unreachable, 4 denied.
+`yourssh` starts YourSSH if it is not running (`yourssh version` never does; it reports "YourSSH app: not running" and exits 3). An unsaved `user@host[:port]` authenticates with the keys in your SSH agent (`ssh-add`); a server that only accepts a password needs a saved host. `yourssh://connect/<host>` links open saved hosts only (registered by the macOS app, the Windows installer and the Linux .deb; not by the portable zip or tarball); a link that names no saved host is ignored and shown in the notification bell. Exit codes: 0 ok, 1 error, 2 usage/unknown or ambiguous host, 3 app unreachable, 4 denied.
+
+A debug build (`flutter run`) uses its own endpoint, so it never takes over from an installed YourSSH; point the CLI at it with `YOURSSH_DEV=1 yourssh …`.
 
 Availability: macOS, Linux and Windows, from source for now (`dart run packages/yourssh_cli/bin/yourssh.dart …`); the CLI binary is not packaged in releases yet (in a release, `yourssh` / `yourssh.exe` is the GUI app). On Linux and Windows, auto-starting the app needs it to have run once (it writes `app.path`).
 
