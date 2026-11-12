@@ -278,7 +278,9 @@ yourssh version
 
 `yourssh` starts YourSSH if it is not running. `yourssh://connect/<host>` links open saved hosts only (registered by the macOS app, the Windows installer and the Linux .deb; not by the portable zip or tarball). Exit codes: 0 ok, 1 error, 2 usage/unknown or ambiguous host, 3 app unreachable, 4 denied.
 
-Availability: macOS and Linux, from source for now (`dart run packages/yourssh_cli/bin/yourssh.dart …`); the CLI binary is not packaged in releases yet (in a release, `yourssh` / `yourssh.exe` is the GUI app). On Windows the CLI is not available yet.
+Availability: macOS and Linux, from source for now (`dart run packages/yourssh_cli/bin/yourssh.dart …`); the CLI binary is not packaged in releases yet (in a release, `yourssh` / `yourssh.exe` is the GUI app). On Windows the CLI is not available yet. On Linux, auto-starting the app needs it to have run once (it writes `app.path`).
+
+Not yet: Windows CLI endpoint; packaged CLI binary and an "Install command-line tool" button; `sftp`/`tunnel`/`import`/`export`; MCP.
 
 ---
 
