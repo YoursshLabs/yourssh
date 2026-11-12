@@ -809,6 +809,7 @@ class SshService {
     StreamSubscription<List<int>>? stdoutSub;
     final outQueue = TerminalWriteQueue(
       write: session.terminal.writeNoNotify,
+      writeBytes: session.terminal.writeBytesNoNotify,
       commit: session.terminal.flushWrites,
       onBatch: (batch) {
         _recording?.writeOutput(session.id, batch);
@@ -920,6 +921,16 @@ class SshService {
     // Pipe SSH output → xterm terminal; complete when shell closes
     stdoutSub = shell.stdout.cast<List<int>>().listen(
       (data) {
+        // Fast path: when nothing needs the text (no plugin transform, no
+        // readiness scan, the gate - if any - is past its handshake and just
+        // passes text through) the bytes go to the parser as they are.
+        final g0 = gate;
+        if ((hookBus == null || !hookBus!.hasTransform('terminal.output')) &&
+            (g0 == null ? (!injectOn || injectionAborted) : !g0.isHolding)) {
+          outQueue.addBytes(
+              data is Uint8List ? data : Uint8List.fromList(data));
+          return;
+        }
         var text = utf8.convert(data);
         if (hookBus != null) {
           text = hookBus!.fireTransform(

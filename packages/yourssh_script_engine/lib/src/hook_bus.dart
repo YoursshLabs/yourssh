@@ -44,6 +44,16 @@ class HookBus {
     }
   }
 
+  /// Whether any handler registered for [event] can transform its data.
+  bool hasTransform(String event) {
+    final handlers = _handlers[event];
+    if (handlers == null) return false;
+    for (final entry in handlers) {
+      if (entry.transformFn != null) return true;
+    }
+    return false;
+  }
+
   String fireTransform(String event, TransformEvent initial) {
     final handlers = _handlers[event];
     if (handlers == null) return initial.data;
