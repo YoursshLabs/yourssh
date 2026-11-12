@@ -11,6 +11,19 @@ import 'package:yourssh/services/port_forward_service.dart';
 
 // ── Fakes ──────────────────────────────────────────────────
 
+/// Polls [condition] until it holds, failing after [timeout]. For assertions
+/// that depend on real socket I/O, which event-queue pumping can't await.
+Future<void> eventually(bool Function() condition,
+    {Duration timeout = const Duration(seconds: 5)}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail('condition not met within $timeout');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+}
+
 class FakeSshSocket implements SSHSocket {
   final inbound = StreamController<Uint8List>();
   final outbound = <int>[];
@@ -267,9 +280,10 @@ void main() {
 
     final channel = FakeSshSocket();
     transports.last.remoteListener!.controller.add(channel);
-    await pumpEventQueue();
     channel.inbound.add(Uint8List.fromList([7, 7]));
-    await pumpEventQueue();
+    // The tunnel dials a real loopback socket: a fixed number of event-queue
+    // pumps is not enough on a loaded CI runner, so wait for the round trip.
+    await eventually(() => echoData.length == 2 && channel.outbound.isNotEmpty);
     expect(echoData, [7, 7]);
     expect(channel.outbound, [42]);
     expect(conns[fwd.id], 1);
