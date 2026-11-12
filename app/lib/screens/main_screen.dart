@@ -13,8 +13,8 @@ import '../providers/host_provider.dart';
 import '../providers/known_hosts_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/recording_provider.dart';
-import '../main.dart' show kAppVersion;
 import '../theme/app_theme.dart';
+import 'shell/app_sidebar.dart';
 import '../widgets/host_detail_panel.dart';
 import '../widgets/hosts_dashboard.dart';
 import '../widgets/keychain_screen.dart';
@@ -57,7 +57,7 @@ import '../widgets/vnc_workspace.dart';
 import '../services/storage_service.dart';
 import '../widgets/network_discovery_sheet.dart';
 
-enum NavSection { hosts, keychain, portForwarding, sftp, knownHosts, recordings, audit, settings, plugins }
+export 'shell/app_sidebar.dart' show NavSection;
 
 enum _SidePanel { none, host, newGroup, import }
 
@@ -687,7 +687,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               children: [
                 if ((!_viewingTerminal || sessions.isEmpty) &&
                     !(_nav == NavSection.sftp && _sftpConnectionNotifier.value))
-                  _Sidebar(
+                  AppSidebar(
                     selected: _nav,
                     activePluginId: _activePluginId,
                     onOpenLocalTerminal: _openLocalTerminal,
@@ -952,270 +952,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Future<void> _retryVnc(VncSession old) async {
     if (!mounted) return;
     await context.read<SessionProvider>().reconnectVnc(old);
-  }
-}
-
-// ── Sidebar ───────────────────────────────────────────────
-
-class _Sidebar extends StatelessWidget {
-  final NavSection selected;
-  final String? activePluginId;
-  final String? activeScriptPanel;
-  final ValueChanged<NavSection> onSelect;
-  final ValueChanged<String> onSelectPlugin;
-  final ValueChanged<String> onSelectScriptPanel;
-  final VoidCallback onOpenLocalTerminal;
-  const _Sidebar({
-    required this.selected,
-    required this.activePluginId,
-    required this.activeScriptPanel,
-    required this.onSelect,
-    required this.onSelectPlugin,
-    required this.onSelectScriptPanel,
-    required this.onOpenLocalTerminal,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 200,
-      color: AppColors.sidebar,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-            child: Row(
-              children: [
-                const Icon(Icons.terminal, color: AppColors.textSecondary, size: 16),
-                const SizedBox(width: 8),
-                const Text('YourSSH',
-                    style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.border),
-          const SizedBox(height: 8),
-
-          // Scrollable nav area so the sidebar never overflows when the
-          // window is short or many plugin/script panels are enabled.
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-          const _SectionLabel('CONNECTIONS'),
-          _navItem(Icons.dns_outlined, 'Hosts', NavSection.hosts),
-          _navItem(Icons.swap_horiz, 'Port Forwarding', NavSection.portForwarding),
-          _navItem(Icons.fact_check_outlined, 'Known Hosts', NavSection.knownHosts),
-
-          const _SectionLabel('FILES & TRANSFER'),
-          _navItem(Icons.folder_open, 'SFTP', NavSection.sftp),
-
-          const _SectionLabel('TOOLS'),
-          // Action, not a nav target: local terminal lives in the top tab bar.
-          _NavItem(
-            icon: Icons.laptop_mac,
-            label: 'Local Terminal',
-            selected: false,
-            onTap: onOpenLocalTerminal,
-          ),
-          _navItem(Icons.video_library_outlined, 'Recordings', NavSection.recordings),
-          _navItem(Icons.receipt_long_outlined, 'Audit Log', NavSection.audit),
-          ...context.watch<PluginProvider>().enabledPlugins.map(
-            (plugin) => _pluginNavItem(context, plugin),
-          ),
-          ...context.watch<PluginUiRegistry>().panels.map(
-            (panel) => _ScriptPanelNavItem(
-              panel: panel,
-              isActive: activeScriptPanel == panel.pluginId,
-              onTap: () => onSelectScriptPanel(panel.pluginId),
-            ),
-          ),
-
-          const _SectionLabel('SECURITY'),
-          _navItem(Icons.vpn_key_outlined, 'Keychain', NavSection.keychain),
-
-                ],
-              ),
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.border),
-          _navItem(Icons.extension_outlined, 'Plugins', NavSection.plugins),
-          _navItem(Icons.settings_outlined, 'Settings', NavSection.settings),
-          const SizedBox(height: 8),
-
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.asset(
-                    'assets/app_icon.png',
-                    width: 28,
-                    height: 28,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('YourSSH', style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w500)),
-                    Text('v$kAppVersion', style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-
-  Widget _navItem(IconData icon, String label, NavSection section) {
-    final isSelected = activePluginId == null && selected == section;
-    return _NavItem(icon: icon, label: label, selected: isSelected, onTap: () => onSelect(section));
-  }
-
-  Widget _pluginNavItem(BuildContext context, YourSSHPlugin plugin) {
-    return _PluginNavItem(
-      plugin: plugin,
-      isActive: activePluginId == plugin.id,
-      onTap: () => onSelectPlugin(plugin.id),
-    );
-  }
-}
-
-class _PluginNavItem extends StatefulWidget {
-  final YourSSHPlugin plugin;
-  final bool isActive;
-  final VoidCallback onTap;
-  const _PluginNavItem({required this.plugin, required this.isActive, required this.onTap});
-
-  @override
-  State<_PluginNavItem> createState() => _PluginNavItemState();
-}
-
-class _PluginNavItemState extends State<_PluginNavItem> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = widget.isActive
-        ? AppColors.accent.withValues(alpha: 0.12)
-        : _hovered
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.transparent;
-    final iconColor = widget.isActive ? AppColors.accent : AppColors.textSecondary;
-    final textColor = widget.isActive ? AppColors.accent : AppColors.textSecondary;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(6),
-            border: widget.isActive ? Border.all(color: AppColors.accent.withValues(alpha: 0.2)) : null,
-          ),
-          child: Row(
-            children: [
-              Icon(widget.plugin.icon, size: 15, color: iconColor),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  widget.plugin.name,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 13,
-                    fontWeight: widget.isActive ? FontWeight.w500 : FontWeight.normal,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ScriptPanelNavItem extends StatelessWidget {
-  final PluginPanelEntry panel;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _ScriptPanelNavItem({
-    required this.panel,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _NavItem(
-      icon: Icons.code_outlined,
-      label: panel.title,
-      selected: isActive,
-      onTap: onTap,
-    );
-  }
-}
-
-class _NavItem extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _NavItem({required this.icon, required this.label, required this.selected, required this.onTap});
-
-  @override
-  State<_NavItem> createState() => _NavItemState();
-}
-
-class _NavItemState extends State<_NavItem> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = widget.selected
-        ? AppColors.accent.withValues(alpha: 0.12)
-        : _hovered
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.transparent;
-    final iconColor = widget.selected ? AppColors.accent : AppColors.textSecondary;
-    final textColor = widget.selected ? AppColors.accent : AppColors.textSecondary;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(6),
-            border: widget.selected ? Border.all(color: AppColors.accent.withValues(alpha: 0.2)) : null,
-          ),
-          child: Row(
-            children: [
-              Icon(widget.icon, size: 15, color: iconColor),
-              const SizedBox(width: 10),
-              Text(widget.label, style: TextStyle(color: textColor, fontSize: 13, fontWeight: widget.selected ? FontWeight.w500 : FontWeight.normal)),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -1697,27 +1433,6 @@ class _PluginErrorBoundaryState extends State<_PluginErrorBoundary> {
   void didUpdateWidget(_PluginErrorBoundary oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.plugin.id != widget.plugin.id) _error = null;
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: AppColors.textTertiary,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.8,
-        ),
-      ),
-    );
   }
 }
 

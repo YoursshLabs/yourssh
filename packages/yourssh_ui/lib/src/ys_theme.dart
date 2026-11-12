@@ -31,10 +31,63 @@ FThemeData _build({required bool touch}) {
     touch: touch,
     fontFamily: kYsFontFamily,
   );
+  final typography = FTypography(display: face, body: face);
   return FThemeData(
     colors: colors,
     touch: touch,
-    typography: FTypography(display: face, body: face),
+    typography: typography,
+    sidebarStyle: _ysSidebarStyle(
+      colors: colors,
+      typography: typography,
+      base: base,
+      touch: touch,
+    ),
+  );
+}
+
+/// Width of the desktop app sidebar.
+const double kYsSidebarWidth = 200;
+
+/// Sidebar style: `sidebar` background, and the selected item is amber
+/// (`primary` at 12% fill, primary icon and label). This is the one place
+/// that style delta lives.
+FSidebarStyle _ysSidebarStyle({
+  required FColors colors,
+  required FTypography typography,
+  required FThemeData base,
+  required bool touch,
+}) {
+  final inherited = FSidebarStyle.inherit(
+    colors: colors,
+    typography: typography,
+    icons: base.icons,
+    style: base.style,
+    touch: touch,
+  );
+  final item = inherited.groupStyle.itemStyle;
+  final selectedFill = YsColors.primary.withValues(alpha: 0.12);
+  final itemStyle = item.copyWith(
+    backgroundColor: .delta([
+      .base(YsColors.sidebar),
+      .match({FTappableVariant.disabled}, YsColors.sidebar),
+      .exact({FTappableVariant.selected}, selectedFill),
+    ]),
+    textStyle: .delta([
+      .exact({FTappableVariant.selected}, .delta(color: YsColors.primary)),
+    ]),
+    iconStyle: .delta([
+      .exact({FTappableVariant.selected}, .delta(color: YsColors.primary)),
+    ]),
+  );
+  return inherited.copyWith(
+    decoration: .value(
+      BoxDecoration(
+        color: YsColors.sidebar,
+        border: BorderDirectional(end: BorderSide(color: colors.border)),
+      ),
+    ),
+    constraints: const BoxConstraints.tightFor(width: kYsSidebarWidth),
+    groupStyle: .delta(itemStyle: itemStyle),
   );
 }
 
