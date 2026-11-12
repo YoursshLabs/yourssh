@@ -94,10 +94,12 @@ class SshService {
   /// [resolveSftpHost].
   Host? Function(String hostId)? defaultHostLookup;
 
-  /// Loads app-Keychain keys served through a forwarded agent when no system
-  /// agent is available. Set from main.dart (KeyProvider + stored
-  /// passphrases); null means the fallback serves an empty identity list.
-  Future<List<SSHKeyPair>> Function()? keychainIdentitiesLoader;
+  /// Loads the app-Keychain key served through a forwarded agent when no
+  /// system agent is available. Receives the connecting host's `keyId` and
+  /// must return only that key (nothing when null) — never the whole
+  /// Keychain. Set from main.dart (KeyProvider + stored passphrases); null
+  /// means the fallback serves an empty identity list.
+  Future<List<SSHKeyPair>> Function(String? keyId)? keychainIdentitiesLoader;
 
   /// Live agent-forwarding events for the session UI (key icon on the tab,
   /// refusal notification). Host-scoped events (sessionId == null) come from
@@ -317,8 +319,9 @@ class SshService {
         // or testConnection.
         agentHandler: host.agentForwarding
             ? AgentForwardingHandler(
-                loadKeychainIdentities:
-                    keychainIdentitiesLoader ?? () async => const <SSHKeyPair>[],
+                loadKeychainIdentities: () async =>
+                    await keychainIdentitiesLoader?.call(host.keyId) ??
+                    const <SSHKeyPair>[],
                 onRequestServed: (usedFallback) =>
                     onAgentForwardingEvent?.call(
                         host.id,

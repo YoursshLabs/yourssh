@@ -311,8 +311,11 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     // openSftp must read the host's live SFTP mode — its callers hold Host
     // snapshots that go stale the moment the host is edited.
     _ssh.defaultHostLookup = (id) => _hostProvider.byId(id);
-    _ssh.keychainIdentitiesLoader = () =>
-        loadKeychainKeyPairs(_keyProvider.keys, _storage.loadPassphrase);
+    _ssh.keychainIdentitiesLoader = (keyId) => loadKeychainKeyPairsForHost(
+          keyId: keyId,
+          entries: _keyProvider.keys,
+          loadPassphrase: _storage.loadPassphrase,
+        );
     _portForwardProvider = PortForwardProvider();
     _portForwardService = PortForwardService(
       acquireTransport: (host) async =>

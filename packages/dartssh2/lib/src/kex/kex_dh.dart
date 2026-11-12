@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:dartssh2/src/ssh_errors.dart';
 import 'package:dartssh2/src/ssh_kex.dart';
 import 'package:dartssh2/src/utils/bigint.dart';
 import 'package:dartssh2/src/utils/list.dart';
@@ -45,8 +46,34 @@ class SSHKexDH implements SSHKex {
     return SSHKexDH(p: _group14Prime, g: BigInt.from(2), secretBits: 224);
   }
 
-  /// Compute the shared secret K
+  /// Validates a server-supplied group-exchange group. Throws
+  /// [SSHHandshakeError] if the bit length of [p] is outside
+  /// [[minBits], [maxBits]], [p] is even, or [g] is not in `(1, p - 1)`.
+  static void validateGexGroup({
+    required BigInt p,
+    required BigInt g,
+    required int minBits,
+    required int maxBits,
+  }) {
+    if (p.sign <= 0 || p.bitLength < minBits || p.bitLength > maxBits) {
+      throw SSHHandshakeError(
+        'Invalid DH group: prime size ${p.bitLength} bits is outside '
+        '[$minBits, $maxBits]',
+      );
+    }
+    if (p.isEven) {
+      throw SSHHandshakeError('Invalid DH group: prime is even');
+    }
+    if (g <= BigInt.one || g >= p - BigInt.one) {
+      throw SSHHandshakeError('Invalid DH group: generator out of range');
+    }
+  }
+
+  /// Compute the shared secret K. [f] must be in `(1, p - 1)`.
   BigInt computeSecret(BigInt f) {
+    if (f <= BigInt.one || f >= p - BigInt.one) {
+      throw SSHHandshakeError('Invalid DH public value from server');
+    }
     return f.modPow(x, p);
   }
 }

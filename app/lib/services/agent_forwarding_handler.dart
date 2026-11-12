@@ -8,6 +8,9 @@ import 'system_agent_proxy.dart';
 
 /// Serves forwarded `auth-agent@openssh.com` channels (issue #49).
 ///
+/// Only REQUEST_IDENTITIES (11) and SIGN_REQUEST (13) are served; every other
+/// message type is answered with SSH_AGENT_FAILURE.
+///
 /// Primary path: relay each agent request verbatim over a fresh
 /// [SystemAgentProxy] connection (the agent protocol is strictly serial per
 /// connection, so connection-per-request sidesteps interleaving between
@@ -50,6 +53,10 @@ class AgentForwardingHandler implements SSHAgentHandler {
 
   @override
   Future<Uint8List> handleRequest(Uint8List request) async {
+    // Allowlist before any agent is contacted (system agent or Keychain).
+    if (!SystemAgentProxy.isForwardableRequest(request)) {
+      return Uint8List.fromList(SystemAgentProxy.agentFailure);
+    }
     final SystemAgentProxy proxy;
     try {
       proxy = await _connectSystemAgent();
@@ -112,4 +119,21 @@ Future<List<SSHKeyPair>> loadKeychainKeyPairs(
     }
   }
   return pairs;
+}
+
+/// Keychain fallback identity source, restricted to the key linked to the
+/// host being connected ([keyId], i.e. `Host.keyId`). Serving the whole
+/// Keychain would let a malicious or compromised server enumerate and use
+/// every key the user owns. No linked key (or one missing from the Keychain)
+/// serves nothing.
+Future<List<SSHKeyPair>> loadKeychainKeyPairsForHost({
+  required String? keyId,
+  required Iterable<SshKeyEntry> entries,
+  required Future<String?> Function(String keyId) loadPassphrase,
+}) {
+  if (keyId == null) return Future.value(const <SSHKeyPair>[]);
+  return loadKeychainKeyPairs(
+    entries.where((e) => e.id == keyId),
+    loadPassphrase,
+  );
 }

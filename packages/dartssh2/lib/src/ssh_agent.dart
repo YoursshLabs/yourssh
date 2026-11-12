@@ -166,8 +166,12 @@ class SSHAgentChannel {
   final SSHAgentHandler _handler;
   final SSHPrintHandler? printDebug;
 
+  /// Largest agent message accepted (OpenSSH's own limit is 256 KiB).
+  static const maxMessageLength = 256 * 1024;
+
   StreamSubscription<SSHChannelData>? _subscription;
   Uint8List _buffer = Uint8List(0);
+  int _bufferLength = 0;
   bool _processing = false;
 
   void _handleDone() {
@@ -175,7 +179,7 @@ class SSHAgentChannel {
   }
 
   void _handleData(SSHChannelData data) {
-    _buffer = _appendBytes(_buffer, data.bytes);
+    _append(data.bytes);
     _drainRequests();
   }
 
@@ -186,20 +190,58 @@ class SSHAgentChannel {
   }
 
   Future<void> _processQueue() async {
-    while (_buffer.length >= 4) {
-      final length = ByteData.sublistView(_buffer, 0, 4).getUint32(0);
-      if (_buffer.length < 4 + length) return;
-      final payload = _buffer.sublist(4, 4 + length);
-      _buffer = _buffer.sublist(4 + length);
-      Uint8List response;
-      try {
-        response = await _handler.handleRequest(payload);
-      } catch (error) {
-        printDebug?.call('SSH agent handler error: $error');
-        response = _failureResponse();
+    var offset = 0;
+    try {
+      while (_bufferLength - offset >= 4) {
+        final length =
+            ByteData.sublistView(_buffer, offset, offset + 4).getUint32(0);
+        if (length > maxMessageLength) {
+          printDebug?.call('SSH agent message too large: $length');
+          _abort();
+          return;
+        }
+        if (_bufferLength - offset < 4 + length) break;
+        final payload = _buffer.sublist(offset + 4, offset + 4 + length);
+        offset += 4 + length;
+        Uint8List response;
+        try {
+          response = await _handler.handleRequest(payload);
+        } catch (error) {
+          printDebug?.call('SSH agent handler error: $error');
+          response = _failureResponse();
+        }
+        _sendResponse(response);
       }
-      _sendResponse(response);
+    } finally {
+      // Compact once per drain (not per chunk): keep only unread bytes.
+      if (offset > 0 && _bufferLength >= offset) {
+        _buffer.setRange(0, _bufferLength - offset, _buffer, offset);
+        _bufferLength -= offset;
+      }
     }
+  }
+
+  void _abort() {
+    _subscription?.cancel();
+    _buffer = Uint8List(0);
+    _bufferLength = 0;
+    _channel.destroy();
+  }
+
+  void _append(Uint8List chunk) {
+    final needed = _bufferLength + chunk.length;
+    if (needed > _buffer.length) {
+      // Amortized growth: avoids copying the whole buffer on every chunk.
+      var capacity = _buffer.isEmpty ? 256 : _buffer.length;
+      while (capacity < needed) {
+        capacity *= 2;
+      }
+      final grown = Uint8List(capacity);
+      grown.setRange(0, _bufferLength, _buffer);
+      _buffer = grown;
+    }
+    _buffer.setRange(_bufferLength, needed, chunk);
+    _bufferLength = needed;
   }
 
   Uint8List _failureResponse() {
@@ -213,15 +255,6 @@ class SSHAgentChannel {
     writer.writeUint32(payload.length);
     writer.writeBytes(payload);
     _channel.addData(writer.takeBytes());
-  }
-
-  Uint8List _appendBytes(Uint8List a, Uint8List b) {
-    if (a.isEmpty) return b;
-    if (b.isEmpty) return a;
-    final combined = Uint8List(a.length + b.length);
-    combined.setAll(0, a);
-    combined.setAll(a.length, b);
-    return combined;
   }
 }
 
