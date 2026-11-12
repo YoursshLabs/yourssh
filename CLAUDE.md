@@ -24,6 +24,14 @@ cd app && flutter test test/services/sync_service_test.dart   # single test file
 cd app && flutter test --name "pattern"                       # filter by test name
 ```
 
+## Toolchain
+
+- **Flutter is pinned** in CI: `FLUTTER_VERSION` in `.github/workflows/pr-test.yml` and `release.yml` (currently 3.50.0; release.yml also clones that tag for the ARM64 Windows/Linux runners). Keep both files equal.
+- **Bump the Android toolchain with Flutter.** Each Flutter release raises the minimum Gradle / AGP / Kotlin its Gradle plugin accepts (3.50: Gradle ≥ 9.3.1, AGP ≥ 9.1.1, Kotlin ≥ 2.4.10) and fails the Android build below them. They live in `app/android/gradle/wrapper/gradle-wrapper.properties` and the `plugins {}` block of `app/android/settings.gradle.kts` (now Gradle 9.5.1, AGP 9.3.3, Kotlin 2.4.21). The `android` job in `pr-test.yml` (`flutter build apk --debug`) is the check; there is no other Android build before a release.
+- `app/android/gradle.properties` keeps the Flutter template's `android.newDsl=false` and `android.builtInKotlin=false`: the root `build.gradle.kts` forces plugin `compileSdk` through the old-DSL `BaseExtension`, and several pub plugins (mobile_scanner, network_info_plus, package_info_plus, …) still apply the Kotlin Gradle plugin themselves.
+- `flutter analyze` runs with `--no-fatal-infos` in CI: on 3.50 about 214 infos are `package:flutter/material.dart` deprecations (the material_ui migration is a separate task). Warnings and errors still fail.
+- Flutter (3.47 and later) migrates project files on its own, and those changes are committed so builds leave the tree clean. `pub get` adds `build/**` and the platform folders to `analyzer.exclude` in `app/analysis_options.yaml`. `flutter build macos` raises the macOS deployment target to 12.0 (`Podfile`, `project.pbxproj`) and moves the plugins that support Swift Package Manager out of `Podfile.lock`.
+
 ## App icon
 
 Every platform icon is generated from the vector masters in `assets/branding/` —
