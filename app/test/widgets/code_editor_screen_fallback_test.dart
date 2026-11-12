@@ -159,6 +159,8 @@ void main() {
 
     expect(external.opened, hasLength(1));
     expect(find.byType(CodeEditorScreen), findsNothing);
+    // Let the dialog's exit transition timers drain.
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
   });
 
   testWidgets('readOnly mode: no save button, TextField is read-only',

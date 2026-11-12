@@ -20,6 +20,7 @@ import 'mobile_add_host_screen.dart';
 import 'mobile_port_forward_screen.dart';
 import 'mobile_sftp_screen.dart';
 import 'mobile_terminal_screen.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Hosts tab: header + search + folder chips + tag-grouped list + amber FAB.
 /// Tap a host → connect via SessionProvider. Long-press → edit/delete sheet.
@@ -450,28 +451,24 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
   }
 
   Future<void> _confirmDelete(Host host) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: MobileColors.surface,
-        title: Text('Delete ${host.label}?',
-            style: mobileHeading(size: 17)),
-        content: Text(
-          'This removes the saved host and its credentials.',
-          style: mobileBody(size: 14, color: MobileColors.textMuted),
+    final ok = await showYsDialog<bool>(context,
+      builder: (ctx) => YsDialog(
+      title: 'Delete ${host.label}?',
+      body: Text('This removes the saved host and its credentials.'),
+      actions: [
+        FButton(
+          autofocus: true,
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(ctx, false),
+          child: Text('Cancel'),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: mobileBody(size: 15)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Delete',
-                style: mobileBody(size: 15, color: MobileColors.red)),
-          ),
-        ],
-      ),
+        FButton(
+          variant: FButtonVariant.destructive,
+          onPress: () => Navigator.pop(ctx, true),
+          child: Text('Delete'),
+        ),
+      ],
+    ),
     );
     if (ok == true && mounted) {
       await context.read<HostProvider>().deleteHost(host.id);

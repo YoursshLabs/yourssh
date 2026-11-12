@@ -21,6 +21,7 @@ FColors _ysColors(FColors base) => base.copyWith(
   destructiveForeground: YsColors.foreground,
   error: YsColors.error,
   errorForeground: YsColors.foreground,
+  barrier: const Color(0x99000000),
 );
 
 FThemeData _build({required bool touch}) {

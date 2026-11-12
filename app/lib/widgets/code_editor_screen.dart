@@ -15,7 +15,7 @@ import '../services/sftp_transfer_service.dart';
 import '../util/safe_local_path.dart';
 import '../util/webview_result.dart';
 import 'package:yourssh/theme/app_theme.dart';
-import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast, YsToastKind;
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class CodeEditorScreen extends StatefulWidget {
   final Host host;
@@ -119,29 +119,27 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   /// Shown when downloaded content turns out to be binary: offer to hand the
   /// file to the OS default app instead, then close the editor either way.
   Future<void> _offerExternalOpen() async {
-    final open = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Cannot edit in-app',
-            style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 14)),
-        content: Text(
-          '"${widget.entry.name}" appears to be a binary file.\n'
-          'Open it with an external application instead? Changes saved '
-          'there are uploaded back automatically.',
-          style: const TextStyle(color: Color(0xFF888888), fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel',
-                  style: TextStyle(color: Color(0xFF888888)))),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Open externally',
-                  style: TextStyle(color: AppColors.accent))),
-        ],
+    final open = await showYsDialog<bool>(context,
+      builder: (ctx) => YsDialog(
+      title: 'Cannot edit in-app',
+      body: Text(
+        '"${widget.entry.name}" appears to be a binary file.\n'
+        'Open it with an external application instead? Changes saved '
+        'there are uploaded back automatically.',
       ),
+      actions: [
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(ctx, false),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: () => Navigator.pop(ctx, true),
+          child: Text('Open externally'),
+        ),
+      ],
+    ),
     );
     if (!mounted) return;
     if (open == true) {
@@ -223,23 +221,24 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   }
 
   Future<void> _showDiscardDialog() async {
-    final discard = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Unsaved changes',
-            style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 14)),
-        content: const Text('Discard changes and close?',
-            style: TextStyle(color: Color(0xFF888888), fontSize: 13)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel', style: TextStyle(color: Color(0xFF888888)))),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Discard', style: TextStyle(color: Color(0xFFEF4444)))),
-        ],
-      ),
+    final discard = await showYsDialog<bool>(context,
+      builder: (ctx) => YsDialog(
+      title: 'Unsaved changes',
+      body: Text('Discard changes and close?'),
+      actions: [
+        FButton(
+          autofocus: true,
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(ctx, false),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.destructive,
+          onPress: () => Navigator.pop(ctx, true),
+          child: Text('Discard'),
+        ),
+      ],
+    ),
     );
     if (discard == true && mounted) Navigator.pop(context);
   }

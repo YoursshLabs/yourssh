@@ -55,6 +55,7 @@ import '../models/vnc_session.dart';
 import '../widgets/vnc_workspace.dart';
 import '../services/storage_service.dart';
 import '../widgets/network_discovery_sheet.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 export 'shell/app_sidebar.dart' show NavSection;
 
@@ -238,9 +239,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         !_hostKeyDialogShowing &&
         mounted) {
       _hostKeyDialogShowing = true;
-      showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
+      showYsDialog<bool>(context, barrierDismissible: false,
         builder: (_) => _HostKeyDialog(challenge: challenge),
       ).then((trusted) {
         challenge.resolve(trusted ?? false);
@@ -257,9 +256,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         !_rdpCertDialogShowing &&
         mounted) {
       _rdpCertDialogShowing = true;
-      showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
+      showYsDialog<bool>(context, barrierDismissible: false,
         builder: (_) => _RdpCertDialog(challenge: rdpChallenge),
       ).then((trusted) {
         rdpChallenge.resolve(trusted ?? false);
@@ -455,7 +452,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           icon: Icons.screen_share_outlined,
           type: CommandType.action,
           execute: () => WidgetsBinding.instance.addPostFrameCallback(
-            (_) => showDialog(context: context, builder: (_) => const JoinShareDialog()),
+            (_) => showYsDialog(context,
+              builder: (_) => const JoinShareDialog()),
           ),
         ),
       // Nav sections
@@ -545,9 +543,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       )),
     ];
 
-    showDialog(
-      context: context,
-      barrierColor: Colors.black54,
+    showYsDialog(context,
       builder: (_) => CommandPaletteDialog(items: items),
     );
   }
@@ -627,9 +623,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _consentDialogShowing = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
+        showYsDialog(context, barrierDismissible: false,
           builder: (_) =>
               PluginConsentDialog(manifest: engineProvider.pendingConsent!),
         ).then((_) => setState(() => _consentDialogShowing = false));
@@ -936,8 +930,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Future<void> _retryRdp(RdpSession old) async {
     final provider = context.read<SessionProvider>();
     if (old.status == RdpSessionStatus.error) {
-      final newPassword = await showDialog<String>(
-        context: context,
+      final newPassword = await showYsDialog<String>(context,
         builder: (_) => _RdpPasswordDialog(host: old.host),
       );
       if (newPassword == null) return; // cancelled
@@ -1018,6 +1011,10 @@ class _TofuDialog extends StatelessWidget {
   final String cancelLabel;
   final String acceptLabel;
 
+  /// Accepting is a security downgrade (changed key / changed certificate):
+  /// the accept button uses the destructive variant.
+  final bool destructiveAccept;
+
   const _TofuDialog({
     required this.icon,
     required this.accentColor,
@@ -1027,45 +1024,50 @@ class _TofuDialog extends StatelessWidget {
     required this.warning,
     required this.cancelLabel,
     required this.acceptLabel,
+    this.destructiveAccept = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.sidebar,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      title: Row(
+    return YsDialog(
+      titleWidget: Row(
         children: [
           Icon(icon, color: accentColor, size: 20),
           const SizedBox(width: 8),
-          Text(title,
-              style: const TextStyle(
-                  color: AppColors.textPrimary, fontSize: 15)),
+          Flexible(child: Text(title)),
         ],
       ),
-      content: Column(
+      body: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(endpoint,
-              style: const TextStyle(
-                  color: AppColors.textSecondary, fontSize: 13)),
+          Text(
+            endpoint,
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
           const SizedBox(height: 12),
           ...fingerprintRows,
           const SizedBox(height: 12),
-          Text(warning,
-              style: const TextStyle(
-                  color: AppColors.textTertiary, fontSize: 11)),
+          Text(
+            warning,
+            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+          ),
         ],
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+        // Safe choice (reject) holds default focus: a stray Enter never
+        // trusts an unverified key/certificate.
+        FButton(
+          autofocus: true,
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.of(context).pop(false),
           child: Text(cancelLabel),
         ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          style: TextButton.styleFrom(foregroundColor: accentColor),
+        FButton(
+          variant: destructiveAccept
+              ? FButtonVariant.destructive
+              : FButtonVariant.primary,
+          onPress: () => Navigator.of(context).pop(true),
           child: Text(acceptLabel),
         ),
       ],
@@ -1103,6 +1105,7 @@ class _HostKeyDialog extends StatelessWidget {
               'Only trust the new key if you know the server key changed.',
       cancelLabel: 'Cancel',
       acceptLabel: 'Trust new key',
+      destructiveAccept: true,
     );
   }
 }
@@ -1132,6 +1135,7 @@ class _RdpCertDialog extends StatelessWidget {
               'Verify the fingerprint above before accepting.',
       cancelLabel: 'Reject',
       acceptLabel: mismatch ? 'Trust new cert' : 'Accept',
+      destructiveAccept: mismatch,
     );
   }
 }
@@ -1231,8 +1235,7 @@ class _ShareButton extends StatelessWidget {
     return Tooltip(
       message: isActive ? 'Sharing active' : 'Share this terminal',
       child: GestureDetector(
-        onTap: () => showDialog(
-          context: context,
+        onTap: () => showYsDialog(context,
           builder: (_) => ShareSessionDialog(sessionId: session.id),
         ),
         child: Container(
@@ -1284,9 +1287,9 @@ class _RdpPasswordDialogState extends State<_RdpPasswordDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('Password for ${widget.host.label}'),
-      content: TextField(
+    return YsDialog(
+      title: 'Password for ${widget.host.label}',
+      body: TextField(
         controller: _ctrl,
         obscureText: true,
         autofocus: true,
@@ -1294,13 +1297,15 @@ class _RdpPasswordDialogState extends State<_RdpPasswordDialog> {
         onSubmitted: (_) => Navigator.pop(context, _ctrl.text),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(context),
+          child: Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _ctrl.text),
-          child: const Text('Connect'),
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: () => Navigator.pop(context, _ctrl.text),
+          child: Text('Connect'),
         ),
       ],
     );

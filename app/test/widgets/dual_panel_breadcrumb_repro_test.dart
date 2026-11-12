@@ -8,6 +8,7 @@ import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/dual_panel_sftp_screen.dart';
 import 'package:yourssh/widgets/path_breadcrumb.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 
 /// Repro for "breadcrumb not visible in the two-panel layout".
 void main() {
@@ -35,7 +36,7 @@ void main() {
           Provider<SshService>(create: (_) => SshService(storage)),
           ChangeNotifierProvider.value(value: hostProvider),
         ],
-        child: MaterialApp(
+        child: MaterialApp(builder: ysRootBuilder,
           home: Scaffold(body: DualPanelSftpScreen(connectionNotifier: notifier)),
         ),
       ),

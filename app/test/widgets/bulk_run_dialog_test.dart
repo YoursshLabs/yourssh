@@ -8,13 +8,14 @@ import 'package:yourssh/models/host.dart';
 import 'package:yourssh/services/bulk_action_service.dart';
 import 'package:yourssh/widgets/bulk/bulk_run_dialog.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   Widget wrap(Widget child) => ChangeNotifierProvider(
         create: (_) => SnippetProvider(),
-        child: MaterialApp(home: Scaffold(body: child)),
+        child: MaterialApp(builder: ysRootBuilder, home: Scaffold(body: child)),
       );
 
   testWidgets('runs a command and shows per-host results', (tester) async {
@@ -61,7 +62,7 @@ void main() {
     late BuildContext dialogCtx;
     await tester.pumpWidget(ChangeNotifierProvider(
       create: (_) => SnippetProvider(),
-      child: MaterialApp(
+      child: MaterialApp(builder: ysRootBuilder,
         home: Builder(builder: (ctx) {
           dialogCtx = ctx;
           return const Scaffold(body: SizedBox());

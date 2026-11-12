@@ -10,6 +10,7 @@ import '../../theme/app_theme.dart';
 import 'bulk_diff_view.dart';
 import 'bulk_host_status_list.dart';
 import 'bulk_run_controller.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Modal that runs one command (free text or snippet) on N hosts in
 /// parallel; Results tab = per-host rows, Diff tab = output grouping.
@@ -66,25 +67,26 @@ class _BulkRunDialogState extends State<BulkRunDialog> {
 
   Future<void> _close() async {
     if (_controller.isRunning) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.card,
-          title: const Text('Cancel run?',
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 15)),
-          content: const Text(
-              'Hosts still in flight will finish; queued hosts will be cancelled.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Keep running')),
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Cancel run',
-                    style: TextStyle(color: AppColors.red))),
-          ],
+      final ok = await showYsDialog<bool>(context,
+        builder: (ctx) => YsDialog(
+        title: 'Cancel run?',
+        body: Text(
+          'Hosts still in flight will finish; queued hosts will be cancelled.',
         ),
+        actions: [
+          FButton(
+            autofocus: true,
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(ctx, false),
+            child: Text('Keep running'),
+          ),
+          FButton(
+            variant: FButtonVariant.destructive,
+            onPress: () => Navigator.pop(ctx, true),
+            child: Text('Cancel run'),
+          ),
+        ],
+      ),
       );
       if (ok != true || !mounted) return;
       _controller.cancel();
@@ -112,9 +114,9 @@ class _BulkRunDialogState extends State<BulkRunDialog> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _close();
       },
-      child: Dialog(
-        backgroundColor: AppColors.bg,
-        insetPadding: const EdgeInsets.all(40),
+      child: YsDialogFrame(
+        maxWidth: 900,
+        padding: EdgeInsets.zero,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: SizedBox(

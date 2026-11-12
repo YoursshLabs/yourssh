@@ -16,7 +16,7 @@ import 'path_breadcrumb.dart';
 import 'entry_context_menu.dart';
 import 'permissions_dialog.dart';
 import 'package:yourssh/theme/app_theme.dart';
-import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast, YsToastKind;
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class SftpPanel extends StatefulWidget {
   final Host? host;
@@ -184,28 +184,26 @@ class _SftpPanelState extends State<SftpPanel> {
         'This file is too large for the in-app editor.',
       EditBlockReason.none => '',
     };
-    final open = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Cannot edit in-app',
-            style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 14)),
-        content: Text(
-          '$why\nOpen "${entry.name}" with an external application instead? '
-          'Changes saved there are uploaded back automatically.',
-          style: const TextStyle(color: Color(0xFF888888), fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel',
-                  style: TextStyle(color: Color(0xFF888888)))),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Open externally',
-                  style: TextStyle(color: AppColors.accent))),
-        ],
+    final open = await showYsDialog<bool>(context,
+      builder: (ctx) => YsDialog(
+      title: 'Cannot edit in-app',
+      body: Text(
+        '$why\nOpen "${entry.name}" with an external application instead? '
+        'Changes saved there are uploaded back automatically.',
       ),
+      actions: [
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(ctx, false),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: () => Navigator.pop(ctx, true),
+          child: Text('Open externally'),
+        ),
+      ],
+    ),
     );
     if (open == true && mounted) await _openExternal(entry);
   }
@@ -719,26 +717,38 @@ class _SftpPanelState extends State<SftpPanel> {
 
   Future<void> _showNewFolderDialog(SftpPanelProvider prov) async {
     final ctrl = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('New Folder', style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 14)),
-        content: TextField(
-          controller: ctrl, autofocus: true,
-          style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
-          decoration: const InputDecoration(
-            hintText: 'Folder name', hintStyle: TextStyle(color: Color(0xFF555555)),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF2A2A2A))),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accent)),
+    final name = await showYsDialog<String>(context,
+      builder: (ctx) => YsDialog(
+      title: 'New Folder',
+      body: TextField(
+        controller: ctrl,
+        autofocus: true,
+        style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
+        decoration: const InputDecoration(
+          hintText: 'Folder name',
+          hintStyle: TextStyle(color: Color(0xFF555555)),
+          enabledBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFF2A2A2A)),
           ),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+          focusedBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: AppColors.accent),
+          ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: Color(0xFF888888)))),
-          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Create', style: TextStyle(color: AppColors.accent))),
-        ],
+        onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
       ),
+      actions: [
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(ctx),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: () => Navigator.pop(ctx, ctrl.text.trim()),
+          child: Text('Create'),
+        ),
+      ],
+    ),
     );
     if (name == null || name.isEmpty || !mounted) return;
     try {
@@ -754,26 +764,38 @@ class _SftpPanelState extends State<SftpPanel> {
 
   Future<void> _showNewFileDialog(SftpPanelProvider prov) async {
     final ctrl = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('New File', style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 14)),
-        content: TextField(
-          controller: ctrl, autofocus: true,
-          style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
-          decoration: const InputDecoration(
-            hintText: 'File name', hintStyle: TextStyle(color: Color(0xFF555555)),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF2A2A2A))),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accent)),
+    final name = await showYsDialog<String>(context,
+      builder: (ctx) => YsDialog(
+      title: 'New File',
+      body: TextField(
+        controller: ctrl,
+        autofocus: true,
+        style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
+        decoration: const InputDecoration(
+          hintText: 'File name',
+          hintStyle: TextStyle(color: Color(0xFF555555)),
+          enabledBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFF2A2A2A)),
           ),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+          focusedBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: AppColors.accent),
+          ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: Color(0xFF888888)))),
-          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Create', style: TextStyle(color: AppColors.accent))),
-        ],
+        onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
       ),
+      actions: [
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(ctx),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: () => Navigator.pop(ctx, ctrl.text.trim()),
+          child: Text('Create'),
+        ),
+      ],
+    ),
     );
     if (name == null || name.isEmpty || !mounted) return;
     try {
@@ -798,25 +820,36 @@ class _SftpPanelState extends State<SftpPanel> {
 
   Future<void> _showRenameDialog(SftpPanelProvider prov, SftpEntry entry) async {
     final ctrl = TextEditingController(text: entry.name);
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Rename', style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 14)),
-        content: TextField(
-          controller: ctrl, autofocus: true,
-          style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
-          decoration: const InputDecoration(
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF2A2A2A))),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.accent)),
+    final newName = await showYsDialog<String>(context,
+      builder: (ctx) => YsDialog(
+      title: 'Rename',
+      body: TextField(
+        controller: ctrl,
+        autofocus: true,
+        style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
+        decoration: const InputDecoration(
+          enabledBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFF2A2A2A)),
           ),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+          focusedBorder: UnderlineInputBorder(
+            borderSide: BorderSide(color: AppColors.accent),
+          ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: Color(0xFF888888)))),
-          TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Rename', style: TextStyle(color: AppColors.accent))),
-        ],
+        onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
       ),
+      actions: [
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(ctx),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: () => Navigator.pop(ctx, ctrl.text.trim()),
+          child: Text('Rename'),
+        ),
+      ],
+    ),
     );
     if (newName == null || newName.isEmpty || newName == entry.name || !mounted) return;
     final slash = entry.path.lastIndexOf('/');
@@ -846,8 +879,7 @@ class _SftpPanelState extends State<SftpPanel> {
       } catch (_) {}
       if (!mounted) return;
     }
-    final result = await showDialog<({int mode, bool recursive})>(
-      context: context,
+    final result = await showYsDialog<({int mode, bool recursive})>(context,
       builder: (_) => PermissionsDialog(
         entryName: entry.name,
         initialMode: initialMode,
@@ -873,17 +905,24 @@ class _SftpPanelState extends State<SftpPanel> {
 
   Future<void> _showDeleteConfirm(SftpPanelProvider prov, List<SftpEntry> entries) async {
     final names = entries.map((e) => e.name).join(', ');
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Delete', style: TextStyle(color: Color(0xFFEF4444), fontSize: 14)),
-        content: Text('Delete "$names"?\nThis cannot be undone.', style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Color(0xFF888888)))),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Color(0xFFEF4444)))),
-        ],
-      ),
+    final ok = await showYsDialog<bool>(context,
+      builder: (ctx) => YsDialog(
+      title: 'Delete',
+      body: Text('Delete "$names"?\nThis cannot be undone.'),
+      actions: [
+        FButton(
+          autofocus: true,
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(ctx, false),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.destructive,
+          onPress: () => Navigator.pop(ctx, true),
+          child: Text('Delete'),
+        ),
+      ],
+    ),
     );
     if (ok != true || !mounted) return;
     try {

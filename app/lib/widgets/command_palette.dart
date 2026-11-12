@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 // ---------------------------------------------------------------------------
 // Model
@@ -196,26 +197,14 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
+    return YsDialogFrame(
+      maxWidth: 560,
+      padding: EdgeInsets.zero,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 420),
+        constraints: const BoxConstraints(maxHeight: 420),
         child: Focus(
           onKeyEvent: _onKeyEvent,
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.sidebar,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.border),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
+          child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _SearchField(
@@ -248,7 +237,6 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                 const _HintBar(),
               ],
             ),
-          ),
         ),
       ),
     );

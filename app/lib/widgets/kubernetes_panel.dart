@@ -9,6 +9,7 @@ import '../providers/session_provider.dart';
 import '../services/container_service.dart';
 import '../services/ssh_service.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class KubernetesPanel extends StatefulWidget {
   const KubernetesPanel({
@@ -269,8 +270,7 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
     final names =
         await _service().podContainers(widget.host, p.name, p.namespace);
     if (names.length > 1 && mounted) {
-      container = await showDialog<String>(
-        context: context,
+      container = await showYsDialog<String>(context,
         builder: (_) => SimpleDialog(
           title: const Text('Select container'),
           children: [
@@ -301,8 +301,7 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
     final names =
         await _service().podContainers(widget.host, p.name, p.namespace);
     if (names.length > 1 && mounted) {
-      container = await showDialog<String>(
-        context: context,
+      container = await showYsDialog<String>(context,
         builder: (_) => SimpleDialog(
           title: const Text('Select container'),
           children: [
@@ -428,8 +427,7 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
   // ── Port-forward dialog ──────────────────────────────
 
   Future<void> _showForwardDialog(PodEntry p) async {
-    await showDialog<void>(
-      context: context,
+    await showYsDialog<void>(context,
       builder: (_) => _PortForwardDialog(
         pod: p,
         onConfirm: (podPort, localPort) =>
@@ -563,21 +561,22 @@ class _PortForwardDialogState extends State<_PortForwardDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Forward port'),
-      content: Form(
+    return YsDialog(
+      title: 'Forward port',
+      body: Form(
         key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('pod/${widget.pod.name}',
-                style: const TextStyle(fontSize: 12)),
+            Text('pod/${widget.pod.name}', style: const TextStyle(fontSize: 12)),
             const SizedBox(height: 12),
             TextFormField(
               controller: _podPortCtrl,
               decoration: const InputDecoration(
-                  labelText: 'Pod port', isDense: true),
+                labelText: 'Pod port',
+                isDense: true,
+              ),
               keyboardType: TextInputType.number,
               autofocus: true,
               validator: _validatePort,
@@ -591,7 +590,9 @@ class _PortForwardDialogState extends State<_PortForwardDialog> {
             TextFormField(
               controller: _localPortCtrl,
               decoration: const InputDecoration(
-                  labelText: 'Local port', isDense: true),
+                labelText: 'Local port',
+                isDense: true,
+              ),
               keyboardType: TextInputType.number,
               validator: _validatePort,
             ),
@@ -599,19 +600,21 @@ class _PortForwardDialogState extends State<_PortForwardDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(context),
+          child: Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: () {
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: () {
             if (!_formKey.currentState!.validate()) return;
             final podPort = int.parse(_podPortCtrl.text);
             final localPort = int.parse(_localPortCtrl.text);
             Navigator.pop(context);
             widget.onConfirm(podPort, localPort);
           },
-          child: const Text('Start Forward'),
+          child: Text('Start Forward'),
         ),
       ],
     );

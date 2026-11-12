@@ -22,6 +22,7 @@ import 'sftp_panel.dart';
 import 'sftp_transfer_panel.dart';
 import 'source_picker_dialog.dart';
 import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Two-panel commander layout. Each slot points at a [PanelSource] (the
 /// local filesystem or any saved host) and can be switched at any time.
@@ -117,8 +118,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
 
   Future<void> _pickSource(bool left) async {
     final hosts = context.read<HostProvider>().allHosts;
-    final picked = await showDialog<PanelSource>(
-      context: context,
+    final picked = await showYsDialog<PanelSource>(context,
       builder: (_) => SourcePickerDialog(hosts: hosts, current: _sourceOf(left)),
     );
     if (!mounted || picked == null || picked == _sourceOf(left)) return;

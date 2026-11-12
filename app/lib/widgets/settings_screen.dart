@@ -27,7 +27,7 @@ import 'qr_import_dialog.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/update_provider.dart';
 import '../models/app_release.dart';
-import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast;
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -457,26 +457,27 @@ class _SyncSectionState extends State<_SyncSection> {
   }
 
   Future<void> _regenerate() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        title: const Text('Regenerate sync code?',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 14)),
-        content: const Text(
-          'A new code creates a new cloud record. Data tied to the old code '
-          'becomes unreachable until you re-enter the old code.',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Regenerate', style: TextStyle(color: Colors.orange))),
-        ],
+    final ok = await showYsDialog<bool>(context,
+      builder: (ctx) => YsDialog(
+      title: 'Regenerate sync code?',
+      body: Text(
+        'A new code creates a new cloud record. Data tied to the old code '
+        'becomes unreachable until you re-enter the old code.',
       ),
+      actions: [
+        FButton(
+          autofocus: true,
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(ctx, false),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: () => Navigator.pop(ctx, true),
+          child: Text('Regenerate'),
+        ),
+      ],
+    ),
     );
     if (ok == true) await _generateCode();
   }
@@ -630,9 +631,7 @@ class _SyncSectionState extends State<_SyncSection> {
 
   Future<void> _showQrExport(BuildContext context) async {
     final hostProvider = context.read<HostProvider>();
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
+    await showYsDialog<void>(context, barrierDismissible: false,
       builder: (_) => QrExportDialog(
         getPayload: () async {
           final hosts = hostProvider.allHosts;
@@ -917,8 +916,7 @@ class _SyncSectionState extends State<_SyncSection> {
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.content_paste, size: 16),
                   label: const Text('Import via Code'),
-                  onPressed: () => showDialog<void>(
-                    context: context,
+                  onPressed: () => showYsDialog<void>(context,
                     builder: (_) => const QrImportDialog(),
                   ),
                   style: OutlinedButton.styleFrom(
@@ -1236,8 +1234,7 @@ class _CustomShellsRows extends StatelessWidget {
 
 Future<void> _showAddCustomShellDialog(BuildContext context) async {
   final settings = context.read<SettingsProvider>();
-  final profile = await showDialog<ShellProfile>(
-    context: context,
+  final profile = await showYsDialog<ShellProfile>(context,
     builder: (_) => const _AddShellDialog(),
   );
   if (profile != null) await settings.addCustomShellProfile(profile);
@@ -1283,10 +1280,9 @@ class _AddShellDialogState extends State<_AddShellDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.card,
-      title: const Text('Add custom shell', style: TextStyle(fontSize: 15)),
-      content: SizedBox(
+    return YsDialog(
+      title: 'Add custom shell',
+      body: SizedBox(
         width: 380,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1295,24 +1291,27 @@ class _AddShellDialogState extends State<_AddShellDialog> {
               controller: _nameCtrl,
               decoration: const InputDecoration(labelText: 'Display name'),
             ),
-            Row(children: [
-              Expanded(
-                child: TextField(
-                  controller: _exeCtrl,
-                  decoration:
-                      const InputDecoration(labelText: 'Executable path'),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _exeCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Executable path',
+                    ),
+                  ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.folder_open, size: 16),
-                tooltip: 'Browse…',
-                onPressed: () async {
-                  final result = await FilePicker.platform.pickFiles();
-                  final path = result?.files.single.path;
-                  if (path != null) _exeCtrl.text = path;
-                },
-              ),
-            ]),
+                IconButton(
+                  icon: const Icon(Icons.folder_open, size: 16),
+                  tooltip: 'Browse…',
+                  onPressed: () async {
+                    final result = await FilePicker.platform.pickFiles();
+                    final path = result?.files.single.path;
+                    if (path != null) _exeCtrl.text = path;
+                  },
+                ),
+              ],
+            ),
             TextField(
               controller: _argsCtrl,
               decoration: const InputDecoration(
@@ -1324,12 +1323,16 @@ class _AddShellDialogState extends State<_AddShellDialog> {
         ),
       ),
       actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        TextButton(
-            onPressed: () => Navigator.pop(context, _buildProfile()),
-            child: const Text('Add')),
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(context),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: () => Navigator.pop(context, _buildProfile()),
+          child: Text('Add'),
+        ),
       ],
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../theme/terminal_themes.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class ThemePickerButton extends StatelessWidget {
   final String currentTheme;
@@ -39,8 +40,7 @@ class ThemePickerButton extends StatelessWidget {
   }
 
   void _openPicker(BuildContext context) {
-    showDialog<String>(
-      context: context,
+    showYsDialog<String>(context,
       builder: (ctx) => _ThemePickerDialog(
         currentTheme: currentTheme,
         onSelected: (name) {
@@ -65,12 +65,9 @@ class _ThemePickerDialog extends StatefulWidget {
 class _ThemePickerDialogState extends State<_ThemePickerDialog> {
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: AppColors.sidebar,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
-      ),
+    return YsDialogFrame(
+      maxWidth: 580,
+      padding: EdgeInsets.zero,
       child: SizedBox(
         width: 580,
         child: Column(

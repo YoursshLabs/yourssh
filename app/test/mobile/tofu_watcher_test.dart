@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/security/tofu_watcher.dart';
 import 'package:yourssh/providers/known_hosts_provider.dart';
 import 'package:yourssh/services/storage_service.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -13,7 +14,7 @@ void main() {
   testWidgets('shows a dialog on host-key mismatch and Trust accepts',
       (tester) async {
     final kh = KnownHostsProvider(StorageService());
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(MaterialApp(builder: ysRootBuilder,
       home: ChangeNotifierProvider.value(
         value: kh,
         child: const TofuWatcher(child: Scaffold(body: SizedBox())),

@@ -6,7 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../services/p2p_sync_encryption.dart';
 import '../services/p2p_sync_service.dart';
 import '../theme/app_theme.dart';
-import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast;
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class QrExportDialog extends StatefulWidget {
   final Future<String> Function() getPayload;
@@ -109,10 +109,9 @@ class _QrExportDialogState extends State<QrExportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.sidebar,
-      title: const Text('Export via QR'),
-      content: SizedBox(
+    return YsDialog(
+      title: 'Export via QR',
+      body: SizedBox(
         width: 320,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -121,17 +120,30 @@ class _QrExportDialogState extends State<QrExportDialog> {
               DropdownButtonFormField<NetworkInterfaceInfo>(
                 initialValue: _selectedInterface,
                 decoration: const InputDecoration(labelText: 'Network interface'),
-                items: _interfaces.map((i) => DropdownMenuItem(
-                  value: i,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(i.displayName, style: const TextStyle(fontSize: 13)),
-                      const SizedBox(width: 8),
-                      Text(i.address, style: const TextStyle(fontSize: 11, color: Color(0xFF888888))),
-                    ],
-                  ),
-                )).toList(),
+                items: _interfaces
+                    .map(
+                      (i) => DropdownMenuItem(
+                        value: i,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              i.displayName,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              i.address,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF888888),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (v) async {
                   if (v == null) return;
                   setState(() => _selectedInterface = v);
@@ -161,7 +173,10 @@ class _QrExportDialogState extends State<QrExportDialog> {
             const SizedBox(height: 8),
             Text(
               _status,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -169,22 +184,27 @@ class _QrExportDialogState extends State<QrExportDialog> {
       ),
       actions: [
         if (_qrData != null)
-          TextButton.icon(
-            icon: const Icon(Icons.copy, size: 16),
-            label: const Text('Copy transfer code'),
-            onPressed: () {
+          FButton(
+            variant: FButtonVariant.outline,
+            prefix: const Icon(FLucideIcons.copy, size: 16),
+            child: const Text('Copy transfer code'),
+            onPress: () {
               Clipboard.setData(ClipboardData(text: _qrData!));
-              showYsToast(context, 'Transfer code copied',
-                  duration: const Duration(seconds: 2));
+              showYsToast(
+                context,
+                'Transfer code copied',
+                duration: const Duration(seconds: 2),
+              );
             },
           ),
-        TextButton(
-          onPressed: () {
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () {
             _countdown?.cancel();
             _service.stop();
             Navigator.of(context).pop();
           },
-          child: const Text('Cancel'),
+          child: Text('Cancel'),
         ),
       ],
     );

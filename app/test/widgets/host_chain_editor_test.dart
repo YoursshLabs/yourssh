@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/widgets/host_chain_editor.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 
 Host makeHost(String id, String label,
         {String user = 'root', String addr = '10.0.0.1', String? os}) =>
     Host(id: id, label: label, host: addr, username: user, detectedOs: os);
 
-Widget wrap(Widget child) => MaterialApp(
+Widget wrap(Widget child) => MaterialApp(builder: ysRootBuilder,
       home: Scaffold(
         body: SingleChildScrollView(
           child: SizedBox(width: 360, child: child),

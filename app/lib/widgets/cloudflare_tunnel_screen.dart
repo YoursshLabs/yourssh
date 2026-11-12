@@ -8,6 +8,7 @@ import '../providers/tunnel_provider.dart';
 import '../services/cloudflare_tunnel_service.dart';
 import '../services/ssh_service.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class CloudflareTunnelScreen extends StatelessWidget {
   const CloudflareTunnelScreen({super.key});
@@ -219,27 +220,24 @@ class _CloudflareTunnelBodyState extends State<_CloudflareTunnelBody> {
             icon: const Icon(Icons.delete_outline,
                 size: 16, color: AppColors.textTertiary),
             onPressed: () async {
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (_) => AlertDialog(
-                  backgroundColor: AppColors.sidebar,
-                  title: const Text('Remove tunnel',
-                      style: TextStyle(color: AppColors.textPrimary)),
-                  content: Text('Remove "${tunnel.label}"?',
-                      style: const TextStyle(
-                          color: AppColors.textSecondary)),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel')),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: TextButton.styleFrom(
-                          foregroundColor: AppColors.red),
-                      child: const Text('Remove'),
-                    ),
-                  ],
-                ),
+              final confirmed = await showYsDialog<bool>(context,
+                builder: (_) => YsDialog(
+                title: 'Remove tunnel',
+                body: Text('Remove "${tunnel.label}"?'),
+                actions: [
+                  FButton(
+                    autofocus: true,
+                    variant: FButtonVariant.outline,
+                    onPress: () => Navigator.pop(context, false),
+                    child: Text('Cancel'),
+                  ),
+                  FButton(
+                    variant: FButtonVariant.destructive,
+                    onPress: () => Navigator.pop(context, true),
+                    child: Text('Remove'),
+                  ),
+                ],
+              ),
               );
               if (confirmed == true && mounted) {
                 context.read<TunnelProvider>().remove(tunnel.id);

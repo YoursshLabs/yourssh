@@ -15,6 +15,7 @@ import '../../theme/app_theme.dart';
 import '../../util/bulk_format.dart';
 import 'bulk_host_status_list.dart';
 import 'bulk_run_controller.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Modal that uploads local files/folders to the same remote path on N
 /// hosts. Existing remote files are overwritten.
@@ -119,25 +120,24 @@ class _BulkPushDialogState extends State<BulkPushDialog> {
 
   Future<void> _close() async {
     if (_controller.isRunning) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.card,
-          title: const Text('Cancel push?',
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 15)),
-          content: const Text(
-              'Transfers in flight will stop at the next file boundary.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Keep pushing')),
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Cancel push',
-                    style: TextStyle(color: AppColors.red))),
-          ],
-        ),
+      final ok = await showYsDialog<bool>(context,
+        builder: (ctx) => YsDialog(
+        title: 'Cancel push?',
+        body: Text('Transfers in flight will stop at the next file boundary.'),
+        actions: [
+          FButton(
+            autofocus: true,
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(ctx, false),
+            child: Text('Keep pushing'),
+          ),
+          FButton(
+            variant: FButtonVariant.destructive,
+            onPress: () => Navigator.pop(ctx, true),
+            child: Text('Cancel push'),
+          ),
+        ],
+      ),
       );
       if (ok != true || !mounted) return;
       _controller.cancel();
@@ -157,9 +157,9 @@ class _BulkPushDialogState extends State<BulkPushDialog> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _close();
       },
-      child: Dialog(
-        backgroundColor: AppColors.bg,
-        insetPadding: const EdgeInsets.all(40),
+      child: YsDialogFrame(
+        maxWidth: 760,
+        padding: EdgeInsets.zero,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: SizedBox(

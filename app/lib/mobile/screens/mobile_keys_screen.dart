@@ -12,6 +12,7 @@ import '../../services/key_gen_service.dart';
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 import '../widgets/key_card.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Keys tab — list of SSH keys with Generate / Import actions.
 class MobileKeysScreen extends StatelessWidget {
@@ -205,28 +206,26 @@ class MobileKeysScreen extends StatelessWidget {
 
   Future<void> _confirmDelete(
       BuildContext context, SshKeyEntry entry) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: MobileColors.surface,
-        title: Text('Remove "${entry.label}"?',
-            style: mobileHeading(size: 17)),
-        content: Text(
-          'This removes the key from the keychain. The file on disk is kept.',
-          style: mobileBody(size: 14, color: MobileColors.textMuted),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: mobileBody(size: 15)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Remove',
-                style: mobileBody(size: 15, color: MobileColors.red)),
-          ),
-        ],
+    final ok = await showYsDialog<bool>(context,
+      builder: (ctx) => YsDialog(
+      title: 'Remove "${entry.label}"?',
+      body: Text(
+        'This removes the key from the keychain. The file on disk is kept.',
       ),
+      actions: [
+        FButton(
+          autofocus: true,
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(ctx, false),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.destructive,
+          onPress: () => Navigator.pop(ctx, true),
+          child: Text('Remove'),
+        ),
+      ],
+    ),
     );
     if (ok == true && context.mounted) {
       await context.read<KeyProvider>().deleteKey(entry.id);

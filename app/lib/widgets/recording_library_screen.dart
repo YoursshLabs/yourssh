@@ -5,6 +5,7 @@ import '../models/recording_entry.dart';
 import '../providers/recording_provider.dart';
 import '../theme/app_theme.dart';
 import 'recording_player_widget.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class RecordingLibraryScreen extends StatefulWidget {
   const RecordingLibraryScreen({super.key});
@@ -261,21 +262,24 @@ class _RecordingRow extends StatelessWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.sidebar,
-        title: const Text('Delete recording?', style: TextStyle(color: AppColors.textPrimary, fontSize: 15)),
-        content: Text(entry.fileName, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await showYsDialog<bool>(context,
+      builder: (_) => YsDialog(
+      title: 'Delete recording?',
+      body: Text(entry.fileName),
+      actions: [
+        FButton(
+          autofocus: true,
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(context, false),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.destructive,
+          onPress: () => Navigator.pop(context, true),
+          child: Text('Delete'),
+        ),
+      ],
+    ),
     );
     if (confirmed == true && context.mounted) {
       try {

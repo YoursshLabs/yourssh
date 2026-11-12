@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../models/host.dart';
 import '../services/os_detection.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Termius-style visual chain editor for a multi-hop jump chain.
 ///
@@ -44,8 +45,7 @@ class HostChainEditor extends StatelessWidget {
     final chosen = chain.map((h) => h.id).toSet();
     final pickable =
         candidates.where((h) => !chosen.contains(h.id)).toList();
-    final picked = await showDialog<Host>(
-      context: context,
+    final picked = await showYsDialog<Host>(context,
       builder: (_) => _HostPickerDialog(candidates: pickable),
     );
     if (picked != null) onChanged([...chain.map((h) => h.id), picked.id]);
@@ -285,9 +285,9 @@ class _HostPickerDialogState extends State<_HostPickerDialog> {
                     '${h.username}@${h.host}'.toLowerCase().contains(q),
               )
               .toList();
-    return Dialog(
-      backgroundColor: AppColors.sidebar,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return YsDialogFrame(
+      maxWidth: 360,
+      padding: EdgeInsets.zero,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 360, maxHeight: 420),
         child: Column(

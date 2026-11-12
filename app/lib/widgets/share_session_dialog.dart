@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../providers/share_provider.dart';
 import '../theme/app_theme.dart';
-import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast;
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class ShareSessionDialog extends StatelessWidget {
   final String sessionId;
@@ -12,9 +12,9 @@ class ShareSessionDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: AppColors.sidebar,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    return YsDialogFrame(
+      maxWidth: 360,
+      padding: EdgeInsets.zero,
       child: SizedBox(
         width: 360,
         child: Consumer<ShareProvider>(

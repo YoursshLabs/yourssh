@@ -11,6 +11,7 @@ import 'package:yourssh/services/agent_probe.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/host_detail_panel.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -45,7 +46,7 @@ void main() {
               create: (_) => HostProvider(StorageService())),
           Provider<SshService>(create: (_) => SshService(StorageService())),
         ],
-        child: MaterialApp(
+        child: MaterialApp(builder: ysRootBuilder,
           home: Scaffold(
             body: HostDetailPanel(
               existing: existing,

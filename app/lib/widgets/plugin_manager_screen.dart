@@ -5,6 +5,7 @@ import '../providers/plugin_provider.dart';
 import '../theme/app_theme.dart';
 import 'plugin_consent_dialog.dart';
 import 'plugin_console_screen.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class PluginManagerScreen extends StatelessWidget {
   const PluginManagerScreen({super.key});
@@ -36,9 +37,7 @@ class PluginManagerScreen extends StatelessWidget {
                       color: AppColors.textSecondary, fontSize: 12),
                 ),
                 trailing: ElevatedButton(
-                  onPressed: () => showDialog(
-                    context: context,
-                    barrierDismissible: false,
+                  onPressed: () => showYsDialog(context, barrierDismissible: false,
                     builder: (_) => PluginConsentDialog(
                         manifest: engineProvider.pendingConsent!),
                   ),

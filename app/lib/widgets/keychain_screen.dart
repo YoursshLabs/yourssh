@@ -10,6 +10,7 @@ import '../providers/key_provider.dart';
 import '../services/key_gen_service.dart';
 import '../theme/app_theme.dart';
 import 'deploy_key_dialog.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class KeychainScreen extends StatefulWidget {
   /// Test seam: a fake overrides the ssh-keygen probe and generation.
@@ -288,9 +289,8 @@ class _KeyTileState extends State<_KeyTile> {
                 child: _tileAction(
                   icon: Icons.cloud_upload_outlined,
                   color: AppColors.textSecondary,
-                  onTap: () => showDialog(
-                      context: context,
-                      builder: (_) => DeployKeyDialog(entry: e)),
+                  onTap: () => showYsDialog(context,
+                    builder: (_) => DeployKeyDialog(entry: e)),
                 ),
               ),
               const SizedBox(width: 6),
@@ -328,22 +328,24 @@ class _KeyTileState extends State<_KeyTile> {
   }
 
   Future<void> _confirmDelete(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Remove Key'),
-        content: Text('Remove "${widget.entry.label}" from keychain?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove',
-                style: TextStyle(color: AppColors.red)),
-          ),
-        ],
-      ),
+    final ok = await showYsDialog<bool>(context,
+      builder: (_) => YsDialog(
+      title: 'Remove Key',
+      body: Text('Remove "${widget.entry.label}" from keychain?'),
+      actions: [
+        FButton(
+          autofocus: true,
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(context, false),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.destructive,
+          onPress: () => Navigator.pop(context, true),
+          child: Text('Remove'),
+        ),
+      ],
+    ),
     );
     if (ok == true && context.mounted) {
       await context.read<KeyProvider>().deleteKey(widget.entry.id);

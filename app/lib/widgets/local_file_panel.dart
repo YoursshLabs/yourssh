@@ -13,6 +13,7 @@ import 'entry_context_menu.dart';
 import 'path_breadcrumb.dart';
 import 'permissions_dialog.dart';
 import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class LocalFilePanel extends StatefulWidget {
   final LocalFilePanelProvider provider;
@@ -109,29 +110,24 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
 
   Future<void> _delete(List<LocalEntry> entries) async {
     if (entries.isEmpty) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Delete', style: TextStyle(color: Color(0xFFD4D4D4))),
-        content: Text(
-          'Delete ${entries.length} item(s)? This cannot be undone.',
-          style: const TextStyle(color: Color(0xFF888888), fontSize: 13),
+    final confirmed = await showYsDialog<bool>(context,
+      builder: (ctx) => YsDialog(
+      title: 'Delete',
+      body: Text('Delete ${entries.length} item(s)? This cannot be undone.'),
+      actions: [
+        FButton(
+          autofocus: true,
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(ctx, false),
+          child: Text('Cancel'),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Color(0xFF888888)),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+        FButton(
+          variant: FButtonVariant.destructive,
+          onPress: () => Navigator.pop(ctx, true),
+          child: Text('Delete'),
+        ),
+      ],
+    ),
     );
     if (confirmed != true) return;
     try {
@@ -166,8 +162,7 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
   }
 
   Future<void> _showPermissionsDialog(LocalEntry entry) async {
-    final result = await showDialog<({int mode, bool recursive})>(
-      context: context,
+    final result = await showYsDialog<({int mode, bool recursive})>(context,
       builder: (_) => PermissionsDialog(
         entryName: entry.name,
         // Scan-time mode from the model — no blocking statSync at
@@ -659,52 +654,46 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
     String initial = '',
   }) async {
     final controller = TextEditingController(text: initial);
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: Text(
-          title,
-          style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 14),
+    return showYsDialog<String>(context,
+      builder: (ctx) => YsDialog(
+      title: title,
+      body: TextField(
+        controller: controller,
+        autofocus: true,
+        style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 13),
+          filled: true,
+          fillColor: const Color(0xFF111111),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: AppColors.accent),
+          ),
         ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: const TextStyle(color: Color(0xFFD4D4D4), fontSize: 13),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 13),
-            filled: true,
-            fillColor: const Color(0xFF111111),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
-              borderSide: const BorderSide(color: AppColors.accent),
-            ),
-          ),
-          onSubmitted: (_) => Navigator.pop(ctx, controller.text),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Color(0xFF888888)),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('OK', style: TextStyle(color: AppColors.accent)),
-          ),
-        ],
+        onSubmitted: (_) => Navigator.pop(ctx, controller.text),
       ),
+      actions: [
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(ctx),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: () => Navigator.pop(ctx, controller.text),
+          child: Text('OK'),
+        ),
+      ],
+    ),
     );
   }
 }

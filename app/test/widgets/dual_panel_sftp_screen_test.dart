@@ -9,6 +9,7 @@ import 'package:yourssh/widgets/dual_panel_sftp_screen.dart';
 import 'package:yourssh/widgets/local_file_panel.dart';
 import 'package:yourssh/widgets/sftp_panel.dart';
 import 'package:yourssh/widgets/source_picker_dialog.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 
 void main() {
   late ValueNotifier<bool> notifier;
@@ -28,7 +29,7 @@ void main() {
           Provider<SshService>(create: (_) => SshService(storage)),
           ChangeNotifierProvider(create: (_) => HostProvider(storage)),
         ],
-        child: MaterialApp(
+        child: MaterialApp(builder: ysRootBuilder,
           home: Scaffold(
             body: DualPanelSftpScreen(connectionNotifier: notifier),
           ),

@@ -26,7 +26,7 @@ import 'bulk/bulk_push_dialog.dart';
 import 'bulk/bulk_run_dialog.dart';
 import 'server_monitor_sheet.dart';
 import 'sftp_screen.dart';
-import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast;
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class HostsDashboard extends StatefulWidget {
   final VoidCallback? onAddHost;
@@ -150,23 +150,22 @@ class _HostsDashboardState extends State<HostsDashboard> {
     final plan =
         planConnectAll(selected: _selectedHosts(), liveHostIds: live);
     if (plan.toConnect.length > 5) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.card,
-          title: Text('Open ${plan.toConnect.length} tabs?',
-              style: const TextStyle(
-                  color: AppColors.textPrimary, fontSize: 15)),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Open all',
-                    style: TextStyle(color: AppColors.accent))),
-          ],
-        ),
+      final ok = await showYsDialog<bool>(context,
+        builder: (ctx) => YsDialog(
+        title: 'Open ${plan.toConnect.length} tabs?',
+        actions: [
+          FButton(
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(ctx, false),
+            child: Text('Cancel'),
+          ),
+          FButton(
+            variant: FButtonVariant.primary,
+            onPress: () => Navigator.pop(ctx, true),
+            child: Text('Open all'),
+          ),
+        ],
+      ),
       );
       if (ok != true || !mounted) return;
     }
@@ -198,9 +197,7 @@ class _HostsDashboardState extends State<HostsDashboard> {
   void _openBulkRun() {
     final hosts = _selectedSshHosts('Run command');
     if (hosts.isEmpty) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
+    showYsDialog(context, barrierDismissible: false,
       builder: (_) => BulkRunDialog(hosts: hosts),
     );
   }
@@ -208,9 +205,7 @@ class _HostsDashboardState extends State<HostsDashboard> {
   void _openBulkPush() {
     final hosts = _selectedSshHosts('Push files');
     if (hosts.isEmpty) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
+    showYsDialog(context, barrierDismissible: false,
       builder: (_) => BulkPushDialog(hosts: hosts),
     );
   }
@@ -1354,8 +1349,8 @@ class _HostCardState extends State<_HostCard> {
         .toList()
       ..sort();
 
-    showDialog<void>(
-      context: context,
+    showYsDialog<void>(context,
+
       builder: (_) => _MoveToGroupDialog(
         host: widget.host,
         groups: groups,
@@ -1364,18 +1359,16 @@ class _HostCardState extends State<_HostCard> {
     );
   }
   void _export(BuildContext context) {
-    showDialog<void>(
-      context: context,
+    showYsDialog<void>(context,
       builder: (_) => _ExportDialog(host: widget.host),
     );
   }
 
   void _openSftp(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Dialog(
-        insetPadding: const EdgeInsets.all(40),
+    showYsDialog<void>(context, barrierDismissible: false,
+      builder: (_) => YsDialogFrame(
+        maxWidth: 800,
+        padding: EdgeInsets.zero,
         child: SizedBox(
           width: 800,
           height: 600,
@@ -1406,11 +1399,9 @@ class _MoveToGroupDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final options = ['', ...groups]; // '' = No group
-    return AlertDialog(
-      backgroundColor: AppColors.card,
-      title: const Text('Move to Group', style: TextStyle(color: AppColors.textPrimary, fontSize: 15)),
-      contentPadding: const EdgeInsets.symmetric(vertical: 8),
-      content: SizedBox(
+    return YsDialog(
+      title: 'Move to Group',
+      body: SizedBox(
         width: 280,
         child: ListView.builder(
           shrinkWrap: true,
@@ -1421,8 +1412,20 @@ class _MoveToGroupDialog extends StatelessWidget {
             final isCurrent = g == host.group;
             return ListTile(
               dense: true,
-              title: Text(label, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-              trailing: isCurrent ? const Icon(Icons.check, size: 16, color: AppColors.textSecondary) : null,
+              title: Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                ),
+              ),
+              trailing: isCurrent
+                  ? const Icon(
+                      Icons.check,
+                      size: 16,
+                      color: AppColors.textSecondary,
+                    )
+                  : null,
               onTap: () {
                 Navigator.of(context).pop();
                 onSelect(g);
@@ -1473,10 +1476,9 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.card,
-      title: const Text('Export Host', style: TextStyle(color: AppColors.textPrimary, fontSize: 15)),
-      content: SizedBox(
+    return YsDialog(
+      title: 'Export Host',
+      body: SizedBox(
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1484,9 +1486,17 @@ class _ExportDialogState extends State<_ExportDialog> {
           children: [
             Row(
               children: [
-                _formatTab('.ssh/config', selected: _showSshConfig, onTap: () => setState(() => _showSshConfig = true)),
+                _formatTab(
+                  '.ssh/config',
+                  selected: _showSshConfig,
+                  onTap: () => setState(() => _showSshConfig = true),
+                ),
                 const SizedBox(width: 8),
-                _formatTab('JSON', selected: !_showSshConfig, onTap: () => setState(() => _showSshConfig = false)),
+                _formatTab(
+                  'JSON',
+                  selected: !_showSshConfig,
+                  onTap: () => setState(() => _showSshConfig = false),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -1510,18 +1520,23 @@ class _ExportDialogState extends State<_ExportDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close', style: TextStyle(color: AppColors.textSecondary)),
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.of(context).pop(),
+          child: Text('Close'),
         ),
-        TextButton(
-          onPressed: () async {
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: () async {
             await Clipboard.setData(ClipboardData(text: _currentText));
             if (!context.mounted) return;
-            showYsToast(context, 'Copied to clipboard',
-                duration: const Duration(seconds: 2));
+            showYsToast(
+              context,
+              'Copied to clipboard',
+              duration: const Duration(seconds: 2),
+            );
           },
-          child: const Text('Copy', style: TextStyle(color: AppColors.textPrimary)),
+          child: Text('Copy'),
         ),
       ],
     );

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/keyword_highlight_rule.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 const _kForegroundPresets = [
   Color(0xFFEF9A9A),
@@ -113,8 +114,7 @@ class KeywordHighlightSection extends StatelessWidget {
     AppKeywordHighlightRule? rule,
     int? index,
   }) async {
-    final result = await showDialog<AppKeywordHighlightRule>(
-      context: context,
+    final result = await showYsDialog<AppKeywordHighlightRule>(context,
       builder: (_) => _KeywordRuleDialog(initial: rule),
     );
     if (result == null || !context.mounted) return;
@@ -275,13 +275,9 @@ class _KeywordRuleDialogState extends State<_KeywordRuleDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.card,
-      title: Text(
-        widget.initial == null ? 'Add rule' : 'Edit rule',
-        style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
-      ),
-      content: SizedBox(
+    return YsDialog(
+      title: widget.initial == null ? 'Add rule' : 'Edit rule',
+      body: SizedBox(
         width: 380,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -302,21 +298,23 @@ class _KeywordRuleDialogState extends State<_KeywordRuleDialog> {
               children: [
                 Checkbox(
                   value: _isRegex,
-                  onChanged: (v) =>
-                      setState(() => _isRegex = v ?? false),
+                  onChanged: (v) => setState(() => _isRegex = v ?? false),
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                const Text('Regex',
-                    style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+                const Text(
+                  'Regex',
+                  style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                ),
                 const SizedBox(width: 16),
                 Checkbox(
                   value: _caseSensitive,
-                  onChanged: (v) =>
-                      setState(() => _caseSensitive = v ?? false),
+                  onChanged: (v) => setState(() => _caseSensitive = v ?? false),
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                const Text('Case-sensitive',
-                    style: TextStyle(color: AppColors.textPrimary, fontSize: 13)),
+                const Text(
+                  'Case-sensitive',
+                  style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -333,7 +331,9 @@ class _KeywordRuleDialogState extends State<_KeywordRuleDialog> {
               presets: _kBackgroundPresets,
               onChanged: (c) => setState(() => _background = c),
             ),
-            if (!_isValid && _labelCtrl.text.isNotEmpty && _patternCtrl.text.isNotEmpty)
+            if (!_isValid &&
+                _labelCtrl.text.isNotEmpty &&
+                _patternCtrl.text.isNotEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: 8),
                 child: Text(
@@ -345,12 +345,14 @@ class _KeywordRuleDialogState extends State<_KeywordRuleDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(context),
+          child: Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: _isValid
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: _isValid
               ? () {
                   Navigator.pop(
                     context,
@@ -367,7 +369,7 @@ class _KeywordRuleDialogState extends State<_KeywordRuleDialog> {
                   );
                 }
               : null,
-          child: const Text('Save'),
+          child: Text('Save'),
         ),
       ],
     );
@@ -453,8 +455,7 @@ class _ColorPickerButton extends StatelessWidget {
   }
 
   Future<void> _pick(BuildContext context) async {
-    final result = await showDialog<Color?>(
-      context: context,
+    final result = await showYsDialog<Color?>(context,
       builder: (_) => _ColorGridDialog(presets: presets, current: current),
     );
     if (result == _clearSentinel) {
@@ -474,11 +475,9 @@ class _ColorGridDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.card,
-      title: const Text('Pick color',
-          style: TextStyle(color: AppColors.textPrimary, fontSize: 14)),
-      content: Wrap(
+    return YsDialog(
+      title: 'Pick color',
+      body: Wrap(
         spacing: 8,
         runSpacing: 8,
         children: [
@@ -492,24 +491,28 @@ class _ColorGridDialog extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               alignment: Alignment.center,
-              child: const Text('✕',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              child: const Text(
+                '✕',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
             ),
           ),
-          ...presets.map((c) => GestureDetector(
-                onTap: () => Navigator.pop(context, c),
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: c,
-                    borderRadius: BorderRadius.circular(4),
-                    border: current == c
-                        ? Border.all(color: Colors.white, width: 2)
-                        : null,
-                  ),
+          ...presets.map(
+            (c) => GestureDetector(
+              onTap: () => Navigator.pop(context, c),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: c,
+                  borderRadius: BorderRadius.circular(4),
+                  border: current == c
+                      ? Border.all(color: Colors.white, width: 2)
+                      : null,
                 ),
-              )),
+              ),
+            ),
+          ),
         ],
       ),
     );

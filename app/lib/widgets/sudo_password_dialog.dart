@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/host.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Prompts for the sudo password used by elevated SFTP. Pops with
 /// `(password:, remember:)` on OK, or null when cancelled. Persisting the
@@ -30,9 +31,9 @@ class _SudoPasswordDialogState extends State<SudoPasswordDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Sudo password'),
-      content: Column(
+    return YsDialog(
+      title: 'Sudo password',
+      body: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -56,8 +57,10 @@ class _SudoPasswordDialogState extends State<SudoPasswordDialog> {
           CheckboxListTile(
             value: _remember,
             onChanged: (v) => setState(() => _remember = v ?? false),
-            title: const Text('Remember in system keychain',
-                style: TextStyle(fontSize: 13)),
+            title: const Text(
+              'Remember in system keychain',
+              style: TextStyle(fontSize: 13),
+            ),
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
             dense: true,
@@ -65,10 +68,16 @@ class _SudoPasswordDialogState extends State<SudoPasswordDialog> {
         ],
       ),
       actions: [
-        TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel')),
-        FilledButton(onPressed: _submit, child: const Text('OK')),
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.of(context).pop(),
+          child: Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: _submit,
+          child: Text('OK'),
+        ),
       ],
     );
   }

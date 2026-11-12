@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/widgets/permissions_dialog.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
+import 'package:yourssh_ui/yourssh_ui.dart' show FButton;
 
 Future<({int mode, bool recursive})?> _open(
   WidgetTester tester, {
@@ -9,7 +11,7 @@ Future<({int mode, bool recursive})?> _open(
   bool isDirectory = false,
 }) async {
   ({int mode, bool recursive})? result;
-  await tester.pumpWidget(MaterialApp(
+  await tester.pumpWidget(MaterialApp(builder: ysRootBuilder,
     home: Builder(
       builder: (context) => TextButton(
         onPressed: () async {
@@ -63,7 +65,7 @@ void main() {
 
   testWidgets('Apply returns the edited mode', (tester) async {
     ({int mode, bool recursive})? result;
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(MaterialApp(builder: ysRootBuilder,
       home: Builder(
         builder: (context) => TextButton(
           onPressed: () async {
@@ -88,9 +90,8 @@ void main() {
     expect(result, (mode: 0x1ED, recursive: false));
   });
 
-  TextButton applyButton(WidgetTester tester) => tester.widget<TextButton>(
-        find.ancestor(
-            of: find.text('Apply'), matching: find.byType(TextButton)),
+  FButton applyButton(WidgetTester tester) => tester.widget<FButton>(
+        find.ancestor(of: find.text('Apply'), matching: find.byType(FButton)),
       );
 
   testWidgets('Apply is disabled while the octal text is incomplete',
@@ -98,12 +99,12 @@ void main() {
     await _open(tester, initialMode: 0x1A4); // 0o644
     await tester.enterText(find.byType(TextField), '64'); // half-typed
     await tester.pump();
-    expect(applyButton(tester).onPressed, isNull);
+    expect(applyButton(tester).onPress, isNull);
     expect(find.text('3–4 octal digits'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), '640');
     await tester.pump();
-    expect(applyButton(tester).onPressed, isNotNull);
+    expect(applyButton(tester).onPress, isNotNull);
   });
 
   testWidgets('non-octal characters are filtered out of the field',
@@ -113,7 +114,7 @@ void main() {
     await tester.pump();
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.controller!.text, isEmpty); // everything non-octal dropped
-    expect(applyButton(tester).onPressed, isNull);
+    expect(applyButton(tester).onPress, isNull);
   });
 
   testWidgets('unknown initialMode shows a warning and gates Apply',
@@ -122,12 +123,12 @@ void main() {
     expect(
         find.text('Current permissions unknown — set them before applying.'),
         findsOneWidget);
-    expect(applyButton(tester).onPressed, isNull);
+    expect(applyButton(tester).onPress, isNull);
 
     await tester.tap(find.byKey(const Key('perm_u_r')));
     await tester.pump();
     expect(find.widgetWithText(TextField, '400'), findsOneWidget);
-    expect(applyButton(tester).onPressed, isNotNull);
+    expect(applyButton(tester).onPress, isNotNull);
   });
 
   testWidgets('recursive checkbox only shown for directories',

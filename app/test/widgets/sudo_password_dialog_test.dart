@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/widgets/sudo_password_dialog.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 
 /// Holder so tests can observe the dialog result after it pops.
 class _Result {
@@ -14,7 +15,7 @@ void main() {
 
   Future<_Result> pumpAndOpen(WidgetTester tester) async {
     final result = _Result();
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(MaterialApp(builder: ysRootBuilder,
       home: Builder(
         builder: (context) => TextButton(
           onPressed: () async {

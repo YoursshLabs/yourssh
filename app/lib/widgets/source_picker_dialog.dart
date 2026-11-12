@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/host.dart';
 import '../models/panel_source.dart';
 import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Picker for an SFTP panel slot's source: the local filesystem (pinned
 /// first) or any saved host. Pops a [PanelSource], or null when dismissed.
@@ -14,9 +15,9 @@ class SourcePickerDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: const Color(0xFF1A1A1A),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    return YsDialogFrame(
+      maxWidth: 380,
+      padding: EdgeInsets.zero,
       child: SizedBox(
         width: 380,
         child: Column(

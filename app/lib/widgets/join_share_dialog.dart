@@ -5,6 +5,7 @@ import '../providers/share_provider.dart';
 import '../providers/sync_provider.dart';
 import '../services/share_crypto.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class JoinShareDialog extends StatefulWidget {
   const JoinShareDialog({super.key});
@@ -52,9 +53,9 @@ class _JoinShareDialogState extends State<JoinShareDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: AppColors.sidebar,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    return YsDialogFrame(
+      maxWidth: 400,
+      padding: EdgeInsets.zero,
       child: SizedBox(
         width: 400,
         child: Padding(

@@ -335,8 +335,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _ssh.sudoPasswordPrompt = (host) async {
       final ctx = _navigatorKey.currentContext;
       if (ctx == null) return null;
-      return showDialog<({String password, bool remember})>(
-        context: ctx,
+      return showYsDialog<({String password, bool remember})>(
+        ctx,
         builder: (_) => SudoPasswordDialog(host: host),
       );
     };
