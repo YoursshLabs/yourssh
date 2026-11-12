@@ -176,7 +176,7 @@ Each phase is its own PR into `develop` with passing CI. Releases may go out bet
 
 | Phase | Scope |
 |---|---|
-| **0 · Foundation** | forui dependency and SDK bump, verified on CI's Flutter 3.47.1. `YsTheme` plus `FTheme` at the root. Inter bundled. `AppColors`/`MobileColors` aliased to the new tokens, so the whole app turns amber/stone at once. "YourSSH Amber" terminal theme (new; the existing "YourSSH Dark" theme is kept unchanged) as the default for new installs; existing installs keep their current theme, including the implicit "Dracula" default. Screenshot harness updated. |
+| **0 · Foundation** | forui dependency and SDK bump, on Flutter 3.50.0. `YsTheme` plus `FTheme` at the root. Inter bundled. `AppColors`/`MobileColors` aliased to the new tokens, so the whole app turns amber/stone at once. "YourSSH Amber" terminal theme (new; the existing "YourSSH Dark" theme is kept unchanged) as the default for new installs; existing installs keep their current theme, including the implicit "Dracula" default. Screenshot harness updated. |
 | **1 · Shell** | Left sidebar → `FSidebar`. Top tab bar → `YsSessionTabBar`. Global sweep of toasts (`ScaffoldMessenger`/`SnackBar` → `FToaster`), dialogs (`AlertDialog` → `FDialog`), tooltips and context menus. |
 | **2 · Hosts** | Hosts dashboard (search, tag filter chips, groups, `YsHostCard` grid/list), `HostDetailPanel` editor, import panel, keychain picker. |
 | **3 · Terminal workspace** | Terminal frame and split chrome, `WorkspaceSidePanel` (snippets, terminal config), input bar, broadcast/bulk-run bars, `YsStatusBar`, terminal context menu. Perf check against v0.3.0. |

@@ -8,16 +8,14 @@
 - A new Flutter package, `packages/yourssh_ui`, owns the tokens (`YsColors`), the forui theme (`ysThemeData()`), the Material fallback theme (`ysMaterialTheme()`) and the shared `Ys*` components, and re-exports forui.
 - The app wraps its `MaterialApp` content in `FTheme` + `FToaster`. It re-points `AppColors`/`MobileColors` at the tokens so every screen recolours at once, then replaces the shell widgets screen-piece by screen-piece.
 
-**Tech Stack:** Flutter (CI pin 3.47.1), forui 0.27.x, provider, flutter_test.
+**Tech Stack:** Flutter 3.50.0 (pin bump ships in `chore/flutter-3.50`), forui 0.27.7, provider, flutter_test.
 
 **Spec:** `docs/superpowers/specs/2026-11-12-yourssh-ui-redesign-design.md` (reference mockups in `docs/superpowers/specs/assets/ui-redesign/`).
 
 ## Global Constraints
 
 **Toolchain and dependencies**
-- CI builds with Flutter **3.47.1**. forui 0.27.x needs Flutter ≥ 3.47.0 / Dart ≥ 3.13. Raise `environment.sdk` to `^3.13.0` in `app/` and `packages/yourssh_ui`.
-  - If no forui 0.27.x resolves and builds on 3.47.1, use the newest forui release that does.
-  - Never bump the Flutter pin. Stop and report instead.
+- Flutter **3.50.0** (Dart 3.14) and forui **0.27.7**, the latest versions at the owner's request. The CI pin bump ships in `chore/flutter-3.50`. Raise `environment.sdk` to `^3.13.0` in `app/` and `packages/yourssh_ui`.
 - Run `flutter pub get` **without** `PUB_HOSTED_URL` / `FLUTTER_STORAGE_BASE_URL`. `app/pubspec.lock` may change only by adding or updating forui and its transitive dependencies, and every `url:` in it stays `https://pub.dev`. Check with `grep -c flutter-io.cn app/pubspec.lock` → 0.
 
 **Look and type**
@@ -92,7 +90,7 @@
   - `grep -c flutter-io.cn app/pubspec.lock`. Expected: `0`.
 - [ ] **Step 5:** Commit `feat(ui): add yourssh_ui package with forui`.
 
-*(The controller pushes the branch and runs CI after this task to prove forui on Flutter 3.47.1 before Task 2 starts.)*
+*(Done: CI proved forui resolves even on 3.47.1. The project now targets 3.50.0.)*
 
 ### Task 2: Tokens and themes (`YsColors`, `ysThemeData()`, `ysMaterialTheme()`)
 
