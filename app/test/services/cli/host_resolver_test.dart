@@ -44,4 +44,10 @@ void main() {
     expect(resolveHost('root@10.0.0.5:2222', [], allowAdHoc: false), isA<UnknownHost>());
     expect(resolveHost('nope', [], allowAdHoc: true), isA<UnknownHost>());
   });
+
+  test('ad hoc user or host starting with a dash is unknown', () {
+    expect(resolveHost('-oProxyCommand=x@h', [], allowAdHoc: true), isA<UnknownHost>());
+    expect(resolveHost('u@-h', [], allowAdHoc: true), isA<UnknownHost>());
+    expect(resolveHost('-u@h:22', [], allowAdHoc: true), isA<UnknownHost>());
+  });
 }

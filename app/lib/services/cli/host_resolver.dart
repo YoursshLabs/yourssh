@@ -61,7 +61,10 @@ HostResolution resolveHost(String query, List<Host> hosts,
           .toList();
       if (matches.length == 1) return ResolvedHost(matches.first);
       if (matches.length > 1) return AmbiguousHost(matches);
-      if (allowAdHoc) return AdHocTarget(user, hostname, port);
+      // A leading '-' could be parsed as an ssh option downstream.
+      if (allowAdHoc && !user.startsWith('-') && !hostname.startsWith('-')) {
+        return AdHocTarget(user, hostname, port);
+      }
     }
   }
   return UnknownHost(query);
