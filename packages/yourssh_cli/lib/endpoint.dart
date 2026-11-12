@@ -97,18 +97,23 @@ Future<void> _chmod(String mode, String path) async {
   }
 }
 
+/// 32 random bytes as lowercase hex.
+String generateToken() {
+  final rng = Random.secure();
+  return List.generate(32, (_) => rng.nextInt(256))
+      .map((b) => b.toRadixString(16).padLeft(2, '0'))
+      .join();
+}
+
 /// Creates [runDir] (0700) and rewrites `cli.token` (0600) with 32 random
 /// bytes as lowercase hex. The file is created empty and restricted before
 /// the secret is written. Returns the token.
-Future<String> writeToken(String runDir) async {
+Future<String> writeToken(String runDir, {String? token}) async {
   final dir = Directory(runDir);
   await dir.create(recursive: true);
   await _chmod('700', runDir);
 
-  final rng = Random.secure();
-  final token = List.generate(32, (_) => rng.nextInt(256))
-      .map((b) => b.toRadixString(16).padLeft(2, '0'))
-      .join();
+  token ??= generateToken();
 
   final path = p.join(runDir, 'cli.token');
   final file = File(path);

@@ -144,7 +144,8 @@ class SessionProvider extends ChangeNotifier {
     _safeNotify();
   }
 
-  Future<void> connect(Host host, {String? initialCommand}) async {
+  Future<void> connect(Host host,
+      {String? initialCommand, String auditSource = 'app'}) async {
     final session = SshSession(host: host, initialCommand: initialCommand);
     _sessions.add(session);
     _activeSessionId = session.id;
@@ -160,7 +161,7 @@ class SessionProvider extends ChangeNotifier {
       _safeNotify();
     }
 
-    await _doConnect(session, host, attempt: 1);
+    await _doConnect(session, host, attempt: 1, auditSource: auditSource);
   }
 
   /// Loads persisted tab metadata (label, color, pin) for [hostId] onto
@@ -176,10 +177,16 @@ class SessionProvider extends ChangeNotifier {
   }
 
   /// Routes to [connectRdp] or [connect] based on [host.protocol].
-  Future<AppSession?> connectAny(Host host, {String? initialCommand}) {
+  ///
+  /// [auditSource] (`app`, `cli`, `url`) is recorded on the SSH connect audit
+  /// row; RDP/VNC rows keep their fixed `rdp`/`vnc` source.
+  Future<AppSession?> connectAny(Host host,
+      {String? initialCommand, String auditSource = 'app'}) {
     if (host.protocol == HostProtocol.rdp) return connectRdp(host);
     if (host.protocol == HostProtocol.vnc) return connectVnc(host);
-    return connect(host, initialCommand: initialCommand).then((_) => null);
+    return connect(host,
+            initialCommand: initialCommand, auditSource: auditSource)
+        .then((_) => null);
   }
 
   Future<RdpSession?> connectRdp(Host host) async {
@@ -473,7 +480,8 @@ class SessionProvider extends ChangeNotifier {
     await connectVnc(old.host);
   }
 
-  Future<void> _doConnect(SshSession session, Host host, {required int attempt}) async {
+  Future<void> _doConnect(SshSession session, Host host,
+      {required int attempt, String auditSource = 'app'}) async {
     try {
       final keyEntry = host.keyId != null ? keyLookup?.call(host.keyId!) : null;
       final jumpChain = SshService.resolveJumpChain(
@@ -506,7 +514,10 @@ class SessionProvider extends ChangeNotifier {
       session.logConnection(ConnectionLogLevel.success, 'Connection established');
       session.status = SessionStatus.connected;
       audit?.record(AuditEvent.now(
-          type: AuditEventType.connect, host: host, sessionId: session.id));
+          type: AuditEventType.connect,
+          host: host,
+          sessionId: session.id,
+          meta: auditSource == 'app' ? const {} : {'source': auditSource}));
       // Fire-and-forget: detect when OS is unknown, or known only as generic
       // 'linux' (pre-distro-detection hosts upgrade to a distro id on the
       // next connect; genuinely unknown distros re-probe — one cheap exec).
@@ -573,7 +584,11 @@ class SessionProvider extends ChangeNotifier {
           type: AuditEventType.connect,
           host: host,
           sessionId: session.id,
-          meta: {'error': '$e', 'attempts': attempt},
+          meta: {
+            'error': '$e',
+            'attempts': attempt,
+            if (auditSource != 'app') 'source': auditSource,
+          },
         ));
         onSessionDropped?.call(session, session.errorMessage);
         _safeNotify();

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, exit;
 
 import 'package:flutter/material.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -7,6 +7,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
+import 'services/cli/app_cli_handlers.dart';
+import 'services/cli/cli_listener.dart';
+import 'services/cli/single_instance.dart';
 import 'platform/runtime_platform.dart';
 import 'mobile/mobile_app.dart';
 import 'utils/bundled_plugin_installer.dart';
@@ -111,7 +114,11 @@ class _SshBridgeAdapter implements SshBridgeDelegate {
   }
 }
 
-void main() async {
+/// argv of this launch (a `yourssh://` URL or nothing); see single_instance.
+List<String> _launchArgs = const [];
+
+void main(List<String> args) async {
+  _launchArgs = args;
   WidgetsFlutterBinding.ensureInitialized();
   final packageInfo = await PackageInfo.fromPlatform();
   kAppVersion = packageInfo.version;
@@ -121,6 +128,15 @@ void main() async {
     // local_notifier have no Android implementation and would throw).
     runApp(const YourSSHMobileApp());
     return;
+  }
+
+  // A second launch hands its request (open URL / just focus) to the running
+  // instance and exits. Fail-soft: never keep the app from starting.
+  try {
+    final ep = resolveCliEndpoint();
+    if (ep != null && await forwardToRunningInstance(args, ep)) exit(0);
+  } catch (e) {
+    debugPrint('[main] single-instance forward failed: $e');
   }
 
   // Before any provider reads prefs: carry data over from the old sandboxed
@@ -194,6 +210,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final AuditProvider _auditProvider;
   String? _lastUpdateNotifVersion;
 
+  CliListener? _cliListener;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   final _navigatorKey = GlobalKey<NavigatorState>();
 
@@ -399,6 +416,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _updateProvider = UpdateProvider(_updateService, currentVersion: kAppVersion);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateProvider.checkForUpdates();
+      unawaited(_startCliEndpoint());
     });
     _updateProvider.startPeriodicChecks();
     _notificationCenter = NotificationCenterProvider();
@@ -518,8 +536,41 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     NotificationService.instance.onWindowBlur();
   }
 
+  /// Opens the local CLI endpoint after the first frame. Never blocks or
+  /// crashes start-up: failures (and Windows, for now) just mean no CLI.
+  Future<void> _startCliEndpoint() async {
+    try {
+      final ep = resolveCliEndpoint();
+      if (ep == null) return;
+      final handlers = AppCliHandlers(
+        sessions: _sessionProvider,
+        hostProvider: _hostProvider,
+        focus: () async {
+          await windowManager.show();
+          await windowManager.focus();
+        },
+        appVersion: kAppVersion,
+      );
+      final listener = await startCliEndpoint(ep, handlers, _launchArgs);
+      if (listener == null) {
+        exit(0); // lost a start race: the request went to the other instance
+      }
+      if (!mounted) {
+        await listener.stop();
+        return;
+      }
+      _cliListener = listener;
+    } on UnsupportedError catch (e) {
+      debugPrint('[main] CLI endpoint unsupported here: $e');
+    } catch (e) {
+      debugPrint('[main] CLI endpoint failed to start: $e');
+    }
+  }
+
   @override
   void dispose() {
+    unawaited(_cliListener?.stop());
+    _cliListener = null;
     _settingsProvider.removeListener(_syncNotificationSetting);
     _updateProvider.removeListener(_pushUpdateNotification);
     // A queued reconnect timer may still fire onSessionDropped during
