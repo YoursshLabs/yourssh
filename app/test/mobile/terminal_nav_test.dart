@@ -43,7 +43,8 @@ class _FakeSessionProvider extends SessionProvider {
 
   /// Override the real connectAny so no SSH dial happens.
   @override
-  Future<AppSession?> connectAny(Host host, {String? initialCommand}) async {
+  Future<AppSession?> connectAny(Host host,
+      {String? initialCommand, String auditSource = 'app'}) async {
     connectAnyCalls++;
     // The session is already injected; return null like the SSH path does.
     return null;
@@ -58,7 +59,8 @@ class _PendingSessionProvider extends _FakeSessionProvider {
   _PendingSessionProvider(super.sessions);
 
   @override
-  Future<AppSession?> connectAny(Host host, {String? initialCommand}) {
+  Future<AppSession?> connectAny(Host host,
+      {String? initialCommand, String auditSource = 'app'}) {
     connectAnyCalls++;
     // Mirror the real provider: the session is registered synchronously…
     setSessions([..._sessions, SshSession(host: host)]);

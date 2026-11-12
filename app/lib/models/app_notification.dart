@@ -4,6 +4,10 @@ enum AppNotificationType {
   sessionDisconnect,
   agentForwarding,
   insecureStorage,
+
+  /// A `yourssh://` link (or `yourssh open`) named no saved host or had an
+  /// unsupported shape and was ignored.
+  linkRefused,
 }
 
 /// One item in the in-app notification center. In-memory only — not

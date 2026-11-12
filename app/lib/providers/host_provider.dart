@@ -14,8 +14,11 @@ class HostProvider extends ChangeNotifier {
   /// Fired before a host is removed so dependents (tunnels) can shut down.
   void Function(String hostId)? onHostDeleted;
 
+  /// Completes once the saved hosts are loaded.
+  late final Future<void> ready;
+
   HostProvider(this._storage) {
-    _load();
+    ready = _load();
   }
 
   List<Host> get hosts {

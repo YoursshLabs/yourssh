@@ -363,7 +363,8 @@ class _FakeSessionProvider extends SessionProvider {
       : super(SshService(StorageService()), TabMetadataService());
 
   @override
-  Future<AppSession?> connectAny(Host host, {String? initialCommand}) async {
+  Future<AppSession?> connectAny(Host host,
+      {String? initialCommand, String auditSource = 'app'}) async {
     connectAnyCalled = true;
     connectedHost = host;
     return null;

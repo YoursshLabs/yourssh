@@ -150,6 +150,64 @@ jobs:
         working-directory: app
         run: flutter build apk --debug
 
+  # Pure-Dart CLI protocol package: no Flutter, no native libs.
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install dependencies
+        working-directory: packages/yourssh_cli
+        run: dart pub get
+
+      - name: Test (yourssh_cli)
+        working-directory: packages/yourssh_cli
+        run: dart test
+
+      - name: Compile smoke (yourssh_cli)
+        working-directory: packages/yourssh_cli
+        run: dart compile exe bin/yourssh.dart -o "$RUNNER_TEMP/yourssh"
+
+  # The Windows CLI endpoint (named pipe, DACL, SID checks, cli.lock) only
+  # runs on Windows: the package suite, a compile smoke and the app's CLI
+  # tests on a real runner. No app build.
+  windows-cli:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install dependencies (yourssh_cli)
+        working-directory: packages/yourssh_cli
+        run: dart pub get
+
+      - name: Test (yourssh_cli)
+        working-directory: packages/yourssh_cli
+        run: dart test
+
+      - name: Compile smoke (yourssh_cli)
+        working-directory: packages/yourssh_cli
+        shell: bash
+        run: dart compile exe bin/yourssh.dart -o "$RUNNER_TEMP/yourssh.exe"
+
+      - name: Install dependencies (app)
+        working-directory: app
+        run: flutter pub get
+
+      - name: Test (app CLI services)
+        working-directory: app
+        run: flutter test test/services/cli/
+
   # Aggregate gate. master's branch protection requires a check literally named
   # "test", so that name has to survive the split — this job carries it, and it
   # is red unless every job above is green. `always()` matters: without it the
@@ -157,14 +215,16 @@ jobs:
   # forever instead of failing.
   test:
     name: test
-    needs: [app, ui, bridge, android]
+    needs: [app, ui, bridge, android, cli, windows-cli]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
         run: |
-          echo "app=${{ needs.app.result }} ui=${{ needs.ui.result }} bridge=${{ needs.bridge.result }} android=${{ needs.android.result }}"
+          echo "app=${{ needs.app.result }} ui=${{ needs.ui.result }} bridge=${{ needs.bridge.result }} android=${{ needs.android.result }} cli=${{ needs.cli.result }} windows-cli=${{ needs.windows-cli.result }}"
           [ "${{ needs.app.result }}" = "success" ] || exit 1
           [ "${{ needs.ui.result }}" = "success" ] || exit 1
           [ "${{ needs.bridge.result }}" = "success" ] || exit 1
           [ "${{ needs.android.result }}" = "success" ] || exit 1
+          [ "${{ needs.cli.result }}" = "success" ] || exit 1
+          [ "${{ needs.windows-cli.result }}" = "success" ] || exit 1

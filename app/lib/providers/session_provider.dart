@@ -144,7 +144,8 @@ class SessionProvider extends ChangeNotifier {
     _safeNotify();
   }
 
-  Future<void> connect(Host host, {String? initialCommand}) async {
+  Future<void> connect(Host host,
+      {String? initialCommand, String auditSource = 'app'}) async {
     final session = SshSession(host: host, initialCommand: initialCommand);
     _sessions.add(session);
     _activeSessionId = session.id;
@@ -160,7 +161,7 @@ class SessionProvider extends ChangeNotifier {
       _safeNotify();
     }
 
-    await _doConnect(session, host, attempt: 1);
+    await _doConnect(session, host, attempt: 1, auditSource: auditSource);
   }
 
   /// Loads persisted tab metadata (label, color, pin) for [hostId] onto
@@ -176,13 +177,25 @@ class SessionProvider extends ChangeNotifier {
   }
 
   /// Routes to [connectRdp] or [connect] based on [host.protocol].
-  Future<AppSession?> connectAny(Host host, {String? initialCommand}) {
-    if (host.protocol == HostProtocol.rdp) return connectRdp(host);
-    if (host.protocol == HostProtocol.vnc) return connectVnc(host);
-    return connect(host, initialCommand: initialCommand).then((_) => null);
+  ///
+  /// [auditSource] (`app`, `cli`, `url`) is recorded on the SSH connect audit
+  /// row; RDP/VNC rows keep their fixed `rdp`/`vnc` source and carry
+  /// `via: <auditSource>` when it is not `app`.
+  Future<AppSession?> connectAny(Host host,
+      {String? initialCommand, String auditSource = 'app'}) {
+    if (host.protocol == HostProtocol.rdp) {
+      return connectRdp(host, auditSource: auditSource);
+    }
+    if (host.protocol == HostProtocol.vnc) {
+      return connectVnc(host, auditSource: auditSource);
+    }
+    return connect(host,
+            initialCommand: initialCommand, auditSource: auditSource)
+        .then((_) => null);
   }
 
-  Future<RdpSession?> connectRdp(Host host) async {
+  Future<RdpSession?> connectRdp(Host host,
+      {String auditSource = 'app'}) async {
     final password = await _ssh.loadPassword(host.id) ?? '';
     final size = rdpDesktopSize?.call() ?? const Size(1280, 800);
 
@@ -289,7 +302,7 @@ class SessionProvider extends ChangeNotifier {
       unawaited(client.connect().then((_) {}, onError: (_) {}));
     }
 
-    _watchRdpStatus(session);
+    _watchRdpStatus(session, auditSource: auditSource);
     session.addListener(_safeNotify);
     _sessions.add(session);
     _activeSessionId = session.id;
@@ -300,7 +313,8 @@ class SessionProvider extends ChangeNotifier {
 
   /// Audits RDP connect/disconnect transitions and feeds the notification
   /// bell — parity with the SSH paths in [_doConnect]/[closeSession].
-  void _watchRdpStatus(RdpSession session) {
+  void _watchRdpStatus(RdpSession session, {String auditSource = 'app'}) {
+    final via = auditSource == 'app' ? const <String, Object?>{} : {'via': auditSource};
     var last = session.status;
     session.addListener(() {
       final now = session.status;
@@ -314,7 +328,7 @@ class SessionProvider extends ChangeNotifier {
             type: AuditEventType.connect,
             host: host,
             sessionId: session.id,
-            meta: const {'source': 'rdp'}));
+            meta: {'source': 'rdp', ...via}));
       } else if (was == RdpSessionStatus.connecting &&
           (now == RdpSessionStatus.error ||
               now == RdpSessionStatus.disconnected)) {
@@ -324,6 +338,7 @@ class SessionProvider extends ChangeNotifier {
             sessionId: session.id,
             meta: {
               'source': 'rdp',
+              ...via,
               'error': session.lastMessage ?? 'connection failed',
             }));
         // Cert flows (mismatch abort, user rejection) have their own dialogs;
@@ -340,6 +355,7 @@ class SessionProvider extends ChangeNotifier {
             sessionId: session.id,
             meta: {
               'source': 'rdp',
+              ...via,
               'reason': userClosed ? 'user-closed' : 'dropped',
             }));
         if (!userClosed) {
@@ -358,7 +374,8 @@ class SessionProvider extends ChangeNotifier {
 
   /// Opens a VNC tab. Mirrors [connectRdp] but with no TLS/cert pinning (plain
   /// VNC has none).
-  Future<VncSession?> connectVnc(Host host) async {
+  Future<VncSession?> connectVnc(Host host,
+      {String auditSource = 'app'}) async {
     final password = await _ssh.loadPassword(host.id) ?? '';
 
     var targetHost = host.host;
@@ -411,7 +428,7 @@ class SessionProvider extends ChangeNotifier {
       unawaited(client.connect().then((_) {}, onError: (_) {}));
     }
 
-    _watchVncStatus(session);
+    _watchVncStatus(session, auditSource: auditSource);
     session.addListener(_safeNotify);
     _sessions.add(session);
     _activeSessionId = session.id;
@@ -422,7 +439,8 @@ class SessionProvider extends ChangeNotifier {
 
   /// Audits VNC connect/disconnect transitions and feeds the notification
   /// bell — parity with [_watchRdpStatus] (no cert flows to special-case).
-  void _watchVncStatus(VncSession session) {
+  void _watchVncStatus(VncSession session, {String auditSource = 'app'}) {
+    final via = auditSource == 'app' ? const <String, Object?>{} : {'via': auditSource};
     var last = session.status;
     session.addListener(() {
       final now = session.status;
@@ -436,7 +454,7 @@ class SessionProvider extends ChangeNotifier {
             type: AuditEventType.connect,
             host: host,
             sessionId: session.id,
-            meta: const {'source': 'vnc'}));
+            meta: {'source': 'vnc', ...via}));
       } else if (was == VncSessionStatus.connecting &&
           (now == VncSessionStatus.error ||
               now == VncSessionStatus.disconnected)) {
@@ -446,6 +464,7 @@ class SessionProvider extends ChangeNotifier {
             sessionId: session.id,
             meta: {
               'source': 'vnc',
+              ...via,
               'error': session.lastMessage ?? 'connection failed',
             }));
         onSessionDropped?.call(session, session.lastMessage);
@@ -457,6 +476,7 @@ class SessionProvider extends ChangeNotifier {
             sessionId: session.id,
             meta: {
               'source': 'vnc',
+              ...via,
               'reason': userClosed ? 'user-closed' : 'dropped',
             }));
         if (!userClosed) {
@@ -473,7 +493,8 @@ class SessionProvider extends ChangeNotifier {
     await connectVnc(old.host);
   }
 
-  Future<void> _doConnect(SshSession session, Host host, {required int attempt}) async {
+  Future<void> _doConnect(SshSession session, Host host,
+      {required int attempt, String auditSource = 'app'}) async {
     try {
       final keyEntry = host.keyId != null ? keyLookup?.call(host.keyId!) : null;
       final jumpChain = SshService.resolveJumpChain(
@@ -506,7 +527,10 @@ class SessionProvider extends ChangeNotifier {
       session.logConnection(ConnectionLogLevel.success, 'Connection established');
       session.status = SessionStatus.connected;
       audit?.record(AuditEvent.now(
-          type: AuditEventType.connect, host: host, sessionId: session.id));
+          type: AuditEventType.connect,
+          host: host,
+          sessionId: session.id,
+          meta: auditSource == 'app' ? const {} : {'source': auditSource}));
       // Fire-and-forget: detect when OS is unknown, or known only as generic
       // 'linux' (pre-distro-detection hosts upgrade to a distro id on the
       // next connect; genuinely unknown distros re-probe — one cheap exec).
@@ -573,7 +597,11 @@ class SessionProvider extends ChangeNotifier {
           type: AuditEventType.connect,
           host: host,
           sessionId: session.id,
-          meta: {'error': '$e', 'attempts': attempt},
+          meta: {
+            'error': '$e',
+            'attempts': attempt,
+            if (auditSource != 'app') 'source': auditSource,
+          },
         ));
         onSessionDropped?.call(session, session.errorMessage);
         _safeNotify();

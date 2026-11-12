@@ -128,6 +128,10 @@ class SshService {
   Future<void> Function(String text) clipboardWriter =
       (text) => Clipboard.setData(ClipboardData(text: text));
 
+  /// Opens the system SSH agent for [AuthType.agent]. A seam for tests.
+  @visibleForTesting
+  Future<SystemAgentProxy> Function() agentConnector = SystemAgentProxy.connect;
+
   SshService(this._storage, {this.hookBus, this.shellIntegration});
 
   /// Routes a private-OSC event. OSC 52 (when [osc52On]) writes the local
@@ -259,7 +263,7 @@ class SshService {
           ),
         ]);
       case AuthType.agent:
-        final proxy = await SystemAgentProxy.connect();
+        final proxy = await agentConnector();
         try {
           final identities = await proxy.getIdentities();
           if (identities.isEmpty) {
