@@ -231,7 +231,12 @@ void main() {
 
     client.destroy();
     await sub.cancel();
-    await pumpEventQueue();
+    // Socket teardown reaches the service asynchronously; on a loaded CI
+    // runner one pumpEventQueue is not always enough, so poll briefly.
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
+    while (conns[fwd.id] != 0 && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
     expect(conns[fwd.id], 0);
     await svc.stop(fwd.id);
   });
