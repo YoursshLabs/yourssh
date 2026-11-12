@@ -10,6 +10,7 @@ import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/docker_panel.dart';
 import 'package:flutter/services.dart';
 
+import '../helpers/tab_to.dart';
 import '../helpers/ys_test_app.dart';
 
 class _FakeSshService extends SshService {
@@ -230,5 +231,23 @@ void main() {
     await tester.tap(find.byTooltip('Close logs'));
     await tester.pumpAndSettle();
     expect(find.text('Logs: web'), findsNothing);
+  });
+
+  testWidgets('keyboard: Tab from the first control reaches Stop, Enter runs it',
+      (tester) async {
+    final fake = _FakeSshService();
+    fake.execStub = (_) => (
+      stdout: 'abc123|web|nginx:latest|Up 2 hours',
+      stderr: '',
+      exitCode: 0,
+    );
+    await tester.pumpWidget(
+        _wrap(DockerPanel(host: host, service: ContainerService(fake))));
+    await tester.pump();
+    final presses = await tabTo(tester, find.byTooltip('Stop'));
+    expect(presses, 2); // Refresh, then Stop
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(fake.cmds.any((c) => c.contains('docker stop')), isTrue);
   });
 }

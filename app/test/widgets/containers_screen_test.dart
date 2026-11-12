@@ -12,6 +12,7 @@ import 'package:yourssh/services/tab_metadata_service.dart';
 import 'package:yourssh/widgets/containers_screen.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
+import '../helpers/tab_to.dart';
 import '../helpers/ys_test_app.dart';
 
 class _FakeSsh extends SshService {
@@ -128,5 +129,17 @@ void main() {
     await tester.tap(find.text('Scan'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('keyboard: Tab from the first control reaches Scan, Enter scans',
+      (tester) async {
+    final fake = await pump(tester);
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    final presses = await tabTo(tester, find.text('Scan'));
+    expect(presses, 6); // measured: select, rescan, tab stops, Scan
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(fake.cmds, contains('command -v docker'));
   });
 }

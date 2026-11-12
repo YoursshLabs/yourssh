@@ -8,6 +8,7 @@ import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/compose_panel.dart';
 import 'package:flutter/services.dart';
 
+import '../helpers/tab_to.dart';
 import '../helpers/ys_test_app.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
@@ -319,6 +320,101 @@ void main() {
 
     Focus.of(tester.element(find.text('myapp'))).requestFocus();
     await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Services in myapp'), findsOneWidget);
+  });
+
+  group('Down confirmation', () {
+    Future<(_FakeSshService, List<String>)> pumpStack(WidgetTester tester) async {
+      final downs = <String>[];
+      final fake = _FakeSshService();
+      fake.execStub = (cmd) {
+        if (cmd.contains('docker compose ls')) {
+          return (
+            stdout:
+                '[{"Name":"myapp","Status":"running(1)","ConfigFiles":"/opt/myapp/compose.yml"}]',
+            stderr: '',
+            exitCode: 0,
+          );
+        }
+        if (cmd.contains(' down')) downs.add(cmd);
+        return (stdout: '', stderr: '', exitCode: 0);
+      };
+      await tester.pumpWidget(
+          _wrap(ComposePanel(host: host, service: ContainerService(fake))));
+      await tester.pump();
+      await tester.tap(find.text('Down'));
+      await tester.pumpAndSettle();
+      return (fake, downs);
+    }
+
+    testWidgets('asks first with the exact wording; nothing runs yet',
+        (tester) async {
+      final (_, downs) = await pumpStack(tester);
+      expect(find.text('Bring the stack down?'), findsOneWidget);
+      expect(
+          find.text(
+              'docker compose down stops and removes the containers and networks of myapp. Named volumes are kept.'),
+          findsOneWidget);
+      expect(downs, isEmpty);
+    });
+
+    testWidgets('Cancel does not call composeDown', (tester) async {
+      final (_, downs) = await pumpStack(tester);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(downs, isEmpty);
+      expect(find.text('Bring the stack down?'), findsNothing);
+    });
+
+    testWidgets('Escape does not call composeDown', (tester) async {
+      final (_, downs) = await pumpStack(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(downs, isEmpty);
+      expect(find.text('Bring the stack down?'), findsNothing);
+    });
+
+    testWidgets('Enter on the default focus (Cancel) does not call composeDown',
+        (tester) async {
+      final (_, downs) = await pumpStack(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(downs, isEmpty);
+      expect(find.text('Bring the stack down?'), findsNothing);
+    });
+
+    testWidgets('confirming calls composeDown once with the same command',
+        (tester) async {
+      final (_, downs) = await pumpStack(tester);
+      await tester.tap(find.descendant(
+          of: find.byType(FDialog), matching: find.text('Down')));
+      await tester.pumpAndSettle();
+      expect(downs, hasLength(1));
+      expect(downs.single, contains('docker compose'));
+    });
+  });
+
+  testWidgets('keyboard: Tab from the first control reaches the stack row, Enter selects it',
+      (tester) async {
+    final fake = _FakeSshService();
+    fake.execStub = (cmd) {
+      if (cmd.contains('docker compose ls')) {
+        return (
+          stdout:
+              '[{"Name":"myapp","Status":"running(1)","ConfigFiles":"/opt/myapp/compose.yml"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      return (stdout: '', stderr: '', exitCode: 0);
+    };
+    await tester.pumpWidget(
+        _wrap(ComposePanel(host: host, service: ContainerService(fake))));
+    await tester.pump();
+    final presses = await tabTo(tester, find.text('myapp'));
+    expect(presses, 3); // Add path, Refresh, stack row
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(find.text('Services in myapp'), findsOneWidget);

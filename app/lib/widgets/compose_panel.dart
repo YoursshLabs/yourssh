@@ -130,6 +130,22 @@ class _ComposePanelState extends State<ComposePanel> {
     }
   }
 
+  /// `docker compose down` removes containers and networks, so it asks first;
+  /// Cancel holds default focus.
+  Future<void> _confirmDown(ComposeStack stack, String key) async {
+    final ok = await showYsConfirm(
+      context,
+      title: 'Bring the stack down?',
+      message:
+          'docker compose down stops and removes the containers and networks of ${stack.name}. Named volumes are kept.',
+      confirmLabel: 'Down',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    await _stackAction(
+        stack, key, () => widget.service.composeDown(widget.host, stack));
+  }
+
   Future<void> _stackAction(
       ComposeStack stack, String key, Future<void> Function() action) async {
     setState(() => _actionLoading[key] = true);
@@ -267,7 +283,6 @@ class _ComposePanelState extends State<ComposePanel> {
               child: FTextField(
                 control: .managed(controller: _manualCtrl),
                 hint: '/path/to/docker-compose.yml',
-                autofocus: true,
                 autocorrect: false,
                 enableSuggestions: false,
                 textInputAction: TextInputAction.done,
@@ -390,8 +405,7 @@ class _ComposePanelState extends State<ComposePanel> {
             else
               ContainerTextAction(
                 label: 'Down',
-                onPress: () => _stackAction(stack, downKey,
-                    () => widget.service.composeDown(widget.host, stack)),
+                onPress: () => _confirmDown(stack, downKey),
               ),
           ]),
         ),

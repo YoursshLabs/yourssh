@@ -11,6 +11,7 @@ import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/kubernetes_panel.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
+import '../helpers/tab_to.dart';
 import '../helpers/ys_test_app.dart';
 
 class _FakeSsh extends SshService {
@@ -175,5 +176,21 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('Start Forward'), findsNothing);
+  });
+
+  testWidgets('keyboard: Tab from the first control reaches Scan, Enter scans',
+      (tester) async {
+    final fake = podsFake('web-1');
+    await tester.pumpWidget(wrap(fake));
+    await tester.pumpAndSettle();
+    // Scan is autofocused: the first Tab from there must not be needed, but
+    // the first focusable control (context select) must reach it by Tab.
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    final presses = await tabTo(tester, find.text('Scan'));
+    expect(presses, 5); // measured: context, namespace, checkbox, refresh, Scan
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('web-1'), findsOneWidget);
   });
 }
