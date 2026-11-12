@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../providers/settings_provider.dart';
-import '../services/hotkey_service.dart';
-import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
+import '../../providers/settings_provider.dart';
+import '../../services/hotkey_service.dart';
+import 'settings_tiles.dart';
+
+/// Keyboard Shortcuts: click (or Enter on) a row, then press the new combo;
+/// Esc or Cancel stops recording. Saved immediately.
 class HotkeySettingsScreen extends StatefulWidget {
   const HotkeySettingsScreen({super.key});
 
@@ -162,43 +166,77 @@ class _HotkeySettingsScreenState extends State<HotkeySettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
+    final recording = _recording;
 
     return Focus(
       focusNode: _focusNode,
       onKeyEvent: _onKeyEvent,
-      child: Scaffold(
-        backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          title: const Text('Keyboard Shortcuts'),
-          backgroundColor: AppColors.sidebar,
-          foregroundColor: AppColors.textPrimary,
-          actions: [
-            if (_recording != null)
-              TextButton(
-                onPressed: _cancelRecording,
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: AppColors.orange),
-                ),
-              ),
-          ],
-        ),
-        body: Column(
+      child: Material(
+        color: YsColors.background,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_recording != null)
+            Container(
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: YsSpace.s3),
+              decoration: const BoxDecoration(
+                color: YsColors.sidebar,
+                border: Border(bottom: BorderSide(color: YsColors.border)),
+              ),
+              child: Row(
+                children: [
+                  SettingsIconButton(
+                    icon: FLucideIcons.arrowLeft,
+                    tooltip: 'Back',
+                    onPress: () => Navigator.maybePop(context),
+                  ),
+                  const SizedBox(width: YsSpace.s2),
+                  const Expanded(
+                    child: Text(
+                      'Keyboard Shortcuts',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: YsColors.foreground,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (recording != null)
+                    FButton(
+                      key: const ValueKey('hotkey-cancel'),
+                      variant: .ghost,
+                      size: .sm,
+                      mainAxisSize: MainAxisSize.min,
+                      onPress: _cancelRecording,
+                      child: const Text('Cancel'),
+                    ),
+                ],
+              ),
+            ),
+            if (recording != null)
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                color: AppColors.accent.withValues(alpha: 0.1),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: YsSpace.s4,
+                  vertical: 10,
+                ),
+                color: YsColors.primary.withValues(alpha: 0.1),
                 child: Row(
                   children: [
-                    const Icon(Icons.keyboard, size: 14, color: AppColors.accent),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Press a key combo for "${_labels[_recording]}"  •  Esc to cancel',
-                      style: const TextStyle(
-                        color: AppColors.accent,
-                        fontSize: 12,
+                    const Icon(
+                      FLucideIcons.keyboard,
+                      size: 14,
+                      color: YsColors.primary,
+                    ),
+                    const SizedBox(width: YsSpace.s2),
+                    Expanded(
+                      child: Text(
+                        'Press a key combo for "${_labels[recording]}"  •  Esc to cancel',
+                        style: const TextStyle(
+                          color: YsColors.primary,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -206,26 +244,27 @@ class _HotkeySettingsScreenState extends State<HotkeySettingsScreen> {
               ),
             Expanded(
               child: ListView(
-                children: _labels.entries.map((entry) {
-                  final isRecording = _recording == entry.key;
-                  final current = settings.hotkeys[entry.key] ?? '';
-                  return _HotkeyRow(
-                    label: entry.value,
-                    combo: current,
-                    isRecording: isRecording,
-                    onTap: () => _startRecording(entry.key),
-                  );
-                }).toList(),
+                padding: const EdgeInsets.all(YsSpace.s5),
+                children: [
+                  FTileGroup(
+                    children: [
+                      for (final entry in _labels.entries)
+                        _hotkeyTile(
+                          action: entry.key,
+                          label: entry.value,
+                          combo: settings.hotkeys[entry.key] ?? '',
+                          isRecording: recording == entry.key,
+                        ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(16),
+            const Padding(
+              padding: EdgeInsets.all(YsSpace.s4),
               child: Text(
                 'Click a shortcut to rebind it. Changes are saved immediately.',
-                style: const TextStyle(
-                  color: AppColors.textTertiary,
-                  fontSize: 11,
-                ),
+                style: TextStyle(color: YsColors.mutedForeground, fontSize: 11),
               ),
             ),
           ],
@@ -233,91 +272,50 @@ class _HotkeySettingsScreenState extends State<HotkeySettingsScreen> {
       ),
     );
   }
-}
 
-class _HotkeyRow extends StatefulWidget {
-  final String label;
-  final String combo;
-  final bool isRecording;
-  final VoidCallback onTap;
-
-  const _HotkeyRow({
-    required this.label,
-    required this.combo,
-    required this.isRecording,
-    required this.onTap,
-  });
-
-  @override
-  State<_HotkeyRow> createState() => _HotkeyRowState();
-}
-
-class _HotkeyRowState extends State<_HotkeyRow> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          decoration: BoxDecoration(
-            color: widget.isRecording
-                ? AppColors.accent.withValues(alpha: 0.08)
-                : _hovered
-                    ? AppColors.card
-                    : Colors.transparent,
-            border: const Border(
-              bottom: BorderSide(color: AppColors.border),
+  FTile _hotkeyTile({
+    required String action,
+    required String label,
+    required String combo,
+    required bool isRecording,
+  }) {
+    return FTile(
+      key: ValueKey('hotkey-row-$action'),
+      selected: isRecording,
+      onPress: () => _startRecording(action),
+      title: Text(label),
+      suffix: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: isRecording
+                  ? YsColors.primary.withValues(alpha: 0.15)
+                  : YsColors.secondary,
+              border: Border.all(
+                color: isRecording ? YsColors.primary : YsColors.border,
+              ),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Text(
+              isRecording ? 'recording...' : combo,
+              style: TextStyle(
+                color: YsColors.accentText,
+                fontFamily: kYsMonoFontFamily,
+                fontFamilyFallback: kYsMonoFontFallback,
+                fontSize: 12,
+                fontStyle: isRecording ? FontStyle.italic : FontStyle.normal,
+              ),
             ),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  widget.label,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: widget.isRecording
-                      ? AppColors.accent.withValues(alpha: 0.15)
-                      : AppColors.card,
-                  border: Border.all(
-                    color: widget.isRecording ? AppColors.accent : AppColors.border,
-                  ),
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Text(
-                  widget.isRecording ? 'recording...' : widget.combo,
-                  style: TextStyle(
-                    color: AppColors.accent,
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                    fontStyle:
-                        widget.isRecording ? FontStyle.italic : FontStyle.normal,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                Icons.edit_outlined,
-                size: 13,
-                color: _hovered || widget.isRecording
-                    ? AppColors.textSecondary
-                    : Colors.transparent,
-              ),
-            ],
+          const SizedBox(width: YsSpace.s2),
+          const Icon(
+            FLucideIcons.pencil,
+            size: 13,
+            color: YsColors.mutedForeground,
           ),
-        ),
+        ],
       ),
     );
   }
