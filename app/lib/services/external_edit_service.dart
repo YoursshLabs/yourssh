@@ -8,7 +8,7 @@ import '../models/host.dart';
 import '../models/sftp_entry.dart';
 import '../util/app_launcher.dart';
 import 'sftp_transfer_service.dart';
-import '../util/safe_local_path.dart';
+import '../util/private_temp.dart';
 
 typedef ExternalLauncher = Future<bool> Function(Uri uri);
 typedef AppLauncher = Future<bool> Function(Uri uri, String? appPath);
@@ -32,13 +32,16 @@ class ExternalEditService {
     this._transferService, {
     ExternalLauncher? launcher,
     AppLauncher? appLauncher,
+    String? platform,
     this.pollInterval = const Duration(seconds: 2),
   })  : _launch = launcher ?? launchUrl,
-        _appLaunch = appLauncher;
+        _appLaunch = appLauncher,
+        _platform = platform ?? Platform.operatingSystem;
 
   final SftpTransferService _transferService;
   final ExternalLauncher _launch;
   final AppLauncher? _appLaunch;
+  final String _platform;
   final Duration pollInterval;
 
   /// Called after a changed file was uploaded back to the server.
@@ -49,7 +52,7 @@ class ExternalEditService {
   void Function(String fileName, Object error)? onUploadError;
 
   final List<_WatchSession> _sessions = [];
-  int _sessionCounter = 0;
+  final Set<Directory> _tempDirs = {};
 
   int get activeWatchCount => _sessions.length;
 
@@ -58,6 +61,12 @@ class ExternalEditService {
   ///
   /// Throws [ExternalEditException] when the download or launch fails.
   Future<void> openExternal(Host host, SftpEntry entry) async {
+    // The OS default handler would run a server-chosen executable type.
+    if (isExecutableExtension(entry.name, _platform)) {
+      throw ExternalEditException(
+          'Not opening ${entry.name}: this file type can run code. '
+          'Download it instead and inspect it first.');
+    }
     final localFile = await _prepareLocalFile(host, entry);
     final launched = _appLaunch != null
         ? await _appLaunch(Uri.file(localFile.path), null)
@@ -88,10 +97,12 @@ class ExternalEditService {
     if (tmpPath == null) {
       throw ExternalEditException('Download failed for ${entry.name}');
     }
-    final sessionDir = Directory(
-        '${File(tmpPath).parent.path}/yourssh_edit/${_sessionCounter++}');
-    await sessionDir.create(recursive: true);
-    return File(tmpPath).rename(safeLocalChild(sessionDir.path, entry.name));
+    // downloadToTemp hands back a file in its own random per-download dir.
+    final file = File(tmpPath);
+    final sessionDir = file.parent;
+    _tempDirs.add(sessionDir);
+    await restrictToOwner(dir: sessionDir, file: file);
+    return file;
   }
 
   void _startWatcher(Host host, SftpEntry entry, File localFile) {
@@ -148,6 +159,14 @@ class ExternalEditService {
       session.timer?.cancel();
     }
     _sessions.clear();
+    for (final dir in _tempDirs) {
+      try {
+        dir.deleteSync(recursive: true);
+      } on FileSystemException {
+        // Already gone or locked by the editor; nothing more to do.
+      }
+    }
+    _tempDirs.clear();
   }
 }
 

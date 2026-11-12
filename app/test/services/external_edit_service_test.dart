@@ -156,4 +156,47 @@ void main() {
     expect(launched2, hasLength(1));
     expect(launched2.first.$2, '/Applications/TextEdit.app');
   });
+
+  test('refuses to default-launch an executable type chosen by the server',
+      () async {
+    final exeEntry = SftpEntry(
+      name: 'payload.bat',
+      path: '/srv/payload.bat',
+      isDirectory: false,
+      size: 14,
+      modifiedAt: DateTime(2026),
+    );
+    final guarded = ExternalEditService(
+      transfer,
+      launcher: (uri) async {
+        launched.add(uri);
+        return true;
+      },
+      platform: 'windows',
+    );
+    addTearDown(guarded.dispose);
+
+    await expectLater(
+        guarded.openExternal(_host, exeEntry),
+        throwsA(isA<ExternalEditException>()
+            .having((e) => e.message, 'message', contains('Download'))));
+    expect(launched, isEmpty);
+    expect(guarded.activeWatchCount, 0);
+  });
+
+  test('temp copy lives in a random per-session dir that dispose deletes',
+      () async {
+    await service.openExternal(_host, _entry);
+    final file = File.fromUri(launched.first);
+    final dir = file.parent;
+    expect(dir.existsSync(), isTrue);
+    expect(dir.path, isNot(contains('yourssh_edit/0')));
+    if (!Platform.isWindows) {
+      expect(dir.statSync().mode & 0xFFF, 0x1C0, reason: 'dir 0700');
+      expect(file.statSync().mode & 0xFFF, 0x180, reason: 'file 0600');
+    }
+
+    service.dispose();
+    expect(dir.existsSync(), isFalse);
+  });
 }
