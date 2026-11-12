@@ -18,6 +18,7 @@ import 'shell/session_tab_bar.dart';
 import '../widgets/host_detail_panel.dart';
 import '../widgets/hosts_dashboard.dart';
 import '../widgets/keychain_screen.dart';
+import '../widgets/rdp_password_dialog.dart';
 import '../widgets/known_hosts_screen.dart';
 import '../widgets/port_forwarding_screen.dart';
 import '../widgets/settings_screen.dart';
@@ -746,22 +747,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 child: Row(
                   children: [
                     for (final item in registry.statusBarItems)
-                      Tooltip(
-                        message: item.tooltip ?? '',
-                        child: InkWell(
-                          onTap: item.onClick,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            child: Text(
-                              item.label,
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                      _statusBarItem(item),
                   ],
                 ),
               );
@@ -770,6 +756,28 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         ],
       ),
     );
+  }
+
+  Widget _statusBarItem(StatusBarItem item) {
+    final tip = item.tooltip;
+    final tappable = FTappable(
+      onPress: item.onClick,
+      semanticsLabel: item.label,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Center(
+          child: Text(
+            item.label,
+            style: const TextStyle(
+              color: YsColors.mutedForeground,
+              fontSize: 11,
+            ),
+          ),
+        ),
+      ),
+    );
+    if (tip == null || tip.isEmpty) return tappable;
+    return Tooltip(message: tip, child: tappable);
   }
 
   Widget _buildContent(AppSession? active) {
@@ -912,7 +920,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     if (old.status == RdpSessionStatus.error) {
       final newPassword = await showYsDialog<String>(
         context,
-        builder: (_) => _RdpPasswordDialog(host: old.host),
+        builder: (_) => RdpPasswordDialog(host: old.host),
       );
       if (newPassword == null) return; // cancelled
       if (!mounted) return;
@@ -981,58 +989,3 @@ class _PluginErrorBoundaryState extends State<_PluginErrorBoundary> {
     if (oldWidget.plugin.id != widget.plugin.id) _error = null;
   }
 }
-
-// ── RDP password re-prompt dialog ─────────────────────────
-
-class _RdpPasswordDialog extends StatefulWidget {
-  final Host host;
-  const _RdpPasswordDialog({required this.host});
-
-  @override
-  State<_RdpPasswordDialog> createState() => _RdpPasswordDialogState();
-}
-
-class _RdpPasswordDialogState extends State<_RdpPasswordDialog> {
-  late final TextEditingController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return YsDialog(
-      title: 'Password for ${widget.host.label}',
-      body: FTextField.password(
-        key: const Key('rdp-password'),
-        control: FTextFieldControl.managed(controller: _ctrl),
-        label: const Text('Password'),
-        autofocus: true,
-        autofillHints: const [],
-        textInputAction: TextInputAction.done,
-        onSubmit: (_) => Navigator.pop(context, _ctrl.text),
-      ),
-      actions: [
-        FButton(
-          variant: FButtonVariant.outline,
-          onPress: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FButton(
-          variant: FButtonVariant.primary,
-          onPress: () => Navigator.pop(context, _ctrl.text),
-          child: const Text('Connect'),
-        ),
-      ],
-    );
-  }
-}
-

@@ -10,14 +10,17 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 class QrExportDialog extends StatefulWidget {
   final Future<String> Function() getPayload;
 
-  const QrExportDialog({super.key, required this.getPayload});
+  /// Test seam: replaces the real network-facing sync service.
+  final P2PSyncService? service;
+
+  const QrExportDialog({super.key, required this.getPayload, this.service});
 
   @override
   State<QrExportDialog> createState() => _QrExportDialogState();
 }
 
 class _QrExportDialogState extends State<QrExportDialog> {
-  final _service = P2PSyncService();
+  late final P2PSyncService _service = widget.service ?? P2PSyncService();
   List<NetworkInterfaceInfo> _interfaces = [];
   NetworkInterfaceInfo? _selectedInterface;
   String? _qrData;

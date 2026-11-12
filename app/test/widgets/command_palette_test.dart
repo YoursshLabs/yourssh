@@ -178,6 +178,60 @@ void main() {
       expect(connected, true);
     });
 
+    testWidgets('ArrowDown/ArrowUp move selection; Enter runs the selected',
+        (tester) async {
+      final fired = <String>[];
+      final items = [
+        for (final id in ['one', 'two', 'three'])
+          CommandItem(
+            id: id,
+            title: id,
+            subtitle: 'sub-$id',
+            icon: Icons.dns,
+            type: CommandType.host,
+            execute: () => fired.add(id),
+          ),
+      ];
+      await tester.pumpWidget(makeDialog(items));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(fired, ['two']);
+
+      fired.clear();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(fired, ['two']);
+    });
+
+    testWidgets('Escape closes without executing', (tester) async {
+      final fired = <String>[];
+      final items = [
+        CommandItem(
+          id: 'one',
+          title: 'one',
+          subtitle: '',
+          icon: Icons.dns,
+          type: CommandType.host,
+          execute: () => fired.add('one'),
+        ),
+      ];
+      await tester.pumpWidget(makeDialog(items));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(CommandPaletteDialog), findsNothing);
+      expect(fired, isEmpty);
+    });
+
     testWidgets('search field has focus on open; typing needs no tap',
         (tester) async {
       await tester.pumpWidget(makeDialog(hosts));

@@ -1,16 +1,19 @@
 import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+
 import '../models/ssh_key.dart';
 import '../providers/key_provider.dart';
 import '../services/key_gen_service.dart';
 import '../theme/app_theme.dart';
 import 'deploy_key_dialog.dart';
 import 'settings/settings_tiles.dart';
+
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 class KeychainScreen extends StatefulWidget {
@@ -33,9 +36,10 @@ class _KeychainScreenState extends State<KeychainScreen> {
     );
     if (result == null || result.files.isEmpty) return;
     if (!mounted) return;
-    await context
-        .read<KeyProvider>()
-        .addKeyFromFile(result.files.first.path!, result.files.first.name);
+    await context.read<KeyProvider>().addKeyFromFile(
+      result.files.first.path!,
+      result.files.first.name,
+    );
   }
 
   @override
@@ -57,8 +61,7 @@ class _KeychainScreenState extends State<KeychainScreen> {
                   child: provider.keys.isEmpty
                       ? _EmptyState(
                           onAdd: _addKeyFromFile,
-                          onGenerate: () =>
-                              setState(() => _showPanel = true),
+                          onGenerate: () => setState(() => _showPanel = true),
                         )
                       : ListView.separated(
                           padding: const EdgeInsets.all(24),
@@ -66,8 +69,9 @@ class _KeychainScreenState extends State<KeychainScreen> {
                           separatorBuilder: (ctx, i) =>
                               const SizedBox(height: 8),
                           itemBuilder: (_, i) => _KeyTile(
-                              key: ValueKey(provider.keys[i].id),
-                              entry: provider.keys[i]),
+                            key: ValueKey(provider.keys[i].id),
+                            entry: provider.keys[i],
+                          ),
                         ),
                 ),
               ],
@@ -247,39 +251,48 @@ class _KeyTileState extends State<_KeyTile> {
                   ],
                 ),
               ),
-              // Always built so keyboard users can Tab onto them; invisible
-              // (and not hit-testable) until hover or focus reveals them.
-              Opacity(
-                opacity: showActions ? 1 : 0,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (e.publicKey.isNotEmpty) ...[
-                      SettingsIconButton(
-                        icon: FLucideIcons.copy,
-                        tooltip: 'Copy public key',
-                        onPress: () {
-                          Clipboard.setData(ClipboardData(text: e.publicKey));
-                          AppSnack.success(context, 'Public key copied');
-                        },
-                      ),
-                      const SizedBox(width: 6),
-                      SettingsIconButton(
-                        icon: FLucideIcons.cloudUpload,
-                        tooltip: 'Deploy to host…',
-                        onPress: () => showYsDialog(
-                          context,
-                          builder: (_) => DeployKeyDialog(entry: e),
+              // Always built and focusable so keyboard users can Tab onto them
+              // (focus reveals them). While hidden they are invisible, ignore
+              // pointer input and are left out of semantics.
+              IgnorePointer(
+                ignoring: !showActions,
+                child: ExcludeSemantics(
+                  excluding: !showActions,
+                  child: Opacity(
+                    opacity: showActions ? 1 : 0,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (e.publicKey.isNotEmpty) ...[
+                          SettingsIconButton(
+                            icon: FLucideIcons.copy,
+                            tooltip: 'Copy public key',
+                            onPress: () {
+                              Clipboard.setData(
+                                ClipboardData(text: e.publicKey),
+                              );
+                              AppSnack.success(context, 'Public key copied');
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          SettingsIconButton(
+                            icon: FLucideIcons.cloudUpload,
+                            tooltip: 'Deploy to host…',
+                            onPress: () => showYsDialog(
+                              context,
+                              builder: (_) => DeployKeyDialog(entry: e),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        SettingsIconButton(
+                          icon: FLucideIcons.trash2,
+                          tooltip: 'Remove key',
+                          onPress: () => _confirmDelete(context),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    SettingsIconButton(
-                      icon: FLucideIcons.trash2,
-                      tooltip: 'Remove key',
-                      onPress: () => _confirmDelete(context),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -445,17 +458,20 @@ class _GenerateKeyPanelState extends State<_GenerateKeyPanel> {
       final name = _label.text.trim();
       final result = _type == 'ed25519'
           ? await widget.keyGen.generateEd25519(
-              name: name, passphrase: _passphrase.text, dir: sshDir.path)
+              name: name,
+              passphrase: _passphrase.text,
+              dir: sshDir.path,
+            )
           : await widget.keyGen.generateWithSshKeygen(
               type: _type,
               name: name,
               passphrase: _passphrase.text,
-              dir: sshDir.path);
+              dir: sshDir.path,
+            );
 
       if (!mounted) return;
       final provider = context.read<KeyProvider>();
-      final entry =
-          await provider.addKeyFromFile(result.privateKeyPath, name);
+      final entry = await provider.addKeyFromFile(result.privateKeyPath, name);
       if (_passphrase.text.isNotEmpty) {
         // Saved as pp_<keyId> so the key works without re-prompting.
         await provider.savePassphrase?.call(entry.id, _passphrase.text);
@@ -482,9 +498,7 @@ class _GenerateKeyPanelState extends State<_GenerateKeyPanel> {
         children: [
           _buildHeader(),
           Expanded(
-            child: _generatedPublicKey != null
-                ? _buildSuccess()
-                : _buildForm(),
+            child: _generatedPublicKey != null ? _buildSuccess() : _buildForm(),
           ),
         ],
       ),

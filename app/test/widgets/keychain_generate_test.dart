@@ -26,7 +26,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1400, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => KeyProvider())],
+      providers: [ChangeNotifierProvider(create: (_) => KeyProvider(discoverSshKeys: false))],
       child: ysTestApp(KeychainScreen(keyGen: keyGen)),
     ));
     await tester.pumpAndSettle();
