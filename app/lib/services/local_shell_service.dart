@@ -1,6 +1,7 @@
 // app/lib/services/local_shell_service.dart
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';
@@ -18,6 +19,11 @@ typedef PtyFactory = PtyRunner Function(
   int rows,
   Map<String, String> environment,
 );
+
+/// Bytes the native PTY reader may have in flight (posted, not yet parsed)
+/// before it blocks. Bounds the output that keeps arriving after Ctrl+C:
+/// at ~100 MB/s parse speed 2 MiB is ~20 ms of output.
+const int kLocalPtyCreditBytes = 2 * 1024 * 1024;
 
 class LocalShellService {
   final Map<String, LocalSession> _sessions = {};
@@ -56,7 +62,8 @@ class LocalShellService {
             columns: columns,
             rows: rows,
             environment: environment,
-            ackRead: true),
+            ackRead: true,
+            creditBytes: kLocalPtyCreditBytes),
       );
 
   /// Picks the shell executable for the current platform. On Windows `SHELL`
@@ -106,6 +113,9 @@ class LocalShellService {
 
       _queues.remove(session.id)?.dispose();
       final ackable = pty is AckablePty ? pty as AckablePty : null;
+      // Credit based flow control (preferred): chunks go to the parser as raw
+      // bytes and credit is returned by bytes parsed, once per queue slice.
+      final credit = pty is CreditPty ? pty as CreditPty : null;
       var ackWithheld = false;
       final queue = TerminalWriteQueue(
         // Small high-water: the kernel pty buffer plus this is all that can
@@ -119,6 +129,8 @@ class LocalShellService {
           }
         },
         write: terminal.writeNoNotify,
+        writeBytes: terminal.writeBytesNoNotify,
+        onConsumed: credit?.ackBytes,
         commit: terminal.flushWrites,
         onBatch: (batch) {
           recordingService?.writeOutput(session.id, batch);
@@ -135,26 +147,35 @@ class LocalShellService {
       );
       _queues[session.id] = queue;
 
-      // With ackRead the native reader blocks until each chunk is acked. Ack
-      // on arrival (acking at slice cadence would cap throughput at one
-      // chunk per frame) but withhold the ack while the backlog is above the
-      // high-water mark: the shell then blocks in write(2) until the UI has
-      // drained below the low-water mark.
-      final decoder = const Utf8Decoder(allowMalformed: true);
-      var decoded = '';
-      // Stateful decoding (multi-byte sequences may straddle chunks).
-      final byteSink =
-          decoder.startChunkedConversion(_CollectingSink((s) => decoded += s));
-      pty.output.listen((bytes) {
-        decoded = '';
-        byteSink.add(bytes);
-        if (decoded.isNotEmpty) queue.add(decoded);
-        if (queue.isPaused) {
-          ackWithheld = true;
-        } else {
-          ackable?.ackRead();
-        }
-      });
+      if (credit != null) {
+        // Nothing is decoded here: no String is built on the hot path. The
+        // native reader blocks only when the credit budget is in flight.
+        pty.output.listen((bytes) {
+          queue.addBytes(
+              bytes is Uint8List ? bytes : Uint8List.fromList(bytes));
+        });
+      } else {
+        // Legacy one-chunk-then-wait ackRead: the native reader blocks until
+        // each chunk is acked. Ack on arrival (acking at slice cadence would
+        // cap throughput at one chunk per frame) but withhold the ack while
+        // the backlog is above the high-water mark: the shell then blocks in
+        // write(2) until the UI has drained below the low-water mark.
+        final decoder = const Utf8Decoder(allowMalformed: true);
+        var decoded = '';
+        // Stateful decoding (multi-byte sequences may straddle chunks).
+        final byteSink = decoder
+            .startChunkedConversion(_CollectingSink((s) => decoded += s));
+        pty.output.listen((bytes) {
+          decoded = '';
+          byteSink.add(bytes);
+          if (decoded.isNotEmpty) queue.add(decoded);
+          if (queue.isPaused) {
+            ackWithheld = true;
+          } else {
+            ackable?.ackRead();
+          }
+        });
+      }
 
       terminal.onOutput = (data) {
         pty.write(const Utf8Encoder().convert(data));

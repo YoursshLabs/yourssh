@@ -18,7 +18,14 @@ abstract class AckablePty {
   void ackRead();
 }
 
-class FlutterPtyRunner implements PtyRunner, AckablePty {
+/// Credit based flow control: the native reader may keep up to the credit
+/// budget in flight and blocks only beyond it. Return credit with [ackBytes]
+/// by the number of bytes processed (batched, e.g. once per parse slice).
+abstract class CreditPty {
+  void ackBytes(int bytes);
+}
+
+class FlutterPtyRunner implements PtyRunner, AckablePty, CreditPty {
   final Pty _pty;
   FlutterPtyRunner(this._pty);
 
@@ -33,6 +40,9 @@ class FlutterPtyRunner implements PtyRunner, AckablePty {
 
   @override
   void ackRead() => _pty.ackRead();
+
+  @override
+  void ackBytes(int bytes) => _pty.ackBytes(bytes);
 
   @override
   void kill() => _pty.kill();
