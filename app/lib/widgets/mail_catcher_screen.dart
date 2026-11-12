@@ -42,13 +42,10 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
           Timer.periodic(const Duration(seconds: 3), (_) => _poll());
     } else {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_service.lastError ??
-              'Failed to start SMTP server. Ensure python3 is installed.'),
-          backgroundColor: AppColors.red,
-        ),
-      );
+      AppSnack.error(
+          context,
+          _service.lastError ??
+              'Failed to start SMTP server. Ensure python3 is installed.');
     }
   }
 

@@ -343,17 +343,13 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
       },
       onError: (_) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Log stream ended')),
-          );
+          AppSnack.info(context, 'Log stream ended');
           _closeLogPanel();
         }
       },
       onDone: () {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Log stream ended')),
-          );
+          AppSnack.info(context, 'Log stream ended');
           setState(() => _logPod = null);
         }
       },
@@ -444,7 +440,6 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
 
   Future<void> _startForward(
       PodEntry p, int podPort, int localPort) async {
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final handle = await _service().startPodPortForward(
         widget.host,
@@ -456,17 +451,14 @@ class _KubernetesPanelState extends State<KubernetesPanel> {
       );
       if (mounted) {
         setState(() => _forwards.add(handle));
-        messenger.showSnackBar(SnackBar(
-          content: Text(
-              'Forwarding localhost:$localPort → pod/${p.name}:$podPort'),
-        ));
+        AppSnack.info(context,
+            'Forwarding localhost:$localPort → pod/${p.name}:$podPort');
       } else {
         await handle.stop();
       }
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Port-forward failed: $e')),
-      );
+      if (!mounted) return;
+      AppSnack.error(context, 'Port-forward failed: $e');
     }
   }
 

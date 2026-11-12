@@ -159,8 +159,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(message), backgroundColor: const Color(0xFF2A1A1A)));
+    AppSnack.error(context, message);
   }
 
   // ── Transfer dispatch ─────────────────────────────────

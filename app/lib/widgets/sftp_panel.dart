@@ -16,6 +16,7 @@ import 'path_breadcrumb.dart';
 import 'entry_context_menu.dart';
 import 'permissions_dialog.dart';
 import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast, YsToastKind;
 
 class SftpPanel extends StatefulWidget {
   final Host? host;
@@ -71,15 +72,12 @@ class _SftpPanelState extends State<SftpPanel> {
     final service = context.read<ExternalEditService>();
     service.onUploaded = (name) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Uploaded $name to server'),
-          duration: const Duration(seconds: 2)));
+      showYsToast(context, 'Uploaded $name to server',
+          kind: YsToastKind.success, duration: const Duration(seconds: 2));
     };
     service.onUploadError = (name, e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Upload of $name failed: $e'),
-          backgroundColor: const Color(0xFF2A1A1A)));
+      AppSnack.error(context, 'Upload of $name failed: $e');
     };
   }
 
@@ -213,32 +211,28 @@ class _SftpPanelState extends State<SftpPanel> {
   }
 
   Future<void> _openExternal(SftpEntry entry) async {
-    final messenger = ScaffoldMessenger.of(context);
     final service = context.read<ExternalEditService>();
     try {
       await service.openExternal(widget.host!, entry);
-      messenger.showSnackBar(SnackBar(
-          content: Text('Opened ${entry.name} — watching for changes'),
-          duration: const Duration(seconds: 2)));
+      if (!mounted) return;
+      showYsToast(context, 'Opened ${entry.name} — watching for changes',
+          duration: const Duration(seconds: 2));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(
-          content: Text('Open externally failed: $e'),
-          backgroundColor: const Color(0xFF2A1A1A)));
+      if (!mounted) return;
+      AppSnack.error(context, 'Open externally failed: $e');
     }
   }
 
   Future<void> _openWithApp(SftpEntry entry, String appPath) async {
-    final messenger = ScaffoldMessenger.of(context);
     final service = context.read<ExternalEditService>();
     try {
       await service.openExternalWith(widget.host!, entry, appPath);
-      messenger.showSnackBar(SnackBar(
-          content: Text('Opened ${entry.name} — watching for changes'),
-          duration: const Duration(seconds: 2)));
+      if (!mounted) return;
+      showYsToast(context, 'Opened ${entry.name} — watching for changes',
+          duration: const Duration(seconds: 2));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(
-          content: Text('Open with failed: $e'),
-          backgroundColor: const Color(0xFF2A1A1A)));
+      if (!mounted) return;
+      AppSnack.error(context, 'Open with failed: $e');
     }
   }
 
@@ -753,8 +747,7 @@ class _SftpPanelState extends State<SftpPanel> {
       if (mounted) _loadDirectory(prov.currentPath);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Create folder failed: $e'), backgroundColor: const Color(0xFF2A1A1A)));
+        AppSnack.error(context, 'Create folder failed: $e');
       }
     }
   }
@@ -798,8 +791,7 @@ class _SftpPanelState extends State<SftpPanel> {
       if (mounted) _loadDirectory(prov.currentPath);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Create file failed: $e'), backgroundColor: const Color(0xFF2A1A1A)));
+        AppSnack.error(context, 'Create file failed: $e');
       }
     }
   }
@@ -835,8 +827,7 @@ class _SftpPanelState extends State<SftpPanel> {
       if (mounted) _loadDirectory(prov.currentPath);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Rename failed: $e'), backgroundColor: const Color(0xFF2A1A1A)));
+        AppSnack.error(context, 'Rename failed: $e');
       }
     }
   }
@@ -875,9 +866,7 @@ class _SftpPanelState extends State<SftpPanel> {
       if (mounted) _loadDirectory(prov.currentPath);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('chmod ${modeToOctal(result.mode)} failed: $e'),
-            backgroundColor: const Color(0xFF2A1A1A)));
+        AppSnack.error(context, 'chmod ${modeToOctal(result.mode)} failed: $e');
       }
     }
   }
@@ -904,8 +893,7 @@ class _SftpPanelState extends State<SftpPanel> {
       if (mounted) _loadDirectory(prov.currentPath);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Delete failed: $e'), backgroundColor: const Color(0xFF2A1A1A)));
+        AppSnack.error(context, 'Delete failed: $e');
       }
     }
   }

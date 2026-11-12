@@ -12,6 +12,7 @@ import 'package:yourssh/providers/session_provider.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/tab_metadata_service.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 // ── Fake SnippetProvider ──────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ Future<void> _pump(
       ],
       child: MaterialApp(
         theme: buildMobileTheme(),
+        builder: ysRootBuilderTouch,
         home: const MobileSnippetsScreen(),
       ),
     ),
@@ -124,6 +126,7 @@ void main() {
         ],
         child: MaterialApp(
           theme: buildMobileTheme(),
+          builder: ysRootBuilderTouch,
           home: const MobileSnippetsScreen(),
         ),
       ),
@@ -189,6 +192,7 @@ void main() {
         ],
         child: MaterialApp(
           theme: buildMobileTheme(),
+          builder: ysRootBuilderTouch,
           home: const MobileSnippetsScreen(),
         ),
       ),

@@ -8,6 +8,7 @@ import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 import '../widgets/snippet_card.dart';
 import '../widgets/tag_chip.dart';
+import '../../theme/app_theme.dart';
 
 /// Snippets tab — lists saved commands with a category filter.
 /// Tapping a card sends the command into the active SSH session.
@@ -130,9 +131,7 @@ class _MobileSnippetsScreenState extends State<MobileSnippetsScreen> {
 
   void _run(BuildContext context, Snippet snippet, String? sessionId) {
     if (sessionId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No active session')),
-      );
+      AppSnack.info(context, 'No active session');
       return;
     }
     context.read<SshService>().sendInput(sessionId, '${snippet.command}\n');

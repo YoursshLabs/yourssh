@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../services/p2p_sync_encryption.dart';
 import '../services/p2p_sync_service.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast;
 
 class QrExportDialog extends StatefulWidget {
   final Future<String> Function() getPayload;
@@ -173,12 +174,8 @@ class _QrExportDialogState extends State<QrExportDialog> {
             label: const Text('Copy transfer code'),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: _qrData!));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Transfer code copied'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
+              showYsToast(context, 'Transfer code copied',
+                  duration: const Duration(seconds: 2));
             },
           ),
         TextButton(

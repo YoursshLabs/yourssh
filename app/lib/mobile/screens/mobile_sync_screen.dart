@@ -15,6 +15,7 @@ import '../theme/mobile_tokens.dart';
 import '../widgets/mobile_card.dart';
 import '../widgets/section_header.dart';
 import 'mobile_qr_scan_screen.dart';
+import '../../theme/app_theme.dart';
 
 /// Screen 09 — Sync / QR pairing.
 ///
@@ -99,9 +100,7 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
     await sync.setSyncCode(_code.text);
     if (mounted) {
       setState(() => _editingConfig = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sync settings saved')),
-      );
+      AppSnack.success(context, 'Sync settings saved');
     }
   }
 
@@ -115,15 +114,12 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
             .read<HostProvider>()
             .replaceAll(payload.hosts, payload.passwords);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Imported ${payload.hosts.length} hosts from cloud'),
-          ));
+          AppSnack.success(
+              context, 'Imported ${payload.hosts.length} hosts from cloud');
         }
       } else if (mounted) {
         final err = context.read<SyncProvider>().error;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(err ?? 'Nothing new to pull')),
-        );
+        AppSnack.info(context, err ?? 'Nothing new to pull');
       }
     } finally {
       if (mounted) setState(() => _pulling = false);
@@ -536,9 +532,7 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
               MaterialPageRoute(builder: (_) => const MobileQrScanScreen()),
             );
             if (result != null && mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(result)),
-              );
+              AppSnack.info(context, result);
             }
           },
         ),

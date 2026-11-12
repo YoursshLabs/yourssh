@@ -12,6 +12,7 @@ import '../../services/ssh_service.dart';
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 import '../../util/safe_local_path.dart';
+import '../../theme/app_theme.dart';
 
 /// Contextual SFTP browser — reached from the Terminal ⋮ menu for the
 /// currently active session's host. One SFTP channel is reused for all
@@ -236,8 +237,7 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
 
   void _snack(String msg) {
     if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(msg)));
+      AppSnack.info(context, msg);
     }
   }
 

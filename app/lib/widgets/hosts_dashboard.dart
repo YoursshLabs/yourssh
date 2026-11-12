@@ -26,6 +26,7 @@ import 'bulk/bulk_push_dialog.dart';
 import 'bulk/bulk_run_dialog.dart';
 import 'server_monitor_sheet.dart';
 import 'sftp_screen.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast;
 
 class HostsDashboard extends StatefulWidget {
   final VoidCallback? onAddHost;
@@ -173,11 +174,11 @@ class _HostsDashboardState extends State<HostsDashboard> {
       unawaited(sessionProvider.connectAny(h));
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(plan.skipped > 0
-          ? 'Opened ${plan.toConnect.length} tabs · ${plan.skipped} already connected'
-          : 'Opened ${plan.toConnect.length} tabs'),
-    ));
+    AppSnack.info(
+        context,
+        plan.skipped > 0
+            ? 'Opened ${plan.toConnect.length} tabs · ${plan.skipped} already connected'
+            : 'Opened ${plan.toConnect.length} tabs');
     _exitSelectionMode();
   }
 
@@ -188,9 +189,8 @@ class _HostsDashboardState extends State<HostsDashboard> {
     final ssh = hosts.where((h) => h.protocol == HostProtocol.ssh).toList();
     final skipped = hosts.length - ssh.length;
     if (skipped > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('$skipped non-SSH host(s) skipped — $action is SSH-only'),
-      ));
+      AppSnack.info(
+          context, '$skipped non-SSH host(s) skipped — $action is SSH-only');
     }
     return ssh;
   }
@@ -1320,9 +1320,8 @@ class _HostCardState extends State<_HostCard> {
     final url = '$scheme://${widget.host.username}@${widget.host.host}:${widget.host.port}';
     await Clipboard.setData(ClipboardData(text: url));
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${scheme.toUpperCase()} URL copied'), duration: const Duration(seconds: 2)),
-    );
+    showYsToast(context, '${scheme.toUpperCase()} URL copied',
+        duration: const Duration(seconds: 2));
   }
 
   Future<void> _duplicate(BuildContext context, HostProvider hostProvider) async {
@@ -1519,9 +1518,8 @@ class _ExportDialogState extends State<_ExportDialog> {
           onPressed: () async {
             await Clipboard.setData(ClipboardData(text: _currentText));
             if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 2)),
-            );
+            showYsToast(context, 'Copied to clipboard',
+                duration: const Duration(seconds: 2));
           },
           child: const Text('Copy', style: TextStyle(color: AppColors.textPrimary)),
         ),

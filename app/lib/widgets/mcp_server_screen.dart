@@ -47,12 +47,7 @@ class _McpServerScreenState extends State<McpServerScreen> {
     } else {
       final port = int.tryParse(_portCtrl.text) ?? 0;
       if (port < 1 || port > 65535) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Port must be between 1 and 65535'),
-            backgroundColor: AppColors.red,
-          ),
-        );
+        AppSnack.error(context, 'Port must be between 1 and 65535');
         return;
       }
       final endpoint = McpEndpoint(

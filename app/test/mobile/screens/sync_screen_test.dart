@@ -9,6 +9,7 @@ import 'package:yourssh/providers/host_provider.dart';
 import 'package:yourssh/providers/sync_provider.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/sync_service.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ Future<SyncProvider> _pump(
   await tester.pumpWidget(
     MaterialApp(
       theme: buildMobileTheme(),
+      builder: ysRootBuilderTouch,
       home: MultiProvider(
         providers: [
           ChangeNotifierProvider<SyncProvider>.value(value: sync),

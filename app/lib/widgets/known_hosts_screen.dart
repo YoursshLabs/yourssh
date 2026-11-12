@@ -30,9 +30,7 @@ class _KnownHostsScreenState extends State<KnownHostsScreen> {
 
     if (!await file.exists()) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('~/.ssh/known_hosts not found')),
-      );
+      AppSnack.error(context, '~/.ssh/known_hosts not found');
       return;
     }
 
@@ -44,7 +42,7 @@ class _KnownHostsScreenState extends State<KnownHostsScreen> {
 
     if (!mounted) return;
     final msg = added > 0 ? 'Imported $added ${added == 1 ? 'entry' : 'entries'}' : 'No new entries found';
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    AppSnack.info(context, msg);
   }
 
   @override

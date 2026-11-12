@@ -27,6 +27,7 @@ import 'qr_import_dialog.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/update_provider.dart';
 import '../models/app_release.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast;
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -445,10 +446,7 @@ class _SyncSectionState extends State<_SyncSection> {
 
   Future<void> _saveCode() async {
     if (!SyncCode.isValid(_syncCodeController.text)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Enter a valid 12-character sync code.'),
-        backgroundColor: Colors.red,
-      ));
+      AppSnack.error(context, 'Enter a valid 12-character sync code.');
       return;
     }
     final provider = context.read<SyncProvider>();
@@ -834,9 +832,8 @@ class _SyncSectionState extends State<_SyncSection> {
                       onPressed: sync.hasSyncCode
                           ? () {
                               Clipboard.setData(ClipboardData(text: sync.syncCode));
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                  content: Text('Sync code copied'),
-                                  duration: Duration(seconds: 1)));
+                              showYsToast(context, 'Sync code copied',
+                                  duration: const Duration(seconds: 1));
                             }
                           : null,
                     ),
@@ -1029,12 +1026,12 @@ class _AiProvidersSectionState extends State<_AiProvidersSection> {
     final key = _controllers[p]!.text.trim();
     if (key.isEmpty) return;
     final ai = context.read<AiChatProvider>();
-    final messenger = ScaffoldMessenger.of(context);
     await ai.setProviderConfig(p, apiKey: key);
+    if (!mounted) return;
     final err = ai.lastError;
     if (err != null) {
       ai.clearError();
-      messenger.showSnackBar(SnackBar(content: Text(err)));
+      AppSnack.info(context, err);
     }
   }
 
@@ -1401,11 +1398,14 @@ class _SecuritySectionState extends State<_SecuritySection> {
     if (!mounted) return;
     setState(() => _retrying = false);
     final left = storage.plaintextSecretKeys.length;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(left == 0
-          ? 'Moved $moved credential(s) into the $_storeName.'
-          : '$left credential(s) still could not be stored securely.'),
-    ));
+    final msg = left == 0
+        ? 'Moved $moved credential(s) into the $_storeName.'
+        : '$left credential(s) still could not be stored securely.';
+    if (left == 0) {
+      AppSnack.success(context, msg);
+    } else {
+      AppSnack.error(context, msg);
+    }
   }
 
   @override

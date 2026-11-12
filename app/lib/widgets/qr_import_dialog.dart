@@ -65,12 +65,11 @@ class _QrImportDialogState extends State<QrImportDialog> {
 
       if (mounted) {
         setState(() => _processing = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-            'Imported ${payload.hosts.length} host${payload.hosts.length == 1 ? '' : 's'}. '
-            'All previous hosts replaced.',
-          ),
-        ));
+        AppSnack.success(
+          context,
+          'Imported ${payload.hosts.length} host${payload.hosts.length == 1 ? '' : 's'}. '
+          'All previous hosts replaced.',
+        );
         Navigator.of(context).pop();
       }
     } on FormatException {

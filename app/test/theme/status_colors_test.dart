@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/host.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'package:yourssh/models/ssh_session.dart';
 import 'package:yourssh/providers/host_provider.dart';
 import 'package:yourssh/providers/recording_provider.dart';
@@ -74,7 +75,7 @@ void main() {
     expect((dot.decoration as BoxDecoration).color, AppColors.success);
   });
 
-  testWidgets('AppSnack.success uses the success colour', (tester) async {
+  testWidgets('AppSnack.success shows a toast with the success icon colour', (tester) async {
     await tester.pumpWidget(ysTestApp(Builder(
       builder: (context) => TextButton(
         onPressed: () => AppSnack.success(context, 'Saved'),
@@ -83,7 +84,10 @@ void main() {
     )));
     await tester.tap(find.text('go'));
     await tester.pump();
-    final snack = tester.widget<SnackBar>(find.byType(SnackBar));
-    expect(snack.backgroundColor, AppColors.success);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Saved'), findsOneWidget);
+    final icon = tester.widget<Icon>(find.byIcon(FLucideIcons.circleCheck));
+    expect(icon.color, AppColors.success);
+    await tester.pumpAndSettle(const Duration(seconds: 6));
   });
 }

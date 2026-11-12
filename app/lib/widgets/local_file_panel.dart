@@ -189,12 +189,7 @@ class _LocalFilePanelState extends State<LocalFilePanel> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: const Color(0xFF2A1A1A),
-      ),
-    );
+    AppSnack.error(context, message);
   }
 
   // ── Build ────────────────────────────────────────────────

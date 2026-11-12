@@ -6,6 +6,7 @@ import '../models/host.dart';
 import '../providers/host_provider.dart';
 import '../theme/app_theme.dart';
 import '../util/import_parsers.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast, YsToastKind;
 
 // ── Public parser functions (also used by tests) ──────────
 
@@ -640,10 +641,8 @@ class _ImportPanelState extends State<ImportPanel> {
       imported++;
     }
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Imported $imported host${imported == 1 ? '' : 's'}'),
-      duration: const Duration(seconds: 2),
-    ));
+    showYsToast(context, 'Imported $imported host${imported == 1 ? '' : 's'}',
+        kind: YsToastKind.success, duration: const Duration(seconds: 2));
     widget.onClose();
   }
 }

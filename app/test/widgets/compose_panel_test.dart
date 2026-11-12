@@ -6,6 +6,7 @@ import 'package:yourssh/services/container_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/compose_panel.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 class _FakeSshService extends SshService {
   _FakeSshService() : super(StorageService());
@@ -23,7 +24,7 @@ class _FakeSshService extends SshService {
 }
 
 Widget _wrap(Widget child) =>
-    MaterialApp(home: Scaffold(body: child));
+    MaterialApp(builder: ysRootBuilder, home: Scaffold(body: child));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -174,8 +175,9 @@ void main() {
     await tester.tap(find.text('Add'));
     await tester.pump();
 
-    // An error snackbar should appear
-    expect(find.byType(SnackBar), findsOneWidget);
+    // An error toast should appear
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.textContaining('absolute'), findsOneWidget);
     // validateComposeFile was never called (no SSH exec for config --services)
     expect(execCalled, isFalse);
     // No stack was added

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/tool_result.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast;
 
 class ToolResultView extends StatelessWidget {
   final ToolResult? result;
@@ -54,11 +55,8 @@ class ToolResultView extends StatelessWidget {
                 onPressed: () {
                   Clipboard.setData(
                       ClipboardData(text: result!.output ?? result!.error ?? ''));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Copied'),
-                        duration: Duration(seconds: 1)),
-                  );
+                  showYsToast(context, 'Copied',
+                      duration: const Duration(seconds: 1));
                 },
               ),
             ],

@@ -247,9 +247,7 @@ class _HintCard extends StatelessWidget {
                 label: const Text('Copy command'),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: command));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Copied')),
-                  );
+                  AppSnack.info(context, 'Copied');
                 },
               ),
             ],

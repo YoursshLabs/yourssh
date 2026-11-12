@@ -43,6 +43,7 @@ import 'services/recording_redaction_policy.dart';
 import 'services/tab_metadata_service.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'widgets/sudo_password_dialog.dart';
 import 'providers/recording_provider.dart';
 import 'providers/share_provider.dart';
@@ -194,7 +195,6 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final AuditProvider _auditProvider;
   String? _lastUpdateNotifVersion;
 
-  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
@@ -474,10 +474,13 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     NotificationService.instance.enabled = _settingsProvider.commandNotificationsEnabled;
     _settingsProvider.addListener(_syncNotificationSetting);
     NotificationService.instance.onToast = (label) {
-      _messengerKey.currentState?.showSnackBar(SnackBar(
-        content: Text('✓ $label — command finished'),
-        duration: const Duration(seconds: 3),
-      ));
+      final ctx = _navigatorKey.currentContext;
+      if (ctx == null) return;
+      showYsToast(
+        ctx,
+        '✓ $label — command finished',
+        kind: YsToastKind.success,
+      );
     };
   }
 
@@ -591,7 +594,6 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
       child: MaterialApp(
         title: 'YourSSH',
         debugShowCheckedModeBanner: false,
-        scaffoldMessengerKey: _messengerKey,
         navigatorKey: _navigatorKey,
         theme: buildAppTheme(),
         darkTheme: buildAppTheme(),

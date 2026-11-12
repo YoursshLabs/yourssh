@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../providers/share_provider.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast;
 
 class ShareSessionDialog extends StatelessWidget {
   final String sessionId;
@@ -108,9 +109,8 @@ class _ActiveShareView extends StatelessWidget {
             child: GestureDetector(
               onTap: () {
                 Clipboard.setData(ClipboardData(text: code));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Code copied'), duration: Duration(seconds: 2)),
-                );
+                showYsToast(context, 'Code copied',
+                    duration: const Duration(seconds: 2));
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

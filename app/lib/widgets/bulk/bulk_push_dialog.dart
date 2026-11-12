@@ -92,8 +92,7 @@ class _BulkPushDialogState extends State<BulkPushDialog> {
       if (mounted) setState(() => _sources.addAll(resolved));
     } on FileSystemException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not read source: ${e.message}')));
+      AppSnack.error(context, 'Could not read source: ${e.message}');
     }
   }
 
@@ -105,8 +104,7 @@ class _BulkPushDialogState extends State<BulkPushDialog> {
       if (mounted) setState(() => _sources.addAll(resolved));
     } on FileSystemException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not read source: ${e.message}')));
+      AppSnack.error(context, 'Could not read source: ${e.message}');
     }
   }
 

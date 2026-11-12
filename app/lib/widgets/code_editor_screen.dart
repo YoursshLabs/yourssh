@@ -15,6 +15,7 @@ import '../services/sftp_transfer_service.dart';
 import '../util/safe_local_path.dart';
 import '../util/webview_result.dart';
 import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show showYsToast, YsToastKind;
 
 class CodeEditorScreen extends StatefulWidget {
   final Host host;
@@ -110,12 +111,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
           ? 'Cannot open ${widget.entry.name}: the server refused to read it '
               '(special file, broken link, or no permission).'
           : 'Cannot open ${widget.entry.name}: $e';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppSnack.error(context, message);
       Navigator.of(context).pop();
     }
   }
@@ -155,9 +151,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
             .openExternal(widget.host, widget.entry);
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('Open externally failed: $e'),
-              backgroundColor: Colors.red));
+          AppSnack.error(context, 'Open externally failed: $e');
         }
       }
     }
@@ -215,15 +209,13 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       await service.uploadFile(widget.host, tmpPath, widget.entry.path);
       if (mounted) {
         setState(() => _isDirty = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Saved'), duration: Duration(seconds: 1)),
-        );
+        showYsToast(context, 'Saved',
+            kind: YsToastKind.success,
+            duration: const Duration(seconds: 1));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e'), backgroundColor: Colors.red),
-        );
+        AppSnack.error(context, 'Save failed: $e');
       }
     } finally {
       if (mounted) setState(() => _saving = false);

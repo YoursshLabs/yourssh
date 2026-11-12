@@ -18,6 +18,7 @@ import 'package:yourssh/services/sftp_transfer_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/code_editor_screen.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 class FakeTransferService extends SftpTransferService {
   FakeTransferService(this.bytes) : super(SshService(StorageService()));
@@ -64,6 +65,7 @@ final _entry = SftpEntry(
 
 Widget _wrap(FakeTransferService service) {
   return MaterialApp(
+    builder: ysRootBuilder,
     home: Provider<SftpTransferService>.value(
       value: service,
       child: CodeEditorScreen(host: _host, entry: _entry),
@@ -130,6 +132,7 @@ void main() {
     final service = FakeTransferService(const [0x7f, 0x45, 0x4c, 0x46, 0x00]);
     final external = FakeExternalEditService(service);
     await tester.pumpWidget(MaterialApp(
+      builder: ysRootBuilder,
       home: Builder(
         builder: (ctx) => ElevatedButton(
           onPressed: () => Navigator.push(
@@ -162,6 +165,7 @@ void main() {
       (tester) async {
     final service = FakeTransferService(utf8.encode('read only content'));
     await tester.pumpWidget(MaterialApp(
+      builder: ysRootBuilder,
       home: Provider<SftpTransferService>.value(
         value: service,
         child: CodeEditorScreen(
