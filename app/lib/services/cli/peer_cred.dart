@@ -19,11 +19,10 @@ int? peerUidFromCred(Uint8List raw, String os) {
 }
 
 /// The uid this process runs as (POSIX only).
-int currentUid() {
-  final getuid = DynamicLibrary.process()
-      .lookupFunction<Uint32 Function(), int Function()>('getuid');
-  return getuid();
-}
+int currentUid() => (_getuid ??= DynamicLibrary.process()
+    .lookupFunction<Uint32 Function(), int Function()>('getuid'))();
+
+int Function()? _getuid;
 
 /// Uid of the process on the other end of an accepted unix-domain [socket],
 /// or null when it cannot be determined (callers must treat that as denied).

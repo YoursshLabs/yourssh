@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -5,7 +6,12 @@ import 'package:path/path.dart' as p;
 
 /// Where the app's CLI endpoint and token file live on this machine.
 class CliEndpoint {
-  const CliEndpoint._(this.runDir, this.address, this.tokenPath);
+  const CliEndpoint._(this.runDir, this.address, this.tokenPath,
+      {this.inSharedTemp = false});
+
+  /// Unix socket paths must stay under sun_path (104 bytes on macOS, 108 on
+  /// Linux); at or above this many bytes we use a short per-user location.
+  static const int maxSocketPathBytes = 100;
 
   final String runDir;
 
@@ -13,22 +19,37 @@ class CliEndpoint {
   final String address;
   final String tokenPath;
 
+  /// True when the run dir is the short fallback under a temp directory. The
+  /// listener must then refuse a pre-existing dir that is not ours / not 0700.
+  final bool inSharedTemp;
+
   static CliEndpoint resolve({
     required String os,
     required Map<String, String> env,
     required String home,
     String? userSid,
+    int? uid,
   }) {
     switch (os) {
       case 'macos':
-        return _posix(p.posix
-            .join(home, 'Library', 'Application Support', 'YourSSH', 'run'));
+        return _posixOrFallback(
+          p.posix.join(home, 'Library', 'Application Support', 'YourSSH', 'run'),
+          () {
+            final tmp = env['TMPDIR'];
+            return (tmp != null && tmp.isNotEmpty)
+                ? p.posix.join(tmp, 'yourssh-run')
+                : _tmpFallback(env, uid);
+          },
+        );
       case 'linux':
         final xdg = env['XDG_RUNTIME_DIR'];
         if (xdg != null && xdg.isNotEmpty) {
-          return _posix(p.posix.join(xdg, 'yourssh'));
+          return _posixOrFallback(
+              p.posix.join(xdg, 'yourssh'), () => _tmpFallback(env, uid));
         }
-        return _posix(p.posix.join(home, '.local', 'state', 'yourssh', 'run'));
+        return _posixOrFallback(
+            p.posix.join(home, '.local', 'state', 'yourssh', 'run'),
+            () => _tmpFallback(env, uid));
       case 'windows':
         if (userSid == null || userSid.isEmpty) {
           throw ArgumentError('userSid is required on Windows');
@@ -45,6 +66,22 @@ class CliEndpoint {
     }
   }
 
+  static String _tmpFallback(Map<String, String> env, int? uid) =>
+      '/tmp/yourssh-${uid ?? env['USER'] ?? 'user'}';
+
+  static CliEndpoint _posixOrFallback(
+      String dir, String Function() fallbackDir) {
+    final sock = p.posix.join(dir, 'cli.sock');
+    if (utf8.encode(sock).length < maxSocketPathBytes) return _posix(dir);
+    final fb = fallbackDir();
+    return CliEndpoint._(
+      fb,
+      p.posix.join(fb, 'cli.sock'),
+      p.posix.join(fb, 'cli.token'),
+      inSharedTemp: true,
+    );
+  }
+
   static CliEndpoint _posix(String dir) => CliEndpoint._(
         dir,
         p.posix.join(dir, 'cli.sock'),
@@ -54,7 +91,7 @@ class CliEndpoint {
 
 Future<void> _chmod(String mode, String path) async {
   if (Platform.isWindows) return;
-  final r = await Process.run('chmod', [mode, path]);
+  final r = await Process.run('/bin/chmod', [mode, path]);
   if (r.exitCode != 0) {
     throw FileSystemException('chmod $mode failed: ${r.stderr}', path);
   }

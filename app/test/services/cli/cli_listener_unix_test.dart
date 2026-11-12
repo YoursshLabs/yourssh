@@ -123,6 +123,45 @@ void main() {
     expect(CliResponse.decode(out.trim()).ok, isTrue);
   });
 
+  test('failed start then stop leaves the live instance serving', skip: skip,
+      () async {
+    listener = createCliListener(ep, server);
+    await listener!.start();
+    final b = createCliListener(ep, server);
+    await expectLater(b.start(), throwsA(isA<CliEndpointInUse>()));
+    await b.stop();
+    final out = await roundTrip(ep.address, '${versionReq()}\n');
+    expect(CliResponse.decode(out.trim()).ok, isTrue);
+  });
+
+  test('refuses a non-socket entry at the socket path', skip: skip, () async {
+    Directory(ep.runDir).createSync(recursive: true);
+    File(ep.address).writeAsStringSync('x');
+    listener = createCliListener(ep, server);
+    await expectLater(listener!.start(), throwsA(isA<FileSystemException>()));
+    expect(File(ep.address).readAsStringSync(), 'x');
+  });
+
+  test('refuses a pre-existing shared-temp run dir with mode 0755',
+      skip: skip, () async {
+    final sep = CliEndpoint.resolve(
+      os: 'macos',
+      env: {'TMPDIR': tmp.path},
+      home: '/Users/${'x' * 80}',
+    );
+    expect(sep.inSharedTemp, isTrue);
+    Directory(sep.runDir).createSync(recursive: true);
+    await Process.run('/bin/chmod', ['755', sep.runDir]);
+    final l = createCliListener(sep, server);
+    await expectLater(l.start(), throwsA(isA<FileSystemException>()));
+    // A 0700 dir of ours is accepted.
+    await Process.run('/bin/chmod', ['700', sep.runDir]);
+    listener = createCliListener(sep, server);
+    await listener!.start();
+    final out = await roundTrip(sep.address, '${versionReq()}\n');
+    expect(CliResponse.decode(out.trim()).ok, isTrue);
+  });
+
   test('stop removes the socket file', skip: skip, () async {
     listener = createCliListener(ep, server);
     await listener!.start();

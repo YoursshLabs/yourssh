@@ -20,18 +20,23 @@ class UnixCliListener implements CliListener {
   ServerSocket? _socket;
   StreamSubscription<Socket>? _sub;
   final _live = <Socket>{};
+  bool _warnedPeerCred = false;
 
   InternetAddress get _addr =>
       InternetAddress(_ep.address, type: InternetAddressType.unix);
 
   @override
   Future<void> start() async {
-    final dir = Directory(_ep.runDir);
-    await dir.create(recursive: true);
-    await _chmod('700', _ep.runDir);
+    await _prepareRunDir();
 
-    if (FileSystemEntity.typeSync(_ep.address) !=
-        FileSystemEntityType.notFound) {
+    final existing =
+        FileSystemEntity.typeSync(_ep.address, followLinks: false);
+    if (existing != FileSystemEntityType.notFound) {
+      if (existing != FileSystemEntityType.unixDomainSock) {
+        throw FileSystemException(
+            'refusing to replace ${existing.toString()} that is not a socket',
+            _ep.address);
+      }
       if (await _isLive()) throw CliEndpointInUse(_ep.address);
       try {
         File(_ep.address).deleteSync();
@@ -40,15 +45,45 @@ class UnixCliListener implements CliListener {
       }
     }
 
+    ServerSocket socket;
     try {
-      _socket = await ServerSocket.bind(_addr, 0);
+      socket = await ServerSocket.bind(_addr, 0);
     } on SocketException {
       // Two instances starting together: the loser sees the winner's socket.
       if (await _isLive()) throw CliEndpointInUse(_ep.address);
       rethrow;
     }
-    await _chmod('600', _ep.address);
-    _sub = _socket!.listen(_onConnection, onError: (_) {});
+    try {
+      await _chmod('600', _ep.address);
+    } catch (_) {
+      await socket.close();
+      rethrow;
+    }
+    _socket = socket;
+    _sub = socket.listen(_onConnection, onError: (_) {});
+  }
+
+  Future<void> _prepareRunDir() async {
+    final dir = Directory(_ep.runDir);
+    final existed = dir.existsSync();
+    if (!existed) await dir.create(recursive: true);
+    if (_ep.inSharedTemp) {
+      // A temp location another user could have pre-created: trust it only
+      // when it is a real directory that is ours and 0700.
+      final type = FileSystemEntity.typeSync(_ep.runDir, followLinks: false);
+      final owner = await _ownerUid(_ep.runDir);
+      final mode = FileStat.statSync(_ep.runDir).mode & 0xFFF;
+      if (type != FileSystemEntityType.directory ||
+          owner != currentUid() ||
+          mode != 0x1C0 /* 0700 */) {
+        if (existed || type != FileSystemEntityType.directory) {
+          throw FileSystemException(
+              'refusing run dir (must be our own directory, mode 0700)',
+              _ep.runDir);
+        }
+      }
+    }
+    await _chmod('700', _ep.runDir);
   }
 
   Future<bool> _isLive() async {
@@ -65,7 +100,12 @@ class UnixCliListener implements CliListener {
   }
 
   void _onConnection(Socket socket) {
-    if (peerUidOf(socket) != currentUid()) {
+    final peer = peerUidOf(socket);
+    if (peer == null && !_warnedPeerCred) {
+      _warnedPeerCred = true;
+      debugPrint('CliListener: cannot read peer credentials; rejecting');
+    }
+    if (peer == null || peer != currentUid()) {
       socket.destroy();
       return;
     }
@@ -133,19 +173,22 @@ class UnixCliListener implements CliListener {
 
   @override
   Future<void> stop() async {
+    final socket = _socket;
+    _socket = null;
     await _sub?.cancel();
     _sub = null;
-    await _socket?.close();
-    _socket = null;
     for (final s in _live.toList()) {
       s.destroy();
     }
     _live.clear();
+    // Never touch the path unless this instance bound it: after a failed
+    // start() it belongs to the live instance.
+    if (socket == null) return;
+    await socket.close();
     try {
-      final f = File(_ep.address);
-      if (FileSystemEntity.typeSync(_ep.address) !=
-          FileSystemEntityType.notFound) {
-        f.deleteSync();
+      if (FileSystemEntity.typeSync(_ep.address, followLinks: false) ==
+          FileSystemEntityType.unixDomainSock) {
+        File(_ep.address).deleteSync();
       }
     } on FileSystemException {
       // Already gone.
@@ -153,8 +196,14 @@ class UnixCliListener implements CliListener {
   }
 }
 
+Future<int?> _ownerUid(String path) async {
+  final args = Platform.isMacOS ? ['-f', '%u', path] : ['-c', '%u', path];
+  final r = await Process.run('/usr/bin/stat', args);
+  return r.exitCode == 0 ? int.tryParse((r.stdout as String).trim()) : null;
+}
+
 Future<void> _chmod(String mode, String path) async {
-  final r = await Process.run('chmod', [mode, path]);
+  final r = await Process.run('/bin/chmod', [mode, path]);
   if (r.exitCode != 0) {
     throw FileSystemException('chmod $mode failed: ${r.stderr}', path);
   }

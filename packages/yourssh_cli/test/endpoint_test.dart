@@ -28,6 +28,28 @@ void main() {
           os: 'linux', env: {'XDG_RUNTIME_DIR': ''}, home: '/home/a');
       expect(e.address, '/home/a/.local/state/yourssh/run/cli.sock');
     });
+    final longHome = '/Users/${'x' * 60}';
+    test('macos long home falls back to TMPDIR', () {
+      final e = CliEndpoint.resolve(
+          os: 'macos', env: {'TMPDIR': '/var/folders/ab/cd/T/'}, home: longHome);
+      expect(e.address, '/var/folders/ab/cd/T/yourssh-run/cli.sock');
+      expect(e.runDir, '/var/folders/ab/cd/T/yourssh-run');
+      expect(e.tokenPath, '/var/folders/ab/cd/T/yourssh-run/cli.token');
+      expect(e.inSharedTemp, isTrue);
+    });
+    test('linux long home falls back to /tmp/yourssh-<uid>', () {
+      final e = CliEndpoint.resolve(
+          os: 'linux', env: {}, home: '/home/${'x' * 90}', uid: 1000);
+      expect(e.address, '/tmp/yourssh-1000/cli.sock');
+      expect(e.tokenPath, '/tmp/yourssh-1000/cli.token');
+      expect(e.inSharedTemp, isTrue);
+    });
+    test('normal paths are not flagged as shared temp', () {
+      expect(
+          CliEndpoint.resolve(os: 'macos', env: {}, home: '/Users/a')
+              .inSharedTemp,
+          isFalse);
+    });
     test('windows', () {
       final e = CliEndpoint.resolve(
           os: 'windows',
