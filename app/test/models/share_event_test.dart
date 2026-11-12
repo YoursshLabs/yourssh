@@ -45,5 +45,11 @@ void main() {
       expect(json['type'], 'output');
       expect(json['data'], 'hello');
     });
+
+    test('input carries guestId', () {
+      final j = ShareEvent.input('x', 'g1').toJson();
+      expect(j['guestId'], 'g1');
+      expect(ShareEvent.fromJson(j).guestId, 'g1');
+    });
   });
 }

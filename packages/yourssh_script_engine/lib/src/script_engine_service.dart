@@ -135,8 +135,17 @@ class ScriptEngineService {
         UiBridge(manifest.id, guard, uiRegistry!, null, (msg) async {
           final type = msg['type'] as String? ?? '';
 
+          // Native operations bypass the JS bridges, so they must enforce the
+          // same manifest permissions the bridges do — a panel is plugin-
+          // controlled HTML and can post any message type.
+          String denied(String permission) => json.encode({
+                'type': 'error',
+                'message': 'Permission denied: $permission not granted',
+              });
+
           // Native SSH operations — handled by Dart, not JS (async-safe)
           if (type == 'ssh-exec') {
+            if (!guard.has('ssh.exec')) return denied('ssh.exec');
             if (sshDelegate == null) {
               return json.encode({'type': 'error', 'message': 'SSH not available'});
             }
@@ -152,12 +161,16 @@ class ScriptEngineService {
           }
 
           if (type == 'ssh-sessions') {
+            if (!guard.has('session.observe') && !guard.has('ssh.exec')) {
+              return denied('session.observe');
+            }
             final sessions = sshDelegate?.activeSessions() ?? [];
             return json.encode({'type': 'sessions', 'data': sessions});
           }
 
           // Native SFTP operations
           if (type == 'sftp-list') {
+            if (!guard.has('sftp.read')) return denied('sftp.read');
             if (sftpDelegate == null) {
               return json.encode({'type': 'error', 'message': 'SFTP not available'});
             }
@@ -172,6 +185,7 @@ class ScriptEngineService {
           }
 
           if (type == 'sftp-read') {
+            if (!guard.has('sftp.read')) return denied('sftp.read');
             if (sftpDelegate == null) {
               return json.encode({'type': 'error', 'message': 'SFTP not available'});
             }

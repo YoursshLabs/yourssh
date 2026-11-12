@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/services/sync_code.dart';
 
@@ -38,6 +40,37 @@ void main() {
 
     test('format groups a 12-char code as XXXX-XXXX-XXXX', () {
       expect(SyncCode.format('ABCD2345EFGH'), 'ABCD-2345-EFGH');
+    });
+
+    group('rowId', () {
+      test('is deterministic, 64 lowercase hex chars and differs from the code', () {
+        const code = 'ABCD2345EFGH';
+        final id = SyncCode.rowId(code);
+        expect(id, SyncCode.rowId(code));
+        expect(id, matches(RegExp(r'^[0-9a-f]{64}$')));
+        expect(id, isNot(code));
+        expect(id.contains(code), isFalse);
+      });
+
+      test('normalizes input so formatted and lowercase codes share an id', () {
+        expect(SyncCode.rowId('abcd-2345-efgh'), SyncCode.rowId('ABCD2345EFGH'));
+        expect(SyncCode.rowId('ABCD 2345 EFGH'), SyncCode.rowId('ABCD2345EFGH'));
+      });
+
+      test('different codes give different ids', () {
+        expect(SyncCode.rowId('ABCD2345EFGH'), isNot(SyncCode.rowId('ABCD2345EFGJ')));
+      });
+
+      test('matches the documented SHA-256 derivation', () {
+        // sha256("yourssh-sync-row-v1:ABCD2345EFGH")
+        expect(SyncCode.rowId('ABCD2345EFGH'), hasLength(64));
+        expect(
+          SyncCode.rowId('ABCD2345EFGH'),
+          sha256
+              .convert(utf8.encode('yourssh-sync-row-v1:ABCD2345EFGH'))
+              .toString(),
+        );
+      });
     });
   });
 }

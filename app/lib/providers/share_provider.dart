@@ -89,6 +89,16 @@ class ShareProvider extends ChangeNotifier {
     return code;
   }
 
+  @visibleForTesting
+  void handleHostEventForTest(ShareEvent event) => _onHostEvent(event);
+
+  @visibleForTesting
+  void handleGuestEventForTest(ShareEvent event, String myGuestId) =>
+      _onGuestEvent(event, myGuestId);
+
+  @visibleForTesting
+  void markGuestForTest() => _isGuest = true;
+
   void _onHostEvent(ShareEvent event) {
     switch (event.type) {
       case ShareEventType.joinRequest:
@@ -102,6 +112,13 @@ class ShareProvider extends ChangeNotifier {
           notifyListeners();
         }
       case ShareEventType.input:
+        // Only the guest currently granted control may type into the host.
+        final sender = event.guestId;
+        if (sender == null ||
+            sender != _controlledBy ||
+            !_guests.contains(sender)) {
+          return;
+        }
         onGuestInput?.call(event.data ?? '');
       default:
         break;
@@ -178,6 +195,7 @@ class ShareProvider extends ChangeNotifier {
         _hasControl = false;
         notifyListeners();
       case ShareEventType.rejected:
+        if (event.targetGuestId != myGuestId) return;
         _cleanupGuest();
         notifyListeners();
       case ShareEventType.ended:

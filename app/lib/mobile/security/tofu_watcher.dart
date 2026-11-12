@@ -40,14 +40,21 @@ class _TofuWatcherState extends State<TofuWatcher> {
       barrierDismissible: false,
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.card,
-        title: const Text('Host key changed'),
+        title: Text(c.isKeyTypeChange
+            ? 'Host key type changed'
+            : 'Host key changed'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-                'The host key for ${c.host}:${c.port} has changed. This could '
-                'be a server reinstall — or a man-in-the-middle attack.',
+                c.isKeyTypeChange
+                    ? '${c.host}:${c.port} is trusted under a ${c.oldKeyType} '
+                        'key but now presents a ${c.keyType} key. This could be '
+                        'a server change — or a man-in-the-middle attack.'
+                    : 'The host key for ${c.host}:${c.port} has changed. This '
+                        'could be a server reinstall — or a man-in-the-middle '
+                        'attack.',
                 style: const TextStyle(
                     color: AppColors.textSecondary, fontSize: 13)),
             const SizedBox(height: 12),

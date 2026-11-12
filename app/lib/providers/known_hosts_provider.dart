@@ -70,7 +70,20 @@ class KnownHostsProvider extends ChangeNotifier {
     final existing =
         _hosts.where((h) => _matches(h, host, port, keyType)).firstOrNull;
 
-    if (existing == null) {
+    // Pinned under another key type for this endpoint: a server (or MITM)
+    // that merely offers a different host-key algorithm must not slip past the
+    // pin. OpenSSH keeps one entry per type, so a legit new type is added on
+    // explicit trust, never silently.
+    final otherType = existing == null
+        ? _hosts
+            .where((h) =>
+                h.protocol == KnownHost.protocolSsh &&
+                h.host == host &&
+                h.port == port)
+            .firstOrNull
+        : null;
+
+    if (existing == null && otherType == null) {
       _hosts.add(KnownHost(
           host: host,
           port: port,
@@ -82,7 +95,7 @@ class KnownHostsProvider extends ChangeNotifier {
       return true;
     }
 
-    if (existing.fingerprint == fp) return true;
+    if (existing != null && existing.fingerprint == fp) return true;
 
     // Key mismatch — raise challenge; block until UI resolves it.
     // If a previous challenge is still pending (UI dialog stuck), reject it so
@@ -93,8 +106,9 @@ class KnownHostsProvider extends ChangeNotifier {
       host: host,
       port: port,
       keyType: keyType,
-      oldFingerprint: existing.fingerprint,
+      oldFingerprint: (existing ?? otherType!).fingerprint,
       newFingerprint: fp,
+      oldKeyType: existing == null ? otherType!.keyType : null,
     );
     _pendingChallenge = challenge;
     notifyListeners();

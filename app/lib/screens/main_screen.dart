@@ -1591,18 +1591,28 @@ class _HostKeyDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final typeChanged = challenge.isKeyTypeChange;
     return _TofuDialog(
       icon: Icons.warning_amber_rounded,
       accentColor: Colors.orange,
-      title: 'Host key changed',
+      title: typeChanged ? 'Host key type changed' : 'Host key changed',
       endpoint: '${challenge.host}:${challenge.port}',
       fingerprintRows: [
-        _FpRow(label: 'Old', fp: challenge.oldFingerprint),
+        _FpRow(
+            label: typeChanged ? 'Old (${challenge.oldKeyType})' : 'Old',
+            fp: challenge.oldFingerprint),
         const SizedBox(height: 4),
-        _FpRow(label: 'New', fp: challenge.newFingerprint),
+        _FpRow(
+            label: typeChanged ? 'New (${challenge.keyType})' : 'New',
+            fp: challenge.newFingerprint),
       ],
-      warning: 'This could indicate a man-in-the-middle attack. '
-          'Only trust the new key if you know the server key changed.',
+      warning: typeChanged
+          ? 'This server is trusted under a ${challenge.oldKeyType} key but now '
+              'presents a ${challenge.keyType} key. This could indicate a '
+              'man-in-the-middle attack. Only trust it if you know the server '
+              'now offers this key type.'
+          : 'This could indicate a man-in-the-middle attack. '
+              'Only trust the new key if you know the server key changed.',
       cancelLabel: 'Cancel',
       acceptLabel: 'Trust new key',
     );

@@ -7,14 +7,18 @@ import 'package:yourssh_script_engine/src/bridge/ssh_bridge.dart';
 import 'package:yourssh_script_engine/src/plugin_ui_registry.dart';
 
 class _MockSshDelegate implements SshBridgeDelegate {
+  final execCalls = <String>[];
+
   @override
   List<Map<String, dynamic>> activeSessions() => [
     {'sessionId': 'mock-1', 'host': 'test.host', 'username': 'user', 'port': 22, 'connected': true}
   ];
 
   @override
-  Future<Map<String, dynamic>> execCommand(String sessionId, String command) async =>
-      {'stdout': 'mock output', 'stderr': '', 'exitCode': 0};
+  Future<Map<String, dynamic>> execCommand(String sessionId, String command) async {
+    execCalls.add(command);
+    return {'stdout': 'mock output', 'stderr': '', 'exitCode': 0};
+  }
 
   @override
   void sendInput(String sessionId, String text) {}
@@ -164,7 +168,7 @@ plugin._setPanelMessage(function(msg) { return {type: "from-js", received: msg.t
   "version": "1.0.0",
   "entry": "index.js",
   "minAppVersion": "1.0.0",
-  "permissions": ["ui.panel", "session.observe"]
+  "permissions": ["ui.panel", "ssh.exec"]
 }
 ''');
     File('${pluginDir.path}/index.js').writeAsStringSync('''
@@ -184,7 +188,7 @@ plugin._setPanelMessage(function(msg) { return {type: "from-js"}; });
     );
 
     await svc.loadPlugin(pluginDir.path,
-        grantedPermissions: {'ui.panel', 'session.observe'});
+        grantedPermissions: {'ui.panel', 'ssh.exec'});
 
     final panel = registry.panels.first;
 
@@ -202,6 +206,56 @@ plugin._setPanelMessage(function(msg) { return {type: "from-js"}; });
     svc.dispose();
   });
 
+  test('panel ssh-exec is refused without the ssh.exec permission', () async {
+    final pluginDir = Directory('${tmpDir.path}/ssh-exec-denied')..createSync();
+    File('${pluginDir.path}/plugin.json').writeAsStringSync('''
+{
+  "id": "test.sshexecdenied",
+  "name": "SSH Exec Denied",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "minAppVersion": "1.0.0",
+  "permissions": ["ui.panel"]
+}
+''');
+    File('${pluginDir.path}/index.js').writeAsStringSync('''
+_ui.registerPanel(JSON.stringify({title: "Test", icon: "test", webviewEntry: "panel/index.html"}));
+plugin._setPanelMessage(function(msg) { return {type: "from-js"}; });
+''');
+
+    final mockSsh = _MockSshDelegate();
+    final registry = PluginUiRegistry();
+    final svc = ScriptEngineService(
+      hookBus: HookBus(),
+      uiRegistry: registry,
+      sshDelegate: mockSsh,
+      sftpDelegate: null,
+    );
+    await svc.loadPlugin(pluginDir.path, grantedPermissions: {'ui.panel'});
+    final panel = registry.panels.first;
+
+    final exec = json.decode((await panel.onMessage({
+      'type': 'ssh-exec',
+      'sessionId': 'mock-1',
+      'command': 'id',
+    }))!) as Map<String, dynamic>;
+    expect(exec['type'], 'error');
+    expect(exec['message'], contains('ssh.exec'));
+    expect(mockSsh.execCalls, isEmpty);
+
+    final sessions = json.decode(
+        (await panel.onMessage({'type': 'ssh-sessions'}))!) as Map<String, dynamic>;
+    expect(sessions['type'], 'error');
+
+    final sftp = json.decode((await panel.onMessage(
+            {'type': 'sftp-read', 'sessionId': 'mock-1', 'path': '/etc/passwd'}))!)
+        as Map<String, dynamic>;
+    expect(sftp['type'], 'error');
+    expect(sftp['message'], contains('sftp.read'));
+
+    svc.dispose();
+  });
+
   test('native sftp-list returns error when sftpDelegate is null', () async {
     final pluginDir = Directory('${tmpDir.path}/sftp-null-test')..createSync();
     File('${pluginDir.path}/plugin.json').writeAsStringSync('''
@@ -211,7 +265,7 @@ plugin._setPanelMessage(function(msg) { return {type: "from-js"}; });
   "version": "1.0.0",
   "entry": "index.js",
   "minAppVersion": "1.0.0",
-  "permissions": ["ui.panel", "session.observe"]
+  "permissions": ["ui.panel", "sftp.read"]
 }
 ''');
     File('${pluginDir.path}/index.js').writeAsStringSync('''
@@ -230,7 +284,7 @@ plugin._setPanelMessage(function(msg) { return {type: "from-js"}; });
     );
 
     await svc.loadPlugin(pluginDir.path,
-        grantedPermissions: {'ui.panel', 'session.observe'});
+        grantedPermissions: {'ui.panel', 'sftp.read'});
 
     final panel = registry.panels.first;
 

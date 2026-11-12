@@ -15,19 +15,39 @@ class UpdateException implements Exception {
   String toString() => 'UpdateException: $message';
 }
 
+/// Runs an external program; injectable so tests never spawn processes.
+typedef ProcessRunner = Future<ProcessResult> Function(
+    String executable, List<String> arguments);
+
 /// Network + platform glue for the in-app update flow.
 class UpdateService {
   UpdateService({
     http.Client? client,
     this.repo = 'YoursshLabs/yourssh',
     Directory? downloadDir,
+    ProcessRunner? processRunner,
   })  : _client = client ?? http.Client(),
         // ignore: prefer_initializing_formals
-        _downloadDir = downloadDir;
+        _downloadDir = downloadDir,
+        _run = processRunner ?? Process.run;
 
   final http.Client _client;
   final Directory? _downloadDir;
+  final ProcessRunner _run;
   final String repo;
+
+  /// Apple Developer Team that signs official macOS releases. A downloaded
+  /// installer must carry this team's Developer ID signature before it is
+  /// opened — the GitHub digest alone comes from the same API response as
+  /// the download URL, so it cannot detect a compromised release.
+  static const releaseTeamId = '84T567KMYD';
+
+  /// Code requirement for a Developer ID Application signature by
+  /// [releaseTeamId] (the leading `=` makes codesign parse it as text).
+  static const _developerIdRequirement = '=anchor apple generic'
+      ' and certificate 1[field.1.2.840.113635.100.6.2.6]'
+      ' and certificate leaf[field.1.2.840.113635.100.6.1.13]'
+      ' and certificate leaf[subject.OU] = "$releaseTeamId"';
 
   static final RegExp _versionSuffix = RegExp(r'[-+]');
 
@@ -251,14 +271,31 @@ class UpdateService {
   /// Hands [file] off to the OS installer. macOS strips quarantine then opens
   /// the DMG; Windows runs the installer exe; Linux opens with the desktop
   /// handler. Throws [UpdateException] on failure.
+  /// Throws [UpdateException] unless [file] is signed with the YourSSH
+  /// Developer ID ([releaseTeamId]). Files written by this app carry no
+  /// quarantine xattr, so Gatekeeper never assesses them — this check is the
+  /// only signature gate before the installer is opened.
+  Future<void> verifyMacInstallerSignature(File file) async {
+    final r = await _run('codesign', [
+      '--verify',
+      '--strict',
+      '-R',
+      _developerIdRequirement,
+      file.path,
+    ]);
+    if (r.exitCode != 0) {
+      throw UpdateException(
+          'The downloaded installer is not signed by the YourSSH developer '
+          '(team $releaseTeamId). Download it from the release page instead.');
+    }
+  }
+
   Future<void> launchInstaller(File file) async {
     final path = file.path;
     try {
       if (Platform.isMacOS) {
-        // Best-effort: our own download usually carries no quarantine xattr,
-        // but strip it anyway so Gatekeeper does not block the new build.
-        await Process.run('xattr', ['-dr', 'com.apple.quarantine', path]);
-        final r = await Process.run('open', [path]);
+        await verifyMacInstallerSignature(file);
+        final r = await _run('open', [path]);
         if (r.exitCode != 0) throw UpdateException('open failed: ${r.stderr}');
       } else if (Platform.isWindows) {
         // Detached: we intentionally don't wait for the installer to finish.

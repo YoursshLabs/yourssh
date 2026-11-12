@@ -11,6 +11,7 @@ import '../../services/sftp_transfer_service.dart';
 import '../../services/ssh_service.dart';
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
+import '../../util/safe_local_path.dart';
 
 /// Contextual SFTP browser — reached from the Terminal ⋮ menu for the
 /// currently active session's host. One SFTP channel is reused for all
@@ -194,7 +195,14 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
   Future<void> _download(SftpName e) async {
     final dir = await FilePicker.platform.getDirectoryPath();
     if (dir == null) return;
-    final sink = io.File(p.join(dir, e.filename)).openWrite();
+    final String localPath;
+    try {
+      localPath = safeLocalChild(dir, e.filename);
+    } on UnsafeRemotePathException catch (err) {
+      _snack('$err');
+      return;
+    }
+    final sink = io.File(localPath).openWrite();
     try {
       final sftp = await _client();
       final file = await sftp.open(_join(e.filename));

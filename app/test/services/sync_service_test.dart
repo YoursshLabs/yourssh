@@ -15,6 +15,25 @@ class _ThrowingSupabase extends SupabaseService {
   Future<void> deleteRow() async => throw Exception('network error');
 }
 
+class _FakeRemote extends SupabaseService {
+  _FakeRemote(String code, this.encrypted, this.serverUpdatedAt)
+      : super('https://test.supabase.co', 'test-anon-key', code);
+  final String encrypted;
+  final DateTime serverUpdatedAt;
+
+  @override
+  Future<DateTime?> fetchUpdatedAt() async => serverUpdatedAt;
+
+  @override
+  Future<String?> fetchPayload() async => encrypted;
+}
+
+String _payloadAt(DateTime t) => jsonEncode({
+      'hosts': <dynamic>[],
+      'passwords': <String, String>{},
+      'updated_at': t.toUtc().toIso8601String(),
+    });
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -103,6 +122,57 @@ void main() {
       expect(syncProvider.enabled, false);
 
       syncProvider.dispose();
+    });
+  });
+
+  group('SyncService.pull anti-rollback', () {
+    const code = 'ABCD2345EFGH';
+
+    Future<(SyncService, SyncProvider)> build(
+        DateTime innerAt, Map<String, Object> prefsInit) async {
+      SharedPreferences.setMockInitialValues(prefsInit);
+      final p = SyncProvider();
+      await p.setSupabaseConfig('https://test.supabase.co', 'test-anon-key');
+      await p.setSyncCode(code);
+      final enc = await SyncEncryption.encrypt(_payloadAt(innerAt), code);
+      // Server-supplied updated_at is fresh (attacker-controlled).
+      final svc = SyncService(p)
+        ..cachedSupabase = _FakeRemote(code, enc, DateTime.now().toUtc());
+      return (svc, p);
+    }
+
+    test('rejects a replayed payload older than last push', () async {
+      final (svc, p) = await build(DateTime.utc(2026, 1, 1),
+          {'sync_last_push_at': '2026-03-01T00:00:00.000Z'});
+      expect(await svc.pull(), isNull);
+      expect(p.status, SyncStatus.synced);
+      expect(p.error, isNull);
+      p.dispose();
+    });
+
+    test('rejects a payload not newer than last applied', () async {
+      final (svc, p) = await build(DateTime.utc(2026, 1, 1),
+          {'sync_last_applied_at': '2026-02-01T00:00:00.000Z'});
+      expect(await svc.pull(), isNull);
+      expect(p.error, isNull);
+      p.dispose();
+    });
+
+    test('accepts a newer payload and records last applied', () async {
+      final (svc, p) = await build(DateTime.utc(2026, 5, 1),
+          {'sync_last_push_at': '2026-03-01T00:00:00.000Z'});
+      final r = await svc.pull();
+      expect(r, isNotNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('sync_last_applied_at'),
+          DateTime.utc(2026, 5, 1).toIso8601String());
+      p.dispose();
+    });
+
+    test('new device (no push, no applied) accepts', () async {
+      final (svc, p) = await build(DateTime.utc(2020), {});
+      expect(await svc.pull(), isNotNull);
+      p.dispose();
     });
   });
 }
