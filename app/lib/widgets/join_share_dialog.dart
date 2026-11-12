@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../providers/share_provider.dart';
 import '../providers/sync_provider.dart';
 import '../services/share_crypto.dart';
-import '../theme/app_theme.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 class JoinShareDialog extends StatefulWidget {
@@ -59,60 +58,52 @@ class _JoinShareDialogState extends State<JoinShareDialog> {
       child: SizedBox(
         width: 400,
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(YsSpace.s5),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Join Shared Session', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _controller,
+              const Text(
+                'Join Shared Session',
+                style: TextStyle(
+                  color: YsColors.foreground,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: YsSpace.s4),
+              FTextField(
+                key: const Key('join-share-code'),
+                control: FTextFieldControl.managed(controller: _controller),
                 autofocus: true,
                 maxLength: 30,
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9 -]')),
                   _UpperCaseFormatter(),
                 ],
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  letterSpacing: 1,
-                  fontFamily: 'monospace',
-                ),
                 textAlign: TextAlign.center,
-                decoration: InputDecoration(
-                  hintText: 'A3K9PX-XXXXXXXXXXXXXXXX',
-                  hintStyle: const TextStyle(color: Color(0xFF333333), letterSpacing: 1, fontSize: 13),
-                  counterText: '',
-                  filled: true,
-                  fillColor: const Color(0xFF1A1A1A),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: AppColors.accent),
-                  ),
-                  errorText: _error,
+                hint: 'A3K9PX-XXXXXXXXXXXXXXXX',
+                style: .delta(
+                  contentTextStyle: .delta([
+                    .base(
+                      const .delta(
+                        fontFamily: kYsMonoFontFamily,
+                        fontFamilyFallback: kYsMonoFontFallback,
+                        fontSize: 15,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ]),
                 ),
-                onSubmitted: (_) => _join(context),
+                error: _error == null ? null : Text(_error!),
+                onSubmit: (_) => _join(context),
               ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-                  onPressed: _joining ? null : () => _join(context),
-                  child: _joining
-                      ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                      : const Text('Join', style: TextStyle(color: Colors.black)),
-                ),
+              const SizedBox(height: YsSpace.s4),
+              FButton(
+                key: const Key('join-share-submit'),
+                onPress: _joining ? null : () => _join(context),
+                prefix: _joining ? const FCircularProgress(size: .sm) : null,
+                child: const Text('Join'),
               ),
             ],
           ),

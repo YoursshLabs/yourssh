@@ -153,4 +153,25 @@ void main() {
 
     expect(controller.selection, isNotNull);
   });
+
+  testWidgets('menu Reset Terminal recovers a terminal stuck in the alt '
+      'screen with mouse reporting on', (tester) async {
+    final terminal = Terminal();
+    final controller = TerminalController();
+
+    await pumpHarness(tester, terminal, controller);
+    await rightClickTerminal(tester);
+    expect(find.text('Reset Terminal'), findsOneWidget);
+
+    // A full-screen app dies uncleanly while the menu is open.
+    terminal.write('\x1b[?1049h\x1b[?1000h');
+    expect(terminal.isUsingAltBuffer, isTrue);
+    expect(terminal.mouseMode, isNot(MouseMode.none));
+
+    await tester.tap(find.text('Reset Terminal'));
+    await tester.pumpAndSettle();
+
+    expect(terminal.isUsingAltBuffer, isFalse);
+    expect(terminal.mouseMode, MouseMode.none);
+  });
 }

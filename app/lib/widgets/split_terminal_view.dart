@@ -20,10 +20,15 @@ import 'broadcast_toolbar.dart';
 import 'terminal_config_panel.dart';
 import 'terminal_snippets_panel.dart';
 import 'terminal_header_chips.dart';
+import 'terminal_status_bar.dart';
 
 class SplitTerminalView extends StatelessWidget {
   final VoidCallback? onNavigateToSettings;
-  const SplitTerminalView({super.key, this.onNavigateToSettings});
+
+  /// Extra controls at the right end of the workspace header.
+  final Widget? toolbarTrailing;
+  const SplitTerminalView(
+      {super.key, this.onNavigateToSettings, this.toolbarTrailing});
 
   void _sendCommand(TerminalSession session, String command) {
     session.terminal.textInput(command);
@@ -86,6 +91,7 @@ class SplitTerminalView extends StatelessWidget {
           leading: active == null
               ? null
               : TerminalHeaderChips(key: ValueKey(active.id), session: active),
+          trailing: toolbarTrailing,
         ),
         Expanded(
           child: Row(
@@ -109,6 +115,8 @@ class SplitTerminalView extends StatelessWidget {
             ],
           ),
         ),
+        if (active != null)
+          SessionStatusBar(key: ValueKey(active.id), session: active),
       ],
     );
   }

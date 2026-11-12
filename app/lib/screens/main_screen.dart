@@ -822,37 +822,31 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       return Row(
         children: [
           Expanded(
-            child: Stack(
-              children: [
-                SplitTerminalView(
-                  onNavigateToSettings: () => setState(() {
-                    _nav = NavSection.settings;
-                    _viewingTerminal = false;
-                  }),
-                ),
-                Positioned(
-                  top: 8,
-                  right: showAiChat ? 348 : 8,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const NetworkStatsOverlay(),
-                      if (active is SshSession) ...[
-                        const SizedBox(width: 8),
-                        _ShareButton(session: active),
-                      ],
-                      if (aiConfigured) ...[
-                        const SizedBox(width: 8),
-                        _AiChatToggle(
-                          active: showAiChat,
-                          onToggle: () =>
-                              setState(() => _showAiChat = !_showAiChat),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
+            child: SplitTerminalView(
+              onNavigateToSettings: () => setState(() {
+                _nav = NavSection.settings;
+                _viewingTerminal = false;
+              }),
+              // In the workspace header, not floated over it: a floating row
+              // covered the header's right-aligned layout/panel buttons.
+              toolbarTrailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const NetworkStatsOverlay(),
+                  if (active is SshSession) ...[
+                    const SizedBox(width: 8),
+                    _ShareButton(session: active),
+                  ],
+                  if (aiConfigured) ...[
+                    const SizedBox(width: 8),
+                    _AiChatToggle(
+                      active: showAiChat,
+                      onToggle: () =>
+                          setState(() => _showAiChat = !_showAiChat),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
           if (showAiChat)

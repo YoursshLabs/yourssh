@@ -7,6 +7,8 @@ import 'package:yourssh/providers/command_history_provider.dart';
 import 'package:yourssh/widgets/suggestion_popup.dart';
 import 'package:yourssh/widgets/terminal_input_bar.dart';
 
+import '../helpers/ys_test_app.dart';
+
 void main() {
   late CommandHistoryProvider historyProvider;
 
@@ -20,23 +22,30 @@ void main() {
   });
 
   Widget wrap({required void Function(String) onSubmit, VoidCallback? onDismiss}) {
-    return MaterialApp(
-      home: Scaffold(
-        body: ChangeNotifierProvider<CommandHistoryProvider>.value(
-          value: historyProvider,
-          child: TerminalInputBar(
-            sessionId: 's1',
-            onSubmit: onSubmit,
-            onDismiss: onDismiss ?? () {},
-          ),
+    return ChangeNotifierProvider<CommandHistoryProvider>.value(
+      value: historyProvider,
+      child: ysTestApp(
+        TerminalInputBar(
+          sessionId: 's1',
+          onSubmit: onSubmit,
+          onDismiss: onDismiss ?? () {},
         ),
       ),
     );
   }
 
+  // The forui field wraps material_ui's TextField, so find it by key and read
+  // the text from its EditableText.
+  final inputField = find.byKey(const Key('terminal-input-field'));
+  String inputText(WidgetTester tester) => tester
+      .widget<EditableText>(
+          find.descendant(of: inputField, matching: find.byType(EditableText)))
+      .controller
+      .text;
+
   testWidgets('suggestions appear after typing a prefix', (tester) async {
     await tester.pumpWidget(wrap(onSubmit: (_) {}));
-    await tester.enterText(find.byType(TextField), 'git');
+    await tester.enterText(inputField, 'git');
     await tester.pump();
     expect(find.byType(SuggestionPopup), findsOneWidget);
     expect(find.text('git status'), findsOneWidget);
@@ -45,7 +54,7 @@ void main() {
   testWidgets('Tab completes first suggestion into text field without submitting', (tester) async {
     String? submitted;
     await tester.pumpWidget(wrap(onSubmit: (cmd) => submitted = cmd));
-    await tester.enterText(find.byType(TextField), 'git');
+    await tester.enterText(inputField, 'git');
     await tester.pump();
     expect(find.byType(SuggestionPopup), findsOneWidget);
 
@@ -53,15 +62,14 @@ void main() {
     await tester.pump();
 
     expect(submitted, isNull);
-    final tf = tester.widget<TextField>(find.byType(TextField));
-    expect(tf.controller!.text.startsWith('git'), isTrue);
-    expect(tf.controller!.text.length, greaterThan(3));
+    expect(inputText(tester).startsWith('git'), isTrue);
+    expect(inputText(tester).length, greaterThan(3));
   });
 
   testWidgets('Tab with no suggestions does not submit', (tester) async {
     String? submitted;
     await tester.pumpWidget(wrap(onSubmit: (cmd) => submitted = cmd));
-    await tester.enterText(find.byType(TextField), 'zzz');
+    await tester.enterText(inputField, 'zzz');
     await tester.pump();
     expect(find.byType(SuggestionPopup), findsNothing);
 
@@ -69,13 +77,12 @@ void main() {
     await tester.pump();
 
     expect(submitted, isNull);
-    final tf = tester.widget<TextField>(find.byType(TextField));
-    expect(tf.controller!.text, 'zzz');
+    expect(inputText(tester), 'zzz');
   });
 
   testWidgets('ArrowDown moves selection highlight when suggestions visible', (tester) async {
     await tester.pumpWidget(wrap(onSubmit: (_) {}));
-    await tester.enterText(find.byType(TextField), 'git');
+    await tester.enterText(inputField, 'git');
     await tester.pump();
     expect(find.byType(SuggestionPopup), findsOneWidget);
 
@@ -84,7 +91,7 @@ void main() {
 
     final highlighted = tester.widgetList<Container>(find.byType(Container)).where((c) {
       final d = c.decoration;
-      return d is BoxDecoration && d.color == const Color(0xFF1E3A5F);
+      return d is BoxDecoration && d.color == kSuggestionSelectedColor;
     });
     expect(highlighted.length, greaterThanOrEqualTo(1));
   });
@@ -97,7 +104,36 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
 
-    final tf = tester.widget<TextField>(find.byType(TextField));
-    expect(tf.controller!.text, isNotEmpty);
+    expect(inputText(tester), isNotEmpty);
+  });
+
+  testWidgets('keyboard flow: focused on open, Escape dismisses',
+      (tester) async {
+    var dismissed = 0;
+    await tester.pumpWidget(
+        wrap(onSubmit: (_) {}, onDismiss: () => dismissed++));
+    await tester.pump();
+
+    expect(
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<TerminalInputBar>(),
+        isNotNull,
+        reason: 'the bar takes focus when it opens');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(dismissed, 1);
+  });
+
+  testWidgets('keyboard flow: Enter submits the typed command and clears it',
+      (tester) async {
+    String? submitted;
+    await tester.pumpWidget(wrap(onSubmit: (cmd) => submitted = cmd));
+
+    await tester.enterText(inputField, 'uptime');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(submitted, 'uptime\n');
+    expect(inputText(tester), isEmpty);
+    await tester.pump(const Duration(seconds: 1)); // history persist debounce
   });
 }

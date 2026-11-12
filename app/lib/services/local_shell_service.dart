@@ -75,6 +75,14 @@ class LocalShellService {
     return env['SHELL'] ?? '/bin/zsh';
   }
 
+  /// File name of the shell a terminal without a profile opens (`zsh`,
+  /// `powershell.exe`, ...); the workspace status bar names it.
+  static String platformDefaultShellName() {
+    final shell =
+        resolveShell(Platform.environment, isWindows: Platform.isWindows);
+    return shell.split(RegExp(r'[/\\]')).last;
+  }
+
   Future<LocalSession> openShell({ShellProfile? profile}) async {
     final terminal = Terminal(maxLines: 10000);
     final session = LocalSession(terminal: terminal, profile: profile);

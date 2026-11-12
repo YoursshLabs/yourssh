@@ -82,7 +82,12 @@ void main() {
     add(ssh('prod-web-01'));
     await tester.pumpWidget(harness());
     expect(find.byType(TerminalHeaderChips), findsOneWidget);
-    expect(find.text('deploy@h.example.com'), findsOneWidget);
+    // Scoped to the chips: the status bar also shows user@host.
+    expect(
+        find.descendant(
+            of: find.byType(TerminalHeaderChips),
+            matching: find.text('deploy@h.example.com')),
+        findsOneWidget);
     expect(find.byTooltip('Toggle Terminal Settings'), findsOneWidget);
   });
 

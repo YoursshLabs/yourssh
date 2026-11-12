@@ -7,11 +7,14 @@ import '../providers/plugin_provider.dart';
 import '../providers/terminal_layout_provider.dart';
 
 /// Workspace header: [leading] (host chips) on the left, layout / panel
-/// toggles and Broadcast on the right. The action cluster scrolls instead of
-/// overflowing when the workspace is narrow (side panel open).
+/// toggles and Broadcast on the right, then [trailing] (the main screen's
+/// network stats, Share and AI controls) at the right edge. The action
+/// cluster scrolls instead of overflowing when the workspace is narrow (side
+/// panel open).
 class BroadcastToolbar extends StatelessWidget {
   final Widget? leading;
-  const BroadcastToolbar({super.key, this.leading});
+  final Widget? trailing;
+  const BroadcastToolbar({super.key, this.leading, this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -98,6 +101,10 @@ class BroadcastToolbar extends StatelessWidget {
               child: actions,
             ),
           ),
+          if (trailing != null) ...[
+            const SizedBox(width: YsSpace.s2),
+            trailing!,
+          ],
         ],
       ),
     );

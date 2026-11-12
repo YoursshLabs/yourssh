@@ -18,6 +18,7 @@ import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/tab_metadata_service.dart';
 import 'package:yourssh/widgets/network_stats_overlay.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class _FakePty implements PtyRunner {
   final _output = StreamController<List<int>>();
@@ -90,7 +91,7 @@ void main() {
     state.debugSetDelta(
         const NetworkStatsDelta(rxBytesPerSec: 1024, txBytesPerSec: 2048));
     await tester.pump();
-    expect(find.byIcon(Icons.arrow_downward), findsOneWidget,
+    expect(find.byIcon(FLucideIcons.arrowDown), findsOneWidget,
         reason: 'precondition: stats render on the SSH tab');
 
     // Switch to the local terminal tab.
@@ -99,7 +100,7 @@ void main() {
         .id);
     await tester.pump();
 
-    expect(find.byIcon(Icons.arrow_downward), findsNothing,
+    expect(find.byIcon(FLucideIcons.arrowDown), findsNothing,
         reason: 'stale SSH stats must not render over a local tab');
   });
 }

@@ -7,7 +7,7 @@ import '../providers/session_provider.dart';
 import '../services/firewall_status_service.dart';
 import '../services/ssh_service.dart';
 import '../services/system_stats_service.dart';
-import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class ServerMonitorSheet extends StatefulWidget {
   final Host host;
@@ -103,9 +103,10 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
       maxChildSize: 0.95,
       builder: (_, ctrl) => Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-          border: Border(top: BorderSide(color: Color(0xFF2A2A2A))),
+          color: YsColors.card,
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(YsRadius.card)),
+          border: Border(top: BorderSide(color: YsColors.border)),
         ),
         child: Column(children: [
           _handle(),
@@ -124,7 +125,7 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
           width: 36,
           height: 4,
           decoration: BoxDecoration(
-            color: const Color(0xFF3A3A3A),
+            color: YsColors.secondary,
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -133,29 +134,32 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
   Widget _header() => Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Row(children: [
-          Text(
-            widget.host.label,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
+          Expanded(
+            child: Text(
+              widget.host.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: YsColors.foreground,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-          const Spacer(),
           if (_snapshot != null)
             Row(children: [
               Container(
                 width: 7,
                 height: 7,
                 decoration: const BoxDecoration(
-                  color: AppColors.success,
+                  color: YsColors.ok,
                   shape: BoxShape.circle,
                 ),
               ),
               const SizedBox(width: 5),
               const Text(
                 'Live',
-                style: TextStyle(color: AppColors.success, fontSize: 11),
+                style: TextStyle(color: YsColors.ok, fontSize: 11),
               ),
             ]),
         ]),
@@ -164,7 +168,7 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
   Widget _notConnected() => const Center(
         child: Text(
           'No active session — open a terminal first',
-          style: TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: YsColors.mutedForeground),
         ),
       );
 
@@ -178,11 +182,11 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
                 'Failed to load stats: $_statsError',
-                style: TextStyle(color: Colors.red.shade300, fontSize: 12),
+                style: const TextStyle(color: YsColors.error, fontSize: 12),
               ),
             )
           else if (_snapshot == null)
-            const Center(child: CircularProgressIndicator())
+            const Center(child: FCircularProgress())
           else
             _systemSection(_snapshot!),
           const SizedBox(height: 16),
@@ -190,7 +194,7 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
           if (_statsError != null && _snapshot == null)
             const SizedBox.shrink()
           else if (_snapshot == null)
-            const Center(child: CircularProgressIndicator())
+            const Center(child: FCircularProgress())
           else
             _portsSection(_snapshot!.ports),
           const SizedBox(height: 16),
@@ -200,11 +204,11 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
                 'Failed to load firewall: $_firewallError',
-                style: TextStyle(color: Colors.red.shade300, fontSize: 12),
+                style: const TextStyle(color: YsColors.error, fontSize: 12),
               ),
             )
           else if (_firewall == null)
-            const Center(child: CircularProgressIndicator())
+            const Center(child: FCircularProgress())
           else
             _firewallSection(_firewall!),
         ],
@@ -215,8 +219,9 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
         child: Text(
           t,
           style: const TextStyle(
-            color: AppColors.textSecondary,
+            color: YsColors.mutedForeground,
             fontSize: 11,
+            fontWeight: FontWeight.w600,
             letterSpacing: 0.8,
           ),
         ),
@@ -256,12 +261,12 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
           width: 72,
           child: Text(
             label,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            style: const TextStyle(color: YsColors.mutedForeground, fontSize: 12),
           ),
         ),
         Text(
           value,
-          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+          style: const TextStyle(color: YsColors.foreground, fontSize: 12),
         ),
       ]);
 
@@ -270,25 +275,25 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
           width: 72,
           child: Text(
             label,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            style: const TextStyle(color: YsColors.mutedForeground, fontSize: 12),
             overflow: TextOverflow.ellipsis,
           ),
         ),
         Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: LinearProgressIndicator(
-              value: fraction.clamp(0.0, 1.0),
-              minHeight: 6,
-              backgroundColor: const Color(0xFF2A2A2A),
-              color: fraction > 0.85 ? AppColors.red : AppColors.success,
+          child: FDeterminateProgress(
+            value: fraction.clamp(0.0, 1.0),
+            semanticsLabel: label,
+            style: .delta(
+              fillDecoration: .shapeDelta(
+                color: fraction > 0.85 ? YsColors.error : YsColors.ok,
+              ),
             ),
           ),
         ),
         const SizedBox(width: 8),
         Text(
           right,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+          style: const TextStyle(color: YsColors.mutedForeground, fontSize: 11),
         ),
       ]);
 
@@ -296,7 +301,7 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
     if (ports.isEmpty) {
       return const Text(
         'No listening ports detected',
-        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        style: TextStyle(color: YsColors.mutedForeground, fontSize: 12),
       );
     }
     return Column(
@@ -309,9 +314,10 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
                     child: Text(
                       p.protocol,
                       style: const TextStyle(
-                        color: AppColors.textSecondary,
+                        color: YsColors.mutedForeground,
                         fontSize: 11,
-                        fontFamily: 'monospace',
+                        fontFamily: kYsMonoFontFamily,
+                        fontFamilyFallback: kYsMonoFontFallback,
                       ),
                     ),
                   ),
@@ -320,9 +326,10 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
                     child: Text(
                       ':${p.localPort}',
                       style: const TextStyle(
-                        color: AppColors.textPrimary,
+                        color: YsColors.foreground,
                         fontSize: 12,
-                        fontFamily: 'monospace',
+                        fontFamily: kYsMonoFontFamily,
+                        fontFamilyFallback: kYsMonoFontFallback,
                       ),
                     ),
                   ),
@@ -330,7 +337,7 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
                     child: Text(
                       p.process ?? '—',
                       style: const TextStyle(
-                        color: AppColors.textSecondary,
+                        color: YsColors.mutedForeground,
                         fontSize: 11,
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -346,26 +353,30 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
     if (fw.type == FirewallType.none) {
       return const Text(
         'No firewall detected',
-        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        style: TextStyle(color: YsColors.mutedForeground, fontSize: 12),
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [
-          _chip(fw.type.name, AppColors.accent),
+          YsStatusBadge(fw.type.name, status: YsStatus.accent),
           const SizedBox(width: 6),
-          _chip(
+          YsStatusBadge(
             fw.enabled ? 'active' : 'inactive',
-            fw.enabled ? AppColors.success : AppColors.red,
+            status: fw.enabled ? YsStatus.ok : YsStatus.error,
           ),
           if (fw.defaultInboundPolicy != null) ...[
             const SizedBox(width: 8),
-            Text(
-              'default inbound: ${fw.defaultInboundPolicy}',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 11,
+            Flexible(
+              child: Text(
+                'default inbound: ${fw.defaultInboundPolicy}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: YsColors.mutedForeground,
+                  fontSize: 11,
+                ),
               ),
             ),
           ],
@@ -377,9 +388,10 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
                 child: Text(
                   r.description,
                   style: const TextStyle(
-                    color: AppColors.textPrimary,
+                    color: YsColors.foreground,
                     fontSize: 11,
-                    fontFamily: 'monospace',
+                    fontFamily: kYsMonoFontFamily,
+                    fontFamilyFallback: kYsMonoFontFallback,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -388,14 +400,4 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
       ],
     );
   }
-
-  Widget _chip(String label, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Text(label, style: TextStyle(color: color, fontSize: 11)),
-      );
 }

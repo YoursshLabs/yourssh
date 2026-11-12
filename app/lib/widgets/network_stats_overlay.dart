@@ -6,7 +6,7 @@ import '../providers/session_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/network_stats_service.dart';
 import '../services/ssh_service.dart';
-import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class NetworkStatsOverlay extends StatefulWidget {
   const NetworkStatsOverlay({super.key});
@@ -64,28 +64,35 @@ class _NetworkStatsOverlayState extends State<NetworkStatsOverlay> {
     final settings = context.watch<SettingsProvider>();
     if (!settings.networkStatsEnabled || _delta == null) return const SizedBox.shrink();
 
+    const mono = TextStyle(
+      fontSize: 11,
+      fontFamily: kYsMonoFontFamily,
+      fontFamilyFallback: kYsMonoFontFallback,
+    );
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(
+          horizontal: YsSpace.s2, vertical: YsSpace.s1 - 1),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1C).withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: const Color(0xFF2A2A2A)),
+        color: YsColors.card.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(YsRadius.control),
+        border: Border.all(color: YsColors.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.arrow_downward, size: 12, color: AppColors.accent),
+          const Icon(FLucideIcons.arrowDown,
+              size: 12, color: YsColors.accentText),
           const SizedBox(width: 2),
           Text(
             NetworkStats.formatBytes(_delta!.rxBytesPerSec),
-            style: const TextStyle(color: AppColors.accent, fontSize: 11, fontFamily: 'monospace'),
+            style: mono.copyWith(color: YsColors.accentText),
           ),
-          const SizedBox(width: 8),
-          const Icon(Icons.arrow_upward, size: 12, color: Color(0xFF60A5FA)),
+          const SizedBox(width: YsSpace.s2),
+          const Icon(FLucideIcons.arrowUp, size: 12, color: YsColors.foreground),
           const SizedBox(width: 2),
           Text(
             NetworkStats.formatBytes(_delta!.txBytesPerSec),
-            style: const TextStyle(color: Color(0xFF60A5FA), fontSize: 11, fontFamily: 'monospace'),
+            style: mono.copyWith(color: YsColors.foreground),
           ),
         ],
       ),

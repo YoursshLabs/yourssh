@@ -92,4 +92,29 @@ void main() {
     expect(layout.configPanelVisible, true);
     expect(layout.snippetsPanelVisible, false);
   });
+
+  testWidgets('trailing controls sit after the actions, not over them',
+      (tester) async {
+    final layout = TerminalLayoutProvider();
+    final plugins = await pluginProvider(snippetsEnabled: true);
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: layout),
+        ChangeNotifierProvider.value(value: plugins),
+      ],
+      child: ysTestApp(const BroadcastToolbar(
+        trailing: SizedBox(key: Key('toolbar-trailing'), width: 120, height: 20),
+      )),
+    ));
+
+    final trailing = tester.getRect(find.byKey(const Key('toolbar-trailing')));
+    final settings = tester.getRect(find.byTooltip('Toggle Terminal Settings'));
+    expect(trailing.left, greaterThanOrEqualTo(settings.right));
+    expect(trailing.overlaps(settings), isFalse);
+
+    // The covered button still receives taps.
+    await tester.tap(find.byTooltip('Toggle Terminal Settings'));
+    await tester.pumpAndSettle();
+    expect(layout.configPanelVisible, true);
+  });
 }
