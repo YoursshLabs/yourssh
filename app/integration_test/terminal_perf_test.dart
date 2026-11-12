@@ -10,6 +10,7 @@
 // Env (via --dart-define): BENCH_DIR, PERF_OUT, PHASE_CAP_S (default 300).
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show FramePhase;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -29,7 +30,10 @@ const _corpora = ['plain', 'color', 'unicode', 'tui'];
 
 class _Frame {
   final double build, raster, total;
-  _Frame(this.build, this.raster, this.total);
+
+  /// vsync -> build start (UI thread busy) and build end -> raster start.
+  final double vsyncLag, rasterWait;
+  _Frame(this.build, this.raster, this.total, this.vsyncLag, this.rasterWait);
 }
 
 void main() {
@@ -47,7 +51,13 @@ void main() {
         frames.putIfAbsent(phase, () => []).add(_Frame(
             t.buildDuration.inMicroseconds / 1000,
             t.rasterDuration.inMicroseconds / 1000,
-            t.totalSpan.inMicroseconds / 1000));
+            t.totalSpan.inMicroseconds / 1000,
+            (t.timestampInMicroseconds(FramePhase.buildStart) -
+                    t.timestampInMicroseconds(FramePhase.vsyncStart)) /
+                1000,
+            (t.timestampInMicroseconds(FramePhase.rasterStart) -
+                    t.timestampInMicroseconds(FramePhase.buildFinish)) /
+                1000));
       }
     });
 
@@ -120,13 +130,26 @@ void main() {
     phase = 'done';
     await sleep(500);
 
+    // Ctrl+C during a flood: how long until the terminal stops changing.
+    var lastChange = 0;
+    void onChange() => lastChange = epoch.elapsedMilliseconds;
+    term.addListener(onChange);
+    term.textInput('cat $_bench/plain.txt\r');
+    await sleep(400);
+    final ctrlCAt = epoch.elapsedMilliseconds;
+    term.textInput('\x03');
+    await sleep(1500);
+    term.removeListener(onChange);
+    final ctrlCStopMs = lastChange - ctrlCAt;
+    stdout.writeln('CTRLC output stopped ${ctrlCStopMs} ms after ^C');
+
     final json = StringBuffer('{"grid":"$grid","window":"${winSize.width}x${winSize.height}",'
-        '"completedLines":${lines()},"lineTimesMs":{${lineTimes.entries.map((e) => '"${e.key}":${e.value}').join(',')}},"writeBuckets50ms":{${writeBuckets.entries.map((e) => '"${e.key}":${e.value}').join(',')}},"capped":${capped.map((e) => '"$e"').toList()},"phases":{');
+        '"completedLines":${lines()},"lineTimesMs":{${lineTimes.entries.map((e) => '"${e.key}":${e.value}').join(',')}},"writeBuckets50ms":{${writeBuckets.entries.map((e) => '"${e.key}":${e.value}').join(',')}},"capped":${capped.map((e) => '"$e"').toList()},"ctrlCStopMs":$ctrlCStopMs,"phases":{');
     var first = true;
     frames.forEach((k, v) {
       if (!first) json.write(',');
       first = false;
-      json.write('"$k":[${v.map((f) => '[${f.build.toStringAsFixed(3)},${f.raster.toStringAsFixed(3)},${f.total.toStringAsFixed(3)}]').join(',')}]');
+      json.write('"$k":[${v.map((f) => '[${f.build.toStringAsFixed(3)},${f.raster.toStringAsFixed(3)},${f.total.toStringAsFixed(3)},${f.vsyncLag.toStringAsFixed(3)},${f.rasterWait.toStringAsFixed(3)}]').join(',')}]');
     });
     json.write('}}');
     File(_outPath).writeAsStringSync(json.toString());
