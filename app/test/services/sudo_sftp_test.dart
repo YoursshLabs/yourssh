@@ -309,4 +309,29 @@ void main() {
       );
     });
   });
+
+  group('resolveSftpHost', () {
+    test('prefers the freshly looked-up host over a stale snapshot', () {
+      // The panel/dashboard hold a Host snapshot captured when the source was
+      // picked. Switching the host to Sudo mode afterwards left the snapshot
+      // on SftpMode.normal, so listings ran unelevated and the server answered
+      // Permission denied (code 3) with no sudo prompt at all.
+      final stale = _host(SftpMode.normal);
+      final fresh = stale.copyWith(sftpMode: SftpMode.sudo);
+      expect(resolveSftpHost(stale, (id) => id == stale.id ? fresh : null)
+          .sftpMode, SftpMode.sudo);
+    });
+
+    test('falls back to the snapshot when no lookup is wired', () {
+      final snapshot = _host(SftpMode.sudo);
+      expect(resolveSftpHost(snapshot, null), same(snapshot));
+    });
+
+    test('falls back to the snapshot when the host is gone from the provider',
+        () {
+      final snapshot = _host(SftpMode.sudo);
+      expect(resolveSftpHost(snapshot, (_) => null), same(snapshot));
+    });
+  });
+
 }

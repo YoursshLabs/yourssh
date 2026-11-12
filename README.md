@@ -213,6 +213,7 @@ sudo dpkg -r yourssh
   </tr>
   <tr>
     <td align="center"><b>Updates</b><br/><img src="screenshots/05-settings/04-settings-updates.png"/></td>
+    <td align="center"><b>Terminal Theme Picker</b><br/><img src="screenshots/05-settings/05-terminal-theme-picker.png"/></td>
   </tr>
 </table>
 

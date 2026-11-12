@@ -1,8 +1,10 @@
 -- Sync data table for YourSSH cross-device host sync.
--- One row holds the encrypted host-list payload, keyed by the fixed id
--- 'default'. The payload is encrypted client-side (AES-GCM) with a key derived
--- from the Supabase anon key plus an optional user passphrase, so the row id is
--- not a secret and carries no length/format constraint.
+-- One row holds the encrypted host-list payload. sync_id is a one-way SHA-256
+-- hash of the user's sync code (never the code itself). The payload is
+-- encrypted client-side with AES-GCM keyed by the sync code, which never leaves
+-- the devices, so confidentiality and integrity do not depend on this table's
+-- access control. Residual risk: anon-key holders can still delete/overwrite
+-- rows (a DoS, detected by clients as a decrypt failure).
 
 create table if not exists sync_data (
   sync_id    text        primary key,
@@ -20,7 +22,8 @@ alter table sync_data drop constraint if exists sync_data_sync_id_check;
 alter table sync_data enable row level security;
 
 -- Allow any anonymous caller to read/write. Access is gated by the project's
--- anon key; confidentiality comes from client-side encryption of the payload.
+-- anon key; confidentiality comes from client-side AES-GCM, and sync_id is a
+-- hash that does not reveal the key input.
 drop policy if exists "anon_rw" on sync_data;
 create policy "anon_rw" on sync_data
   for all

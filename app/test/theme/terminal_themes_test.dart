@@ -24,8 +24,13 @@ void main() {
     expect(names.toSet().length, names.length);
   });
 
+  test('YourSSH Dark leads the catalog and is the fallback theme', () {
+    expect(kTerminalThemes.first.name, 'YourSSH Dark');
+    expect(terminalThemeByName('No Such Theme'), kTerminalThemes.first.data);
+  });
+
   test('catalog contains the nine added themes', () {
-    expect(kTerminalThemes.length, 44);
+    expect(kTerminalThemes.length, 45);
     const added = [
       'Kanagawa Dragon',
       'Kanagawa Lotus',

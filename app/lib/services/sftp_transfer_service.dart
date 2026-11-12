@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../models/host.dart';
 import '../models/sftp_entry.dart';
+import '../util/safe_local_path.dart';
 import 'ssh_service.dart';
 
 class SftpTransferService {
@@ -131,9 +132,12 @@ class SftpTransferService {
   }
 
   Future<String?> downloadToTemp(Host host, SftpEntry entry) async {
+    if (!isSafeRemoteEntryName(entry.name)) {
+      throw UnsafeRemotePathException(entry.name);
+    }
     final sftp = await _sshService.openSftp(host);
     final tmpDir = await getTemporaryDirectory();
-    final localPath = p.join(tmpDir.path, entry.name);
+    final localPath = safeLocalChild(tmpDir.path, entry.name);
     SftpFile? file;
     final sink = File(localPath).openWrite();
     try {
@@ -187,9 +191,10 @@ class SftpTransferService {
     required SftpEntry remoteEntry,
     required String localDir,
   }) async {
+    final localPath = safeLocalChild(localDir, remoteEntry.name);
     final sftp = await _sshService.openSftp(remoteHost);
     SftpFile? remoteFile;
-    final sink = File(p.join(localDir, remoteEntry.name)).openWrite();
+    final sink = File(localPath).openWrite();
     try {
       remoteFile = await sftp.open(remoteEntry.path);
       await _pipeToSink(remoteFile, sink);
@@ -315,7 +320,7 @@ class SftpTransferService {
   }) async {
     final sftp = await _sshService.openSftp(remoteHost);
     try {
-      await _downloadDirRecursive(
+      await downloadDirTree(
         sftp: sftp,
         remotePath: remoteDir.path,
         localDir: localDir,
@@ -328,21 +333,36 @@ class SftpTransferService {
     }
   }
 
-  Future<void> _downloadDirRecursive({
+  static const maxDownloadDepth = 64;
+
+  @visibleForTesting
+  static Future<void> downloadDirTree({
     required SftpClient sftp,
     required String remotePath,
     required String localDir,
     required void Function(String, int, int) onProgress,
     required void Function(String) onFileSkipped,
     required bool Function() isCancelled,
+    int depth = 0,
   }) async {
-    final dest = Directory(p.join(localDir, p.posix.basename(remotePath)));
+    // Symlink loops (`loop -> ..`) would otherwise recurse forever.
+    if (depth > maxDownloadDepth) {
+      onFileSkipped(remotePath);
+      return;
+    }
+    final dest = Directory(
+        safeLocalChild(localDir, p.posix.basename(remotePath)));
     if (!await dest.exists()) await dest.create(recursive: true);
     final items = await sftp.listdir(remotePath);
     for (final item in items) {
       if (item.filename == '.' || item.filename == '..') continue;
       if (isCancelled()) return;
       final childRemote = p.posix.join(remotePath, item.filename);
+      // Names are server-controlled: never let one leave the destination.
+      if (!isSafeRemoteEntryName(item.filename)) {
+        onFileSkipped(childRemote);
+        continue;
+      }
       // Resolve symlinks the same way the panel listing does, so a
       // symlink-to-dir shown as a folder in the UI is recursed into rather
       // than downloaded as a file.
@@ -352,19 +372,20 @@ class SftpTransferService {
         stat: sftp.stat,
       );
       if (isDirEntry) {
-        await _downloadDirRecursive(
+        await downloadDirTree(
           sftp: sftp, remotePath: childRemote, localDir: dest.path,
           onProgress: onProgress, onFileSkipped: onFileSkipped, isCancelled: isCancelled,
+          depth: depth + 1,
         );
       } else {
-        final localPath = p.join(dest.path, item.filename);
+        final localPath = safeLocalChild(dest.path, item.filename);
         if (await File(localPath).exists()) { onFileSkipped(childRemote); continue; }
         await _downloadFileWithProgress(sftp, childRemote, localPath, item.attr.size ?? 0, onProgress);
       }
     }
   }
 
-  Future<void> _downloadFileWithProgress(
+  static Future<void> _downloadFileWithProgress(
     SftpClient sftp,
     String remotePath,
     String localPath,

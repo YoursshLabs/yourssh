@@ -84,6 +84,9 @@ class MobileBootstrap {
     ssh.defaultKeyLookup = (id) => keyProvider.findById(id);
     ssh.defaultJumpHostLookup =
         (id) => hostProvider.allHosts.where((h) => h.id == id).firstOrNull;
+    // openSftp reads the host's live SFTP mode through this — its callers hold
+    // Host snapshots that go stale as soon as the host is edited.
+    ssh.defaultHostLookup = (id) => hostProvider.byId(id);
   }
 
   List<SingleChildWidget> get providers => [

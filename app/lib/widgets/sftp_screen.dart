@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../services/ssh_service.dart';
 import '../theme/app_theme.dart';
+import '../util/safe_local_path.dart';
 
 class SftpScreen extends StatefulWidget {
   final Host host;
@@ -80,7 +81,13 @@ class _SftpScreenState extends State<SftpScreen> {
     if (saveDir == null) return;
 
     final remotePath = p.posix.join(_remotePath, entry.filename);
-    final localPath = p.join(saveDir, entry.filename);
+    final String localPath;
+    try {
+      localPath = safeLocalChild(saveDir, entry.filename);
+    } on UnsafeRemotePathException catch (e) {
+      setState(() => _status = 'Error: $e');
+      return;
+    }
 
     setState(() => _status = 'Downloading ${entry.filename}…');
     try {

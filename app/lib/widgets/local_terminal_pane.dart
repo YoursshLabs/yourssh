@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:xterm/xterm.dart';
 import '../models/local_session.dart';
 import '../providers/settings_provider.dart';
+import '../theme/terminal_themes.dart';
 import '../services/hotkey_service.dart';
 import 'record_button.dart';
 import 'terminal_context_menu.dart';
@@ -56,6 +57,8 @@ class _LocalTerminalPaneState extends State<LocalTerminalPane> {
           controller: _controller,
           autofocus: true,
           keywordRules: keywordRules,
+          // Local shells have no host, so only the global appearance applies.
+          theme: terminalThemeByName(settings.terminalTheme),
           textStyle: TerminalStyle(
             fontSize: settings.fontSize,
             fontFamily: settings.terminalFont,

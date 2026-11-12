@@ -108,11 +108,19 @@ class HostKeyChallenge extends TofuChallenge {
   final String oldFingerprint;
   final String newFingerprint;
 
+  /// Set when the host is pinned under a DIFFERENT key type than the one now
+  /// presented (e.g. pinned ssh-ed25519, server offers ecdsa). Null when the
+  /// same key type presented a different fingerprint.
+  final String? oldKeyType;
+
   HostKeyChallenge({
     required this.host,
     required this.port,
     required this.keyType,
     required this.oldFingerprint,
     required this.newFingerprint,
+    this.oldKeyType,
   });
+
+  bool get isKeyTypeChange => oldKeyType != null && oldKeyType != keyType;
 }

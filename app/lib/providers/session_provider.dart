@@ -226,7 +226,10 @@ class SessionProvider extends ChangeNotifier {
       security: host.rdpSecurity.name,
       // With a pinned cert the Rust engine verifies it post-TLS, pre-CredSSP:
       // a mismatch aborts before any credentials are transmitted.
-      expectedFingerprint: rdpPinLookup?.call(host.host, host.port),
+      // No pin yet: send the probe sentinel so the engine still aborts
+      // pre-auth and reports the real fingerprint for first-use verification.
+      expectedFingerprint:
+          rdpPinLookup?.call(host.host, host.port) ?? kRdpUnpinnedProbe,
     );
     final client = RdpClient(config);
     session = RdpSession(
@@ -241,6 +244,26 @@ class SessionProvider extends ChangeNotifier {
     if (verifier != null) {
       session.certCheckCallback =
           (fp) => verifier(host.host, host.port, fp);
+    }
+    {
+      final s = session;
+      s.onFirstUseCert = (fp) {
+        final v = rdpCertVerifier;
+        if (v == null) {
+          s.markCertRejected(); // fail closed: never auto-trust unpinned
+          return;
+        }
+        unawaited(v(host.host, host.port, fp).then((trusted) {
+          if (!_sessions.contains(s)) return;
+          // Reconnect only if the pin is now stored; otherwise the next
+          // attempt would probe again and loop forever.
+          if (trusted && rdpPinLookup?.call(host.host, host.port) == fp) {
+            unawaited(reconnectRdp(s));
+          } else {
+            s.markCertRejected();
+          }
+        }, onError: (Object _) => s.markCertRejected()));
+      };
     }
     final mismatchHandler = rdpCertMismatchHandler;
     if (mismatchHandler != null) {

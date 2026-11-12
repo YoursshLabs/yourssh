@@ -12,6 +12,12 @@ import 'host.dart';
 
 enum RdpSessionStatus { connecting, connected, disconnected, error }
 
+/// Sentinel `expectedFingerprint` sent on the first connect to an unpinned
+/// host. It can never equal a SHA-256 hex fingerprint, so the Rust engine
+/// aborts post-TLS / pre-CredSSP with `certMismatch` carrying the server's
+/// real fingerprint — no credentials are sent before the user verifies it.
+const String kRdpUnpinnedProbe = 'unpinned-probe';
+
 /// One RDP tab. Holds the event subscription, framebuffer, and status.
 /// Pure model: no widget imports; UI listens via [ChangeNotifier].
 class RdpSession extends ChangeNotifier implements AppSession {
@@ -69,6 +75,23 @@ class RdpSession extends ChangeNotifier implements AppSession {
   /// the handler can offer re-trust + reconnect.
   void Function(String fingerprint)? onCertMismatch;
 
+  /// Fired when a first-use probe (no pin yet) reports the server's real
+  /// fingerprint. Nothing was sent to the server; the handler asks the user
+  /// to trust it and then reconnects with the pin.
+  void Function(String fingerprint)? onFirstUseCert;
+
+  /// True when this attempt is the unpinned first-use probe.
+  bool get isFirstUseProbe =>
+      client.config.expectedFingerprint == kRdpUnpinnedProbe;
+
+  /// The user declined (or could not complete) the first-use verification.
+  void markCertRejected() {
+    status = RdpSessionStatus.error;
+    lastMessage = 'Server certificate not trusted — connection aborted '
+        'before authentication';
+    notifyListeners();
+  }
+
   @override
   String? customLabel;
   @override
@@ -124,6 +147,14 @@ class RdpSession extends ChangeNotifier implements AppSession {
         status = RdpSessionStatus.connected;
       case frb.RdpEvent_CertMismatch(:final fingerprint):
         certFingerprint = fingerprint;
+        if (isFirstUseProbe) {
+          // Stay in `connecting`: this is verification, not a failure (no
+          // audit/notification noise). The handler resolves it.
+          lastMessage = 'Verifying server certificate…';
+          onFirstUseCert?.call(fingerprint);
+          if (onFirstUseCert == null) markCertRejected();
+          return;
+        }
         status = RdpSessionStatus.error;
         lastMessage = 'Server certificate changed — connection aborted '
             'before authentication';

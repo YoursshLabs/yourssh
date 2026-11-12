@@ -123,9 +123,9 @@ class _ActiveShareView extends StatelessWidget {
                   code,
                   style: const TextStyle(
                     color: AppColors.accent,
-                    fontSize: 28,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 6,
+                    letterSpacing: 1,
                     fontFamily: 'monospace',
                   ),
                 ),

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,79 @@ import 'package:yourssh/models/ssh_key.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/system_agent_proxy.dart';
+
+class _FakeSocket implements SSHSocket {
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+/// Stubs the network seams of testConnection so only the host-key policy
+/// wiring is exercised.
+class _TestConnSvc extends SshService {
+  _TestConnSvc(super.storage);
+  final List<String> dialed = [];
+  final List<String> clientsBuilt = [];
+  Uint8List fp = Uint8List.fromList([1, 2, 3]);
+  bool? lastTargetVerdict;
+
+  @override
+  Future<SSHSocket> localDial(Host host, {Duration? timeout}) async {
+    dialed.add(host.host);
+    return _FakeSocket();
+  }
+
+  @override
+  SSHClient buildTestClient(SSHSocket socket,
+      {required Host host,
+      required String? password,
+      required List<SSHKeyPair>? identities,
+      required Future<bool> Function(String keyType, Uint8List fp)
+          onVerifyHostKey}) {
+    clientsBuilt.add(host.host);
+    return _VerifyingClient(() async {
+      lastTargetVerdict = await onVerifyHostKey('ssh-ed25519', fp);
+      if (lastTargetVerdict != true) throw Exception('Host key rejected');
+    });
+  }
+
+  @override
+  Future<({SSHClient client, SystemAgentProxy? proxy})> dialHop(
+    Host hop,
+    SSHSocket? over, {
+    SshKeyEntry? keyEntry,
+    Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
+  }) async {
+    dialed.add('hop:${hop.host}');
+    if (verifyHostKey == null || !await verifyHostKey('ssh-ed25519', fp)) {
+      throw Exception('Host key rejected');
+    }
+    return (client: _VerifyingClient(() async {}), proxy: null);
+  }
+}
+
+class _FakeChannel implements SSHForwardChannel {
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+class _VerifyingClient implements SSHClient {
+  _VerifyingClient(this._auth);
+  final Future<void> Function() _auth;
+
+  @override
+  Future<void> get authenticated => _auth();
+
+  @override
+  Future<SSHForwardChannel> forwardLocal(String host, int port,
+          {String? localHost, int? localPort}) async =>
+      _FakeChannel();
+
+  @override
+  void close() {}
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
 
 SshKeyEntry _keyEntry({String? certPath}) => SshKeyEntry(
       label: 'test-key',
@@ -82,7 +156,8 @@ void main() {
   group('testConnection — error classification', () {
     test('unreachable host → success=false, error="Host unreachable"',
         () async {
-      final svc = SshService(StorageService());
+      final svc = SshService(StorageService())
+        ..defaultHostKeyVerifier = (host, port, type, fp) async => true;
       final host = Host(
         label: 'x',
         host: '127.0.0.1',
@@ -96,6 +171,81 @@ void main() {
       expect(r.success, isFalse);
       expect(r.error, 'Host unreachable');
       expect(r.latencyMs, 0);
+    });
+  });
+
+  group('testConnection — host key verification', () {
+    Host h(String id, String host, int port) => Host(
+        id: id, label: id, host: host, port: port, username: 'u');
+
+    test('fails closed without dialing when no verifier is wired', () async {
+      final svc = _TestConnSvc(StorageService());
+      final r = await svc.testConnection(h('t', '10.0.0.9', 22), password: 'pw');
+      expect(r.success, isFalse);
+      expect(r.error, contains('host key'));
+      expect(svc.dialed, isEmpty);
+      expect(svc.clientsBuilt, isEmpty);
+    });
+
+    test('consults the verifier for the target under its own host:port', () async {
+      final svc = _TestConnSvc(StorageService());
+      final seen = <String>[];
+      svc.defaultHostKeyVerifier = (host, port, type, fp) async {
+        seen.add('$host:$port');
+        return true;
+      };
+      final r = await svc.testConnection(h('t', '10.0.0.9', 2222), password: 'pw');
+      expect(r.success, isTrue);
+      expect(seen, ['10.0.0.9:2222']);
+    });
+
+    test('target host key rejected -> success=false with clear error', () async {
+      final svc = _TestConnSvc(StorageService());
+      svc.defaultHostKeyVerifier = (host, port, type, fp) async => false;
+      final r = await svc.testConnection(h('t', '10.0.0.9', 22), password: 'pw');
+      expect(r.success, isFalse);
+      expect(r.error, contains('Host key'));
+    });
+
+    test('every hop is verified under its own host:port, then the target', () async {
+      final svc = _TestConnSvc(StorageService());
+      final seen = <String>[];
+      svc.defaultHostKeyVerifier = (host, port, type, fp) async {
+        seen.add('$host:$port');
+        return true;
+      };
+      final r = await svc.testConnection(h('t', '10.0.0.9', 22), password: 'pw', jumpChain: [
+        (host: h('a', '10.0.0.1', 22), keyEntry: null),
+        (host: h('b', '10.0.0.2', 2200), keyEntry: null),
+      ]);
+      expect(r.success, isTrue);
+      expect(seen, ['10.0.0.1:22', '10.0.0.2:2200', '10.0.0.9:22']);
+    });
+
+    test('a rejected hop key aborts before the next hop or target', () async {
+      final svc = _TestConnSvc(StorageService());
+      svc.defaultHostKeyVerifier = (host, port, type, fp) async => false;
+      final r = await svc.testConnection(h('t', '10.0.0.9', 22), password: 'pw', jumpChain: [
+        (host: h('a', '10.0.0.1', 22), keyEntry: null),
+        (host: h('b', '10.0.0.2', 22), keyEntry: null),
+      ]);
+      expect(r.success, isFalse);
+      expect(svc.dialed, ['hop:10.0.0.1']);
+      expect(svc.clientsBuilt, isEmpty);
+    });
+  });
+
+  group('hostKeyDecision — fail closed without a verifier', () {
+    test('null verifier rejects', () async {
+      expect(await SshService.hostKeyDecision(null, 'ssh-ed25519', Uint8List(1)),
+          isFalse);
+    });
+
+    test('delegates to the verifier when present', () async {
+      expect(
+          await SshService.hostKeyDecision(
+              (t, f) async => true, 'ssh-ed25519', Uint8List(1)),
+          isTrue);
     });
   });
 

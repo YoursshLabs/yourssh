@@ -14,6 +14,7 @@ class ShareEvent {
   final ShareEventType type;
   final String? data;
   final String? guestId;
+  final String? targetGuestId;
   final int? chunkIndex;
   final int? chunkTotal;
 
@@ -21,6 +22,7 @@ class ShareEvent {
     required this.type,
     this.data,
     this.guestId,
+    this.targetGuestId,
     this.chunkIndex,
     this.chunkTotal,
   });
@@ -28,8 +30,8 @@ class ShareEvent {
   factory ShareEvent.output(String data) =>
       ShareEvent._(type: ShareEventType.output, data: data);
 
-  factory ShareEvent.input(String data) =>
-      ShareEvent._(type: ShareEventType.input, data: data);
+  factory ShareEvent.input(String data, String? guestId) =>
+      ShareEvent._(type: ShareEventType.input, data: data, guestId: guestId);
 
   factory ShareEvent.snapshot(String data) =>
       ShareEvent._(type: ShareEventType.snapshot, data: data);
@@ -51,8 +53,12 @@ class ShareEvent {
   factory ShareEvent.joinRequest(String guestId) =>
       ShareEvent._(type: ShareEventType.joinRequest, guestId: guestId);
 
-  factory ShareEvent.rejected(String reason) =>
-      ShareEvent._(type: ShareEventType.rejected, data: reason);
+  factory ShareEvent.rejected(String reason, String? targetGuestId) =>
+      ShareEvent._(
+        type: ShareEventType.rejected,
+        data: reason,
+        targetGuestId: targetGuestId,
+      );
 
   factory ShareEvent.ended() => ShareEvent._(type: ShareEventType.ended);
 
@@ -74,6 +80,7 @@ class ShareEvent {
       type: type,
       data: json['data'] as String?,
       guestId: json['guestId'] as String?,
+      targetGuestId: json['targetGuestId'] as String?,
       chunkIndex: json['index'] as int?,
       chunkTotal: json['total'] as int?,
     );
@@ -95,6 +102,7 @@ class ShareEvent {
       'type': typeStr,
       if (data != null) 'data': data,
       if (guestId != null) 'guestId': guestId,
+      if (targetGuestId != null) 'targetGuestId': targetGuestId,
       if (chunkIndex != null) 'index': chunkIndex,
       if (chunkTotal != null) 'total': chunkTotal,
     };

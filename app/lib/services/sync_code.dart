@@ -1,7 +1,11 @@
+import 'dart:convert';
 import 'dart:math';
 
-/// A 12-character sync code — the single secret for cloud sync. It is both the
-/// Supabase row id (`sync_id`) and the KDF input for payload encryption. Uses
+import 'package:crypto/crypto.dart';
+
+/// A 12-character sync code — the single secret for cloud sync. It is the KDF
+/// input for payload encryption and never leaves the device; the Supabase row
+/// id (`sync_id`) is the one-way [rowId] derived from it. Uses
 /// the Crockford Base32 alphabet (excludes the ambiguous I, L, O, U) so codes
 /// transcribe cleanly by hand.
 class SyncCode {
@@ -30,6 +34,13 @@ class SyncCode {
         .replaceAll(RegExp('[IL]'), '1')
         .replaceAll('O', '0');
   }
+
+  /// The Supabase row id for [code]: lowercase hex SHA-256 of a domain-separated
+  /// normalized code. One-way, so reading `sync_id` from the table does not
+  /// reveal the code (the AES-GCM key input).
+  static String rowId(String code) => sha256
+      .convert(utf8.encode('yourssh-sync-row-v1:${normalize(code)}'))
+      .toString();
 
   /// True when [input] normalizes to exactly 12 chars, all in [alphabet].
   static bool isValid(String input) {

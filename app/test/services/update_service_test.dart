@@ -275,4 +275,39 @@ void main() {
       expect(file.existsSync(), isTrue);
     });
   });
+
+  group('verifyMacInstallerSignature', () {
+    test('passes when codesign accepts the release team requirement', () async {
+      final calls = <List<String>>[];
+      final svc = UpdateService(processRunner: (exe, args) async {
+        calls.add([exe, ...args]);
+        return ProcessResult(0, 0, '', '');
+      });
+      await svc.verifyMacInstallerSignature(File('/tmp/YourSSH.dmg'));
+      expect(calls, hasLength(1));
+      final call = calls.single;
+      expect(call.first, 'codesign');
+      expect(call, containsAll(['--verify', '--strict', '-R']));
+      final requirement = call[call.indexOf('-R') + 1];
+      expect(requirement, startsWith('=anchor apple generic'));
+      expect(requirement,
+          contains('certificate leaf[subject.OU] = "${UpdateService.releaseTeamId}"'));
+      expect(call.last, '/tmp/YourSSH.dmg');
+    });
+
+    test('throws when the installer is unsigned or signed by another team',
+        () async {
+      final svc = UpdateService(
+          processRunner: (exe, args) async =>
+              ProcessResult(0, 3, '', 'test-requirement: code failed to satisfy'));
+      await expectLater(
+        svc.verifyMacInstallerSignature(File('/tmp/YourSSH.dmg')),
+        throwsA(isA<UpdateException>()),
+      );
+    });
+
+    test('pins the YourSSH Developer ID team', () {
+      expect(UpdateService.releaseTeamId, '84T567KMYD');
+    });
+  });
 }

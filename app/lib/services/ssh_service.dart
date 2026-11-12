@@ -88,6 +88,12 @@ class SshService {
   /// out — only interactive sessions (SessionProvider) resolved the jump.
   Host? Function(String jumpHostId)? defaultJumpHostLookup;
 
+  /// Resolves a host id to its saved [Host], so [openSftp] honours the host's
+  /// *current* SFTP mode instead of the snapshot its caller captured. Wired in
+  /// main.dart to HostProvider; null keeps the caller's snapshot. See
+  /// [resolveSftpHost].
+  Host? Function(String hostId)? defaultHostLookup;
+
   /// Loads app-Keychain keys served through a forwarded agent when no system
   /// agent is available. Set from main.dart (KeyProvider + stored
   /// passphrases); null means the fallback serves an empty identity list.
@@ -269,7 +275,7 @@ class SshService {
     List<JumpHop> jumpChain = const [],
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
     // Verifies each bastion hop's key under its OWN host:port (the target's
-    // [verifyHostKey] only covers the destination). Null → accept hop keys.
+    // [verifyHostKey] only covers the destination). Null → reject (fail closed).
     Future<bool> Function(Host hop, String keyType, Uint8List fp)?
         verifyHopHostKey,
   }) async {
@@ -322,10 +328,8 @@ class SshService {
                             : AgentForwardingState.active),
               )
             : null,
-        onVerifyHostKey: (type, fp) async {
-          if (verifyHostKey != null) return verifyHostKey(type.toString(), fp);
-          return true;
-        },
+        onVerifyHostKey: (type, fp) =>
+            hostKeyDecision(verifyHostKey, type.toString(), fp),
         // Built-in keepalive is disabled: HealthMonitorService is the sole
         // pinger (it both keeps the connection alive and measures latency),
         // avoiding a race on the shared global-request reply queue.
@@ -366,6 +370,36 @@ class SshService {
     return chain;
   }
 
+  /// Host-key policy shared by every dial path. With no [verifier] the key is
+  /// REJECTED (fail closed): an unverified key would hand credentials to
+  /// whoever answers on the wire.
+  @visibleForTesting
+  static Future<bool> hostKeyDecision(
+    Future<bool> Function(String keyType, Uint8List fingerprint)? verifier,
+    String keyType,
+    Uint8List fingerprint,
+  ) async {
+    if (verifier == null) return false;
+    return verifier(keyType, fingerprint);
+  }
+
+  /// Builds the throwaway client used by [testConnection]. Seam for tests.
+  @visibleForTesting
+  SSHClient buildTestClient(
+    SSHSocket socket, {
+    required Host host,
+    required String? password,
+    required List<SSHKeyPair>? identities,
+    required Future<bool> Function(String keyType, Uint8List fp) onVerifyHostKey,
+  }) =>
+      SSHClient(
+        socket,
+        username: host.username,
+        onPasswordRequest: () => password ?? '',
+        identities: identities,
+        onVerifyHostKey: (type, fp) => onVerifyHostKey(type.toString(), fp),
+      );
+
   /// Opens one hop and returns its client + agent proxy (the caller owns
   /// proxy storage/lifetime). [over] null = direct TCP (hop0); otherwise the
   /// socket is the previous client's forwardLocal channel. `@visibleForTesting`
@@ -386,10 +420,8 @@ class SshService {
       onPasswordRequest: () => password ?? '',
       identities:
           resolution.identities.isNotEmpty ? resolution.identities : null,
-      onVerifyHostKey: (type, fp) async {
-        if (verifyHostKey != null) return verifyHostKey(type.toString(), fp);
-        return true;
-      },
+      onVerifyHostKey: (type, fp) =>
+          hostKeyDecision(verifyHostKey, type.toString(), fp),
     );
     try {
       await client.authenticated;
@@ -542,6 +574,16 @@ class SshService {
     SshKeyEntry? keyEntry,
     List<JumpHop> jumpChain = const [],
   }) async {
+    // Same host-key policy as a real connect: without a verifier the saved
+    // credentials would go to whoever answers, so refuse to dial at all.
+    final verifier = defaultHostKeyVerifier;
+    if (verifier == null) {
+      return (
+        success: false,
+        latencyMs: 0,
+        error: 'Cannot verify host key: host key verification is not available',
+      );
+    }
     final stopwatch = Stopwatch()..start();
     SSHClient? client;
     // Temp (non-cached) hop clients + their agent proxies, all closed in
@@ -562,7 +604,9 @@ class SshService {
           // Shared per-hop dial (same auth/identity path as a real connect);
           // temp clients/proxies are tracked here and closed in `finally`.
           final r = await dialHop(hop.host, overSocket,
-                  keyEntry: hop.keyEntry)
+                  keyEntry: hop.keyEntry,
+                  verifyHostKey: (kt, fp) =>
+                      verifier(hop.host.host, hop.host.port, kt, fp))
               .timeout(const Duration(seconds: 10));
           jumpClients.add(r.client);
           if (r.proxy != null) jumpProxies.add(r.proxy!);
@@ -577,18 +621,21 @@ class SshService {
 
       final resolution = await _resolveIdentities(host, keyEntry);
       agentProxy = resolution.agentProxy;
-      client = SSHClient(
+      client = buildTestClient(
         socket,
-        username: host.username,
-        onPasswordRequest: () => password ?? '',
-        identities: resolution.identities.isNotEmpty ? resolution.identities : null,
-        onVerifyHostKey: (_, _) async => true,
+        host: host,
+        password: password,
+        identities:
+            resolution.identities.isNotEmpty ? resolution.identities : null,
+        onVerifyHostKey: (kt, fp) => verifier(host.host, host.port, kt, fp),
       );
       await client.authenticated.timeout(const Duration(seconds: 10));
       stopwatch.stop();
       return (success: true, latencyMs: stopwatch.elapsedMilliseconds, error: null);
     } on SSHAgentUnavailableException catch (e) {
       return (success: false, latencyMs: 0, error: e.message);
+    } on SSHHostkeyError {
+      return (success: false, latencyMs: 0, error: 'Host key rejected');
     } on TimeoutException {
       return (success: false, latencyMs: 0, error: 'Host unreachable');
     } on SocketException {
@@ -1152,7 +1199,10 @@ class SshService {
 
   // ── SFTP ───────────────────────────────────────────────
 
-  Future<SftpClient> openSftp(Host host, {bool interactive = true}) async {
+  Future<SftpClient> openSftp(Host snapshot, {bool interactive = true}) async {
+    // Callers pass a Host captured when their panel/tab was created; the SFTP
+    // mode must come from the live host or a mode switch never takes effect.
+    final host = resolveSftpHost(snapshot, defaultHostLookup);
     final client = await _ensureClient(host);
     if (host.sftpMode == SftpMode.normal) return client.sftp();
     return _openElevatedSftp(client, host, interactive: interactive);
