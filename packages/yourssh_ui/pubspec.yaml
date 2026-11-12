@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   forui: ^0.27.7
+  material_ui: ^1.11.0
+
 
 dev_dependencies:
   flutter_test:
