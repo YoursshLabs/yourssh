@@ -1,10 +1,11 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../helpers/ys_test_app.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/rdp_session.dart';
 import 'package:yourssh/widgets/rdp_workspace.dart';
+import 'package:yourssh/widgets/remote_workspace_chrome.dart';
 import 'package:yourssh_rdp/yourssh_rdp.dart' show RdpClient, RdpConfig;
 // ignore: implementation_imports
 import 'package:yourssh_rdp/src/generated/api.dart' as frb;
@@ -39,12 +40,12 @@ void main() {
     final session = _session();
     session.attach(events.stream);
 
-    await tester.pumpWidget(MaterialApp(home: RdpWorkspace(session: session)));
-    expect(find.textContaining('Connecting'), findsOneWidget);
+    await tester.pumpWidget(ysTestApp(RdpWorkspace(session: session)));
+    expect(find.descendant(of: find.byType(RemoteStatusOverlay), matching: find.textContaining('Connecting')), findsOneWidget);
 
     events.add(const frb.RdpEvent.error(message: 'auth failed'));
     await tester.pump();
-    expect(find.textContaining('auth failed'), findsOneWidget);
+    expect(find.descendant(of: find.byType(RemoteStatusOverlay), matching: find.textContaining('auth failed')), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
   });
 
@@ -55,14 +56,15 @@ void main() {
     session.attach(events.stream);
     bool? changed;
 
-    await tester.pumpWidget(MaterialApp(
-        home: RdpWorkspace(
+    await tester.pumpWidget(ysTestApp(RdpWorkspace(
             session: session, onFullscreenChanged: (v) => changed = v)));
 
     // Still connecting — button rendered but disabled.
     final btn = find.byTooltip('Fullscreen');
     expect(btn, findsOneWidget);
     await tester.tap(btn);
+    // forui buttons keep a short tap-feedback timer.
+    await tester.pump(const Duration(milliseconds: 200));
     expect(changed, isNull);
 
     events.add(frb.RdpEvent.connected(
@@ -70,15 +72,18 @@ void main() {
         desktopWidth: 800,
         desktopHeight: 600));
     await tester.pump();
+    await tester.pump(); // let the toolbar settle after the status change
 
     await tester.tap(find.byTooltip('Fullscreen'));
+    // forui buttons keep a short tap-feedback timer.
+    await tester.pump(const Duration(milliseconds: 200));
     expect(changed, isTrue);
   });
 
   testWidgets('no fullscreen button without an onFullscreenChanged handler',
       (tester) async {
     final session = _session();
-    await tester.pumpWidget(MaterialApp(home: RdpWorkspace(session: session)));
+    await tester.pumpWidget(ysTestApp(RdpWorkspace(session: session)));
     expect(find.byTooltip('Fullscreen'), findsNothing);
   });
 
@@ -89,8 +94,7 @@ void main() {
     session.attach(events.stream);
 
     bool? changed;
-    await tester.pumpWidget(MaterialApp(
-        home: RdpWorkspace(
+    await tester.pumpWidget(ysTestApp(RdpWorkspace(
             session: session,
             isFullscreen: true,
             onFullscreenChanged: (v) => changed = v)));
@@ -106,6 +110,9 @@ void main() {
     expect(exit, findsOneWidget);
 
     await tester.tap(exit);
+
+    // forui buttons keep a short tap-feedback timer.
+    await tester.pump(const Duration(milliseconds: 200));
     expect(changed, isFalse);
 
     // Pill auto-hides after the flash window.
@@ -119,8 +126,7 @@ void main() {
     session.attach(events.stream);
 
     bool? changed;
-    await tester.pumpWidget(MaterialApp(
-        home: RdpWorkspace(
+    await tester.pumpWidget(ysTestApp(RdpWorkspace(
             session: session,
             isFullscreen: true,
             onFullscreenChanged: (v) => changed = v)));

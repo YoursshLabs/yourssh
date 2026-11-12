@@ -5,10 +5,12 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../models/rdp_session.dart';
 import '../services/hotkey_service.dart';
-import '../theme/app_theme.dart';
+import 'remote_workspace_chrome.dart';
+import 'terminal_status_bar.dart';
 import '../util/rdp_input_mapping.dart';
 
 /// Full workspace for an active RDP tab: rendered remote screen,
@@ -162,22 +164,22 @@ class _RdpWorkspaceState extends State<RdpWorkspace> {
             : () => widget.onFullscreenChanged!.call(true),
       ),
       Expanded(child: _buildBody()),
+      // Same bar as the terminal workspace; listens to stateChanges only,
+      // so decoded frames never rebuild it.
+      SessionStatusBar(key: ValueKey(session.id), session: session),
     ]);
   }
 
   Widget _buildBody() {
     switch (session.status) {
       case RdpSessionStatus.connecting:
-        return const Center(child: Text('Connecting…'));
+        return const RemoteStatusOverlay(message: 'Connecting…');
       case RdpSessionStatus.error:
       case RdpSessionStatus.disconnected:
-        return Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(session.lastMessage ?? 'Disconnected'),
-            const SizedBox(height: 12),
-            FilledButton(
-                onPressed: widget.onReconnect, child: const Text('Retry')),
-          ]),
+        return RemoteStatusOverlay(
+          message: session.lastMessage ?? 'Disconnected',
+          showRetry: true,
+          onRetry: widget.onReconnect,
         );
       case RdpSessionStatus.connected:
         return LayoutBuilder(builder: (context, constraints) {
@@ -321,40 +323,32 @@ class _Toolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 34,
-      color: AppColors.card,
-      child: Row(children: [
-        const SizedBox(width: 8),
-        Text(session.tabLabel, style: Theme.of(context).textTheme.labelMedium),
-        const Spacer(),
-        IconButton(
-          tooltip: 'Send Ctrl+Alt+Del',
-          icon: const Icon(Icons.keyboard_command_key, size: 16),
-          onPressed: () => _sendCtrlAltDel(session),
+    return RemoteWorkspaceToolbar(label: session.tabLabel, actions: [
+      RemoteIconAction(
+        tooltip: 'Send Ctrl+Alt+Del',
+        icon: FLucideIcons.command,
+        onPressed: () => _sendCtrlAltDel(session),
+      ),
+      RemoteIconAction(
+        tooltip: 'Push clipboard to remote',
+        icon: FLucideIcons.clipboardPaste,
+        onPressed: () => _pushClipboard(session),
+      ),
+      if (onEnterFullscreen != null)
+        RemoteIconAction(
+          tooltip: 'Fullscreen',
+          icon: FLucideIcons.maximize,
+          // Only meaningful with a live desktop behind it.
+          onPressed: session.status == RdpSessionStatus.connected
+              ? onEnterFullscreen
+              : null,
         ),
-        IconButton(
-          tooltip: 'Push clipboard to remote',
-          icon: const Icon(Icons.content_paste_go, size: 16),
-          onPressed: () => _pushClipboard(session),
-        ),
-        if (onEnterFullscreen != null)
-          IconButton(
-            tooltip: 'Fullscreen',
-            icon: const Icon(Icons.fullscreen, size: 16),
-            // Only meaningful with a live desktop behind it.
-            onPressed: session.status == RdpSessionStatus.connected
-                ? onEnterFullscreen
-                : null,
-          ),
-        IconButton(
-          tooltip: 'Disconnect',
-          icon: const Icon(Icons.power_settings_new, size: 16),
-          onPressed: () => session.client.disconnect(),
-        ),
-        const SizedBox(width: 4),
-      ]),
-    );
+      RemoteIconAction(
+        tooltip: 'Disconnect',
+        icon: FLucideIcons.power,
+        onPressed: () => session.client.disconnect(),
+      ),
+    ]);
   }
 }
 
@@ -371,39 +365,41 @@ class _FullscreenPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.card.withValues(alpha: 0.92),
-      borderRadius: BorderRadius.circular(8),
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(session.tabLabel,
-              style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(width: 8),
-          IconButton(
-            tooltip: 'Send Ctrl+Alt+Del',
-            icon: const Icon(Icons.keyboard_command_key, size: 16),
-            onPressed: () => _sendCtrlAltDel(session),
-          ),
-          IconButton(
-            tooltip: 'Push clipboard to remote',
-            icon: const Icon(Icons.content_paste_go, size: 16),
-            onPressed: () => _pushClipboard(session),
-          ),
-          IconButton(
-            tooltip: 'Exit fullscreen',
-            icon: const Icon(Icons.fullscreen_exit, size: 16),
-            onPressed: onExitFullscreen,
-          ),
-          IconButton(
-            tooltip: 'Disconnect',
-            icon: const Icon(Icons.power_settings_new, size: 16),
-            onPressed: () => session.client.disconnect(),
-          ),
-        ]),
+    return RemoteFloatingPill(children: [
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 240),
+        child: Text(
+          session.tabLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+              color: YsColors.foreground,
+              fontSize: 12,
+              fontWeight: FontWeight.w500),
+        ),
       ),
-    );
+      const SizedBox(width: YsSpace.s2),
+      RemoteIconAction(
+        tooltip: 'Send Ctrl+Alt+Del',
+        icon: FLucideIcons.command,
+        onPressed: () => _sendCtrlAltDel(session),
+      ),
+      RemoteIconAction(
+        tooltip: 'Push clipboard to remote',
+        icon: FLucideIcons.clipboardPaste,
+        onPressed: () => _pushClipboard(session),
+      ),
+      RemoteIconAction(
+        tooltip: 'Exit fullscreen',
+        icon: FLucideIcons.minimize,
+        onPressed: onExitFullscreen,
+      ),
+      RemoteIconAction(
+        tooltip: 'Disconnect',
+        icon: FLucideIcons.power,
+        onPressed: () => session.client.disconnect(),
+      ),
+    ]);
   }
 }
 
