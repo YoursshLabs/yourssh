@@ -9,6 +9,18 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+# Build output and the platform runner projects are not analyzed. `flutter pub
+# get` (Flutter 3.47 and later) adds any of these that are missing
+# (AnalysisOptionsMigration), so removing them only makes the next `pub get`
+# rewrite this file.
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - windows/**
+    - macos/**
+    - linux/**
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`
