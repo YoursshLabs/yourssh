@@ -39,6 +39,7 @@ class _GatedSsh extends SshService {
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
     Future<bool> Function(Host hop, String keyType, Uint8List fp)?
         verifyHopHostKey,
+    bool Function()? isCurrent,
   }) async {
     await gate.future;
     return _NullClient();

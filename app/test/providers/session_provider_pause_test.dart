@@ -45,6 +45,7 @@ class _Ssh extends SshService {
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
     Future<bool> Function(Host hop, String keyType, Uint8List fp)?
         verifyHopHostKey,
+    bool Function()? isCurrent,
   }) {
     connects.add(host.id);
     if (connectCompletes) return Future.value(_FakeClient());
@@ -65,6 +66,42 @@ class _Ssh extends SshService {
   void disconnect(String hostId) => disconnects.add(hostId);
 }
 
+class _ScriptedShell implements SSHSession {
+  final written = <String>[];
+  final _out = StreamController<Uint8List>();
+  final _err = StreamController<Uint8List>();
+  @override
+  bool get agentForwardingRefused => false;
+  @override
+  Stream<Uint8List> get stdout => _out.stream;
+  @override
+  Stream<Uint8List> get stderr => _err.stream;
+  @override
+  void write(Uint8List data) => written.add(String.fromCharCodes(data));
+  @override
+  void resizeTerminal(int w, int h, [int pw = 0, int ph = 0]) {}
+  @override
+  Future<void> close() async {
+    await _out.close();
+    await _err.close();
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+class _ScriptedClient extends _FakeClient {
+  _ScriptedClient(this.scripted);
+  final _ScriptedShell scripted;
+  @override
+  Future<SSHSession> shell({
+    SSHPtyConfig? pty = const SSHPtyConfig(),
+    SSHX11Config? x11,
+    Map<String, String>? environment,
+  }) async =>
+      scripted;
+}
+
 class _GatedSsh extends _Ssh {
   final connectGate = Completer<SSHClient>();
   @override
@@ -75,6 +112,7 @@ class _GatedSsh extends _Ssh {
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
     Future<bool> Function(Host hop, String keyType, Uint8List fp)?
         verifyHopHostKey,
+    bool Function()? isCurrent,
   }) =>
       connectGate.future;
 }
@@ -233,19 +271,39 @@ void main() {
     });
   });
 
-  test('paused session rejects input and nothing is buffered', () {
-    final s = _session('A', SessionStatus.connected);
-    p.addSessionForTest(s);
+  test('paused session rejects input and nothing is buffered', () async {
+    // Real SshService + a scripted shell, so sendInput really has a shell.
+    final real = SshService(StorageService());
+    final rp = SessionProvider(real, TabMetadataService());
+    addTearDown(rp.dispose);
+    final host = _host('A');
+    final s = SshSession(host: host, status: SessionStatus.connected);
+    rp.addSessionForTest(s);
+    final shell1 = _ScriptedShell();
+    real.debugSetClient(host.id, _ScriptedClient(shell1));
+    unawaited(real.openShell(s));
+    await Future<void>.delayed(Duration.zero);
     expect(s.acceptsInput, isTrue);
-    p.pauseAll();
+    expect(real.sendInput(s.id, 'ls\n'), isTrue);
+    expect(shell1.written, ['ls\n']);
+
+    rp.pauseAll();
     expect(s.acceptsInput, isFalse);
-    expect(ssh.sendInput(s.id, 'ls\n'), isFalse);
-    // Nothing is queued for later: after the resume starts connecting, the
-    // session still rejects input until it is connected again.
-    p.resumePaused(stagger: Duration.zero);
-    expect(s.status, SessionStatus.connecting);
-    expect(s.acceptsInput, isFalse);
-    expect(ssh.sendInput(s.id, 'ls\n'), isFalse);
+    expect(real.sendInput(s.id, 'rm -rf x\n'), isFalse);
+
+    // The resumed attempt gets a fresh shell: nothing typed while paused may
+    // be replayed into it.
+    final shell2 = _ScriptedShell();
+    real.debugSetClient(host.id, _ScriptedClient(shell2));
+    s
+      ..paused = false
+      ..status = SessionStatus.connected;
+    unawaited(real.openShell(s));
+    await Future<void>.delayed(Duration.zero);
+    expect(shell2.written, isEmpty);
+    expect(real.sendInput(s.id, 'pwd\n'), isTrue);
+    expect(shell2.written, ['pwd\n']);
+    expect(shell1.written, ['ls\n']);
   });
 
   test('verifyLive probes only connected hosts and reconnects the dead ones',

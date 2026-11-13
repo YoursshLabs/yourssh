@@ -531,6 +531,7 @@ class SessionProvider extends ChangeNotifier {
       _safeNotify();
       final client = await _ssh.connect(
         host,
+        isCurrent: () => !superseded(),
         keyEntry: keyEntry,
         jumpChain: jumpChain,
         verifyHostKey: hostKeyVerifier != null

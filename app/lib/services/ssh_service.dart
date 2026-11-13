@@ -309,6 +309,47 @@ class SshService {
 
   // ── Connect ────────────────────────────────────────────
 
+  /// Builds the destination [SSHClient] for [connect] (a seam for tests).
+  @visibleForTesting
+  SSHClient buildConnectClient(
+    SSHSocket socket, {
+    required Host host,
+    required String? password,
+    required List<SSHKeyPair>? identities,
+    required Future<bool> Function(String keyType, Uint8List fingerprint)?
+        verifyHostKey,
+  }) {
+    return SSHClient(
+      socket,
+      username: host.username,
+      onPasswordRequest: () => password ?? '',
+      identities: identities,
+      // Forwarding terminates at the destination client only (OpenSSH
+      // ProxyJump semantics) — never add a handler to _ensureJumpClient
+      // or testConnection.
+      agentHandler: host.agentForwarding
+          ? AgentForwardingHandler(
+              loadKeychainIdentities: () async =>
+                  await keychainIdentitiesLoader?.call(host.keyId) ??
+                  const <SSHKeyPair>[],
+              onRequestServed: (usedFallback) =>
+                  onAgentForwardingEvent?.call(
+                      host.id,
+                      null,
+                      usedFallback
+                          ? AgentForwardingState.fallback
+                          : AgentForwardingState.active),
+            )
+          : null,
+      onVerifyHostKey: (type, fp) =>
+          hostKeyDecision(verifyHostKey, type.toString(), fp),
+      // Built-in keepalive is disabled: HealthMonitorService is the sole
+      // pinger (it both keeps the connection alive and measures latency),
+      // avoiding a race on the shared global-request reply queue.
+      keepAliveInterval: null,
+    );
+  }
+
   Future<SSHClient> connect(
     Host host, {
     SshKeyEntry? keyEntry,
@@ -318,6 +359,10 @@ class SshService {
     // [verifyHostKey] only covers the destination). Null → reject (fail closed).
     Future<bool> Function(Host hop, String keyType, Uint8List fp)?
         verifyHopHostKey,
+    // Returns false once this attempt was superseded (the app paused it while
+    // it was dialing). A stale attempt never touches the per-host caches the
+    // current one owns: it closes its own client and gives up quietly.
+    bool Function()? isCurrent,
   }) async {
     if (hookBus != null) {
       final result = hookBus!.fireInterceptable(
@@ -347,43 +392,39 @@ class SshService {
       } else {
         socket = await localDial(host);
       }
-      client = SSHClient(
-        socket,
-        username: host.username,
-        onPasswordRequest: () => password ?? '',
-        identities: resolution.identities.isNotEmpty ? resolution.identities : null,
-        // Forwarding terminates at the destination client only (OpenSSH
-        // ProxyJump semantics) — never add a handler to _ensureJumpClient
-        // or testConnection.
-        agentHandler: host.agentForwarding
-            ? AgentForwardingHandler(
-                loadKeychainIdentities: () async =>
-                    await keychainIdentitiesLoader?.call(host.keyId) ??
-                    const <SSHKeyPair>[],
-                onRequestServed: (usedFallback) =>
-                    onAgentForwardingEvent?.call(
-                        host.id,
-                        null,
-                        usedFallback
-                            ? AgentForwardingState.fallback
-                            : AgentForwardingState.active),
-              )
-            : null,
-        onVerifyHostKey: (type, fp) =>
-            hostKeyDecision(verifyHostKey, type.toString(), fp),
-        // Built-in keepalive is disabled: HealthMonitorService is the sole
-        // pinger (it both keeps the connection alive and measures latency),
-        // avoiding a race on the shared global-request reply queue.
-        keepAliveInterval: null,
-      );
+      client = buildConnectClient(socket,
+          host: host,
+          password: password,
+          identities: resolution.identities.isNotEmpty
+              ? resolution.identities
+              : null,
+          verifyHostKey: verifyHostKey);
       await client.authenticated;
     } catch (e) {
-      if (resolution.agentProxy != null) {
-        unawaited(_agentProxies[host.id]?.close() ?? Future.value());
-        _agentProxies.remove(host.id);
+      final proxy = resolution.agentProxy;
+      if (proxy != null) {
+        // Only the proxy this attempt registered: a newer attempt may own the
+        // map entry by now.
+        if (identical(_agentProxies[host.id], proxy)) {
+          _agentProxies.remove(host.id);
+        }
+        unawaited(proxy.close());
       }
-      _teardownJumpChain(host.id);
+      // A stale attempt must not unwind the jump chain a newer one is using.
+      if (isCurrent?.call() ?? true) _teardownJumpChain(host.id);
       rethrow;
+    }
+    if (!(isCurrent?.call() ?? true)) {
+      // Superseded while authenticating: do not evict the live client.
+      client.close();
+      final proxy = resolution.agentProxy;
+      if (proxy != null) {
+        if (identical(_agentProxies[host.id], proxy)) {
+          _agentProxies.remove(host.id);
+        }
+        unawaited(proxy.close());
+      }
+      return client;
     }
     _clients[host.id] = client;
     return client;

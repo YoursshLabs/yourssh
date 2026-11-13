@@ -39,6 +39,11 @@ class MobileLifecycleCoordinator {
   BackgroundLease? _lease;
   List<PortForward> _stoppedForwards = const [];
   Future<void>? _expiry;
+  final _open = <int>{};
+
+  Future<void> _endLease(BackgroundLease lease) async {
+    if (_open.remove(lease.id)) await tasks.end(lease.id);
+  }
   bool _background = false;
   bool _disposed = false;
 
@@ -64,33 +69,41 @@ class MobileLifecycleCoordinator {
       if (lease != null) unawaited(tasks.end(lease.id));
       return;
     }
+    if (lease != null) _open.add(lease.id);
     _lease = lease;
     _graceTimer?.cancel();
     final grace = _graceFor(lease);
     if (grace == Duration.zero) {
-      await (_expiry = _onGraceExpired());
+      await (_expiry = _onGraceExpired(epoch));
     } else {
-      _graceTimer = Timer(grace, () => _expiry = _onGraceExpired());
+      _graceTimer = Timer(grace, () => _expiry = _onGraceExpired(epoch));
     }
   }
 
-  Future<void> _onGraceExpired() async {
+  Future<void> _onGraceExpired(int epoch) async {
     _graceTimer = null;
     final lease = _lease;
     try {
-      _stoppedForwards = forwardRules.forwards
-          .where((f) => forwards.isRunning(f.id))
-          .toList();
+      // Remember what ran, across several backgrounds before one foreground.
+      final known = _stoppedForwards.map((f) => f.id).toSet();
+      _stoppedForwards = [
+        ..._stoppedForwards,
+        ...forwardRules.forwards
+            .where((f) => forwards.isRunning(f.id) && !known.contains(f.id)),
+      ];
       await forwards.stopAll();
-      // The app came back while the tunnels were closing: the foreground
-      // handler restarts them and must not find sessions paused behind it.
-      if (_background && !_disposed) sessions.pauseAll();
+      // The app came back (or left again) while the tunnels were closing:
+      // this expiry belongs to an older background and must not pause
+      // anything.
+      if (epoch == _epoch && !_disposed) sessions.pauseAll();
     } catch (e) {
       debugPrint('[MobileLifecycleCoordinator] pause failed: $e');
     } finally {
-      if (lease != null && identical(_lease, lease)) {
-        _lease = null;
-        await tasks.end(lease.id);
+      // Release our own lease even when a newer background already replaced
+      // `_lease`; [_endLease] is idempotent against the foreground's release.
+      if (lease != null) {
+        if (identical(_lease, lease)) _lease = null;
+        await _endLease(lease);
       }
     }
   }
@@ -100,15 +113,18 @@ class MobileLifecycleCoordinator {
     // Control Center): nothing was backgrounded, so there is nothing to do.
     if (_disposed || !_background) return;
     _background = false;
-    _epoch++;
+    final epoch = ++_epoch;
     _graceTimer?.cancel();
     _graceTimer = null;
     final expiry = _expiry;
     if (expiry != null) await expiry;
-    _expiry = null;
+    // A newer background started while we waited: it owns the lease, the
+    // recorded forwards and the next foreground.
+    if (epoch != _epoch || _disposed) return;
+    if (identical(_expiry, expiry)) _expiry = null;
     final lease = _lease;
     _lease = null;
-    if (lease != null) await tasks.end(lease.id);
+    if (lease != null) await _endLease(lease);
     final restart = _stoppedForwards;
     _stoppedForwards = const [];
     await sessions.resumePaused(stagger: stagger);
@@ -125,6 +141,6 @@ class MobileLifecycleCoordinator {
     _graceTimer = null;
     final lease = _lease;
     _lease = null;
-    if (lease != null) unawaited(tasks.end(lease.id));
+    if (lease != null) unawaited(_endLease(lease));
   }
 }

@@ -232,6 +232,39 @@ void main() {
     });
   });
 
+  test('bg1 expiry in flight, fg1, bg2: the stale foreground does nothing', () {
+    fakeAsync((fa) {
+      build(running: {'a'});
+      forwards.stopGate = Completer<void>();
+      c.onBackground();
+      fa.elapse(const Duration(seconds: 25));
+      fa.flushMicrotasks();
+      c.onForeground(); // fg1: waits for the expiry
+      fa.flushMicrotasks();
+      c.onBackground(); // bg2 while fg1 is still waiting
+      fa.flushMicrotasks();
+      forwards.stopGate!.complete();
+      fa.flushMicrotasks();
+      // No pause for bg1, nothing resumed/restarted while backgrounded, and
+      // bg2's lease is still held.
+      expect(log, ['forwards.stopAll', 'tasks.end']);
+      expect(tasks.ended, [1]);
+      log.clear();
+      fa.elapse(const Duration(seconds: 25));
+      fa.flushMicrotasks();
+      expect(log, ['forwards.stopAll', 'sessions.pauseAll', 'tasks.end']);
+      log.clear();
+      c.onForeground();
+      fa.flushMicrotasks();
+      expect(log, [
+        'sessions.resumePaused',
+        'sessions.verifyLive',
+        'forwards.start:a', // remembered across both backgrounds, once
+      ]);
+      c.dispose();
+    });
+  });
+
   test('a foreground without a background (Face ID sheet) probes nothing', () {
     fakeAsync((fa) {
       build();
