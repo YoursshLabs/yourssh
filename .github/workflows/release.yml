@@ -719,9 +719,12 @@ jobs:
         if: env.IOS_SIGNING == 'true'
         working-directory: app
         run: |
+          # run_number repeats on "Re-run failed jobs"; the attempt keeps the
+          # build number monotonic (App Store Connect rejects duplicates).
+          BUILD_NUMBER=$(( ${{ github.run_number }} * 100 + ${{ github.run_attempt }} ))
           flutter build ipa --release \
             --export-options-plist=ios/ExportOptions.plist \
-            --build-number=${{ github.run_number }} \
+            --build-number="$BUILD_NUMBER" \
             --split-debug-info=build/symbols
 
       - name: Check bundle (signed)

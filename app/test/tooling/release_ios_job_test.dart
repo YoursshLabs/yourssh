@@ -20,6 +20,9 @@ void main() {
     expect(ios, contains('check_ios_bundle.sh'));
     expect(ios, contains('ASC_KEY_ID'));
     expect(ios, contains('if: always()'));
+    expect(ios, contains('github.run_attempt'));
+    expect(ios, isNot(contains('--build-number=\${{ github.run_number }}')));
+    expect(ios, contains('--build-number="\$BUILD_NUMBER"'));
     expect(job(y, 'release'), isNot(contains('build-ios')));
     expect(ios, contains('::add-mask::\$KEYCHAIN_PASSWORD'));
     expect(ios.indexOf('SIGN_KEYCHAIN='),
