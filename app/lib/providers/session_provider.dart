@@ -693,6 +693,11 @@ class SessionProvider extends ChangeNotifier {
   /// [onSessionDropped] does not fire.
   void pauseAll() => _pauseSessions(sshSessions.where((s) => !s.isWatch));
 
+  /// True while any session is paused for the background (until
+  /// [resumePaused] reconnects it). Anything that would re-dial a host on its
+  /// own should wait.
+  bool get hasPausedSessions => sshSessions.any((s) => s.paused);
+
   void _pauseSessions(Iterable<SshSession> candidates) {
     final hostIds = <String>{};
     for (final s in candidates.toList()) {

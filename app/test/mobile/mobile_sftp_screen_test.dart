@@ -7,6 +7,9 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/screens/mobile_sftp_screen.dart';
 import 'package:yourssh/models/host.dart';
+import 'package:yourssh/models/ssh_session.dart';
+import 'package:yourssh/providers/session_provider.dart';
+import 'package:yourssh/services/tab_metadata_service.dart';
 import 'package:yourssh/services/sftp_transfer_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
@@ -109,6 +112,44 @@ void main() {
     expect(find.text('new.txt'), findsOneWidget);
     expect(opened, 2, reason: 'the dead channel was replaced');
     expect(dead.closed, isTrue);
+  });
+
+  testWidgets('does not re-dial a dead channel while sessions are paused',
+      (tester) async {
+    final storage = StorageService();
+    final ssh = SshService(storage);
+    final transfer = SftpTransferService(ssh);
+    final host = Host(
+        id: 'h1', label: 'web-01', host: '10.0.0.1', port: 22, username: 'u');
+    final sessions = SessionProvider(ssh, TabMetadataService());
+    addTearDown(sessions.dispose);
+    sessions.addSessionForTest(
+        SshSession(host: host, status: SessionStatus.connected));
+    sessions.pauseAll();
+    var opened = 0;
+
+    await tester.pumpWidget(MaterialApp(
+      builder: ysRootBuilderTouch,
+      home: MultiProvider(
+        providers: [
+          Provider<SshService>.value(value: ssh),
+          Provider<SftpTransferService>.value(value: transfer),
+          ChangeNotifierProvider<SessionProvider>.value(value: sessions),
+        ],
+        child: MobileSftpScreen(
+          host: host,
+          sftpOpener: () async {
+            opened++;
+            return _FakeSftp(['old'], fail: true);
+          },
+        ),
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(opened, 1, reason: 'no second dial while paused');
+    expect(find.textContaining('channel closed'), findsWidgets);
   });
 
   testWidgets('a protocol-level SFTP error does not drop or retry the channel',

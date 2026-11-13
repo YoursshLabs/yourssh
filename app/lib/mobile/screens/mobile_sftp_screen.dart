@@ -10,6 +10,7 @@ import '../../models/host.dart';
 import '../../platform/runtime_platform.dart';
 import '../files/app_paths.dart';
 import '../files/file_export.dart';
+import '../../providers/session_provider.dart';
 import '../../services/sftp_transfer_service.dart';
 import '../../services/ssh_service.dart';
 import '../theme/mobile_theme.dart';
@@ -104,6 +105,14 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
     } catch (_) {}
   }
 
+  bool _sessionsPaused() {
+    try {
+      return context.read<SessionProvider>().hasPausedSessions;
+    } on ProviderNotFoundException {
+      return false;
+    }
+  }
+
   /// Runs [op] on the cached channel. Only when it fails because the channel
   /// or connection is dead ([isDeadChannelError]) is the channel discarded and
   /// [op] retried once on a fresh one (reconnecting if the session was paused).
@@ -114,6 +123,9 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
     } catch (e) {
       if (!isDeadChannelError(e)) rethrow;
       _dropClient();
+      // Paused for the background: the host is closed on purpose, and a
+      // re-dial now would race the resume. Fail cleanly instead.
+      if (_sessionsPaused()) rethrow;
       return await op(await _client());
     }
   }
