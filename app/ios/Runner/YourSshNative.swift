@@ -9,25 +9,32 @@ final class YourSshNative: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegat
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let instance = YourSshNative()
+    // Ownership: nothing else keeps `instance` alive. Flutter holds scene
+    // lifecycle delegates in a WEAK array, so without a strong reference it
+    // would be deallocated as soon as this function returns (and every channel
+    // call would then fail). `publish` retains it for the registrar's lifetime
+    // and `addMethodCallDelegate` makes the channel retain it as its handler.
+    registrar.publish(instance)
     registrar.addSceneDelegate(instance)
 
     // yourssh/background: begin -> {"id": Int, "remainingMs": Int} (-1 when the
-    // OS reports no finite allowance); end(id). Null result when refused.
+    // OS reports no finite allowance), null when refused; end(id).
     let background = FlutterMethodChannel(
       name: "yourssh/background", binaryMessenger: registrar.messenger())
-    background.setMethodCallHandler { [weak instance] call, result in
-      guard let instance = instance else { return result(nil) }
-      switch call.method {
-      case "begin": instance.beginBackgroundTask(result)
-      case "end":
-        if let id = call.arguments as? Int { instance.endBackgroundTask(id) }
-        result(nil)
-      default: result(FlutterMethodNotImplemented)
-      }
+    registrar.addMethodCallDelegate(instance, channel: background)
+  }
+
+  func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "begin": beginBackgroundTask(result)
+    case "end":
+      if let id = call.arguments as? Int { endBackgroundTask(id) }
+      result(nil)
+    default: result(FlutterMethodNotImplemented)
     }
   }
 
-  private func beginBackgroundTask(_ result: FlutterResult) {
+  private func beginBackgroundTask(_ result: @escaping FlutterResult) {
     var taskId = UIBackgroundTaskIdentifier.invalid
     taskId = UIApplication.shared.beginBackgroundTask(withName: "yourssh.grace") { [weak self] in
       // The OS is about to suspend us: end the task so it does not kill the app.

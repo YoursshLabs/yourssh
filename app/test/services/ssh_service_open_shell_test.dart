@@ -81,7 +81,9 @@ class _FakeShell implements SSHSession {
   }
 
   @override
-  Future<void> close() async {
+  Future<void> close() => closeStreams();
+
+  Future<void> closeStreams() async {
     await _stdout.close();
     await _stderr.close();
   }
@@ -550,5 +552,37 @@ void main() {
 
     await shell.close();
     await shellDone;
+  });
+
+  test(
+      'a late close of an older shell does not tear down the session\'s new shell',
+      () async {
+    // Pause/resume reuses the tab: the old shell's done event can arrive after
+    // the resumed shell was registered, and must not null its input hooks.
+    final svc = SshService(StorageService());
+    final host = Host(label: 'f', host: 'example.com', port: 22, username: 'u');
+    final session = SshSession(host: host);
+    final shell1 = _FakeShell();
+    final shell2 = _FakeShell();
+    svc.debugSetClient(host.id, _FakeClient(shell1));
+    final first = svc.openShell(session);
+    await Future<void>.delayed(Duration.zero);
+
+    svc.debugSetClient(host.id, _FakeClient(shell2));
+    final second = svc.openShell(session);
+    await Future<void>.delayed(Duration.zero);
+    expect(svc.sendInput(session.id, 'x'), isTrue);
+    expect(shell2.writtenText, 'x');
+
+    await shell1.closeStreams();
+    await first;
+
+    expect(session.terminal.onOutput, isNotNull);
+    expect(svc.sendInput(session.id, 'y'), isTrue);
+    expect(shell2.writtenText, 'xy');
+
+    await shell2.closeStreams();
+    await second;
+    expect(svc.sendInput(session.id, 'z'), isFalse);
   });
 }

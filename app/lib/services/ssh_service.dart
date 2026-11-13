@@ -1047,7 +1047,12 @@ class SshService {
           final out = g.flush();
           if (out.isNotEmpty) outQueue.add(out);
         }
-        _onShellClosed(session);
+        // After a pause/resume the tab already runs a newer shell: only the
+        // current shell (or none) may tear the session's hooks down.
+        final current = _shells[session.id];
+        if (current == null || identical(current, shell)) {
+          _onShellClosed(session);
+        }
         if (!done.isCompleted) done.complete();
       },
       onError: (Object e) {
@@ -1496,6 +1501,13 @@ class SshService {
     _agentProxies.remove(hostId);
 
     _teardownJumpChain(hostId);
+  }
+
+  /// Closes a [client] nobody will use (a connect attempt superseded while it
+  /// was dialing) and drops it from the cache only when it is the cached one.
+  void discardClient(String hostId, SSHClient client) {
+    if (identical(_clients[hostId], client)) _clients.remove(hostId);
+    client.close();
   }
 
   void disconnectSession(String sessionId) {

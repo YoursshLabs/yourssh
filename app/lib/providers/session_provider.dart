@@ -529,7 +529,7 @@ class SessionProvider extends ChangeNotifier {
             'Tunneling via ${jumpChain.map((h) => h.host.label).join(' → ')}');
       }
       _safeNotify();
-      await _ssh.connect(
+      final client = await _ssh.connect(
         host,
         keyEntry: keyEntry,
         jumpChain: jumpChain,
@@ -542,6 +542,12 @@ class SessionProvider extends ChangeNotifier {
                 _verifyAndLog(session, hop.host, hop.port, keyType, fp)
             : null,
       );
+      if (superseded()) {
+        // Paused (or replaced by a newer attempt) while dialing: this client
+        // belongs to nobody. Close it before it can mark the tab connected.
+        _ssh.discardClient(host.id, client);
+        return;
+      }
       session.logConnection(ConnectionLogLevel.success, 'Connection established');
       session.status = SessionStatus.connected;
       audit?.record(AuditEvent.now(
@@ -669,6 +675,10 @@ class SessionProvider extends ChangeNotifier {
   // ── App lifecycle (iOS background pause / foreground resume) ────────────
 
   @visibleForTesting
+  void scheduleReconnectForTest(SshSession s) =>
+      _scheduleReconnect(s, s.host, attempt: 1);
+
+  @visibleForTesting
   void addSessionForTest(SshSession s) {
     _sessions.add(s);
     _activeSessionId ??= s.id;
@@ -689,7 +699,6 @@ class SessionProvider extends ChangeNotifier {
           s.status != SessionStatus.connecting) {
         continue;
       }
-      final wasConnected = s.status == SessionStatus.connected;
       _reconnectTimers.remove(s.id)?.cancel();
       _countdownTimers.remove(s.id)?.cancel();
       s.connectGeneration++;
@@ -697,13 +706,9 @@ class SessionProvider extends ChangeNotifier {
       s.status = SessionStatus.disconnected;
       s.terminal.write(
           '\r\n\x1b[2m[Paused while YourSSH was in the background]\x1b[0m\r\n');
-      if (wasConnected) {
-        audit?.record(AuditEvent.now(
-            type: AuditEventType.disconnect,
-            host: s.host,
-            sessionId: s.id,
-            meta: const {'reason': 'background'}));
-      }
+      // Clients are per tab but the service keys them by host: close this
+      // tab's own shell too, not just the newest client of the host.
+      _ssh.disconnectSession(s.id);
       hostIds.add(s.host.id);
     }
     for (final id in hostIds) {

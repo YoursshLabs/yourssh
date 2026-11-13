@@ -38,8 +38,13 @@ class MobileLifecycleCoordinator {
   Timer? _graceTimer;
   BackgroundLease? _lease;
   List<PortForward> _stoppedForwards = const [];
+  Future<void>? _expiry;
   bool _background = false;
   bool _disposed = false;
+
+  /// Bumped on every background/foreground transition so an answer to an older
+  /// `begin()` can tell it was superseded.
+  int _epoch = 0;
 
   Duration _graceFor(BackgroundLease? lease) {
     if (lease == null) return Duration.zero;
@@ -52,9 +57,10 @@ class MobileLifecycleCoordinator {
   Future<void> onBackground() async {
     if (_disposed || _background) return;
     _background = true;
+    final epoch = ++_epoch;
     final lease = await tasks.begin();
-    if (!_background || _disposed) {
-      // Foregrounded (or disposed) while the OS was answering.
+    if (epoch != _epoch || _disposed) {
+      // Foregrounded (or backgrounded again) while the OS was answering.
       if (lease != null) unawaited(tasks.end(lease.id));
       return;
     }
@@ -62,9 +68,9 @@ class MobileLifecycleCoordinator {
     _graceTimer?.cancel();
     final grace = _graceFor(lease);
     if (grace == Duration.zero) {
-      await _onGraceExpired();
+      await (_expiry = _onGraceExpired());
     } else {
-      _graceTimer = Timer(grace, _onGraceExpired);
+      _graceTimer = Timer(grace, () => _expiry = _onGraceExpired());
     }
   }
 
@@ -76,7 +82,9 @@ class MobileLifecycleCoordinator {
           .where((f) => forwards.isRunning(f.id))
           .toList();
       await forwards.stopAll();
-      sessions.pauseAll();
+      // The app came back while the tunnels were closing: the foreground
+      // handler restarts them and must not find sessions paused behind it.
+      if (_background && !_disposed) sessions.pauseAll();
     } catch (e) {
       debugPrint('[MobileLifecycleCoordinator] pause failed: $e');
     } finally {
@@ -88,10 +96,16 @@ class MobileLifecycleCoordinator {
   }
 
   Future<void> onForeground() async {
-    if (_disposed) return;
+    // `resumed` also follows an inactive-only transition (Face ID sheet,
+    // Control Center): nothing was backgrounded, so there is nothing to do.
+    if (_disposed || !_background) return;
     _background = false;
+    _epoch++;
     _graceTimer?.cancel();
     _graceTimer = null;
+    final expiry = _expiry;
+    if (expiry != null) await expiry;
+    _expiry = null;
     final lease = _lease;
     _lease = null;
     if (lease != null) await tasks.end(lease.id);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,6 +45,7 @@ class _Forwards extends PortForwardService {
           onConnections: (_, __) {},
         );
   Set<String> running;
+  Completer<void>? stopGate;
 
   @override
   bool isRunning(String id) => running.contains(id);
@@ -50,6 +53,7 @@ class _Forwards extends PortForwardService {
   @override
   Future<void> stopAll() async {
     log.add('forwards.stopAll');
+    await stopGate?.future;
     running = {};
   }
 
@@ -70,12 +74,19 @@ class _Tasks implements BackgroundTasks {
   final ended = <int>[];
   int lastId = 0;
   bool refuse = false;
+  final gates = <Completer<void>>[];
+  bool gated = false;
 
   @override
   Future<BackgroundLease?> begin() async {
     if (refuse) return null;
-    lastId++;
-    return BackgroundLease(id: lastId, remaining: remaining);
+    final id = ++lastId;
+    if (gated) {
+      final g = Completer<void>();
+      gates.add(g);
+      await g.future;
+    }
+    return BackgroundLease(id: id, remaining: remaining);
   }
 
   @override
@@ -194,6 +205,61 @@ void main() {
       c.onForeground();
       fa.flushMicrotasks();
       expect(log.where((e) => e.startsWith('forwards.start')), isEmpty);
+      c.dispose();
+    });
+  });
+
+  test('a foreground during a slow stopAll does not leave sessions paused', () {
+    fakeAsync((fa) {
+      build(running: {'a'});
+      forwards.stopGate = Completer<void>();
+      c.onBackground();
+      fa.elapse(const Duration(seconds: 25));
+      fa.flushMicrotasks();
+      expect(log, ['forwards.stopAll']);
+      c.onForeground();
+      fa.flushMicrotasks();
+      forwards.stopGate!.complete();
+      fa.flushMicrotasks();
+      expect(log, [
+        'forwards.stopAll',
+        'tasks.end',
+        'sessions.resumePaused',
+        'sessions.verifyLive',
+        'forwards.start:a',
+      ]);
+      c.dispose();
+    });
+  });
+
+  test('a foreground without a background (Face ID sheet) probes nothing', () {
+    fakeAsync((fa) {
+      build();
+      c.onForeground();
+      fa.flushMicrotasks();
+      expect(log, isEmpty);
+      c.dispose();
+    });
+  });
+
+  test('background, foreground, background within one begin ends the first lease',
+      () {
+    fakeAsync((fa) {
+      build();
+      tasks.gated = true;
+      c.onBackground();
+      c.onForeground();
+      c.onBackground();
+      fa.flushMicrotasks();
+      expect(tasks.gates, hasLength(2));
+      tasks.gates[0].complete();
+      tasks.gates[1].complete();
+      fa.flushMicrotasks();
+      expect(tasks.ended, [1]); // the stale lease is released at once
+      fa.elapse(const Duration(seconds: 25));
+      fa.flushMicrotasks();
+      expect(log.where((e) => e == 'sessions.pauseAll'), hasLength(1));
+      expect(tasks.ended, [1, 2]);
       c.dispose();
     });
   });

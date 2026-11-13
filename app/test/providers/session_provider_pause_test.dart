@@ -17,6 +17,9 @@ class _FakeClient implements SSHClient {
   _FakeClient({this.closed = false, this.pingFuture});
   final bool closed;
   final Future<void>? pingFuture;
+  bool closeCalled = false;
+  @override
+  void close() => closeCalled = true;
   @override
   bool get isClosed => closed;
   @override
@@ -29,6 +32,8 @@ class _Ssh extends SshService {
   _Ssh() : super(StorageService());
   final connects = <String>[];
   final disconnects = <String>[];
+  final sessionDisconnects = <String>[];
+  int shellsOpened = 0;
   final shellDone = Completer<void>();
   bool connectCompletes = false;
 
@@ -48,14 +53,19 @@ class _Ssh extends SshService {
 
   @override
   Future<void> openShell(SshSession session,
-      {bool useTmux = false, String termType = 'xterm-256color'}) =>
-      shellDone.future;
+      {bool useTmux = false, String termType = 'xterm-256color'}) {
+    shellsOpened++;
+    return shellDone.future;
+  }
+
+  @override
+  void disconnectSession(String sessionId) => sessionDisconnects.add(sessionId);
 
   @override
   void disconnect(String hostId) => disconnects.add(hostId);
 }
 
-class _FailingSsh extends _Ssh {
+class _GatedSsh extends _Ssh {
   final connectGate = Completer<SSHClient>();
   @override
   Future<SSHClient> connect(
@@ -110,15 +120,29 @@ void main() {
     expect(err.status, SessionStatus.error);
     expect(closed.paused, isFalse);
     expect(ssh.disconnects, ['A', 'B']);
+    // Every paused session's own shell is closed too (clients are per tab).
+    expect(ssh.sessionDisconnects, unorderedEquals([a1.id, a2.id, b.id]));
     expect(dropped, isEmpty);
   });
 
-  test('pauseAll cancels a pending reconnect and writes a dim marker', () async {
-    final s = _session('A', SessionStatus.connected);
-    p.addSessionForTest(s);
-    p.pauseAll();
-    expect(s.terminal.buffer.toString(),
-        contains('[Paused while YourSSH was in the background]'));
+  test('pauseAll cancels a pending reconnect and writes a dim marker', () {
+    fakeAsync((fa) {
+      final host = _host('A');
+      final s = SshSession(host: host, status: SessionStatus.connected);
+      p.addSessionForTest(s);
+      p.reconnectAttempts = () => 0;
+      p.autoReconnectEnabled = () => true;
+      p.scheduleReconnectForTest(s);
+      expect(s.status, SessionStatus.connecting);
+      p.pauseAll();
+      fa.elapse(const Duration(seconds: 30));
+      // The countdown timer is gone: no reconnect attempt started.
+      expect(ssh.connects, isEmpty);
+      expect(s.status, SessionStatus.disconnected);
+      expect(s.terminal.buffer.toString(),
+          contains('[Paused while YourSSH was in the background]'));
+      expect(s.terminal.buffer.toString(), isNot(contains('Reconnecting now')));
+    });
   });
 
   test('a paused session whose shell closes schedules no reconnect', () async {
@@ -145,7 +169,7 @@ void main() {
   test('an attempt superseded by a pause stops quietly when it later fails',
       () async {
     p.autoReconnectEnabled = () => true;
-    final failing = _FailingSsh();
+    final failing = _GatedSsh();
     final q = SessionProvider(failing, TabMetadataService());
     addTearDown(q.dispose);
     final dropped = <Object>[];
@@ -164,6 +188,26 @@ void main() {
     expect(s.reconnectCount, 0);
     expect(s.errorMessage, isNull);
     expect(dropped, isEmpty);
+  });
+
+  test('an attempt that succeeds after a pause stays paused and closes its client',
+      () async {
+    final gated = _GatedSsh();
+    final q = SessionProvider(gated, TabMetadataService());
+    addTearDown(q.dispose);
+    final done = q.connect(_host('A'));
+    await Future<void>.delayed(Duration.zero);
+    final s = q.sshSessions.single;
+
+    q.pauseAll();
+    final client = _FakeClient();
+    gated.connectGate.complete(client);
+    await done;
+
+    expect(client.closeCalled, isTrue);
+    expect(s.status, SessionStatus.disconnected);
+    expect(s.paused, isTrue);
+    expect(gated.shellsOpened, 0);
   });
 
   test('resumePaused reconnects in tab order, stagger apart, even with auto-reconnect off',
@@ -194,6 +238,12 @@ void main() {
     p.addSessionForTest(s);
     expect(s.acceptsInput, isTrue);
     p.pauseAll();
+    expect(s.acceptsInput, isFalse);
+    expect(ssh.sendInput(s.id, 'ls\n'), isFalse);
+    // Nothing is queued for later: after the resume starts connecting, the
+    // session still rejects input until it is connected again.
+    p.resumePaused(stagger: Duration.zero);
+    expect(s.status, SessionStatus.connecting);
     expect(s.acceptsInput, isFalse);
     expect(ssh.sendInput(s.id, 'ls\n'), isFalse);
   });
