@@ -165,7 +165,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
         SettingsRow(
           leading: const Icon(FLucideIcons.timer, color: MobileColors.textMuted, size: 20),
           title: 'Auto-lock',
-          value: 'After 1 min',
+          value: 'Immediately when you leave the app',
         ),
       ],
     );

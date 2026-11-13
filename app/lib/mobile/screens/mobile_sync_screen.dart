@@ -271,11 +271,11 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
   Widget _buildHero() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text('Sync with Supabase', style: mobileHeading(size: 22)),
+      Text('Sync between devices', style: mobileHeading(size: 22)),
       const SizedBox(height: MobileTokens.space2),
       Text(
-        'No account needed. Your hosts, keys & snippets stay end-to-end '
-        'encrypted across devices.',
+        'No account needed. Syncs your hosts and their passwords. '
+        'Keys and snippets are not synced.',
         style: mobileBody(size: 14, color: MobileColors.textMuted),
       ),
     ],

@@ -135,7 +135,7 @@ void main() {
       for (final t in [
         'Biometric unlock',
         'Auto-lock',
-        'After 1 min',
+        'Immediately when you leave the app',
         'Shortcut key bar',
         'Supabase sync',
         'Pair new device',

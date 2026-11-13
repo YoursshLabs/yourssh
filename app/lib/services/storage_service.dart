@@ -149,6 +149,8 @@ class StorageService {
 
   Future<String?> loadPassphrase(String keyId) => _loadSecret('pp_$keyId');
 
+  Future<void> deletePassphrase(String keyId) => _deleteSecret('pp_$keyId');
+
   /// Generic secret store for app-scoped secrets (e.g., sync passphrase).
   /// Caller is responsible for key namespacing.
   Future<void> saveGenericSecret(String key, String value) =>
