@@ -15,17 +15,36 @@ void main() {
       expect(plist, contains('<key>$k</key>'));
     }
     expect(
-        plist,
-        matches(RegExp(r'<key>ITSAppUsesNonExemptEncryption</key>\s*<true/>',
-            dotAll: true)));
+      plist,
+      matches(RegExp(r'<key>ITSAppUsesNonExemptEncryption</key>\s*<true/>')),
+    );
     expect(plist, isNot(contains('NSAppTransportSecurity')));
+    for (final k in [
+      'NSCameraUsageDescription',
+      'NSLocalNetworkUsageDescription',
+      'NSFaceIDUsageDescription',
+    ]) {
+      expect(
+        plist,
+        matches(RegExp('<key>$k</key>\\s*<string>[^<\\s][^<]*</string>')),
+      );
+    }
     final pm = File('ios/Runner/PrivacyInfo.xcprivacy').readAsStringSync();
-    expect(pm, contains('<key>NSPrivacyTracking</key>'));
     expect(pm, matches(RegExp(r'<key>NSPrivacyTracking</key>\s*<false/>')));
+    for (final k in [
+      'NSPrivacyCollectedDataTypes',
+      'NSPrivacyTrackingDomains',
+    ]) {
+      expect(pm, matches(RegExp('<key>$k</key>\\s*<array/>')));
+    }
     expect(pm, contains('NSPrivacyAccessedAPICategoryUserDefaults'));
+    expect(pm, contains('NSPrivacyAccessedAPICategoryDiskSpace'));
+    expect(pm, contains('E174.1'));
     expect(pm, contains('CA92.1'));
     expect(pm, contains('C617.1'));
-    expect(File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync(),
-        contains('PrivacyInfo.xcprivacy in Resources'));
+    expect(
+      File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync(),
+      contains('PrivacyInfo.xcprivacy in Resources'),
+    );
   });
 }
