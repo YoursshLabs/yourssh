@@ -585,6 +585,191 @@ jobs:
             YourSSH-${{ steps.version.outputs.version }}-Android.apk
             YourSSH-${{ steps.version.outputs.version }}-Android-symbols.zip
 
+  # ── iOS ────────────────────────────────────────────────────────────────────
+  # Goes to TestFlight, not to the GitHub release page, so `release` does not
+  # need this job. The mobile UI is SSH-only: no Rust native libraries.
+  build-ios:
+    needs: test
+    runs-on: macos-latest
+    # Signing and upload run only when all secrets exist (forks and
+    # unconfigured repos still get an unsigned, bundle-checked build). Secrets:
+    #   IOS_DISTRIBUTION_P12_BASE64      base64 of the exported Apple
+    #                                    Distribution certificate + private key
+    #   IOS_DISTRIBUTION_P12_PASSWORD    password set when exporting the .p12
+    #   IOS_PROVISIONING_PROFILE_BASE64  base64 of the App Store provisioning
+    #                                    profile named "YourSSH App Store"
+    #   ASC_KEY_ID / ASC_ISSUER_ID       App Store Connect API key id / issuer
+    #   ASC_API_KEY_P8_BASE64            base64 of that key's AuthKey_*.p8
+    env:
+      IOS_SIGNING: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' && secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.ASC_API_KEY_P8_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep '^version:' app/pubspec.yaml | sed 's/^version:[[:space:]]*//' | cut -d'+' -f1)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # ── Unsigned path (secrets missing) ──
+      - name: Build iOS (unsigned)
+        if: env.IOS_SIGNING != 'true'
+        working-directory: app
+        run: flutter build ios --release --no-codesign --split-debug-info=build/symbols
+
+      - name: Check bundle (unsigned)
+        if: env.IOS_SIGNING != 'true'
+        run: bash tool/check_ios_bundle.sh app/build/ios/iphoneos/Runner.app
+
+      - name: Zip unsigned app
+        if: env.IOS_SIGNING != 'true'
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent app/build/ios/iphoneos/Runner.app \
+            "YourSSH-${{ steps.version.outputs.version }}-iOS-unsigned.zip"
+
+      # ── Signed path ──
+      - name: Import Apple Distribution certificate
+        if: env.IOS_SIGNING == 'true'
+        env:
+          CERT_P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          chmod 600 "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          # Prepend the signing keychain to the search list (word splitting of
+          # the existing list is intended; runner keychain paths have no spaces).
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          # Exported before the identity check so the cleanup step still runs.
+          echo "SIGN_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | awk '/Apple Distribution/ {print $2; exit}')
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::The .p12 holds no Apple Distribution identity"
+            exit 1
+          fi
+
+      # Fails early with a clear message when the profile is not the one the
+      # Runner target's Release settings and ExportOptions.plist expect. Never
+      # prints profile contents.
+      - name: Install provisioning profile
+        if: env.IOS_SIGNING == 'true'
+        env:
+          PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          EXPECTED_NAME="YourSSH App Store"
+          EXPECTED_TEAM="84T567KMYD"
+          EXPECTED_APPID="84T567KMYD.com.thangnm.yourssh"
+          echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          chmod 600 "$RUNNER_TEMP/profile.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          PB=/usr/libexec/PlistBuddy
+          NAME=$($PB -c 'Print :Name' "$RUNNER_TEMP/profile.plist" 2>/dev/null || true)
+          TEAMS=$($PB -c 'Print :TeamIdentifier' "$RUNNER_TEMP/profile.plist" 2>/dev/null || true)
+          APPID=$($PB -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/profile.plist" 2>/dev/null || true)
+          UUID=$($PB -c 'Print :UUID' "$RUNNER_TEMP/profile.plist" 2>/dev/null || true)
+          rm -f "$RUNNER_TEMP/profile.plist"
+          FAILED=0
+          if [ "$NAME" != "$EXPECTED_NAME" ]; then
+            echo "::error::Provisioning profile Name must be '$EXPECTED_NAME'"
+            FAILED=1
+          fi
+          if ! printf '%s\n' "$TEAMS" | grep -qw "$EXPECTED_TEAM"; then
+            echo "::error::Provisioning profile TeamIdentifier must contain $EXPECTED_TEAM"
+            FAILED=1
+          fi
+          if [ "$APPID" != "$EXPECTED_APPID" ]; then
+            echo "::error::Provisioning profile application-identifier must be $EXPECTED_APPID"
+            FAILED=1
+          fi
+          if [ -z "$UUID" ]; then
+            echo "::error::Provisioning profile has no UUID"
+            FAILED=1
+          fi
+          if [ "$FAILED" -ne 0 ]; then
+            rm -f "$RUNNER_TEMP/profile.mobileprovision"
+            exit 1
+          fi
+          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES_DIR"
+          mv "$RUNNER_TEMP/profile.mobileprovision" "$PROFILES_DIR/$UUID.mobileprovision"
+          echo "IOS_PROFILE_PATH=$PROFILES_DIR/$UUID.mobileprovision" >> "$GITHUB_ENV"
+
+      # Manual signing is set in the Runner target's Release settings only; a
+      # command-line override would also hit the SPM/CocoaPods targets.
+      - name: Build signed IPA
+        if: env.IOS_SIGNING == 'true'
+        working-directory: app
+        run: |
+          flutter build ipa --release \
+            --export-options-plist=ios/ExportOptions.plist \
+            --build-number=${{ github.run_number }} \
+            --split-debug-info=build/symbols
+
+      - name: Check bundle (signed)
+        if: env.IOS_SIGNING == 'true'
+        run: bash tool/check_ios_bundle.sh app/build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+
+      - name: Upload to TestFlight
+        if: env.IOS_SIGNING == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+        run: |
+          KEY_DIR="$RUNNER_TEMP/private_keys"
+          mkdir -p "$KEY_DIR"
+          echo "$ASC_API_KEY_P8_BASE64" | base64 --decode > "$KEY_DIR/AuthKey_$ASC_KEY_ID.p8"
+          chmod 600 "$KEY_DIR/AuthKey_$ASC_KEY_ID.p8"
+          IPA=$(find app/build/ios/ipa -name '*.ipa' -maxdepth 1 | head -1)
+          if [ -z "$IPA" ]; then
+            echo "::error::flutter build ipa produced no .ipa"
+            exit 1
+          fi
+          API_PRIVATE_KEYS_DIR="$KEY_DIR" xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Name the IPA and zip debug symbols
+        if: env.IOS_SIGNING == 'true'
+        run: |
+          IPA=$(find app/build/ios/ipa -name '*.ipa' -maxdepth 1 | head -1)
+          mv "$IPA" "YourSSH-${{ steps.version.outputs.version }}-iOS.ipa"
+          cd app/build/symbols
+          zip -r "$GITHUB_WORKSPACE/YourSSH-${{ steps.version.outputs.version }}-iOS-symbols.zip" .
+
+      - name: Remove signing material
+        if: always()
+        run: |
+          if [ -n "$SIGN_KEYCHAIN" ]; then security delete-keychain "$SIGN_KEYCHAIN" || true; fi
+          if [ -n "$IOS_PROFILE_PATH" ]; then rm -f "$IOS_PROFILE_PATH"; fi
+          rm -f "$RUNNER_TEMP/profile.mobileprovision" "$RUNNER_TEMP/profile.plist" "$RUNNER_TEMP/cert.p12"
+          rm -rf "$RUNNER_TEMP/private_keys"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios
+          if-no-files-found: error
+          path: |
+            YourSSH-${{ steps.version.outputs.version }}-iOS.ipa
+            YourSSH-${{ steps.version.outputs.version }}-iOS-symbols.zip
+            YourSSH-${{ steps.version.outputs.version }}-iOS-unsigned.zip
+
   release:
     runs-on: ubuntu-latest
     needs: [build-macos, build-windows, build-linux, build-android]
