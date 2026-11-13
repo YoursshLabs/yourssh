@@ -115,7 +115,23 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     if (!_locked) return widget.child;
-    // Nothing of the app is built while locked: only this screen.
+    // The child (navigator, pushed routes, dialogs, toasts) stays mounted so
+    // sessions and routes survive the unlock, but offstage with tickers off:
+    // nothing of it is painted, so neither the screen nor the app-switcher
+    // snapshot can show it. The lock screen is built outside the Navigator, so
+    // it brings its own FTheme (the gate sits above the app's FTheme/FToaster).
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Offstage(
+          child: TickerMode(enabled: false, child: widget.child),
+        ),
+        FTheme(data: ysThemeDataTouch(), child: _lockScreen()),
+      ],
+    );
+  }
+
+  Widget _lockScreen() {
     return Scaffold(
       backgroundColor: YsColors.background,
       body: Center(
