@@ -10,6 +10,7 @@ import 'package:yourssh/mobile/screens/mobile_settings_screen.dart';
 import 'package:yourssh/mobile/security/app_lock_gate.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
 import 'package:yourssh/mobile/util/mobile_prefs.dart';
+import 'package:yourssh/mobile/widgets/settings_row.dart';
 import 'package:yourssh/providers/host_provider.dart';
 import 'package:yourssh/providers/settings_provider.dart';
 import 'package:yourssh/providers/sync_provider.dart';
@@ -121,5 +122,40 @@ void main() {
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(kAccessoryBarPrefKey), !initialValue);
+  });
+
+  group('forui screen behaviour', () {
+    testWidgets('360x640: no overflow, security wording unchanged',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pump(tester);
+      expect(tester.takeException(), isNull);
+      for (final t in [
+        'Biometric unlock',
+        'Auto-lock',
+        'After 1 min',
+        'Shortcut key bar',
+        'Supabase sync',
+        'Pair new device',
+      ]) {
+        expect(find.text(t), findsOneWidget, reason: t);
+      }
+    });
+
+    testWidgets('rows are >=44 px',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pump(tester);
+      for (final title in ['Biometric unlock', 'Supabase sync', 'Pair new device']) {
+        final row = find.ancestor(
+            of: find.text(title), matching: find.byType(SettingsRow));
+        expect(tester.getSize(row).height, greaterThanOrEqualTo(44),
+            reason: title);
+      }
+    });
   });
 }

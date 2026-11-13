@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 
 import '../../providers/session_provider.dart';
@@ -48,37 +49,32 @@ class _MobileSnippetsScreenState extends State<MobileSnippetsScreen> {
     return Scaffold(
       backgroundColor: MobileColors.bg,
       body: SafeArea(
+        // FHeader adds the top safe area itself.
+        top: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Header ──────────────────────────────────────────────────────
+            const FHeader(title: Text('Snippets')),
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 MobileTokens.space4,
-                MobileTokens.space4,
+                0,
                 MobileTokens.space4,
                 MobileTokens.space2,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Snippets',
-                    style: mobileHeading(size: 30, weight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: MobileTokens.space1),
-                  Text(
-                    subtitle,
-                    style: mobileBody(size: 13, color: MobileColors.textMuted),
-                  ),
-                ],
+              child: Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: mobileBody(size: 13, color: MobileColors.textMuted),
               ),
             ),
 
             // ── Category filter chips ────────────────────────────────────────
             if (tags.isNotEmpty)
               SizedBox(
-                height: 38,
+                height: MobileTokens.touchTarget,
                 child: ListView(
                   padding: const EdgeInsets.symmetric(
                       horizontal: MobileTokens.space4),
@@ -146,19 +142,9 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.code_off_outlined,
-              size: 48, color: MobileColors.textFaint),
-          const SizedBox(height: MobileTokens.space3),
-          Text(
-            hasFilter ? 'No snippets in this category' : 'No snippets yet',
-            style: mobileHeading(size: 17),
-          ),
-        ],
-      ),
+    return YsEmptyState(
+      icon: FLucideIcons.braces,
+      title: hasFilter ? 'No snippets in this category' : 'No snippets yet',
     );
   }
 }

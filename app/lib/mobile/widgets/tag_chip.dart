@@ -3,6 +3,7 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
+import 'press_tint.dart';
 
 /// Compact pill for a host tag or a filter chip. [selected] fills it with the
 /// accent color; tappable when [onTap] is provided.
@@ -25,13 +26,18 @@ class TagChip extends StatelessWidget {
     this.onTap,
   });
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _pill({required bool tinted}) {
     final fg = selected ? Colors.black : MobileColors.textMuted;
+    // Hover/press feedback, same tint as MobileCard/SettingsRow. An unselected
+    // pill takes the tint as its fill; the amber selected pill gets a darker
+    // overlay so it stays recognisably selected.
     final bg = selected
         ? MobileColors.accent
-        : (large ? MobileColors.fieldFill : MobileColors.surface);
-    final chip = Container(
+        : tinted
+            ? YsColors.secondary
+            : (large ? MobileColors.fieldFill : MobileColors.surface);
+    final radius = BorderRadius.circular(MobileTokens.radiusPill);
+    return Container(
       // Large (folder/category filter) chips get a min width + centered text so
       // short labels like "All"/"logs" don't look cramped next to longer ones.
       constraints: large ? const BoxConstraints(minWidth: 64) : null,
@@ -42,9 +48,12 @@ class TagChip extends StatelessWidget {
               horizontal: MobileTokens.space2, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(MobileTokens.radiusPill),
+        borderRadius: radius,
         border: large ? null : Border.all(color: MobileColors.border),
       ),
+      foregroundDecoration: selected && tinted
+          ? BoxDecoration(color: const Color(0x1F000000), borderRadius: radius)
+          : null,
       child: large
           ? Text(
               label,
@@ -55,13 +64,32 @@ class TagChip extends StatelessWidget {
                 weight: selected ? FontWeight.w600 : FontWeight.w500,
               ).copyWith(height: 1.0),
             )
-          : Text(label, style: TextStyle(color: fg, fontSize: 11)),
+          : Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: fg, fontSize: 11),
+            ),
     );
-    if (onTap == null) return chip;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (onTap == null) return _pill(tinted: false);
     return FTappable.static(
       selected: selected,
       onPress: onTap,
-      child: chip,
+      builder: (context, variants, _) => ConstrainedBox(
+        // The pill stays compact; the hit area reaches the 44 px touch minimum.
+        constraints: const BoxConstraints(
+          minHeight: MobileTokens.touchTarget,
+          minWidth: MobileTokens.touchTarget,
+        ),
+        child: Center(
+          widthFactor: 1,
+          child: _pill(tinted: mobileIsTinted(variants)),
+        ),
+      ),
     );
   }
 }

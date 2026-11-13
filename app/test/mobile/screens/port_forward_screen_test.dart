@@ -224,7 +224,7 @@ void main() {
 
     // Enter "0" — out of valid range.
     await tester.enterText(
-        find.widgetWithText(TextField, 'Local port'), '0');
+        find.widgetWithText(FTextField, 'Local port'), '0');
     await tester.tap(find.text('Add rule'));
     await tester.pumpAndSettle();
 
@@ -244,7 +244,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'Local port'), '5432');
+        find.widgetWithText(FTextField, 'Local port'), '5432');
     // Leave remote host empty.
     await tester.tap(find.text('Add rule'));
     await tester.pumpAndSettle();
@@ -263,11 +263,11 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'Local port'), '5432');
+        find.widgetWithText(FTextField, 'Local port'), '5432');
     await tester.enterText(
-        find.widgetWithText(TextField, 'Remote host'), 'db-server');
+        find.widgetWithText(FTextField, 'Remote host'), 'db-server');
     await tester.enterText(
-        find.widgetWithText(TextField, 'Remote port'), '5432');
+        find.widgetWithText(FTextField, 'Remote port'), '5432');
     await tester.tap(find.text('Add rule'));
     await tester.pumpAndSettle();
 
@@ -288,12 +288,130 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'Local port'), '1080');
+        find.widgetWithText(FTextField, 'Local port'), '1080');
     await tester.tap(find.text('Add rule'));
     await tester.pumpAndSettle();
 
     expect(result.provider.added, hasLength(1));
     expect(result.provider.added.first.type, ForwardType.dynamic);
     expect(result.provider.added.first.localPort, 1080);
+  });
+
+  group('forui screen behaviour', () {
+    testWidgets('360x640 with a 60-char host label: no overflow',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final longHost = Host(
+        id: 'h1',
+        label: 'x' * 60,
+        host: '10.0.0.1',
+        username: 'a',
+      );
+      await tester.pumpWidget(MaterialApp(
+        theme: buildMobileTheme(),
+        builder: ysRootBuilderTouch,
+        home: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<PortForwardProvider>.value(
+                value: _FakePortForwardProvider([_activeRule])),
+            Provider<PortForwardService>.value(value: _FakePortForwardService()),
+          ],
+          child: MobilePortForwardScreen(host: longHost),
+        ),
+      ));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      // Open the sheet too: no overflow with the keyboard-height viewport.
+      await tester.tap(find.text('Add forwarding rule'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('primary actions are >=44 px (back, add, toggle, sheet)',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pump(tester);
+      Size sizeOf(Finder f) => tester.getSize(f.first);
+      final back = find.descendant(
+          of: find.byTooltip('Back'), matching: find.bySubtype<FTappable>());
+      expect(sizeOf(back).shortestSide, greaterThanOrEqualTo(44));
+      final add = find.widgetWithText(FButton, 'Add forwarding rule');
+      expect(sizeOf(add).height, greaterThanOrEqualTo(44));
+      for (final tip in ['Start', 'Stop']) {
+        final t = find.descendant(
+            of: find.byTooltip(tip), matching: find.bySubtype<FTappable>());
+        expect(sizeOf(t).shortestSide, greaterThanOrEqualTo(44), reason: tip);
+      }
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      for (final label in ['Local', 'Remote', 'Dynamic', 'Add rule']) {
+        final b = find.widgetWithText(FButton, label);
+        expect(sizeOf(b).height, greaterThanOrEqualTo(44), reason: label);
+      }
+      for (final label in ['Local port', 'Remote host']) {
+        expect(sizeOf(find.widgetWithText(FTextField, label)).height,
+            greaterThanOrEqualTo(44),
+            reason: label);
+      }
+    });
+
+    testWidgets('validation message appears on the offending field only',
+        (tester) async {
+      await _pumpWithProvider(tester);
+      await tester.tap(find.text('Add forwarding rule'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.widgetWithText(FTextField, 'Local port'), '5432');
+      await tester.enterText(
+          find.widgetWithText(FTextField, 'Remote host'), 'db');
+      await tester.enterText(
+          find.widgetWithText(FTextField, 'Remote port'), '70000');
+      await tester.tap(find.text('Add rule'));
+      await tester.pumpAndSettle();
+      const msg = 'Remote port must be between 1 and 65535.';
+      expect(find.text(msg), findsOneWidget);
+      expect(
+        find.descendant(
+            of: find.widgetWithText(FTextField, 'Remote port'),
+            matching: find.text(msg)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('switching type hides remote fields and clears the error',
+        (tester) async {
+      await _pumpWithProvider(tester);
+      await tester.tap(find.text('Add forwarding rule'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add rule'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Local port must be'), findsOneWidget);
+      await tester.tap(find.text('Dynamic'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Local port must be'), findsNothing);
+      expect(find.widgetWithText(FTextField, 'Remote host'), findsNothing);
+    });
+
+    testWidgets('icon-only actions keep tooltips: Back, Start, Stop',
+        (tester) async {
+      await _pump(tester);
+      for (final tip in ['Back', 'Start', 'Stop']) {
+        expect(find.byTooltip(tip), findsOneWidget, reason: tip);
+      }
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('rule can be started and the screen has no delete action',
+        (tester) async {
+      // Parity: the old screen only offers start/stop + add; no delete/edit.
+      await _pump(tester);
+      expect(find.byIcon(FLucideIcons.trash2), findsNothing);
+      expect(find.text('Delete'), findsNothing);
+    });
   });
 }

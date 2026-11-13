@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../../models/host.dart';
 import '../../models/ssh_session.dart';
@@ -11,6 +12,7 @@ import '../../util/host_query.dart';
 import '../services/host_reachability_probe.dart';
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
+import '../widgets/button_label.dart';
 import '../widgets/host_card.dart';
 import '../widgets/mobile_fab.dart';
 import '../widgets/section_header.dart';
@@ -20,7 +22,6 @@ import 'mobile_add_host_screen.dart';
 import 'mobile_port_forward_screen.dart';
 import 'mobile_sftp_screen.dart';
 import 'mobile_terminal_screen.dart';
-import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Hosts tab: header + search + folder chips + tag-grouped list + amber FAB.
 /// Tap a host → connect via SessionProvider. Long-press → edit/delete sheet.
@@ -127,56 +128,51 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
     return Scaffold(
       backgroundColor: MobileColors.bg,
       body: SafeArea(
+        // FHeader adds the top safe area itself.
+        top: false,
         child: Stack(
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ── Header ──────────────────────────────────────────────────
+                const FHeader(
+                  title: Text('Hosts'),
+                  suffixes: [
+                    _DecorativeCircle(icon: FLucideIcons.ellipsis),
+                    SizedBox(width: MobileTokens.space2),
+                    _DecorativeCircle(icon: FLucideIcons.user),
+                  ],
+                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     MobileTokens.space4,
-                    MobileTokens.space4,
+                    0,
                     MobileTokens.space4,
                     MobileTokens.space2,
                   ),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Hosts',
-                                style: mobileHeading(
-                                    size: 30, weight: FontWeight.w800)),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: const BoxDecoration(
-                                    color: MobileColors.green,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '$onlineCount online · $totalCount total',
-                                  style: mobileBody(
-                                    size: 13,
-                                    color: MobileColors.textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: MobileColors.green,
+                          shape: BoxShape.circle,
                         ),
                       ),
-                      const _DecorativeCircle(icon: Icons.more_horiz),
-                      const SizedBox(width: MobileTokens.space2),
-                      const _DecorativeCircle(icon: Icons.person_outline),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '$onlineCount online · $totalCount total',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: mobileBody(
+                            size: 13,
+                            color: MobileColors.textMuted,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -186,36 +182,19 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
                   padding: const EdgeInsets.symmetric(
                     horizontal: MobileTokens.space4,
                   ),
-                  child: TextField(
-                    controller: _searchCtrl,
-                    onChanged: (v) => setState(() => _query = v),
-                    style: mobileBody(size: 15),
-                    decoration: InputDecoration(
-                      hintText: 'Search hosts, tags, IPs…',
-                      hintStyle: mobileBody(
-                          size: 15, color: MobileColors.textFaint),
-                      prefixIcon: const Icon(Icons.search,
-                          color: MobileColors.textFaint, size: 20),
-                      filled: true,
-                      fillColor: MobileColors.fieldFill,
-                      contentPadding: const EdgeInsets.symmetric(
-                          vertical: MobileTokens.space3),
-                      border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(MobileTokens.radiusField),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(MobileTokens.radiusField),
-                        borderSide: BorderSide.none,
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(MobileTokens.radiusField),
-                        borderSide: const BorderSide(
-                            color: MobileColors.accent, width: 1.5),
-                      ),
+                  child: FTextField(
+                    control: FTextFieldControl.managed(
+                      controller: _searchCtrl,
+                      onChange: (v) => setState(() => _query = v.text),
+                    ),
+                    hint: 'Search hosts, tags, IPs…',
+                    textInputAction: TextInputAction.search,
+                    prefixBuilder: (context, style, variants) =>
+                        FTextField.prefixIconBuilder(
+                      context,
+                      style,
+                      variants,
+                      const Icon(FLucideIcons.search),
                     ),
                   ),
                 ),
@@ -224,7 +203,7 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
                 // ── Folder chips ─────────────────────────────────────────────
                 if (tags.isNotEmpty)
                   SizedBox(
-                    height: 38,
+                    height: MobileTokens.touchTarget,
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(
@@ -399,51 +378,35 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
   }
 
   Future<void> _showActions(Host host) async {
-    await showModalBottomSheet<void>(
+    await showFSheet<void>(
       context: context,
-      backgroundColor: MobileColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
+      side: FLayout.btt,
+      useSafeArea: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: MobileTokens.space2),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Handle
-            Container(
-              margin: const EdgeInsets.only(top: MobileTokens.space3),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: MobileColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: MobileTokens.space2),
-            ListTile(
-              leading: const Icon(Icons.edit_outlined,
-                  color: MobileColors.textPrimary),
-              title: Text('Edit',
-                  style: mobileBody(size: 16, weight: FontWeight.w500)),
-              onTap: () {
+            FItem(
+              prefix: const Icon(FLucideIcons.pencil),
+              title: const Text('Edit'),
+              onPress: () {
                 Navigator.pop(ctx);
                 Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => MobileAddHostScreen(existing: host),
                 ));
               },
             ),
-            ListTile(
-              leading:
-                  const Icon(Icons.delete_outline, color: MobileColors.red),
-              title: Text('Delete',
-                  style:
-                      mobileBody(size: 16, color: MobileColors.red)),
-              onTap: () {
+            FItem(
+              variant: FItemVariant.destructive,
+              prefix: const Icon(FLucideIcons.trash2),
+              title: const Text('Delete'),
+              onPress: () {
                 Navigator.pop(ctx);
                 _confirmDelete(host);
               },
             ),
-            const SizedBox(height: MobileTokens.space2),
           ],
         ),
       ),
@@ -522,40 +485,20 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            hasQuery ? Icons.search_off : Icons.dns_outlined,
-            size: 48,
-            color: MobileColors.textFaint,
-          ),
-          const SizedBox(height: MobileTokens.space3),
-          Text(
-            hasQuery ? 'No results' : 'No hosts yet',
-            style: mobileHeading(size: 17),
-          ),
-          const SizedBox(height: MobileTokens.space1),
-          Text(
-            hasQuery
-                ? 'Try a different search term or tag'
-                : 'Add a server to get started',
-            style: mobileBody(size: 13, color: MobileColors.textMuted),
-          ),
-          if (!hasQuery) ...[
-            const SizedBox(height: MobileTokens.space4),
-            FilledButton.icon(
-              onPressed: onAdd,
-              icon: const Icon(Icons.add),
-              label: const Text('Add host'),
-              style: FilledButton.styleFrom(
-                  backgroundColor: MobileColors.accent,
-                  foregroundColor: Colors.black),
+    return YsEmptyState(
+      icon: hasQuery ? FLucideIcons.searchX : FLucideIcons.server,
+      title: hasQuery ? 'No results' : 'No hosts yet',
+      message: hasQuery
+          ? 'Try a different search term or tag'
+          : 'Add a server to get started',
+      action: hasQuery
+          ? null
+          : FButton(
+              variant: FButtonVariant.primary,
+              prefix: const Icon(FLucideIcons.plus),
+              onPress: onAdd,
+              child: const ButtonLabel('Add host'),
             ),
-          ],
-        ],
-      ),
     );
   }
 }

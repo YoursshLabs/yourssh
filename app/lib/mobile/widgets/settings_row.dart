@@ -3,6 +3,7 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
+import 'press_tint.dart';
 
 /// A single settings / info row supporting:
 /// - optional leading icon widget
@@ -93,7 +94,12 @@ class SettingsRow extends StatelessWidget {
     );
 
     if (onTap != null) {
-      return FTappable.static(onPress: onTap, child: content);
+      return FTappable.static(
+        onPress: onTap,
+        builder: (context, variants, child) =>
+            mobilePressTint(variants, child!),
+        child: content,
+      );
     }
     return content;
   }
