@@ -305,11 +305,17 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     return t.isEmpty ? _protocol.defaultPort : int.parse(t);
   }
 
-  static String? _validatePort(String? v) {
+  static String? _validatePort(String? v) => _portError(v, 'Invalid (1–65535)');
+
+  /// For the 76 px port field next to the hostname, where the long message
+  /// wraps to three lines.
+  static String? _validatePortShort(String? v) => _portError(v, '1–65535');
+
+  static String? _portError(String? v, String message) {
     final t = (v ?? '').trim();
     if (t.isEmpty) return null;
     final n = int.tryParse(t);
-    return n == null || n < 1 || n > 65535 ? 'Invalid (1–65535)' : null;
+    return n == null || n < 1 || n > 65535 ? message : null;
   }
 
   Future<void> _save() async {

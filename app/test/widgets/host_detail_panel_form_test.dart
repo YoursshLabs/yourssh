@@ -249,7 +249,8 @@ void main() {
   });
 
   group('port validation', () {
-    const msg = 'Invalid (1–65535)';
+    // Short on purpose: the port field is only 76 px wide.
+    const msg = '1–65535';
 
     // Set the controller directly so the digits-only formatter cannot strip
     // the value first (e.g. a non-numeric one).
@@ -285,6 +286,31 @@ void main() {
       await tester.tap(field('host-save-button'));
       await tester.pumpAndSettle();
       expect(saved?.port, 5900);
+    });
+
+    testWidgets('the port error clears as soon as the value is valid',
+        (tester) async {
+      await pumpPanel(tester, existing: existingHost());
+      await tester.enterText(field('host-port-field'), '70000');
+      await tester.tap(field('host-save-button'));
+      await tester.pumpAndSettle();
+      expect(find.text(msg), findsOneWidget);
+
+      await tester.enterText(field('host-port-field'), '2222');
+      await tester.pumpAndSettle();
+      expect(find.text(msg), findsNothing, reason: 'no Save needed');
+      expect(saved, isNull);
+    });
+
+    testWidgets('the hostname error clears once a hostname is typed',
+        (tester) async {
+      await pumpPanel(tester);
+      await tester.tap(field('host-save-button'));
+      await tester.pumpAndSettle();
+      expect(find.text('Required'), findsOneWidget);
+      await tester.enterText(field('host-address-field'), '1.2.3.4');
+      await tester.pumpAndSettle();
+      expect(find.text('Required'), findsNothing);
     });
 
     testWidgets('Test connection with 70000 does not dial', (tester) async {

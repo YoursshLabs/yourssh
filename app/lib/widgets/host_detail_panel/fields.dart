@@ -87,6 +87,9 @@ class _Field extends StatelessWidget {
     autocorrect: false,
     enableSuggestions: false,
     validator: validator,
+    // Once Save has flagged a field, re-check it as the user edits so the
+    // error goes away as soon as the value is valid.
+    autovalidateMode: AutovalidateMode.onUserInteraction,
     // Keep the caret in the field (no unfocus) when Enter hits an invalid
     // form; a valid save closes the panel anyway.
     onEditingComplete: onSubmit == null ? null : controller.clearComposing,

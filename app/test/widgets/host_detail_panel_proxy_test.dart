@@ -121,6 +121,19 @@ void main() {
     });
   }
 
+  testWidgets('proxy port error clears as the user corrects it',
+      (tester) async {
+    await openHttpProxy(tester);
+    final port = find.byKey(const ValueKey('proxy-port-field'));
+    await tester.enterText(port, '70000');
+    await trySave(tester);
+    expect(find.text('Invalid (1–65535)'), findsOneWidget);
+    await tester.enterText(port, '8080');
+    await tester.pumpAndSettle();
+    expect(find.text('Invalid (1–65535)'), findsNothing);
+    expect(saved, isNull);
+  });
+
   testWidgets('proxy port 65535 saves; empty keeps saving no port',
       (tester) async {
     await openHttpProxy(tester);

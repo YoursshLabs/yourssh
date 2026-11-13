@@ -440,7 +440,8 @@ class _ForwardPanelState extends State<_ForwardPanel> {
         c.text.trim().isEmpty ? 'Required' : null;
     String? number(TextEditingController c) {
       final n = int.tryParse(c.text);
-      return n == null || n < 1 || n > 65535 ? 'Invalid (1–65535)' : null;
+      // Short: the port fields are only ~90 px wide.
+      return n == null || n < 1 || n > 65535 ? '1–65535' : null;
     }
     final found = <String, String?>{
       'label': required(_label),

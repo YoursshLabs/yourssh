@@ -303,7 +303,7 @@ void main() {
     await tester.tap(find.text('Add Rule'));
     await tester.pumpAndSettle();
     expect(find.text('Required'), findsWidgets);
-    expect(find.textContaining('Invalid'), findsWidgets);
+    expect(find.text('1–65535'), findsWidgets);
     expect(provider.forwards, isEmpty);
 
     // Dynamic SOCKS5 hides the remote fields.
@@ -359,7 +359,7 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     expect(find.text('Required'), findsWidgets);
-    expect(find.textContaining('Invalid'), findsWidgets);
+    expect(find.text('1–65535'), findsWidgets);
     expect(provider.forwards, isEmpty);
     expect(find.text('New Port Forward Rule'), findsOneWidget);
   });
@@ -382,6 +382,27 @@ void main() {
     expect(provider.forwards.single.localPort, 1080);
   });
 
+  testWidgets('a flagged port error clears as soon as the port is corrected',
+      (tester) async {
+    final (provider, widget) = await build();
+    await tester.pumpWidget(widget);
+    await tester.pump();
+    await tester.tap(find.text('+ New Rule'));
+    await tester.pumpAndSettle();
+    await fill(tester, {'pf-local-port': '70000'});
+    await tester.tap(find.text('Add Rule'));
+    await tester.pumpAndSettle();
+    final inField = find.descendant(
+      of: find.byKey(const ValueKey('pf-local-port')),
+      matching: find.text('1–65535'),
+    );
+    expect(inField, findsOneWidget);
+    await fill(tester, {'pf-local-port': '8080'});
+    await tester.pumpAndSettle();
+    expect(inField, findsNothing);
+    expect(provider.forwards, isEmpty);
+  });
+
   testWidgets('validation: whitespace label, ports 0 and 65536 rejected',
       (tester) async {
     final (provider, widget) = await build();
@@ -399,7 +420,7 @@ void main() {
     await tester.tap(find.text('Add Rule'));
     await tester.pumpAndSettle();
     expect(find.text('Required'), findsOneWidget, reason: 'whitespace label');
-    expect(find.text('Invalid (1–65535)'), findsNWidgets(2));
+    expect(find.text('1–65535'), findsNWidgets(2));
     expect(provider.forwards, isEmpty);
 
     await fill(tester, {
