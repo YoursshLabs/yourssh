@@ -50,7 +50,11 @@ for f in $files; do
     [ -n "$p" ] || continue
     # Left word boundary, so FLucideIcons. / WtIconButton( / SettingsIconButton(
     # / showYsDialog( / FTextField( / DevopsTextField( do not match. Comment-only lines are skipped.
-    re="(^|[^A-Za-z0-9_])$(printf '%s' "$p" | sed 's/[.(]/\\&/g')"
+    # A call pattern ("name(") also matches generic calls ("name<T>(").
+    case "$p" in
+      *'(') re="(^|[^A-Za-z0-9_])${p%(}(<[^()]*>)?\\(" ;;
+      *) re="(^|[^A-Za-z0-9_])$(printf '%s' "$p" | sed 's/[.(]/\\&/g')" ;;
+    esac
     hits=$(grep -nE -- "$re" "$f" | grep -vE '^[0-9]+:[[:space:]]*//' || true)
     [ -n "$hits" ] || continue
     if ! allowed "$f" "$p"; then

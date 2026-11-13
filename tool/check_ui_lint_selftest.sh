@@ -12,7 +12,7 @@ fail() { echo "SELFTEST FAIL: $1"; exit 1; }
 printf 'final a = FLucideIcons.x; WtIconButton(a); SettingsIconButton(a); showYsDialog(c); showFDialog(c); FTextField(a); DevopsTextField(a); showFSheet(c);\n// IconButton( in a comment\n' > "$tmp/app/lib/ok.dart"
 lint || fail "clean tree must pass (word boundaries / comments)"
 
-for bad in 'IconButton(' 'AlertDialog(' 'SnackBar(' 'Icons.add' 'ScaffoldMessenger.of(c)' 'showDialog(c)' 'showModalBottomSheet(c)' 'TextField(a)'; do
+for bad in 'IconButton(' 'AlertDialog(' 'SnackBar(' 'Icons.add' 'ScaffoldMessenger.of(c)' 'showDialog(c)' 'showDialog<void>(c)' 'showModalBottomSheet(c)' 'showModalBottomSheet<int>(c)' 'TextField(a)'; do
   printf 'final w = %s;\n' "$bad" > "$tmp/app/lib/bad.dart"
   if lint; then fail "'$bad' must fail"; fi
 done
