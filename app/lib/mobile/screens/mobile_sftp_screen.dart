@@ -1,3 +1,5 @@
+import 'dart:io' as io;
+
 import 'package:dartssh2/dartssh2.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -41,6 +43,17 @@ class MobileSftpScreen extends StatefulWidget {
   @override
   State<MobileSftpScreen> createState() => _MobileSftpScreenState();
 }
+
+/// True when [e] means the SFTP channel or its SSH connection is gone (closed
+/// socket, aborted channel, closed stream) rather than that one operation was
+/// refused (`SftpStatusError`) or failed locally (`FileSystemException`).
+bool isDeadChannelError(Object e) =>
+    e is io.SocketException ||
+    e is SSHSocketError ||
+    e is SSHStateError ||
+    e is SSHChannelOpenError ||
+    e is SftpAbortError ||
+    e is StateError;
 
 enum _SortField { name, size }
 
@@ -91,12 +104,15 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
     } catch (_) {}
   }
 
-  /// Runs [op] on the cached channel; if it fails, discards the channel and
-  /// retries once on a fresh one (reconnecting if the session was paused).
+  /// Runs [op] on the cached channel. Only when it fails because the channel
+  /// or connection is dead ([isDeadChannelError]) is the channel discarded and
+  /// [op] retried once on a fresh one (reconnecting if the session was paused).
+  /// Server status errors and local I/O errors propagate untouched.
   Future<T> _withSftp<T>(Future<T> Function(SftpClient sftp) op) async {
     try {
       return await op(await _client());
-    } catch (_) {
+    } catch (e) {
+      if (!isDeadChannelError(e)) rethrow;
       _dropClient();
       return await op(await _client());
     }
