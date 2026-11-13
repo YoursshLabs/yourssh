@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/storage_service.dart';
+import '../../theme/app_theme.dart';
 import '../../models/ssh_key.dart';
 import '../../providers/host_provider.dart';
 import '../../providers/key_provider.dart';
@@ -152,7 +154,11 @@ class MobileKeysScreen extends StatelessWidget {
     final entry = await keyProv.addKeyFromFile(path, result.files.first.name);
 
     if (passphrase.isNotEmpty && context.mounted) {
-      await keyProv.savePassphrase?.call(entry.id, passphrase);
+      try {
+        await keyProv.savePassphrase?.call(entry.id, passphrase);
+      } on SecretStoreException {
+        if (context.mounted) AppSnack.error(context, 'Could not save to the iOS Keychain');
+      }
     }
   }
 
@@ -309,7 +315,11 @@ class _GenerateSheetState extends State<_GenerateSheet> {
       if (!mounted) return;
       final entry = await keyProv.addKeyFromFile(result.privateKeyPath, name);
       if (_passphraseCtrl.text.isNotEmpty && mounted) {
-        await keyProv.savePassphrase?.call(entry.id, _passphraseCtrl.text);
+        try {
+          await keyProv.savePassphrase?.call(entry.id, _passphraseCtrl.text);
+        } on SecretStoreException {
+          if (mounted) AppSnack.error(context, 'Could not save to the iOS Keychain');
+        }
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {

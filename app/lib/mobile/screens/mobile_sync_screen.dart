@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../services/storage_service.dart';
 import '../../providers/host_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/p2p_sync_encryption.dart';
@@ -104,7 +105,12 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
     setState(() => _configError = null);
     final sync = context.read<SyncProvider>();
     await sync.setSupabaseConfig(url, anonKey);
-    await sync.setSyncCode(_code.text);
+    try {
+      await sync.setSyncCode(_code.text);
+    } on SecretStoreException {
+      if (mounted) AppSnack.error(context, 'Could not save to the iOS Keychain');
+      return;
+    }
     if (mounted) {
       setState(() => _editingConfig = false);
       AppSnack.success(context, 'Sync settings saved');

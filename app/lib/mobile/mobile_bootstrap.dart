@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 
+import '../platform/runtime_platform.dart';
 import '../providers/host_provider.dart';
 import '../providers/key_provider.dart';
 import '../providers/known_hosts_provider.dart';
@@ -40,7 +41,7 @@ class MobileBootstrap {
   late final KeyGenService keyGen;
 
   MobileBootstrap() {
-    storage = StorageService();
+    storage = StorageService(allowPlaintextFallback: !isIOSPlatform);
     ssh = SshService(storage);
     hostProvider = HostProvider(storage);
     keyProvider = KeyProvider()..savePassphrase = storage.savePassphrase;

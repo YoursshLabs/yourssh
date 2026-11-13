@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
+import '../../services/storage_service.dart';
+import '../../theme/app_theme.dart';
 import '../../models/host.dart';
 import '../../models/ssh_key.dart';
 import '../../providers/host_provider.dart';
@@ -189,13 +191,24 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
 
   Future<void> _save() async {
     if (!_canSave) return;
-    await _doSave();
+    try {
+      await _doSave();
+    } on SecretStoreException {
+      if (mounted) AppSnack.error(context, 'Could not save to the iOS Keychain');
+      return;
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _saveAndConnect() async {
     if (!_canSave) return;
-    final savedId = await _doSave();
+    final String savedId;
+    try {
+      savedId = await _doSave();
+    } on SecretStoreException {
+      if (mounted) AppSnack.error(context, 'Could not save to the iOS Keychain');
+      return;
+    }
     if (!mounted) return;
     // Use the id returned by _doSave — deterministic, no .last assumption.
     final host = context.read<HostProvider>().byId(savedId);
