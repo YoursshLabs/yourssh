@@ -14,6 +14,8 @@ import '../theme/mobile_tokens.dart';
 import '../../util/safe_local_path.dart';
 import '../../theme/app_theme.dart';
 
+import 'package:yourssh_ui/yourssh_ui.dart';
+
 /// Contextual SFTP browser — reached from the Terminal ⋮ menu for the
 /// currently active session's host. One SFTP channel is reused for all
 /// operations; a load-token prevents stale results from a slow listdir
@@ -25,11 +27,7 @@ class MobileSftpScreen extends StatefulWidget {
   /// tree can be pumped without a real SSH connection.
   final Future<List<SftpName>> Function(String path)? lister;
 
-  const MobileSftpScreen({
-    super.key,
-    required this.host,
-    this.lister,
-  });
+  const MobileSftpScreen({super.key, required this.host, this.lister});
 
   @override
   State<MobileSftpScreen> createState() => _MobileSftpScreenState();
@@ -131,8 +129,7 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
   List<String> get _parts =>
       _path == '.' ? [] : _path.split('/').where((s) => s.isNotEmpty).toList();
 
-  String _join(String name) =>
-      _path == '.' ? name : p.posix.join(_path, name);
+  String _join(String name) => _path == '.' ? name : p.posix.join(_path, name);
 
   // ── Size formatting ───────────────────────────────────────────────────────
 
@@ -146,8 +143,7 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
   }
 
   static String _totalSize(List<SftpName> entries) {
-    final total =
-        entries.fold<int>(0, (s, e) => s + (e.attr.size ?? 0));
+    final total = entries.fold<int>(0, (s, e) => s + (e.attr.size ?? 0));
     return _fmtSize(total);
   }
 
@@ -158,9 +154,12 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
     final lower = name.toLowerCase();
     if (e.attr.isDirectory) return Icons.folder_rounded;
     // Sensitive / dot-files get a lock glyph.
-    if (name.startsWith('.') || lower.contains('secret') ||
-        lower.contains('credential') || lower.contains('passwd') ||
-        lower.endsWith('.pem') || lower.endsWith('.key') ||
+    if (name.startsWith('.') ||
+        lower.contains('secret') ||
+        lower.contains('credential') ||
+        lower.contains('passwd') ||
+        lower.endsWith('.pem') ||
+        lower.endsWith('.key') ||
         lower.endsWith('.env')) {
       return Icons.lock_outline;
     }
@@ -173,8 +172,9 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
     if (RegExp(r'\.(mp4|mov|avi|mkv|webm)$').hasMatch(lower)) {
       return Icons.videocam_outlined;
     }
-    if (RegExp(r'\.(sh|bash|zsh|py|js|ts|go|rs|c|cpp|dart|rb|json|ya?ml|toml|conf|ini|cfg)$')
-        .hasMatch(lower)) {
+    if (RegExp(
+      r'\.(sh|bash|zsh|py|js|ts|go|rs|c|cpp|dart|rb|json|ya?ml|toml|conf|ini|cfg)$',
+    ).hasMatch(lower)) {
       return Icons.description_outlined;
     }
     return Icons.insert_drive_file_outlined;
@@ -183,9 +183,12 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
   Color _iconColor(SftpName e) {
     if (e.attr.isDirectory) return MobileColors.blue;
     final name = e.filename.toLowerCase();
-    if (e.filename.startsWith('.') || name.endsWith('.pem') ||
-        name.endsWith('.key') || name.endsWith('.env') ||
-        name.contains('secret') || name.contains('passwd')) {
+    if (e.filename.startsWith('.') ||
+        name.endsWith('.pem') ||
+        name.endsWith('.key') ||
+        name.endsWith('.env') ||
+        name.contains('secret') ||
+        name.contains('passwd')) {
       return MobileColors.yellow;
     }
     return MobileColors.textMuted;
@@ -222,8 +225,9 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
   Future<void> _upload() async {
     final transfer = context.read<SftpTransferService>();
     final picked = await FilePicker.platform.pickFiles();
-    final localPath =
-        picked == null || picked.files.isEmpty ? null : picked.files.first.path;
+    final localPath = picked == null || picked.files.isEmpty
+        ? null
+        : picked.files.first.path;
     if (localPath == null) return;
     final name = p.basename(localPath);
     try {
@@ -247,84 +251,81 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: MobileColors.bg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _Header(
-              host: widget.host,
-              onBack: () => Navigator.maybePop(context),
-              onUpload: _upload,
-              onRefresh: () => _load(_path),
-            ),
-            _BreadcrumbRow(
-              parts: _parts,
-              onHome: _parts.isEmpty ? null : () => _load('.'),
-              onSegment: (i) =>
-                  _load('/${_parts.sublist(0, i + 1).join('/')}'),
-            ),
-            _MetaRow(
-              count: _entries.length,
-              totalSize: _totalSize(_entries),
-              sortField: _sortField,
-              ascending: _sortAscending,
-              onSort: (field, asc) {
-                setState(() {
-                  _sortField = field;
-                  _sortAscending = asc;
-                });
-                _applySort();
-              },
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: MobileTokens.space4,
-                    vertical: MobileTokens.space2),
-                child: Text(
-                  _error!,
-                  style: mobileBody(size: 12, color: MobileColors.red),
-                ),
+      // FHeader adds its own top safe area; the list handles the bottom inset.
+      body: Column(
+        children: [
+          _Header(
+            host: widget.host,
+            onBack: () => Navigator.maybePop(context),
+            onUpload: _upload,
+            onRefresh: () => _load(_path),
+          ),
+          _BreadcrumbRow(
+            parts: _parts,
+            onHome: _parts.isEmpty ? null : () => _load('.'),
+            onSegment: (i) => _load('/${_parts.sublist(0, i + 1).join('/')}'),
+          ),
+          _MetaRow(
+            count: _entries.length,
+            totalSize: _totalSize(_entries),
+            sortField: _sortField,
+            ascending: _sortAscending,
+            onSort: (field, asc) {
+              setState(() {
+                _sortField = field;
+                _sortAscending = asc;
+              });
+              _applySort();
+            },
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: MobileTokens.space4,
+                vertical: MobileTokens.space2,
               ),
-            Expanded(
-              child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                          color: MobileColors.accent))
-                  : _entries.isEmpty
-                      ? Center(
-                          child: Text(
-                            'Empty folder',
-                            style:
-                                mobileBody(color: MobileColors.textMuted),
-                          ),
-                        )
-                      : ListView.separated(
-                          itemCount: _entries.length,
-                          separatorBuilder: (context, i) => Padding(
-                            padding:
-                                const EdgeInsets.only(left: 47),
-                            child: Divider(
-                              height: 1,
-                              thickness: 0.5,
-                              color: MobileColors.border,
-                            ),
-                          ),
-                          itemBuilder: (_, i) => _EntryRow(
-                            entry: _entries[i],
-                            icon: _iconFor(_entries[i]),
-                            iconColor: _iconColor(_entries[i]),
-                            onTap: _entries[i].attr.isDirectory
-                                ? () =>
-                                    _load(_join(_entries[i].filename))
-                                : null,
-                            onDownload: _entries[i].attr.isDirectory
-                                ? null
-                                : () => _download(_entries[i]),
-                          ),
-                        ),
+              child: Text(
+                _error!,
+                style: mobileBody(size: 12, color: MobileColors.red),
+              ),
             ),
-          ],
-        ),
+          Expanded(
+            child: _loading
+                ? const Center(child: FCircularProgress())
+                : _entries.isEmpty
+                ? Center(
+                    child: Text(
+                      'Empty folder',
+                      style: mobileBody(color: MobileColors.textMuted),
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: _entries.length,
+                    separatorBuilder: (context, i) => Padding(
+                      padding: const EdgeInsets.only(left: 47),
+                      child: Divider(
+                        height: 1,
+                        thickness: 0.5,
+                        color: MobileColors.border,
+                      ),
+                    ),
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.paddingOf(context).bottom,
+                    ),
+                    itemBuilder: (_, i) => _EntryRow(
+                      entry: _entries[i],
+                      icon: _iconFor(_entries[i]),
+                      iconColor: _iconColor(_entries[i]),
+                      onTap: _entries[i].attr.isDirectory
+                          ? () => _load(_join(_entries[i].filename))
+                          : null,
+                      onDownload: _entries[i].attr.isDirectory
+                          ? null
+                          : () => _download(_entries[i]),
+                    ),
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -347,88 +348,61 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 52,
-      color: MobileColors.surfaceAlt,
-      child: Row(
+    return FHeader.nested(
+      titleAlignment: Alignment.centerLeft,
+      title: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new,
-                color: MobileColors.accent, size: 20),
-            onPressed: onBack,
-          ),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Files',
-                  style: mobileBody(
-                      size: 11,
-                      color: MobileColors.textMuted,
-                      weight: FontWeight.w500),
-                ),
-                Text(
-                  host.label,
-                  style: mobileBody(
-                      size: 14, weight: FontWeight.w600),
-                ),
-              ],
+          Text(
+            'Files',
+            style: mobileBody(
+              size: 11,
+              color: MobileColors.textMuted,
+              weight: FontWeight.w500,
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.upload_file_outlined,
-                color: MobileColors.textMuted, size: 20),
-            tooltip: 'Upload',
-            onPressed: onUpload,
+          Text(
+            host.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: mobileBody(size: 14, weight: FontWeight.w600),
           ),
-          IconButton(
-            icon: const Icon(Icons.more_vert,
-                color: MobileColors.textMuted, size: 20),
-            tooltip: 'More',
-            onPressed: () => _showMenu(context),
-          ),
-          const SizedBox(width: 4),
         ],
       ),
+      prefixes: [FHeaderAction.back(onPress: onBack)],
+      suffixes: [
+        FHeaderAction(
+          icon: const Icon(FLucideIcons.fileUp),
+          semanticsLabel: 'Upload',
+          onPress: onUpload,
+        ),
+        FHeaderAction(
+          icon: const Icon(FLucideIcons.ellipsisVertical),
+          semanticsLabel: 'More',
+          onPress: () => _showMenu(context),
+        ),
+      ],
     );
   }
 
   void _showMenu(BuildContext context) {
-    showModalBottomSheet<void>(
+    showFSheet<void>(
       context: context,
-      backgroundColor: MobileColors.surfaceAlt,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: MobileColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              leading: const Icon(Icons.refresh,
-                  color: MobileColors.textPrimary),
-              title: Text('Refresh',
-                  style: mobileBody(color: MobileColors.textPrimary)),
-              onTap: () {
-                Navigator.pop(context);
-                onRefresh();
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
+      side: FLayout.btt,
+      mainAxisMaxRatio: null,
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(MobileTokens.space2),
+          child: FItem(
+            prefix: const Icon(FLucideIcons.refreshCw),
+            title: const Text('Refresh'),
+            onPress: () {
+              Navigator.pop(ctx);
+              onRefresh();
+            },
+          ),
         ),
       ),
     );
@@ -451,7 +425,7 @@ class _BreadcrumbRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 38,
+      height: MobileTokens.touchTarget,
       color: MobileColors.surfaceAlt,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -460,27 +434,36 @@ class _BreadcrumbRow extends StatelessWidget {
           children: [
             // Home icon — tappable when not at root.
             GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: onHome,
-              child: Icon(
-                Icons.home_outlined,
-                size: 16,
-                color: parts.isEmpty
-                    ? MobileColors.textPrimary
-                    : MobileColors.accent,
+              child: SizedBox(
+                width: MobileTokens.touchTarget,
+                height: MobileTokens.touchTarget,
+                child: Icon(
+                  Icons.home_outlined,
+                  size: 16,
+                  color: parts.isEmpty
+                      ? MobileColors.textPrimary
+                      : MobileColors.accent,
+                ),
               ),
             ),
             for (var i = 0; i < parts.length; i++) ...[
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 2),
-                child: Icon(Icons.chevron_right,
-                    size: 14, color: MobileColors.textFaint),
+                child: Icon(
+                  Icons.chevron_right,
+                  size: 14,
+                  color: MobileColors.textFaint,
+                ),
               ),
               GestureDetector(
-                onTap: i == parts.length - 1
-                    ? null
-                    : () => onSegment(i),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                behavior: HitTestBehavior.opaque,
+                onTap: i == parts.length - 1 ? null : () => onSegment(i),
+                child: Container(
+                  height: MobileTokens.touchTarget,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Text(
                     parts[i],
                     style: mobileMono(
@@ -523,7 +506,7 @@ class _MetaRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 36,
+      height: MobileTokens.touchTarget,
       color: MobileColors.surfaceAlt,
       padding: const EdgeInsets.symmetric(horizontal: MobileTokens.space4),
       child: Row(
@@ -535,6 +518,8 @@ class _MetaRow extends StatelessWidget {
             ),
           ),
           GestureDetector(
+            key: const ValueKey('sftp-sort'),
+            behavior: HitTestBehavior.opaque,
             onTap: () {
               // Cycle: name↑ → name↓ → size↑ → size↓ → name↑
               if (sortField == _SortField.name && ascending) {
@@ -547,23 +532,23 @@ class _MetaRow extends StatelessWidget {
                 onSort(_SortField.name, true);
               }
             },
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  sortField == _SortField.name ? 'Name' : 'Size',
-                  style: mobileBody(
-                      size: 12, color: MobileColors.textMuted),
-                ),
-                const SizedBox(width: 2),
-                Icon(
-                  ascending
-                      ? Icons.arrow_upward
-                      : Icons.arrow_downward,
-                  size: 12,
-                  color: MobileColors.textMuted,
-                ),
-              ],
+            child: SizedBox(
+              height: MobileTokens.touchTarget,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    sortField == _SortField.name ? 'Name' : 'Size',
+                    style: mobileBody(size: 12, color: MobileColors.textMuted),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    ascending ? Icons.arrow_upward : Icons.arrow_downward,
+                    size: 12,
+                    color: MobileColors.textMuted,
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -597,48 +582,70 @@ class _EntryRow extends StatelessWidget {
         ? mobileMono(size: 14, color: MobileColors.textPrimary)
         : mobileBody(size: 14, color: MobileColors.textPrimary);
 
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: MobileTokens.space4, vertical: MobileTokens.space3),
-        child: Row(
-          children: [
-            // Icon column — fixed width so names align.
-            SizedBox(
-              width: 32,
-              child: Icon(icon, size: 22, color: iconColor),
-            ),
-            const SizedBox(width: MobileTokens.space2),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(entry.filename, style: nameStyle),
-                  if (!isDir && entry.attr.size != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      _MobileSftpScreenState._fmtSize(entry.attr.size!),
-                      style: mobileMono(
-                          size: 11, color: MobileColors.textMuted),
-                    ),
-                  ],
-                ],
+    return FTappable.static(
+      key: ValueKey('sftp-row-${entry.filename}'),
+      onPress: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: MobileTokens.touchTarget),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: MobileTokens.space4,
+            vertical: MobileTokens.space3,
+          ),
+          child: Row(
+            children: [
+              // Icon column — fixed width so names align.
+              SizedBox(
+                width: 32,
+                child: Icon(icon, size: 22, color: iconColor),
               ),
-            ),
-            if (isDir)
-              const Icon(Icons.chevron_right,
-                  size: 18, color: MobileColors.textFaint)
-            else if (onDownload != null)
-              GestureDetector(
-                onTap: onDownload,
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(Icons.download_outlined,
-                      size: 18, color: MobileColors.textMuted),
+              const SizedBox(width: MobileTokens.space2),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.filename,
+                      style: nameStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (!isDir && entry.attr.size != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        _MobileSftpScreenState._fmtSize(entry.attr.size!),
+                        style: mobileMono(
+                          size: 11,
+                          color: MobileColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-          ],
+              if (isDir)
+                const Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: MobileColors.textFaint,
+                )
+              else if (onDownload != null)
+                FTappable.static(
+                  key: const ValueKey('sftp-download'),
+                  onPress: onDownload,
+                  semanticsLabel: 'Download',
+                  child: const SizedBox(
+                    width: MobileTokens.touchTarget,
+                    height: MobileTokens.touchTarget,
+                    child: Icon(
+                      Icons.download_outlined,
+                      size: 18,
+                      color: MobileColors.textMuted,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

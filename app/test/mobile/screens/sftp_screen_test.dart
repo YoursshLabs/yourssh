@@ -10,6 +10,8 @@ import 'package:yourssh/models/host.dart';
 import 'package:yourssh/services/sftp_transfer_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
+import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 // ---------------------------------------------------------------------------
 // Fake entry builders — use SftpFileAttrs / SftpFileMode named constructors.
@@ -57,6 +59,7 @@ Future<void> _pump(
   await tester.pumpWidget(
     MaterialApp(
       theme: buildMobileTheme(),
+      builder: ysRootBuilderTouch,
       home: MultiProvider(
         providers: [
           Provider<SshService>.value(value: ssh),
@@ -125,5 +128,47 @@ void main() {
   testWidgets('sensitive file (.env) shows Icons.lock_outline', (tester) async {
     await _pump(tester, entries: [_file('.env', 512)]);
     expect(find.byIcon(Icons.lock_outline), findsAtLeastNWidgets(1));
+  });
+
+  // ── forui migration (Task 15b) ───────────────────────────────────────────
+
+  testWidgets('uses FHeader; upload action >=44px', (tester) async {
+    await _pump(tester, entries: []);
+    expect(find.bySubtype<FHeader>(), findsOneWidget);
+    for (final a in find.byType(FHeaderAction).evaluate()) {
+      final size = tester.getSize(find.byWidget(a.widget));
+      expect(size.width, greaterThanOrEqualTo(44));
+      expect(size.height, greaterThanOrEqualTo(44));
+    }
+    expect(find.byType(FHeaderAction), findsWidgets);
+  });
+
+  testWidgets('row, download and sort tappables are >=44px', (tester) async {
+    await _pump(tester, entries: [_dir('etc'), _file('a.txt', 10)]);
+    expect(tester.getSize(find.byKey(const ValueKey('sftp-sort'))).height,
+        greaterThanOrEqualTo(44));
+    final dl = find.byKey(const ValueKey('sftp-download'));
+    expect(dl, findsOneWidget);
+    final s = tester.getSize(dl);
+    expect(s.width, greaterThanOrEqualTo(44));
+    expect(s.height, greaterThanOrEqualTo(44));
+    expect(tester.getSize(find.byKey(const ValueKey('sftp-row-etc'))).height,
+        greaterThanOrEqualTo(44));
+  });
+
+  testWidgets('360x640 with 60-char names and nested path: no overflow',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final longDir = 'd' * 60;
+    await _pump(tester, entries: [
+      _dir(longDir),
+      _file('f' * 60 + '.txt', 123456789),
+    ]);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(ValueKey('sftp-row-$longDir')));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
   });
 }

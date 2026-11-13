@@ -10,6 +10,7 @@ import 'package:yourssh/providers/sync_provider.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/sync_service.dart';
 import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
@@ -17,11 +18,12 @@ Future<SyncProvider> _pump(
   WidgetTester tester, {
   bool configured = true,
   SyncStatus status = SyncStatus.synced,
+  String url = 'https://example.supabase.co',
 }) async {
   // Pre-seed SharedPreferences so SyncProvider._init() reads configured values.
   if (configured) {
     SharedPreferences.setMockInitialValues({
-      'supabase_url': 'https://example.supabase.co',
+      'supabase_url': url,
       'supabase_anon_key': 'test-anon-key',
     });
   }
@@ -253,5 +255,41 @@ void main() {
     expect(sync.syncCode, 'ABCDEFGH0JKM');
     // No error shown.
     expect(find.byKey(const Key('sync-config-error')), findsNothing);
+  });
+
+  // ── forui migration (Task 15b) ───────────────────────────────────────────
+
+  testWidgets('uses FHeader; back action >=44px', (tester) async {
+    await _pump(tester);
+    expect(find.bySubtype<FHeader>(), findsOneWidget);
+    final a = find.byType(FHeaderAction);
+    expect(a, findsOneWidget);
+    final size = tester.getSize(a);
+    expect(size.width, greaterThanOrEqualTo(44));
+    expect(size.height, greaterThanOrEqualTo(44));
+  });
+
+  testWidgets('primary actions (Scan, Save, Pull, Edit) >=44px tall',
+      (tester) async {
+    await _pump(tester, configured: false);
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pump(const Duration(milliseconds: 100));
+    for (final label in ['Scan QR code', 'Save', 'Pull from cloud']) {
+      final b = find.widgetWithText(FButton, label);
+      expect(b, findsOneWidget, reason: label);
+      expect(tester.getSize(b).height, greaterThanOrEqualTo(44),
+          reason: label);
+    }
+  });
+
+  testWidgets('360x640 with 60-char Supabase URL does not overflow',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(tester, url: 'https://${'a' * 60}.supabase.co');
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
   });
 }

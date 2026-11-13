@@ -17,6 +17,8 @@ import '../widgets/section_header.dart';
 import 'mobile_qr_scan_screen.dart';
 import '../../theme/app_theme.dart';
 
+import 'package:yourssh_ui/yourssh_ui.dart';
+
 /// Screen 09 — Sync / QR pairing.
 ///
 /// Shows:
@@ -40,7 +42,7 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
   Timer? _countdown;
 
   // ── Supabase config form state ────────────────────────────────────────────
-  final _url  = TextEditingController();
+  final _url = TextEditingController();
   final _anon = TextEditingController();
   final _code = TextEditingController();
   bool _editingConfig = false;
@@ -67,13 +69,13 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
 
   void _prefillConfig() {
     final sync = context.read<SyncProvider>();
-    _url.text  = sync.supabaseUrl;
+    _url.text = sync.supabaseUrl;
     _anon.text = sync.supabaseAnonKey;
     _code.text = sync.syncCode;
   }
 
   Future<void> _saveConfig() async {
-    final url     = _url.text.trim();
+    final url = _url.text.trim();
     final anonKey = _anon.text.trim();
 
     // Validate URL — must be non-empty and parse as http/https.
@@ -83,7 +85,9 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
     }
     final uri = Uri.tryParse(url);
     if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
-      setState(() => _configError = 'URL must start with https:// (or http://).');
+      setState(
+        () => _configError = 'URL must start with https:// (or http://).',
+      );
       return;
     }
 
@@ -110,12 +114,15 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
       final payload = await context.read<SyncService>().pull();
       if (!mounted) return;
       if (payload != null) {
-        await context
-            .read<HostProvider>()
-            .replaceAll(payload.hosts, payload.passwords);
+        await context.read<HostProvider>().replaceAll(
+          payload.hosts,
+          payload.passwords,
+        );
         if (mounted) {
           AppSnack.success(
-              context, 'Imported ${payload.hosts.length} hosts from cloud');
+            context,
+            'Imported ${payload.hosts.length} hosts from cloud',
+          );
         }
       } else if (mounted) {
         final err = context.read<SyncProvider>().error;
@@ -146,7 +153,10 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
       final hostProvider = context.read<HostProvider>();
       final hosts = hostProvider.allHosts;
       final passwords = await hostProvider.loadAllPasswords();
-      final payload = SyncService.buildPayload(hosts: hosts, passwords: passwords);
+      final payload = SyncService.buildPayload(
+        hosts: hosts,
+        passwords: passwords,
+      );
       if (!mounted) return;
 
       final key = P2PSyncEncryption.generateKey();
@@ -208,81 +218,84 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
 
     return Scaffold(
       backgroundColor: MobileColors.bg,
-      appBar: _buildAppBar(),
-      body: ListView(
-        padding: EdgeInsets.only(
-          top: MobileTokens.space4,
-          left: MobileTokens.space4,
-          right: MobileTokens.space4,
-          bottom: MobileTokens.space5,
-        ),
+      body: Column(
         children: [
-          _buildHero(),
-          const SizedBox(height: MobileTokens.space5),
-          _buildQrSection(),
-          const SizedBox(height: MobileTokens.space5),
-          _buildStatusSection(sync),
-          const SizedBox(height: MobileTokens.space5),
-          _buildConfigSection(sync),
-          const SizedBox(height: MobileTokens.space5),
-          _buildScanButton(),
+          _buildHeader(),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(
+                top: MobileTokens.space4,
+                left: MobileTokens.space4,
+                right: MobileTokens.space4,
+                bottom: MobileTokens.space5,
+              ),
+              children: [
+                _buildHero(),
+                const SizedBox(height: MobileTokens.space5),
+                _buildQrSection(),
+                const SizedBox(height: MobileTokens.space5),
+                _buildStatusSection(sync),
+                const SizedBox(height: MobileTokens.space5),
+                _buildConfigSection(sync),
+                const SizedBox(height: MobileTokens.space5),
+                _buildScanButton(),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // ── App bar ───────────────────────────────────────────────────────────────
+  // ── Header (FHeader adds its own top safe area) ───────────────────────────
 
-  AppBar _buildAppBar() => AppBar(
-        backgroundColor: MobileColors.bg,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 18),
-          color: MobileColors.accent,
-          onPressed: () => Navigator.of(context).maybePop(),
-          tooltip: 'Settings',
-        ),
-        title: Text('Pair device', style: mobileHeading()),
-        actions: const [SizedBox(width: 8)],
-      );
+  Widget _buildHeader() => FHeader.nested(
+    title: const Text('Pair device'),
+    prefixes: [
+      FHeaderAction.back(
+        semanticsLabel: 'Settings',
+        onPress: () => Navigator.of(context).maybePop(),
+      ),
+    ],
+  );
 
   // ── Hero copy ─────────────────────────────────────────────────────────────
 
   Widget _buildHero() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Sync with Supabase', style: mobileHeading(size: 22)),
-          const SizedBox(height: MobileTokens.space2),
-          Text(
-            'No account needed. Your hosts, keys & snippets stay end-to-end '
-            'encrypted across devices.',
-            style: mobileBody(size: 14, color: MobileColors.textMuted),
-          ),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('Sync with Supabase', style: mobileHeading(size: 22)),
+      const SizedBox(height: MobileTokens.space2),
+      Text(
+        'No account needed. Your hosts, keys & snippets stay end-to-end '
+        'encrypted across devices.',
+        style: mobileBody(size: 14, color: MobileColors.textMuted),
+      ),
+    ],
+  );
 
   // ── QR section ────────────────────────────────────────────────────────────
 
   Widget _buildQrSection() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader('Pair a new device'),
-          MobileCard(
-            padding: const EdgeInsets.all(MobileTokens.space5),
-            child: Column(
-              children: [
-                _buildQrContent(),
-                const SizedBox(height: MobileTokens.space3),
-                Text(
-                  'Open YourSSH on another device and scan this',
-                  style: mobileBody(size: 13, color: MobileColors.textMuted),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SectionHeader('Pair a new device'),
+      MobileCard(
+        padding: const EdgeInsets.all(MobileTokens.space5),
+        child: Column(
+          children: [
+            _buildQrContent(),
+            const SizedBox(height: MobileTokens.space3),
+            Text(
+              'Open YourSSH on another device and scan this',
+              style: mobileBody(size: 13, color: MobileColors.textMuted),
+              textAlign: TextAlign.center,
             ),
-          ),
-        ],
-      );
+          ],
+        ),
+      ),
+    ],
+  );
 
   Widget _buildQrContent() {
     if (_qrData != null) {
@@ -322,7 +335,11 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
           if (_qrStatus.startsWith('Error') || _qrStatus.contains('expired'))
             Column(
               children: [
-                Icon(Icons.error_outline, color: MobileColors.textMuted, size: 40),
+                Icon(
+                  Icons.error_outline,
+                  color: MobileColors.textMuted,
+                  size: 40,
+                ),
                 const SizedBox(height: MobileTokens.space3),
                 Text(
                   _qrStatus,
@@ -330,16 +347,13 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: MobileTokens.space3),
-                FilledButton(
-                  onPressed: _startServer,
-                  child: const Text('Refresh'),
-                ),
+                FButton(onPress: _startServer, child: const Text('Refresh')),
               ],
             )
           else
             Column(
               children: [
-                const CircularProgressIndicator(),
+                const FCircularProgress(),
                 const SizedBox(height: MobileTokens.space3),
                 Text(
                   _qrStatus,
@@ -355,57 +369,56 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
   // ── Status section ────────────────────────────────────────────────────────
 
   Widget _buildStatusSection(SyncProvider sync) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader('Cloud sync'),
-          MobileCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SectionHeader('Cloud sync'),
+      MobileCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            sync.isSupabaseConfigured
-                                ? 'Supabase connected'
-                                : 'Supabase not configured',
-                            style: mobileBody(
-                              size: 14,
-                              weight: FontWeight.w600,
-                              color: sync.isSupabaseConfigured
-                                  ? MobileColors.textPrimary
-                                  : MobileColors.textMuted,
-                            ),
-                          ),
-                          if (sync.isSupabaseConfigured) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              'Last sync · ${_formatLastSync(sync.lastSynced)}',
-                              style: mobileBody(
-                                size: 12,
-                                color: MobileColors.textMuted,
-                              ),
-                            ),
-                          ],
-                        ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        sync.isSupabaseConfigured
+                            ? 'Supabase connected'
+                            : 'Supabase not configured',
+                        style: mobileBody(
+                          size: 14,
+                          weight: FontWeight.w600,
+                          color: sync.isSupabaseConfigured
+                              ? MobileColors.textPrimary
+                              : MobileColors.textMuted,
+                        ),
                       ),
-                    ),
-                    if (sync.isSupabaseConfigured)
-                      _E2EBadge(),
-                  ],
+                      if (sync.isSupabaseConfigured) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Last sync · ${_formatLastSync(sync.lastSynced)}',
+                          style: mobileBody(
+                            size: 12,
+                            color: MobileColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-                if (sync.isSupabaseConfigured) ...[
-                  const SizedBox(height: MobileTokens.space3),
-                  _SyncStatusRow(status: sync.status),
-                ],
+                if (sync.isSupabaseConfigured) _E2EBadge(),
               ],
             ),
-          ),
-        ],
-      );
+            if (sync.isSupabaseConfigured) ...[
+              const SizedBox(height: MobileTokens.space3),
+              _SyncStatusRow(status: sync.status),
+            ],
+          ],
+        ),
+      ),
+    ],
+  );
 
   // ── Supabase config section ───────────────────────────────────────────────
 
@@ -428,8 +441,9 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: MobileTokens.space2),
-                OutlinedButton(
-                  onPressed: () {
+                FButton(
+                  variant: FButtonVariant.outline,
+                  onPress: () {
                     _prefillConfig();
                     setState(() => _editingConfig = true);
                   },
@@ -443,100 +457,83 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
   }
 
   Widget _buildConfigForm(SyncProvider sync) => MobileCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Enter your Supabase project URL, anon key, and 12-character sync code.',
+          style: mobileBody(size: 13, color: MobileColors.textMuted),
+        ),
+        const SizedBox(height: MobileTokens.space3),
+        _configField(_url, 'Supabase URL', 'sync-url'),
+        _configField(_anon, 'Anon key', 'sync-anon'),
+        _configField(_code, 'Sync code (12 chars)', 'sync-code'),
+        const SizedBox(height: MobileTokens.space3),
+        Row(
           children: [
-            Text(
-              'Enter your Supabase project URL, anon key, and 12-character sync code.',
-              style: mobileBody(size: 13, color: MobileColors.textMuted),
-            ),
-            const SizedBox(height: MobileTokens.space3),
-            _configField(_url, 'Supabase URL', 'sync-url'),
-            _configField(_anon, 'Anon key', 'sync-anon'),
-            _configField(_code, 'Sync code (12 chars)', 'sync-code'),
-            const SizedBox(height: MobileTokens.space3),
-            Row(
-              children: [
-                FilledButton(
-                  onPressed: _saveConfig,
-                  child: const Text('Save'),
-                ),
-                const SizedBox(width: MobileTokens.space3),
-                OutlinedButton(
-                  onPressed: _pulling ? null : _pullFromCloud,
-                  child: _pulling
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Pull from cloud'),
-                ),
-              ],
-            ),
-            if (_configError != null) ...[
-              const SizedBox(height: MobileTokens.space2),
-              Text(
-                _configError!,
-                key: const Key('sync-config-error'),
-                style: mobileBody(size: 12, color: MobileColors.red),
+            FButton(onPress: _saveConfig, child: const Text('Save')),
+            const SizedBox(width: MobileTokens.space3),
+            Flexible(
+              child: FButton(
+                variant: FButtonVariant.outline,
+                onPress: _pulling ? null : _pullFromCloud,
+                child: _pulling
+                    ? const FCircularProgress()
+                    : const Text('Pull from cloud'),
               ),
-            ] else if (sync.error != null) ...[
-              const SizedBox(height: MobileTokens.space2),
-              Text(
-                sync.error!,
-                style: mobileBody(size: 12, color: MobileColors.red),
-              ),
-            ],
+            ),
           ],
         ),
-      );
+        if (_configError != null) ...[
+          const SizedBox(height: MobileTokens.space2),
+          Text(
+            _configError!,
+            key: const Key('sync-config-error'),
+            style: mobileBody(size: 12, color: MobileColors.red),
+          ),
+        ] else if (sync.error != null) ...[
+          const SizedBox(height: MobileTokens.space2),
+          Text(
+            sync.error!,
+            style: mobileBody(size: 12, color: MobileColors.red),
+          ),
+        ],
+      ],
+    ),
+  );
 
   Widget _configField(
     TextEditingController controller,
     String label,
     String key,
-  ) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: MobileTokens.space3),
-        child: TextField(
-          key: Key(key),
-          controller: controller,
-          style: const TextStyle(
-            color: MobileColors.textPrimary,
-            fontSize: 13,
-          ),
-          decoration: InputDecoration(labelText: label),
-        ),
-      );
+  ) => Padding(
+    padding: const EdgeInsets.only(bottom: MobileTokens.space3),
+    child: FTextField(
+      key: Key(key),
+      control: FTextFieldControl.managed(controller: controller),
+      label: Text(label),
+      autocorrect: false,
+      enableSuggestions: false,
+    ),
+  );
 
   // ── Scan button ───────────────────────────────────────────────────────────
 
   Widget _buildScanButton() => SizedBox(
-        width: double.infinity,
-        child: FilledButton.icon(
-          icon: const Icon(Icons.qr_code_scanner, size: 18),
-          label: const Text('Scan QR code'),
-          style: FilledButton.styleFrom(
-            backgroundColor: MobileColors.accent,
-            foregroundColor: Colors.black,
-            padding: const EdgeInsets.symmetric(vertical: MobileTokens.space4),
-            textStyle: mobileBody(
-              size: 16,
-              weight: FontWeight.w600,
-              color: Colors.black,
-            ),
-          ),
-          onPressed: () async {
-            final result = await Navigator.of(context).push<String>(
-              MaterialPageRoute(builder: (_) => const MobileQrScanScreen()),
-            );
-            if (result != null && mounted) {
-              AppSnack.info(context, result);
-            }
-          },
-        ),
-      );
+    width: double.infinity,
+    child: FButton(
+      prefix: const Icon(FLucideIcons.scanLine),
+      onPress: () async {
+        final result = await Navigator.of(context).push<String>(
+          MaterialPageRoute(builder: (_) => const MobileQrScanScreen()),
+        );
+        if (result != null && mounted) {
+          AppSnack.info(context, result);
+        }
+      },
+      child: const Text('Scan QR code'),
+    ),
+  );
 }
 
 // ── Sub-widgets ───────────────────────────────────────────────────────────────
@@ -573,10 +570,10 @@ class _SyncStatusRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
-      SyncStatus.synced  => ('Synced', MobileColors.green),
+      SyncStatus.synced => ('Synced', MobileColors.green),
       SyncStatus.syncing => ('Syncing…', MobileColors.yellow),
-      SyncStatus.error   => ('Sync error', MobileColors.red),
-      SyncStatus.idle    => ('Idle', MobileColors.textMuted),
+      SyncStatus.error => ('Sync error', MobileColors.red),
+      SyncStatus.idle => ('Idle', MobileColors.textMuted),
     };
 
     return Row(
@@ -584,10 +581,7 @@ class _SyncStatusRow extends StatelessWidget {
         Container(
           width: MobileTokens.statusDot,
           height: MobileTokens.statusDot,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: MobileTokens.space2),
         Text(label, style: mobileBody(size: 12, color: color)),
