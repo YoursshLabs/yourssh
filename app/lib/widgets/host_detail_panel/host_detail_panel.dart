@@ -290,6 +290,20 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
     super.dispose();
   }
 
+  /// Empty means the protocol default. Anything else is range-checked by
+  /// [_validatePort] before Save / Test reach this.
+  int get _port {
+    final t = _portCtrl.text.trim();
+    return t.isEmpty ? _protocol.defaultPort : int.parse(t);
+  }
+
+  static String? _validatePort(String? v) {
+    final t = (v ?? '').trim();
+    if (t.isEmpty) return null;
+    final n = int.tryParse(t);
+    return n == null || n < 1 || n > 65535 ? 'Invalid (1–65535)' : null;
+  }
+
   Future<void> _save() async {
     if (!_validate()) return;
     setState(() => _saving = true);
@@ -305,7 +319,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
           ? _hostCtrl.text.trim()
           : _labelCtrl.text.trim(),
       host: _hostCtrl.text.trim(),
-      port: int.tryParse(_portCtrl.text) ?? _protocol.defaultPort,
+      port: _port,
       username: _usernameCtrl.text.trim(),
       protocol: _protocol,
       domain: _isRdp && _domainCtrl.text.trim().isNotEmpty
@@ -440,7 +454,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
       id: widget.existing?.id,
       label: _hostCtrl.text.trim(),
       host: _hostCtrl.text.trim(),
-      port: int.tryParse(_portCtrl.text) ?? 22,
+      port: _port,
       username: _usernameCtrl.text.trim(),
       authType: _authType,
       keyId: _authType == AuthType.privateKey ? _selectedKeyId : null,

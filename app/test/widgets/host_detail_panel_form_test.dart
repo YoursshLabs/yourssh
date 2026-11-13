@@ -29,6 +29,24 @@ class _FakeSsh extends SshService {
   }) async => result;
 }
 
+/// Counts dial attempts so a blocked Test connection can be asserted.
+class _CountingSsh extends _FakeSsh {
+  _CountingSsh(StorageService storage)
+    : super(storage, (success: true, latencyMs: 1, error: null));
+  int calls = 0;
+
+  @override
+  Future<({bool success, int latencyMs, String? error})> testConnection(
+    Host host, {
+    String? password,
+    SshKeyEntry? keyEntry,
+    List<JumpHop> jumpChain = const [],
+  }) async {
+    calls++;
+    return result;
+  }
+}
+
 /// Keyboard flow, footer actions, protocol switch and the 900×600 layout of
 /// the host editor (Review Focus 1–3 of the UI redesign plan).
 void main() {
@@ -227,6 +245,56 @@ void main() {
       await tester.tap(find.text('VNC'));
       await tester.pumpAndSettle();
       expect(editable(tester, 'host-port-field').controller.text, '2200');
+    });
+  });
+
+  group('port validation', () {
+    const msg = 'Invalid (1–65535)';
+
+    // Set the controller directly so the digits-only formatter cannot strip
+    // the value first (e.g. a non-numeric one).
+    void setPort(WidgetTester tester, String v) =>
+        editable(tester, 'host-port-field').controller.text = v;
+
+    for (final bad in ['0', '65536', '70000', 'abc']) {
+      testWidgets('"$bad" shows the error and blocks Save', (tester) async {
+        await pumpPanel(tester, existing: existingHost());
+        setPort(tester, bad);
+        await tester.tap(field('host-save-button'));
+        await tester.pumpAndSettle();
+        expect(find.text(msg), findsOneWidget);
+        expect(saved, isNull);
+      });
+    }
+
+    for (final ok in {'1': 1, '65535': 65535, '': 22}.entries) {
+      testWidgets('"${ok.key}" saves as ${ok.value}', (tester) async {
+        await pumpPanel(tester, existing: existingHost());
+        setPort(tester, ok.key);
+        await tester.tap(field('host-save-button'));
+        await tester.pumpAndSettle();
+        expect(find.text(msg), findsNothing);
+        expect(saved?.port, ok.value);
+      });
+    }
+
+    testWidgets('empty port saves the protocol default (VNC)', (tester) async {
+      await pumpPanel(tester, initialProtocol: HostProtocol.vnc);
+      await tester.enterText(field('host-address-field'), '1.2.3.4');
+      setPort(tester, '');
+      await tester.tap(field('host-save-button'));
+      await tester.pumpAndSettle();
+      expect(saved?.port, 5900);
+    });
+
+    testWidgets('Test connection with 70000 does not dial', (tester) async {
+      final ssh = _CountingSsh(StorageService());
+      await pumpPanel(tester, existing: existingHost(), ssh: ssh);
+      setPort(tester, '70000');
+      await tester.tap(field('host-test-button'));
+      await tester.pumpAndSettle();
+      expect(ssh.calls, 0);
+      expect(find.text(msg), findsOneWidget);
     });
   });
 

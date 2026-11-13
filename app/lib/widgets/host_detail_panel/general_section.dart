@@ -89,7 +89,7 @@ class _GeneralSection extends StatelessWidget {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 onSubmit: form._submit,
-                validator: (v) => int.tryParse(v ?? '') == null ? '!' : null,
+                validator: _HostDetailPanelState._validatePort,
               ),
             ),
           ],
