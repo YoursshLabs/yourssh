@@ -246,6 +246,63 @@ jobs:
         working-directory: app
         run: flutter test test/services/cli/
 
+  # iOS: unit tests that touch Darwin paths, a simulator build, the release
+  # build with the bundle exclusion check (no desktop-only code or ATS opt-out
+  # in the .app), and a launch smoke test on a booted simulator. No signing and
+  # no secrets: --no-codesign.
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Test (mobile, platform, util)
+        working-directory: app
+        run: flutter test test/mobile test/platform test/util
+
+      - name: Build for simulator
+        working-directory: app
+        run: flutter build ios --simulator --no-codesign
+
+      - name: Build release and check the bundle
+        working-directory: app
+        run: |
+          flutter build ios --release --no-codesign
+          bash ../tool/check_ios_bundle.sh build/ios/iphoneos/Runner.app
+
+      - name: Boot an iPhone simulator
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          rts = json.load(sys.stdin)["devices"]
+          def ver(k):
+              tail = k.rsplit("iOS-", 1)[-1]
+              return tuple(int(x) for x in tail.split("-") if x.isdigit())
+          for k in sorted((k for k in rts if "iOS-" in k), key=ver, reverse=True):
+              phones = [d for d in rts[k] if d["name"].startswith("iPhone")]
+              if phones:
+                  print(phones[0]["udid"])
+                  break
+          ')
+          [ -n "$udid" ] || { echo "no iPhone simulator available"; exit 1; }
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Simulator smoke test
+        working-directory: app
+        run: flutter test integration_test/ios_smoke_test.dart -d "${{ steps.sim.outputs.udid }}"
+
   # Aggregate gate. master's branch protection requires a check literally named
   # "test", so that name has to survive the split — this job carries it, and it
   # is red unless every job above is green. `always()` matters: without it the
@@ -253,16 +310,17 @@ jobs:
   # forever instead of failing.
   test:
     name: test
-    needs: [app, ui, bridge, android, cli, windows-cli]
+    needs: [app, ui, bridge, android, cli, windows-cli, ios]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
         run: |
-          echo "app=${{ needs.app.result }} ui=${{ needs.ui.result }} bridge=${{ needs.bridge.result }} android=${{ needs.android.result }} cli=${{ needs.cli.result }} windows-cli=${{ needs.windows-cli.result }}"
+          echo "app=${{ needs.app.result }} ui=${{ needs.ui.result }} bridge=${{ needs.bridge.result }} android=${{ needs.android.result }} cli=${{ needs.cli.result }} windows-cli=${{ needs.windows-cli.result }} ios=${{ needs.ios.result }}"
           [ "${{ needs.app.result }}" = "success" ] || exit 1
           [ "${{ needs.ui.result }}" = "success" ] || exit 1
           [ "${{ needs.bridge.result }}" = "success" ] || exit 1
           [ "${{ needs.android.result }}" = "success" ] || exit 1
           [ "${{ needs.cli.result }}" = "success" ] || exit 1
           [ "${{ needs.windows-cli.result }}" = "success" ] || exit 1
+          [ "${{ needs.ios.result }}" = "success" ] || exit 1
