@@ -63,7 +63,7 @@ class _StartSharingView extends StatelessWidget {
           ),
           const SizedBox(height: YsSpace.s1),
           const Text(
-            'Shared over TLS via your Supabase project.',
+            'End-to-end encrypted with the share code.',
             style: TextStyle(color: YsColors.off, fontSize: 11),
           ),
           const SizedBox(height: YsSpace.s5 - 4),
