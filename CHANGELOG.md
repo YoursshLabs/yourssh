@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.1] — 2026-11-13
 
-Security and polish fixes found while writing the documentation (now at https://your-ssh.mintlify.site).
+Security and polish fixes found while writing the documentation (now at https://yoursshlabs.com).
 
 ### Security
 - **Android: the app lock now covers every screen.** The lock used to sit under any open screen, so a terminal, SFTP browser or dialog stayed visible above **YourSSH is locked** (and in the app switcher) after the app locked. The lock now covers the whole app; open screens and sessions survive the unlock.
@@ -20,7 +20,7 @@ Security and polish fixes found while writing the documentation (now at https://
 - The terminal-sharing dialog says sessions are end-to-end encrypted with the share code (it said "Shared over TLS").
 
 ### Documentation
-- New documentation site: https://your-ssh.mintlify.site. The README's macOS section reflects that releases are signed and notarized.
+- New documentation site: https://yoursshlabs.com. The README's macOS section reflects that releases are signed and notarized.
 
 ### Added
 - **Homebrew:** `brew install --cask yoursshlabs/tap/yourssh` (tap [YoursshLabs/homebrew-tap](https://github.com/YoursshLabs/homebrew-tap); the cask follows new releases automatically).
