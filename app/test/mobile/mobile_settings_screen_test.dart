@@ -71,4 +71,14 @@ void main() {
     expect(find.text('Sync with Supabase'), findsOneWidget);
     expect(find.byType(MobileSyncScreen), findsOneWidget);
   });
+
+  testWidgets('"Pair new device" row navigates to MobileSyncScreen',
+      (tester) async {
+    await _pump(tester);
+    await tester.tap(find.text('Pair new device'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byType(MobileSyncScreen), findsOneWidget);
+    expect(find.text('Sync with Supabase'), findsOneWidget);
+  });
 }

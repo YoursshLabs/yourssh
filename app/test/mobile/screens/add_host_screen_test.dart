@@ -309,6 +309,56 @@ void main() {
         reason: 'connectAny received a different host than the one saved');
   });
 
+  group('port validation (P28)', () {
+    Future<_FakeHostProvider> fill(WidgetTester tester, String port,
+        {_FakeSessionProvider? session}) async {
+      final hosts = _FakeHostProvider(onAdd: () {});
+      await tester.pumpWidget(
+          _wrap(hosts, const MobileAddHostScreen(), session: session));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('host-label')), 'b');
+      await tester.enterText(find.byKey(const Key('host-address')), '1.1.1.1');
+      await tester.enterText(find.byKey(const Key('host-username')), 'u');
+      await tester.enterText(find.byKey(const Key('host-port')), port);
+      await tester.pumpAndSettle();
+      return hosts;
+    }
+
+    for (final bad in ['0', '65536', '70000']) {
+      testWidgets('port $bad is rejected: error shown, no save, no connect',
+          (tester) async {
+        final session = _FakeSessionProvider();
+        final hosts = await fill(tester, bad, session: session);
+        expect(find.text('Invalid (1–65535)'), findsOneWidget);
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Save & connect'));
+        await tester.tap(find.text('Save & connect'), warnIfMissed: false);
+        await tester.pumpAndSettle();
+        expect(hosts.lastAdded, isNull);
+        expect(session.connectAnyCalled, isFalse);
+        expect(find.byType(MobileAddHostScreen), findsOneWidget);
+      });
+    }
+
+    for (final ok in ['1', '65535']) {
+      testWidgets('port $ok saves', (tester) async {
+        final hosts = await fill(tester, ok);
+        expect(find.text('Invalid (1–65535)'), findsNothing);
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+        expect(hosts.lastAdded?.port, int.parse(ok));
+      });
+    }
+
+    testWidgets('empty port saves as 22', (tester) async {
+      final hosts = await fill(tester, '');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(hosts.lastAdded?.port, 22);
+    });
+  });
+
   group('forui form behaviour', () {
     testWidgets('360x640 with 60-char nickname/hostname: no overflow',
         (tester) async {
@@ -475,6 +525,39 @@ void main() {
       await tester.pumpAndSettle();
       expect(hosts.lastAdded?.authType, AuthType.privateKey);
       expect(hosts.lastAdded?.keyId, key.id);
+    });
+
+    testWidgets('keys with identical labels are all selectable by their id',
+        (tester) async {
+      final k1 = SshKeyEntry(
+          id: 'aaaaaaaa-111111',
+          label: 'dup',
+          algorithm: KeyAlgorithm.ed25519,
+          publicKey: 'p',
+          privateKeyPath: 'embedded');
+      final k2 = SshKeyEntry(
+          id: 'bbbbbbbb-222222',
+          label: 'dup',
+          algorithm: KeyAlgorithm.ed25519,
+          publicKey: 'p',
+          privateKeyPath: 'embedded');
+      final hosts = _FakeHostProvider(onAdd: () {});
+      await tester.pumpWidget(
+          _wrap(hosts, const MobileAddHostScreen(), keys: [k1, k2]));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('host-label')), 'k');
+      await tester.enterText(find.byKey(const Key('host-address')), '1.1.1.1');
+      await tester.enterText(find.byKey(const Key('host-username')), 'root');
+      await tester.tap(find.widgetWithText(FButton, 'SSH key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySubtype<FSelect<String>>());
+      await tester.pumpAndSettle();
+      expect(find.textContaining('dup (…'), findsNWidgets(2));
+      await tester.tap(find.textContaining('dup (…222222').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(hosts.lastAdded?.keyId, k2.id);
     });
 
     testWidgets('SSH key method is unavailable without keys; Password field '

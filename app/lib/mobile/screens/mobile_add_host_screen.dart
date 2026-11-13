@@ -54,7 +54,16 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
     return a == AuthType.certificate || a == AuthType.agent;
   }
 
+  /// Empty means the default port (22); otherwise it must be 1-65535.
+  String? get _portError {
+    final t = _port.text.trim();
+    if (t.isEmpty) return null;
+    final n = int.tryParse(t);
+    return n == null || n < 1 || n > 65535 ? 'Invalid (1–65535)' : null;
+  }
+
   bool get _canSave =>
+      _portError == null &&
       _label.text.trim().isNotEmpty &&
       _address.text.trim().isNotEmpty &&
       _username.text.trim().isNotEmpty;
@@ -66,6 +75,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
     _label.addListener(_onFieldChanged);
     _address.addListener(_onFieldChanged);
     _username.addListener(_onFieldChanged);
+    _port.addListener(_onFieldChanged);
 
     final h = widget.existing;
     if (h != null) {
@@ -115,6 +125,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
     final label = _label.text.trim();
     final address = _address.text.trim();
     final username = _username.text.trim();
+    // Empty -> default 22; the 1-65535 range is enforced by _canSave.
     final port = int.tryParse(_port.text.trim()) ?? 22;
     final snippetVal = _snippet.text.trim();
     final provider = context.read<HostProvider>();
@@ -296,6 +307,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
           keyboardType: TextInputType.number,
           formatters: [FilteringTextInputFormatter.digitsOnly],
           textInputAction: TextInputAction.next,
+          error: _portError,
         ),
       ]);
 
@@ -377,6 +389,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
     TextInputType? keyboardType,
     List<TextInputFormatter>? formatters,
     TextInputAction? textInputAction,
+    String? error,
   }) {
     final control = FTextFieldControl.managed(controller: controller);
     if (obscure) {
@@ -397,6 +410,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
       keyboardType: keyboardType,
       inputFormatters: formatters,
       textInputAction: textInputAction,
+      error: error == null ? null : Text(error),
     );
   }
 }
@@ -487,8 +501,17 @@ class _KeyPickerRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final known = keys.any((k) => k.id == selectedId);
+    // Items are keyed by display text, so equal labels are disambiguated with
+    // the tail of the id; every key stays selectable.
+    final counts = <String, int>{};
+    for (final k in keys) {
+      counts[k.label] = (counts[k.label] ?? 0) + 1;
+    }
+    String shown(SshKeyEntry k) => counts[k.label]! > 1
+        ? '${k.label} (…${k.id.length > 6 ? k.id.substring(k.id.length - 6) : k.id})'
+        : k.label;
     return FSelect<String>(
-      items: {for (final k in keys) k.label: k.id},
+      items: {for (final k in keys) shown(k): k.id},
       control: FSelectControl.managed(
         initial: known ? selectedId : null,
         onChange: onChanged,

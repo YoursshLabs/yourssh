@@ -41,7 +41,6 @@ class TagChip extends StatelessWidget {
       // Large (folder/category filter) chips get a min width + centered text so
       // short labels like "All"/"logs" don't look cramped next to longer ones.
       constraints: large ? const BoxConstraints(minWidth: 64) : null,
-      alignment: large ? Alignment.center : null,
       padding: large
           ? const EdgeInsets.symmetric(horizontal: 14, vertical: 8)
           : const EdgeInsets.symmetric(
@@ -55,14 +54,19 @@ class TagChip extends StatelessWidget {
           ? BoxDecoration(color: const Color(0x1F000000), borderRadius: radius)
           : null,
       child: large
-          ? Text(
-              label,
-              textAlign: TextAlign.center,
-              style: mobileBody(
-                size: 13,
-                color: fg,
-                weight: selected ? FontWeight.w600 : FontWeight.w500,
-              ).copyWith(height: 1.0),
+          // Centre horizontally within the min width without growing the
+          // pill's height to the parent's (Container(alignment) would).
+          ? Center(
+              heightFactor: 1,
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: mobileBody(
+                  size: 13,
+                  color: fg,
+                  weight: selected ? FontWeight.w600 : FontWeight.w500,
+                ).copyWith(height: 1.0),
+              ),
             )
           : Text(
               label,
@@ -87,6 +91,7 @@ class TagChip extends StatelessWidget {
         ),
         child: Center(
           widthFactor: 1,
+          heightFactor: 1,
           child: _pill(tinted: mobileIsTinted(variants)),
         ),
       ),

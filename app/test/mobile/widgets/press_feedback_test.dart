@@ -134,4 +134,23 @@ void main() {
       expect(t.getSize(find.text('static')).height, lessThan(30));
     });
   });
+
+  testWidgets('tappable TagChip in a 200 px-tall Row keeps its 44 px height',
+      (t) async {
+    await t.pumpWidget(
+      ysTestApp(
+        Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            height: 200,
+            child: Row(
+              children: [TagChip(label: 'tap', large: true, onTap: () {})],
+            ),
+          ),
+        ),
+        touch: true,
+      ),
+    );
+    expect(t.getSize(find.bySubtype<FTappable>()).height, 44);
+  });
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:yourssh_ui/yourssh_ui.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../../providers/session_provider.dart';
 import '../../services/ssh_service.dart';
