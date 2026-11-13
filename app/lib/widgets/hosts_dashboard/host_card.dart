@@ -316,9 +316,12 @@ class _HostCardState extends State<_HostCard> {
           item(c, FLucideIcons.upload, 'Export', () => _export(context)),
         ]),
         FItemGroup(children: [
-          item(c, FLucideIcons.trash2, 'Delete',
-              () => hosts().deleteHost(widget.host.id),
-              destructive: true),
+          item(c, FLucideIcons.trash2, 'Delete', () async {
+            final hp = hosts();
+            if (await confirmDeleteHost(context, widget.host)) {
+              await hp.deleteHost(widget.host.id);
+            }
+          }, destructive: true),
         ]),
       ],
       builder: (_, c, _) => Tooltip(

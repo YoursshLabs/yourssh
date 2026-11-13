@@ -21,6 +21,7 @@ import 'package:yourssh/services/tab_metadata_service.dart';
 import 'package:yourssh/util/host_sort.dart';
 import 'package:yourssh/widgets/hosts_dashboard.dart';
 
+import 'package:forui/forui.dart' show FButton;
 import 'package:yourssh_ui/yourssh_ui.dart' show YsColors;
 
 import '../helpers/ys_test_app.dart';
@@ -348,7 +349,47 @@ void main() {
       await _tapInCard(t, _more(db));
       await t.tap(find.text('Delete'));
       await t.pumpAndSettle();
+      // Delete now asks first (final review fix).
+      expect(find.text('Delete host?'), findsOneWidget);
+      expect(env.hosts.allHosts, hasLength(2));
+      await t.tap(find.widgetWithText(FButton, 'Delete'));
+      await t.pumpAndSettle();
       expect(env.hosts.allHosts.map((h) => h.id), [web.id]);
+    });
+
+    Future<_Env> openDeleteConfirm(WidgetTester t) async {
+      final env = await _pump(t, hosts: [web, db]);
+      await _hover(t, _card(db));
+      await _tapInCard(t, _more(db));
+      await t.tap(find.text('Delete'));
+      await t.pumpAndSettle();
+      expect(find.text('Delete host?'), findsOneWidget);
+      return env;
+    }
+
+    testWidgets('menu Delete: Cancel keeps the host', (t) async {
+      final env = await openDeleteConfirm(t);
+      await t.tap(find.widgetWithText(FButton, 'Cancel'));
+      await t.pumpAndSettle();
+      expect(find.text('Delete host?'), findsNothing);
+      expect(env.hosts.allHosts, hasLength(2));
+    });
+
+    testWidgets('menu Delete: Escape keeps the host', (t) async {
+      final env = await openDeleteConfirm(t);
+      await t.sendKeyEvent(LogicalKeyboardKey.escape);
+      await t.pumpAndSettle();
+      expect(find.text('Delete host?'), findsNothing);
+      expect(env.hosts.allHosts, hasLength(2));
+    });
+
+    testWidgets('menu Delete: Enter on the default (Cancel) keeps the host',
+        (t) async {
+      final env = await openDeleteConfirm(t);
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.pumpAndSettle();
+      expect(find.text('Delete host?'), findsNothing);
+      expect(env.hosts.allHosts, hasLength(2));
     });
 
     testWidgets('RDP card hides SSH-only actions and copies an rdp:// URL',

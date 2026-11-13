@@ -16,6 +16,7 @@ import '../../services/ssh_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/terminal_themes.dart';
 import '../agent_status_line.dart';
+import '../confirm_delete_host.dart';
 import '../host_chain_editor.dart';
 import '../network_discovery_sheet.dart';
 import '../protocol_badge.dart';
@@ -422,14 +423,7 @@ class _HostDetailPanelState extends State<HostDetailPanel> {
   Future<void> _delete() async {
     final existing = widget.existing;
     if (existing == null || _saving) return;
-    final name = existing.label.isEmpty ? existing.host : existing.label;
-    final ok = await showYsConfirm(
-      context,
-      title: 'Delete host?',
-      message: '"$name" and its saved password will be removed.',
-      confirmLabel: 'Delete',
-      destructive: true,
-    );
+    final ok = await confirmDeleteHost(context, existing);
     if (!ok || !mounted) return;
     await context.read<HostProvider>().deleteHost(existing.id);
     if (mounted) widget.onClose();

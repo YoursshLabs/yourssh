@@ -26,6 +26,7 @@ import '../../util/bulk_connect.dart';
 import '../../util/host_query.dart';
 import '../../util/host_sort.dart';
 import '../bulk/bulk_action_bar.dart';
+import '../confirm_delete_host.dart';
 import '../bulk/bulk_push_dialog.dart';
 import '../bulk/bulk_run_dialog.dart';
 import '../protocol_badge.dart';

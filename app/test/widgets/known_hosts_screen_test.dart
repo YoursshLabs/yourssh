@@ -73,8 +73,53 @@ void main() {
 
     await tester.tap(find.byTooltip('Remove').first);
     await tester.pumpAndSettle();
+    // Remove now asks first (final review fix).
+    expect(find.text('Remove host key?'), findsOneWidget);
+    expect(
+      find.text('YourSSH will trust whatever key web.local:22 presents on '
+          'the next connection.'),
+      findsOneWidget,
+    );
+    expect(p.hosts, hasLength(2));
+    await tester.tap(find.widgetWithText(FButton, 'Remove'));
+    await tester.pumpAndSettle();
     expect(p.hosts, hasLength(1));
     expect(p.hosts.single.host, 'db.local');
+  });
+
+  group('Remove confirm', () {
+    Future<KnownHostsProvider> open(WidgetTester tester) async {
+      final p = KnownHostsProvider.forTest([_kh('web.local')]);
+      await tester.pumpWidget(_app(p));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Remove'));
+      await tester.pumpAndSettle();
+      expect(find.text('Remove host key?'), findsOneWidget);
+      return p;
+    }
+
+    testWidgets('Cancel keeps the key', (tester) async {
+      final p = await open(tester);
+      await tester.tap(find.widgetWithText(FButton, 'Cancel'));
+      await tester.pumpAndSettle();
+      expect(p.hosts, hasLength(1));
+    });
+
+    testWidgets('Escape keeps the key', (tester) async {
+      final p = await open(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('Remove host key?'), findsNothing);
+      expect(p.hosts, hasLength(1));
+    });
+
+    testWidgets('Enter on the default (Cancel) keeps the key', (tester) async {
+      final p = await open(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('Remove host key?'), findsNothing);
+      expect(p.hosts, hasLength(1));
+    });
   });
 
   testWidgets('900x600 with 60-char host and fingerprint does not overflow',

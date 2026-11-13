@@ -129,6 +129,21 @@ class _HostTile extends StatelessWidget {
     return '${parts.take(4).join(':')}…';
   }
 
+  /// Removing a pinned key means the next connect trusts whatever key the
+  /// server presents, so ask first. Cancel holds default focus.
+  Future<void> _confirmRemove(BuildContext context, KnownHost entry) async {
+    final provider = context.read<KnownHostsProvider>();
+    final ok = await showYsConfirm(
+      context,
+      title: 'Remove host key?',
+      message: 'YourSSH will trust whatever key ${entry.host}:${entry.port} '
+          'presents on the next connection.',
+      confirmLabel: 'Remove',
+      destructive: true,
+    );
+    if (ok) provider.remove(entry);
+  }
+
   @override
   Widget build(BuildContext context) => settingsTileGroup(
     children: [
@@ -184,7 +199,7 @@ class _HostTile extends StatelessWidget {
             SettingsIconButton(
               icon: FLucideIcons.trash2,
               tooltip: 'Remove',
-              onPress: () => context.read<KnownHostsProvider>().remove(entry),
+              onPress: () => _confirmRemove(context, entry),
             ),
           ],
         ),
