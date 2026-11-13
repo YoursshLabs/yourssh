@@ -5,57 +5,83 @@ description: Use when the user wants to update, refresh, or add screenshots for 
 
 # yourssh-screenshots
 
-Captures screenshots of every YourSSH feature screen using Flutter integration tests (render tree — no macOS Screen Recording permission needed). Saves PNGs to `screenshots/<group>/`, then updates README.
+Default path: the **isolated docs journey** (`tool/docs_journey.sh`). It drives the real macOS app through every feature against demo Docker containers and captures ~209 PNGs (render tree, so no Screen Recording permission). The app runs with a temp `HOME`, in-memory prefs, fake secure storage and temp path_provider dirs, so the owner's real data is never touched; the script checks the real prefs plist mtime and `~/.yourssh` hash before/after (`ISOLATION OK`).
 
-## Quick Reference
+## Default workflow
 
 ```bash
-# Capture all general feature screenshots
+tool/docs_journey.sh setup      # client key + image + network + 5 demo containers (idempotent)
+tool/docs_journey.sh all        # build the integration app, then run desktop + mobile launches (~30 min, needs a GUI session)
+# review screenshots/docs/INDEX.md (one line per shot) and screenshots/docs/BUGS.md (anomalies found)
+tool/docs_journey.sh teardown   # remove ONLY the containers/network/image that setup created
+```
+
+- Output: `screenshots/docs/<NN-section>/<NN-step>.png` + `INDEX.md` + `BUGS.md` (untracked; `DOCS_OUT` overrides).
+- Subcommands: `setup | build | run | all | teardown`. `run` skips the build; `build` only builds.
+- Re-run a subset: `SECTIONS="07,08" MODES=desktop tool/docs_journey.sh run` (section numbers are the `NN-` prefixes of `app/integration_test/docs/sNN_*.dart`; `MODES` is `desktop`, `mobile`, or both). Use `run` after one full `build`; rebuild (`build`) after any Dart change.
+- Demo servers (loopback only; the harness expects these defaults): `yourssh-docs-ssh` 2222 (hostname `yourssh-demo`, user `demo`/`demo1234` + key auth), `yourssh-docs-bastion` 2223, `yourssh-docs-db` (network only, `db-internal:22`), `yourssh-docs-rdp` 3389 (`demo`/`demo12345`), `yourssh-docs-vnc` 5900 (`demo12345`). Image files: `tool/docs_journey/Dockerfile`.
+- The generated ed25519 client key lives in `~/.local/state/yourssh-docs-journey` (`DOCS_KEY_DIR` overrides), never in the repo. Never commit keys.
+- `DOCS_PREFIX` and `SSH_PORT/BASTION_PORT/RDP_PORT/VNC_PORT` let `setup`/`teardown` run side by side with another set of containers (only for testing setup; the journey itself needs the default ports).
+- Timestamps/progress go to `$TMPDIR/yourssh-docs-run.*/run-*.log`; a hung mobile launch is retried once automatically.
+
+## Refreshing the README images from a run
+
+README images are copies of journey shots, resized: `sips -Z 1440 <src> --out <README path>` (writes a copy; never edit the source). Mapping (README path <- journey shot; confirm each against `screenshots/docs/INDEX.md` because shot numbers shift when sections change):
+
+| README path (under `screenshots/`) | Journey shot |
+|---|---|
+| `01-terminal-ssh/01-hosts-dashboard.png` | `06-dashboard/01-grid.png` |
+| `01-terminal-ssh/02-new-host-panel-ssh.png` | `02-add-host/01-new-host-panel.png` |
+| `02-ssh-terminal-ai.png` | `16-ai-chat/04-chat-open.png` |
+| `01-terminal-ssh/04-dashboard-with-rdp-badge.png` | `12-rdp/04-dashboard-rdp-badge.png` |
+| `02-sftp/01-sftp-browser.png` | `07-sftp/03-dual-panel.png` |
+| `03-port-forwarding/01-port-forward-rules.png` | `08-port-forwarding/05-rule-list.png` |
+| `04-credentials-security/01-keychain.png` | `04-keychain/05-key-list.png` |
+| `04-credentials-security/02-known-hosts.png` | `09-known-hosts/01-list.png` |
+| `05-settings/01-settings-general.png` | `14-settings/01-settings-top.png` |
+| `05-settings/02-settings-terminal.png` | `14-settings/03-terminal.png` |
+| `05-settings/03-settings-sync.png` | `14-settings/09-sync.png` |
+| `10-settings-sync-qr-code.png` | `14-settings/17-sync-qr-dialog.png` (see gaps) |
+| `05-settings/04-settings-updates.png` | `14-settings/12-updates.png` |
+| `05-settings/05-terminal-theme-picker.png` | `03-first-connect/19-theme-picker.png` |
+| `06-plugins/01-plugins.png` | `15-plugins/01-manager.png` |
+| `05-devops-hub-network-tools.png` | `17-devops/04-network-tools.png` |
+| `08-web-tools-http-client.png` | `18-web-tools/03-get-response.png` |
+| `09-snippets.png` | `15-plugins/03-snippets-screen.png` |
+| `02-host-editor-rdp-form.png` | `12-rdp/03-editor-filled.png` |
+| `03-tofu-certificate-dialog.png` | `12-rdp/05-cert-trust-dialog.png` |
+| `04-rdp-workspace-connected.png` | `12-rdp/06-session-connected.png` |
+| `05-fullscreen-with-pill.png` | `12-rdp/08-fullscreen-pill.png` |
+| `06-fullscreen-clean.png` | `12-rdp/09-fullscreen-clean.png` |
+| `07-fullscreen-hover-reveal.png` | `12-rdp/10-fullscreen-hover-pill.png` |
+| `08-back-to-windowed.png` | `12-rdp/11-back-windowed.png` |
+| `10-audit-recording/01-audit-log.png` | `11-audit-log/01-rows.png` |
+| `10-audit-recording/02-recording-library.png` | `10-recordings/02-library.png` |
+| `11-recording.png` | `10-recordings/03b-player-playing.png` |
+| `12-multiple-player.png` | no journey shot (needs two clients; keep the existing image) |
+
+After copying, check every README path exists:
+```bash
+grep -o 'screenshots/[^"]*\.png' README.md | while read p; do [ -f "$p" ] && echo "OK: $p" || echo "MISSING: $p"; done
+```
+New feature screens: add the step to the matching `app/integration_test/docs/sNN_*.dart`, rebuild, re-run that section, then add the README `<td>` (2-column `<table>` rows per feature group).
+
+## Known gaps
+
+- WebViews are blank in render-tree capture (embedded browser, Monaco code editor, web tools browser): only the surrounding chrome is real.
+- Mobile pair / LAN-sync QR dialogs show the machine's real LAN IP. Before publishing, re-encode the QR with a placeholder address or crop it out; otherwise note it in the PR.
+- Terminal sharing (multiplayer) and anything needing a second client are not covered.
+- Real AI providers are never called (no key); RDP/VNC need the containers running and a window that stays awake (the script runs `caffeinate`).
+
+## Do not use the legacy path by default
+
+`app/integration_test/feature_screenshots_test.dart` and `rdp_screenshots_test.dart` back up and seed the user's REAL SharedPreferences (hosts, known hosts, port forwards) and restore them afterwards. A crash mid-run can leave demo data in the real profile. Use them only if the user explicitly asks; the journey above replaces them.
+
+```bash
+# legacy, only on request
 cd app && flutter test integration_test/feature_screenshots_test.dart -d macos
-
-# Capture RDP-specific screenshots (requires Docker)
-cd app && flutter test integration_test/rdp_screenshots_test.dart -d macos
-
-# Capture Android/mobile screenshots (requires an emulator + Docker sshd)
-flutter emulators --launch Medium_Phone_API_36.1
-docker run -d --name yourssh-ssh-demo -p 2222:2222 \
-  -e PASSWORD_ACCESS=true -e USER_NAME=demo -e USER_PASSWORD=demo1234 \
-  lscr.io/linuxserver/openssh-server:latest
-cd app && flutter drive \
-  --driver=test_driver/integration_test.dart \
-  --target=integration_test/mobile_screenshots_test.dart -d emulator-5554
+cd app && flutter test integration_test/rdp_screenshots_test.dart -d macos   # needs the RDP container
 ```
-
-## Folder Structure
-
-```
-screenshots/
-  01-terminal-ssh/      # Dashboard, host editor, SSH terminal
-  02-sftp/              # Dual-panel SFTP
-  03-port-forwarding/   # Port forward rules
-  04-credentials-security/  # Keychain, known hosts
-  05-settings/          # Settings sections
-  06-plugins/           # Plugin manager
-  07-rdp/               # RDP workspace (populated by rdp test)
-  08-devops/            # DevOps hub
-  10-audit-recording/   # Audit log, recording library
-  11-mobile/            # Android screens (populated by the mobile test)
-  *.png                 # Legacy flat screenshots (keep for features needing live connections)
-```
-
-## How It Works
-
-`integration_test/feature_screenshots_test.dart`:
-1. Backs up user's real host data
-2. Seeds demo hosts + port forward rules into SharedPreferences
-3. Launches `app.main()` via Flutter integration test harness
-4. Navigates each sidebar section by tapping the nav label text
-5. Captures frames via `RendererBinding.instance.renderViews.first`
-6. Restores user data in `finally`
-
-`integration_test/rdp_screenshots_test.dart`:
-- Requires `docker run -d --name yourssh-rdp-demo -p 3389:3389 scottyhardy/docker-remote-desktop:latest`
-- Connects to a real xrdp container; captures fullscreen + TOFU dialog screenshots
 
 ## Mobile (Android) capture
 
@@ -79,7 +105,7 @@ Emulator gotchas: a full debug APK is ~185 MB, so `INSTALL_FAILED_INSUFFICIENT_S
 means the AVD's `/data` is full — reboot the emulator to reclaim cache. Biometric
 app-lock is force-disabled in setup because an emulator has no enrolled fingerprint.
 
-## Adding a New Screen
+## Adding a screen (legacy test only)
 
 1. Open `app/integration_test/feature_screenshots_test.dart`
 2. Navigate to the screen with `_navTo(tester, 'Label')` or tap the relevant widget
@@ -88,28 +114,7 @@ app-lock is force-disabled in setup because an emulator has no enrolled fingerpr
 5. Run the test to verify
 6. Add the `<img src="screenshots/NN-group-name/filename.png"/>` entry to README under the correct section
 
-## Updating README
-
-The `## Screenshots` section in `README.md` is organized by feature groups matching the folder structure. Each group uses an HTML `<table>` with 2-column rows:
-
-```html
-### Group Name
-<table>
-  <tr>
-    <td align="center"><b>Screen Title</b><br/><img src="screenshots/NN-group/filename.png"/></td>
-    <td align="center"><b>Screen Title</b><br/><img src="screenshots/NN-group/filename.png"/></td>
-  </tr>
-</table>
-```
-
-After updating, verify all paths exist:
-```bash
-grep -o 'screenshots/[^"]*\.png' README.md | while read p; do
-  [ -f "$p" ] && echo "OK: $p" || echo "MISSING: $p"
-done
-```
-
-## Key Implementation Details
+## Legacy test implementation details
 
 - **Storage keys**: `yourssh.hosts`, `yourssh.known_hosts`, `yourssh.port_forwards` (not bare `hosts`)
 - **Nav tap**: `find.text('Port Forwarding')`, `find.text('Known Hosts')`, etc. — matches sidebar label text
@@ -117,7 +122,7 @@ done
 - **Debounce update check**: set `last_update_check` to `DateTime.now().millisecondsSinceEpoch` to prevent update banner polluting shots
 - **PortForward JSON**: stored as a flat list, `type` is the enum name (`local`, `remote`, `dynamic`)
 
-## Common Mistakes
+## Common mistakes (legacy test)
 
 | Problem | Fix |
 |---|---|
