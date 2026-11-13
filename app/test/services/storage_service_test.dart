@@ -81,6 +81,13 @@ void main() {
       expect(s.hasPlaintextSecrets, isFalse);
     });
 
+    test('without plaintext fallback reads ignore a prefs copy', () async {
+      SharedPreferences.setMockInitialValues({'pw_h1': 'stale'});
+      expect(await StorageService(allowPlaintextFallback: false)
+          .loadPassword('h1'), isNull);
+      expect(await StorageService().loadPassword('h1'), 'stale');
+    });
+
     test('the default still falls back to prefs (desktop/Android unchanged)',
         () async {
       secureFailsAllWrites = true;

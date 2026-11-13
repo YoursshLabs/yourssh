@@ -32,6 +32,7 @@ class _YourSSHMobileAppState extends State<YourSSHMobileApp> {
     return MultiProvider(
       providers: _bootstrap.providers,
       child: MaterialApp(
+        navigatorKey: _bootstrap.navigatorKey,
         title: 'YourSSH',
         debugShowCheckedModeBanner: false,
         themeMode: ThemeMode.dark,

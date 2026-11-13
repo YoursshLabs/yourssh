@@ -137,6 +137,8 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
         final err = context.read<SyncProvider>().error;
         AppSnack.info(context, err ?? 'Nothing new to pull');
       }
+    } on SecretStoreException {
+      if (mounted) AppSnack.error(context, 'Could not save to the iOS Keychain');
     } finally {
       if (mounted) setState(() => _pulling = false);
     }

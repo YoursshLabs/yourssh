@@ -73,11 +73,12 @@ class HostProvider extends ChangeNotifier {
   }
 
   Future<void> addHost(Host host, {String? password}) async {
-    _hosts.add(host);
-    await _storage.saveHosts(_hosts);
+    // Secret first: if the secure store refuses (iOS), no host is added.
     if (password != null && password.isNotEmpty) {
       await _storage.savePassword(host.id, password);
     }
+    _hosts.add(host);
+    await _storage.saveHosts(_hosts);
     notifyListeners();
     await onMutation?.call();
   }
@@ -85,11 +86,11 @@ class HostProvider extends ChangeNotifier {
   Future<void> updateHost(Host host, {String? password}) async {
     final idx = _hosts.indexWhere((h) => h.id == host.id);
     if (idx == -1) return;
-    _hosts[idx] = host;
-    await _storage.saveHosts(_hosts);
     if (password != null && password.isNotEmpty) {
       await _storage.savePassword(host.id, password);
     }
+    _hosts[idx] = host;
+    await _storage.saveHosts(_hosts);
     notifyListeners();
     await onMutation?.call();
   }
@@ -125,14 +126,34 @@ class HostProvider extends ChangeNotifier {
     final oldIds = _hosts.map((h) => h.id).toSet();
     final newIds = hosts.map((h) => h.id).toSet();
     final removedIds = oldIds.difference(newIds);
+    // Write every secret first. If one write fails (iOS Keychain refusing),
+    // restore the previous values and leave the host list untouched, so there
+    // is never a half-imported state.
+    final previous = <String, String?>{};
+    try {
+      for (final entry in passwords.entries) {
+        final hostId = entry.key.replaceFirst('pw_', '');
+        if (!previous.containsKey(hostId)) {
+          previous[hostId] = await _storage.loadPassword(hostId);
+        }
+        await _storage.savePassword(hostId, entry.value);
+      }
+    } catch (_) {
+      for (final e in previous.entries) {
+        try {
+          if (e.value == null) {
+            await _storage.deletePassword(e.key);
+          } else {
+            await _storage.savePassword(e.key, e.value!);
+          }
+        } catch (_) {/* best effort */}
+      }
+      rethrow;
+    }
     _hosts = hosts;
     await _storage.saveHosts(_hosts);
     for (final id in removedIds) {
       await _storage.deleteHostSecrets(id);
-    }
-    for (final entry in passwords.entries) {
-      final hostId = entry.key.replaceFirst('pw_', '');
-      await _storage.savePassword(hostId, entry.value);
     }
     notifyListeners();
   }

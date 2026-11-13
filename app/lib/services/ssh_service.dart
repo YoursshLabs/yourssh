@@ -54,6 +54,10 @@ class SshService {
   /// Global on/off for shell integration, read from SettingsProvider in
   /// main.dart. null => treat as enabled.
   bool Function()? isShellIntegrationEnabled;
+
+  /// Fired when a validated sudo password could not be stored (iOS Keychain
+  /// refused and plaintext fallback is off), so the UI can tell the user.
+  void Function(Host host)? onSudoPasswordNotSaved;
   final Map<String, SSHClient> _clients = {};
   final Map<String, SSHSession> _shells = {};
   final Map<String, String> _shellToHost = {}; // sessionId → hostId
@@ -1375,8 +1379,11 @@ class SshService {
     if (validatedToPersist != null) {
       try {
         await _storage.saveSudoPassword(host.id, validatedToPersist!);
-      } catch (_) {
+      } catch (e) {
         // Keychain unavailable — the password still works for this session.
+        // Only surfaced when plaintext fallback is off (iOS), where it means
+        // the password was not remembered.
+        if (e is SecretStoreException) onSudoPasswordNotSaved?.call(host);
       }
     }
     return sftp;

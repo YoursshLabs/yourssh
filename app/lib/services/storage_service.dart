@@ -129,6 +129,8 @@ class StorageService {
     } catch (e) {
       debugPrint('[StorageService] secure read failed for $key: $e');
     }
+    // Without plaintext fallback nothing was ever written to prefs.
+    if (!allowPlaintextFallback) return null;
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(key);
   }
