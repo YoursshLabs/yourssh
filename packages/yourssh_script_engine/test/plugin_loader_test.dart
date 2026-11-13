@@ -7,6 +7,7 @@ import 'package:yourssh_script_engine/src/script_engine_service.dart';
 import 'package:yourssh_script_engine/src/hook_bus.dart';
 
 void main() {
+  _reservedTests();
   late Directory tmpDir;
 
   setUp(() {
@@ -57,5 +58,51 @@ void main() {
 
     engine.dispose();
     loader.dispose();
+  });
+}
+
+void _reservedTests() {
+  group('reserved built-in ids', () {
+    late Directory tmp;
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      tmp = Directory.systemTemp.createTempSync('reserved_test_');
+      File('${tmp.path}/plugin.json').writeAsStringSync('''
+{"id": "dev.yourssh.snippets", "name": "Snippets", "version": "2.0.0",
+ "entry": "index.js", "minAppVersion": "1.0.0", "permissions": ["ui.notify"]}
+''');
+      File('${tmp.path}/index.js').writeAsStringSync('var x = 1;');
+    });
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    PluginLoader make(List<String> consents, List<String> errors,
+            ScriptEngineService engine) =>
+        PluginLoader(
+          engine: engine,
+          reservedIds: {'dev.yourssh.snippets'},
+          onConsentRequired: (id, _, __) => consents.add(id),
+          onError: (id, m) => errors.add('$id: $m'),
+        );
+
+    test('tryLoad neither prompts nor loads, and keeps the directory', () async {
+      final engine = ScriptEngineService(
+          hookBus: HookBus(), uiRegistry: null, sshDelegate: null, sftpDelegate: null);
+      final consents = <String>[], errors = <String>[];
+      await make(consents, errors, engine).tryLoad(tmp.path);
+      expect(consents, isEmpty);
+      expect(engine.loadedManifests, isEmpty);
+      expect(errors.single, contains('built-in'));
+      expect(tmp.existsSync(), isTrue);
+    });
+
+    test('approvePermissions does not load it either', () async {
+      final engine = ScriptEngineService(
+          hookBus: HookBus(), uiRegistry: null, sshDelegate: null, sftpDelegate: null);
+      final consents = <String>[], errors = <String>[];
+      await make(consents, errors, engine)
+          .approvePermissions('dev.yourssh.snippets', {'ui.notify'}, tmp.path);
+      expect(engine.loadedManifests, isEmpty);
+      expect(errors.single, contains('built-in'));
+    });
   });
 }

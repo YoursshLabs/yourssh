@@ -47,6 +47,12 @@ class RecordingProvider extends ChangeNotifier {
 
   bool isRecording(String sessionId) => _activeIds.contains(sessionId);
 
+  /// How long [sessionId] has been recording, read from the recording's own
+  /// clock; null when it is not recording. Not a notifier: callers that show
+  /// a running time poll it (the status bar ticks once a second).
+  Duration? recordingElapsed(String sessionId) =>
+      _activeIds.contains(sessionId) ? _service.elapsed(sessionId) : null;
+
   Future<void> startRecording(TerminalSession session) async {
     if (_activeIds.contains(session.id)) return;
 

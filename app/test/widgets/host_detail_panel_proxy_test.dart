@@ -12,6 +12,8 @@ import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/host_detail_panel.dart';
 
+import '../helpers/ys_test_app.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
@@ -40,14 +42,12 @@ void main() {
               create: (_) => HostProvider(StorageService())),
           Provider<SshService>(create: (_) => SshService(StorageService())),
         ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: HostDetailPanel(
-              existing: existing,
-              agentProbe: () async => const AgentProbeSystem(1),
-              onClose: () {},
-              onSave: (host, _) async => saved = host,
-            ),
+        child: ysTestApp(
+          HostDetailPanel(
+            existing: existing,
+            agentProbe: () async => const AgentProbeSystem(1),
+            onClose: () {},
+            onSave: (host, _) async => saved = host,
           ),
         ),
       ),
@@ -79,7 +79,7 @@ void main() {
     await tester.enterText(
         find.byKey(const ValueKey('proxy-port-field')), '8080');
 
-    final save = find.text('SAVE ONLY');
+    final save = find.byKey(const ValueKey('host-save-button'));
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();
@@ -88,5 +88,63 @@ void main() {
     expect(saved!.proxyType, ProxyType.http);
     expect(saved!.proxyHost, 'proxy.local');
     expect(saved!.proxyPort, 8080);
+  });
+
+  Future<void> openHttpProxy(WidgetTester tester) async {
+    await pumpPanel(tester, existing: Host(label: 's', host: 'h', username: 'u'));
+    final dropdown = find.byKey(const ValueKey('proxy-type-dropdown'));
+    await tester.ensureVisible(dropdown);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('HTTP CONNECT').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const ValueKey('proxy-host-field')), 'proxy.local');
+  }
+
+  Future<void> trySave(WidgetTester tester) async {
+    final save = find.byKey(const ValueKey('host-save-button'));
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+  }
+
+  for (final bad in ['0', '65536', '70000']) {
+    testWidgets('proxy port "$bad" shows the error and blocks Save',
+        (tester) async {
+      await openHttpProxy(tester);
+      await tester.enterText(
+          find.byKey(const ValueKey('proxy-port-field')), bad);
+      await trySave(tester);
+      expect(find.text('Invalid (1–65535)'), findsOneWidget);
+      expect(saved, isNull);
+    });
+  }
+
+  testWidgets('proxy port error clears as the user corrects it',
+      (tester) async {
+    await openHttpProxy(tester);
+    final port = find.byKey(const ValueKey('proxy-port-field'));
+    await tester.enterText(port, '70000');
+    await trySave(tester);
+    expect(find.text('Invalid (1–65535)'), findsOneWidget);
+    await tester.enterText(port, '8080');
+    await tester.pumpAndSettle();
+    expect(find.text('Invalid (1–65535)'), findsNothing);
+    expect(saved, isNull);
+  });
+
+  testWidgets('proxy port 65535 saves; empty keeps saving no port',
+      (tester) async {
+    await openHttpProxy(tester);
+    await tester.enterText(
+        find.byKey(const ValueKey('proxy-port-field')), '65535');
+    await trySave(tester);
+    expect(saved?.proxyPort, 65535);
+
+    await openHttpProxy(tester);
+    await tester.enterText(find.byKey(const ValueKey('proxy-port-field')), '');
+    await trySave(tester);
+    expect(saved?.proxyPort, isNull);
   });
 }

@@ -39,6 +39,23 @@ void main() {
     expect(provider.isRecording('s1'), isFalse);
   });
 
+  test('recordingElapsed runs from start and is null when not recording',
+      () async {
+    final provider =
+        RecordingProvider(RecordingService(), getPath: () => tmpDir.path);
+    final session = LocalSession(terminal: Terminal());
+    expect(provider.recordingElapsed(session.id), isNull);
+
+    await provider.startRecording(session);
+    final first = provider.recordingElapsed(session.id);
+    expect(first, isNotNull);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(provider.recordingElapsed(session.id)!, greaterThan(first!));
+
+    await provider.stopRecording(session.id);
+    expect(provider.recordingElapsed(session.id), isNull);
+  });
+
   test('local session records into local/ folder', () async {
     final provider =
         RecordingProvider(RecordingService(), getPath: () => tmpDir.path);

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/widgets/bulk/bulk_action_bar.dart';
 
+import '../helpers/ys_test_app.dart';
+
 void main() {
   testWidgets('fires callbacks; actions disabled with empty selection',
       (tester) async {
@@ -12,9 +14,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final fired = <String>[];
-    Widget build(int count) => MaterialApp(
-          home: Scaffold(
-            body: BulkActionBar(
+    Widget build(int count) => ysTestApp(
+            BulkActionBar(
               selectedCount: count,
               onSelectAll: () => fired.add('all'),
               onClear: () => fired.add('clear'),
@@ -23,23 +24,24 @@ void main() {
               onPushFiles: () => fired.add('push'),
               onDone: () => fired.add('done'),
             ),
-          ),
-        );
+          );
 
     await tester.pumpWidget(build(0));
     expect(find.text('0 selected'), findsOneWidget);
-    await tester.tap(find.text('CONNECT ALL'));
+    await tester.tap(find.text('Connect all'));
     expect(fired, isEmpty); // disabled at 0
+    await tester.pumpAndSettle();
 
     await tester.pumpWidget(build(3));
     expect(find.text('3 selected'), findsOneWidget);
-    await tester.tap(find.text('CONNECT ALL'));
-    await tester.tap(find.text('RUN COMMAND'));
-    await tester.tap(find.text('PUSH FILES'));
-    await tester.tap(find.text('SELECT ALL'));
+    await tester.tap(find.text('Connect all'));
+    await tester.tap(find.text('Run command'));
+    await tester.tap(find.text('Push files'));
+    await tester.tap(find.text('Select all'));
     // DONE lives inside a SingleChildScrollView — ensure it is visible before tap.
-    await tester.ensureVisible(find.text('DONE'));
-    await tester.tap(find.text('DONE'));
+    await tester.ensureVisible(find.text('Done'));
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle(); // let button press timers finish
     expect(fired, ['connect', 'run', 'push', 'all', 'done']);
   });
 
@@ -48,19 +50,15 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: BulkActionBar(
-          selectedCount: 3,
-          onSelectAll: () {},
-          onClear: () {},
-          onConnectAll: () {},
-          onRunCommand: () {},
-          onPushFiles: () {},
-          onDone: () {},
-        ),
-      ),
-    ));
+    await tester.pumpWidget(ysTestApp(BulkActionBar(
+      selectedCount: 3,
+      onSelectAll: () {},
+      onClear: () {},
+      onConnectAll: () {},
+      onRunCommand: () {},
+      onPushFiles: () {},
+      onDone: () {},
+    )));
     expect(tester.takeException(), isNull); // no RenderFlex overflow
   });
 }

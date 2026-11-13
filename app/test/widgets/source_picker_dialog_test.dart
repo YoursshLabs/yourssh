@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/panel_source.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 import 'package:yourssh/widgets/source_picker_dialog.dart';
 
 Host _host(String label) => Host(
@@ -17,6 +18,7 @@ void main() {
 
   Widget harness({PanelSource? current}) {
     return MaterialApp(
+      builder: ysRootBuilder,
       home: Builder(
         builder: (context) => TextButton(
           onPressed: () async {

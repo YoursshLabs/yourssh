@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/providers/settings_provider.dart';
 import 'package:yourssh/widgets/terminal_config_panel.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import '../helpers/ys_test_app.dart';
 
 void main() {
   setUp(() {
@@ -13,10 +15,8 @@ void main() {
   Widget wrap({VoidCallback? onClose}) {
     return ChangeNotifierProvider(
       create: (_) => SettingsProvider(),
-      child: MaterialApp(
-        home: Scaffold(
-          body: Row(children: [TerminalConfigPanel(onClose: onClose)]),
-        ),
+      child: ysTestApp(
+        Row(children: [TerminalConfigPanel(onClose: onClose)]),
       ),
     );
   }
@@ -32,7 +32,8 @@ void main() {
   testWidgets('close button fires onClose', (tester) async {
     var closed = false;
     await tester.pumpWidget(wrap(onClose: () => closed = true));
-    await tester.tap(find.byIcon(Icons.close));
+    await tester.tap(find.byIcon(FLucideIcons.x));
+    await tester.pumpAndSettle();
     expect(closed, true);
   });
 

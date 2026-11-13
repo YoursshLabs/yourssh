@@ -4,8 +4,9 @@ import 'package:yourssh/models/bulk_result.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/widgets/bulk/bulk_host_status_list.dart';
 
-Widget _wrap(Widget child) =>
-    MaterialApp(home: Scaffold(body: child));
+import '../helpers/ys_test_app.dart';
+
+Widget _wrap(Widget child) => ysTestApp(child);
 
 void main() {
   final host = Host(label: 'web-1', host: 'w1.x', username: 'root');
@@ -41,5 +42,15 @@ void main() {
     ])));
     expect(find.text('auth failed'), findsOneWidget); // error shown inline
     expect(find.text('exit 2'), findsOneWidget);
+  });
+
+  testWidgets('unknown exit status reads "exit unknown", not "exit -1"',
+      (tester) async {
+    await tester.pumpWidget(_wrap(BulkHostStatusList(results: [
+      BulkHostResult(
+          host: host, status: BulkHostStatus.success, exitCode: -1, stdout: 'x'),
+    ])));
+    expect(find.text('exit unknown'), findsOneWidget);
+    expect(find.text('exit -1'), findsNothing);
   });
 }

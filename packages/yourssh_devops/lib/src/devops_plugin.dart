@@ -1,4 +1,7 @@
+// Migrating the app to material_ui is a separate later step.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show YsPluginHost, FLucideIcons;
 import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
 import 'devops_plugin_config.dart';
 import 'screens/devops_hub_screen.dart';
@@ -12,12 +15,12 @@ class YourSSHDevOpsPlugin extends YourSSHPlugin {
   @override String get name => 'DevOps Hub';
   @override String get description =>
       'Network tools, S3 browser, LAN share, Mail catcher, MCP server, Cloudflare tunnels';
-  @override IconData get icon => Icons.rocket_launch_outlined;
+  @override IconData get icon => FLucideIcons.rocket;
   @override String get version => '1.0.0';
   @override String get minApiVersion => '1.0.0';
 
   @override
   Widget buildUI(BuildContext context, YourSSHPluginContext pluginContext) {
-    return DevOpsHubScreen(config: config);
+    return YsPluginHost(child: DevOpsHubScreen(config: config));
   }
 }

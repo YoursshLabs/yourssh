@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 const String kAppLockPrefKey = 'app_lock_enabled';
 
@@ -115,19 +115,24 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     if (!_locked) return widget.child;
+    // Nothing of the app is built while locked: only this screen.
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: YsColors.background,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.lock_outline,
-                size: 56, color: AppColors.textSecondary),
+            const Icon(FLucideIcons.lock,
+                size: 56, color: YsColors.mutedForeground),
             const SizedBox(height: 16),
             const Text('YourSSH is locked',
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+                style: TextStyle(color: YsColors.foreground, fontSize: 16)),
             const SizedBox(height: 16),
-            FilledButton(onPressed: _authenticate, child: const Text('Unlock')),
+            FButton(
+              variant: .primary,
+              onPress: _authenticate,
+              child: const Text('Unlock'),
+            ),
           ],
         ),
       ),

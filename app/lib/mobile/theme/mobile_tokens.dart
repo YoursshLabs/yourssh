@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
 
 /// Layout and typography constants for the mobile UI.
@@ -6,14 +7,14 @@ import 'package:yourssh/mobile/theme/mobile_theme.dart';
 /// so widgets share one rhythm.
 abstract final class MobileTokens {
   // ── Spacing ──────────────────────────────────────────────────────────────
-  static const double space1 = 4;
-  static const double space2 = 8;
-  static const double space3 = 12;
-  static const double space4 = 16;
-  static const double space5 = 24;
+  static const double space1 = YsSpace.s1;
+  static const double space2 = YsSpace.s2;
+  static const double space3 = YsSpace.s3;
+  static const double space4 = YsSpace.s4;
+  static const double space5 = YsSpace.s5;
 
   // ── Radii ─────────────────────────────────────────────────────────────────
-  static const double radiusCard   = 14;
+  static const double radiusCard = YsRadius.mobileCard;
   static const double radiusPill   = 22;
   static const double radiusAvatar = 12;
   static const double radiusField  = 12;

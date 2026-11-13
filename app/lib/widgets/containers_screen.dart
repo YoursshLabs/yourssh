@@ -11,6 +11,8 @@ import '../providers/session_provider.dart';
 import '../services/container_service.dart';
 import '../services/ssh_service.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import 'ys_form_controls.dart';
 
 class ContainersScreen extends StatefulWidget {
   const ContainersScreen({super.key, this.onOpenBrowser});
@@ -40,9 +42,9 @@ class _ContainersScreenState extends State<ContainersScreen> {
   Widget build(BuildContext context) {
     final sessions = context.watch<SessionProvider>().sshSessions;
     if (sessions.isEmpty) {
-      return const _CenterHint(
-        icon: Icons.terminal,
-        message: 'Open an SSH session first, then come back to browse containers.',
+      return const YsEmptyState(
+        icon: FLucideIcons.terminal,
+        title: 'Open an SSH session first, then come back to browse containers.',
       );
     }
     _sessionId ??= sessions.first.id;
@@ -53,20 +55,18 @@ class _ContainersScreenState extends State<ContainersScreen> {
     _sessionId = selected.id;
 
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(YsSpace.s4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Expanded(
-                child: DropdownButton<String>(
-                  value: _sessionId,
-                  isExpanded: true,
-                  items: [
-                    for (final s in sessions)
-                      DropdownMenuItem(value: s.id, child: Text(s.title)),
-                  ],
+                child: SettingsSelect<String>(
+                  key: const ValueKey('containers-session'),
+                  width: double.infinity,
+                  value: _sessionId!,
+                  options: [for (final s in sessions) (s.id, s.title)],
                   onChanged: (v) => setState(() {
                     _sessionId = v;
                     _runtimes = null;
@@ -76,59 +76,73 @@ class _ContainersScreenState extends State<ContainersScreen> {
                   }),
                 ),
               ),
-              const SizedBox(width: 12),
-              IconButton(
-                tooltip: 'Rescan runtimes',
-                icon: const Icon(Icons.refresh),
-                onPressed: _loading ? null : _refresh,
+              const SizedBox(width: YsSpace.s3),
+              Tooltip(
+                message: 'Rescan runtimes',
+                excludeFromSemantics: true,
+                child: FButton.icon(
+                  variant: .outline,
+                  semanticsLabel: 'Rescan runtimes',
+                  onPress: _loading ? null : _refresh,
+                  child: const Icon(FLucideIcons.refreshCw),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(children: [
-            _tabButton(_Tab.docker, 'Docker'),
-            const SizedBox(width: 8),
-            _tabButton(_Tab.compose, 'Compose'),
-            const SizedBox(width: 8),
-            _tabButton(_Tab.kubernetes, 'Kubernetes'),
-          ]),
-          const SizedBox(height: 8),
+          const SizedBox(height: YsSpace.s2),
+          FTabs(
+            key: const ValueKey('containers-tabs'),
+            control: .lifted(
+              index: _tab.index,
+              onChange: (i) => setState(() => _tab = _Tab.values[i]),
+            ),
+            children: [
+              FTabEntry(
+                  label: const Text('Docker'), child: const SizedBox.shrink()),
+              FTabEntry(
+                  label: const Text('Compose'), child: const SizedBox.shrink()),
+              FTabEntry(
+                  label: const Text('Kubernetes'),
+                  child: const SizedBox.shrink()),
+            ],
+          ),
+          const SizedBox(height: YsSpace.s2),
           Expanded(child: _body()),
         ],
       ),
     );
   }
 
-  Widget _tabButton(_Tab tab, String label) {
-    final active = _tab == tab;
-    return ChoiceChip(
-      label: Text(label),
-      selected: active,
-      onSelected: (_) => setState(() => _tab = tab),
-    );
-  }
-
   Widget _body() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const Center(child: FCircularProgress());
     final host = _hostForSelected();
     if (host == null) {
-      return const _CenterHint(icon: Icons.link_off, message: 'Session not found.');
+      return const YsEmptyState(
+        icon: FLucideIcons.unlink,
+        title: 'Session not found.',
+      );
     }
     final runtimes = _runtimes;
     if (runtimes == null) {
       if (_error != null) {
-        return _CenterHint(
-          icon: Icons.error_outline,
-          message: _error!,
-          actionLabel: 'Retry',
-          onAction: _refresh,
+        return YsEmptyState(
+          icon: FLucideIcons.circleAlert,
+          title: _error!,
+          action: FButton(
+            autofocus: true,
+            onPress: _refresh,
+            child: const Text('Retry'),
+          ),
         );
       }
-      return _CenterHint(
-        icon: Icons.search,
-        message: 'Tap refresh to scan for Docker / Kubernetes.',
-        actionLabel: 'Scan',
-        onAction: _refresh,
+      return YsEmptyState(
+        icon: FLucideIcons.search,
+        title: 'Tap refresh to scan for Docker / Kubernetes.',
+        action: FButton(
+          autofocus: true,
+          onPress: _refresh,
+          child: const Text('Scan'),
+        ),
       );
     }
 
@@ -189,37 +203,6 @@ class _ContainersScreenState extends State<ContainersScreen> {
   }
 }
 
-class _CenterHint extends StatelessWidget {
-  final IconData icon;
-  final String message;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-  const _CenterHint({
-    required this.icon,
-    required this.message,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 40, color: AppColors.textTertiary),
-          const SizedBox(height: 12),
-          Text(message, textAlign: TextAlign.center),
-          if (actionLabel != null) ...[
-            const SizedBox(height: 12),
-            FilledButton(onPressed: onAction, child: Text(actionLabel!)),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 class _HintCard extends StatelessWidget {
   final String title;
   final String command;
@@ -228,31 +211,41 @@ class _HintCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 12),
-              SelectableText(
-                command,
-                style: const TextStyle(fontFamily: 'monospace'),
+      child: SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: FCard(
+            child: Padding(
+              padding: const EdgeInsets.all(YsSpace.s1),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: YsColors.foreground,
+                    ),
+                  ),
+                  const SizedBox(height: YsSpace.s3),
+                  SelectableText(
+                    command,
+                    style: const TextStyle(fontFamily: kYsMonoFontFamily),
+                  ),
+                  const SizedBox(height: YsSpace.s3),
+                  FButton(
+                    mainAxisSize: MainAxisSize.min,
+                    prefix: const Icon(FLucideIcons.copy),
+                    onPress: () {
+                      Clipboard.setData(ClipboardData(text: command));
+                      AppSnack.info(context, 'Copied');
+                    },
+                    child: const Text('Copy command'),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                icon: const Icon(Icons.copy, size: 16),
-                label: const Text('Copy command'),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: command));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Copied')),
-                  );
-                },
-              ),
-            ],
+            ),
           ),
         ),
       ),

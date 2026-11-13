@@ -1,12 +1,14 @@
 // app/lib/widgets/code_editor_screen.dart
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+
 import '../models/host.dart';
 import '../models/sftp_entry.dart';
 import '../services/external_edit_service.dart';
@@ -14,6 +16,9 @@ import '../services/sftp_file_inspector.dart';
 import '../services/sftp_transfer_service.dart';
 import '../util/safe_local_path.dart';
 import '../util/webview_result.dart';
+
+import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class CodeEditorScreen extends StatefulWidget {
   final Host host;
@@ -42,16 +47,35 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   bool _saving = false;
   bool _isDirty = false;
   String? _content;
+
+  /// Fallback editor text as of the last load or save. The forui field's
+  /// onChange also fires on caret/selection moves, so dirtiness compares text.
+  String _cleanText = '';
   String? _tmpPath;
 
   bool get _useWebView => _controller != null;
 
   static const _langMap = {
-    'dart': 'dart', 'py': 'python', 'js': 'javascript', 'ts': 'typescript',
-    'json': 'json', 'yaml': 'yaml', 'yml': 'yaml', 'md': 'markdown',
-    'sh': 'shell', 'bash': 'shell', 'zsh': 'shell', 'go': 'go',
-    'rs': 'rust', 'c': 'c', 'cpp': 'cpp', 'html': 'html', 'css': 'css',
-    'xml': 'xml', 'sql': 'sql', 'toml': 'ini',
+    'dart': 'dart',
+    'py': 'python',
+    'js': 'javascript',
+    'ts': 'typescript',
+    'json': 'json',
+    'yaml': 'yaml',
+    'yml': 'yaml',
+    'md': 'markdown',
+    'sh': 'shell',
+    'bash': 'shell',
+    'zsh': 'shell',
+    'go': 'go',
+    'rs': 'rust',
+    'c': 'c',
+    'cpp': 'cpp',
+    'html': 'html',
+    'css': 'css',
+    'xml': 'xml',
+    'sql': 'sql',
+    'toml': 'ini',
   };
 
   @override
@@ -94,6 +118,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
         }
       } else {
         _textController.text = _content!;
+        _cleanText = _content!;
         setState(() => _ready = true);
       }
     } catch (e) {
@@ -107,14 +132,9 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       if (!mounted) return;
       final message = e is SftpStatusError
           ? 'Cannot open ${widget.entry.name}: the server refused to read it '
-              '(special file, broken link, or no permission).'
+                '(special file, broken link, or no permission).'
           : 'Cannot open ${widget.entry.name}: $e';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppSnack.error(context, message);
       Navigator.of(context).pop();
     }
   }
@@ -122,41 +142,39 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   /// Shown when downloaded content turns out to be binary: offer to hand the
   /// file to the OS default app instead, then close the editor either way.
   Future<void> _offerExternalOpen() async {
-    final open = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Cannot edit in-app',
-            style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 14)),
-        content: Text(
+    final open = await showYsDialog<bool>(
+      context,
+      builder: (ctx) => YsDialog(
+        title: 'Cannot edit in-app',
+        body: Text(
           '"${widget.entry.name}" appears to be a binary file.\n'
           'Open it with an external application instead? Changes saved '
           'there are uploaded back automatically.',
-          style: const TextStyle(color: Color(0xFF888888), fontSize: 13),
         ),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel',
-                  style: TextStyle(color: Color(0xFF888888)))),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Open externally',
-                  style: TextStyle(color: Color(0xFF22C55E)))),
+          FButton(
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FButton(
+            variant: FButtonVariant.primary,
+            onPress: () => Navigator.pop(ctx, true),
+            child: const Text('Open externally'),
+          ),
         ],
       ),
     );
     if (!mounted) return;
     if (open == true) {
       try {
-        await context
-            .read<ExternalEditService>()
-            .openExternal(widget.host, widget.entry);
+        await context.read<ExternalEditService>().openExternal(
+          widget.host,
+          widget.entry,
+        );
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('Open externally failed: $e'),
-              backgroundColor: Colors.red));
+          AppSnack.error(context, 'Open externally failed: $e');
         }
       }
     }
@@ -193,8 +211,9 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   Future<void> _saveCurrent() async {
     if (_saving) return;
     if (_useWebView) {
-      final content =
-          await _controller!.runJavaScriptReturningResult('getContent()');
+      final content = await _controller!.runJavaScriptReturningResult(
+        'getContent()',
+      );
       await _saveFile(decodeWebViewString(content));
     } else {
       await _saveFile(_textController.text);
@@ -207,22 +226,27 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       final service = context.read<SftpTransferService>();
       // Reuse the download location; path_provider only as a fallback when
       // the initial download never completed.
-      final tmpPath = _tmpPath ??
+      final tmpPath =
+          _tmpPath ??
           safeLocalChild(
-              (await getTemporaryDirectory()).path, widget.entry.name);
+            (await getTemporaryDirectory()).path,
+            widget.entry.name,
+          );
       await File(tmpPath).writeAsString(content);
       await service.uploadFile(widget.host, tmpPath, widget.entry.path);
       if (mounted) {
+        if (!_useWebView) _cleanText = content;
         setState(() => _isDirty = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Saved'), duration: Duration(seconds: 1)),
+        showYsToast(
+          context,
+          'Saved',
+          kind: YsToastKind.success,
+          duration: const Duration(seconds: 1),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e'), backgroundColor: Colors.red),
-        );
+        AppSnack.error(context, 'Save failed: $e');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -230,21 +254,23 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   }
 
   Future<void> _showDiscardDialog() async {
-    final discard = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Unsaved changes',
-            style: TextStyle(color: Color(0xFFD4D4D4), fontSize: 14)),
-        content: const Text('Discard changes and close?',
-            style: TextStyle(color: Color(0xFF888888), fontSize: 13)),
+    final discard = await showYsDialog<bool>(
+      context,
+      builder: (ctx) => YsDialog(
+        title: 'Unsaved changes',
+        body: Text('Discard changes and close?'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel', style: TextStyle(color: Color(0xFF888888)))),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Discard', style: TextStyle(color: Color(0xFFEF4444)))),
+          FButton(
+            autofocus: true,
+            variant: FButtonVariant.outline,
+            onPress: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FButton(
+            variant: FButtonVariant.destructive,
+            onPress: () => Navigator.pop(ctx, true),
+            child: const Text('Discard'),
+          ),
         ],
       ),
     );
@@ -259,71 +285,126 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
         if (!didPop) _showDiscardDialog();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF0F0F0F),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF141414),
-          title: Text(widget.entry.name,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 14)),
-          actions: [
-            if (widget.readOnly)
-              const Padding(
-                padding: EdgeInsets.all(12),
-                child: Icon(Icons.lock_outline,
-                    size: 16, color: Color(0xFF888888)),
-              )
-            else ...[
-              if (_saving)
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Color(0xFF22C55E)),
-                  ),
-                ),
-              IconButton(
-                icon: const Icon(Icons.save_outlined, size: 18),
-                tooltip: 'Save (Ctrl+S)',
-                onPressed: _saving ? null : _saveCurrent,
-              ),
-            ],
+        backgroundColor: YsColors.terminalSurface,
+        body: Column(
+          children: [
+            _buildHeader(context),
+            Expanded(
+              child: !_ready
+                  ? const Center(child: FCircularProgress())
+                  : _useWebView
+                  ? WebViewWidget(controller: _controller!)
+                  : _buildFallbackEditor(),
+            ),
           ],
         ),
-        body: !_ready
-            ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFF22C55E)))
-            : _useWebView
-                ? WebViewWidget(controller: _controller!)
-                : _buildFallbackEditor(),
+      ),
+    );
+  }
+
+  Widget _headerButton(IconData icon, String tooltip, VoidCallback? onPress) {
+    return Tooltip(
+      message: tooltip,
+      excludeFromSemantics: true,
+      child: FButton.icon(
+        variant: FButtonVariant.ghost,
+        size: FButtonSizeVariant.sm,
+        semanticsLabel: tooltip,
+        onPress: onPress,
+        child: Icon(icon),
+      ),
+    );
+  }
+
+  /// Editor header replacing the Material AppBar: back, file name, then the
+  /// read-only lock or the save button (with its saving spinner).
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s2),
+      decoration: const BoxDecoration(
+        color: YsColors.card,
+        border: Border(bottom: BorderSide(color: YsColors.border)),
+      ),
+      child: Row(
+        children: [
+          if (Navigator.of(context).canPop())
+            _headerButton(
+              FLucideIcons.arrowLeft,
+              'Back',
+              () => Navigator.of(context).maybePop(),
+            ),
+          const SizedBox(width: YsSpace.s2),
+          Expanded(
+            child: Text(
+              widget.entry.name,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: kYsMonoFontFamily,
+                fontFamilyFallback: kYsMonoFontFallback,
+                fontSize: 14,
+                color: YsColors.foreground,
+              ),
+            ),
+          ),
+          if (widget.readOnly)
+            const Padding(
+              padding: EdgeInsets.all(YsSpace.s3),
+              child: Icon(
+                FLucideIcons.lock,
+                size: 16,
+                color: YsColors.mutedForeground,
+              ),
+            )
+          else ...[
+            if (_saving)
+              const Padding(
+                padding: EdgeInsets.all(YsSpace.s3),
+                child: FCircularProgress(size: FCircularProgressSizeVariant.sm),
+              ),
+            _headerButton(
+              FLucideIcons.save,
+              'Save (Ctrl+S)',
+              _saving ? null : _saveCurrent,
+            ),
+          ],
+        ],
       ),
     );
   }
 
   /// Plain-Flutter editor for platforms without a webview implementation.
   Widget _buildFallbackEditor() {
-    final field = TextField(
-      controller: _textController,
+    final field = FTextField(
+      control: FTextFieldControl.managed(
+        controller: _textController,
+        onChange: widget.readOnly
+            ? null
+            : (value) {
+                final dirty = value.text != _cleanText;
+                if (dirty != _isDirty) setState(() => _isDirty = dirty);
+              },
+      ),
       maxLines: null,
       expands: true,
       textAlignVertical: TextAlignVertical.top,
       autofocus: !widget.readOnly,
       readOnly: widget.readOnly,
-      style: const TextStyle(
-        fontFamily: 'monospace',
-        fontSize: 13,
-        color: Color(0xFFD4D4D4),
-        height: 1.5,
+      style: .delta(
+        border: .delta([.all(.none)]),
+        contentPadding: .value(const EdgeInsets.all(12)),
+        contentTextStyle: .delta([
+          .base(
+            const .delta(
+              fontFamily: kYsMonoFontFamily,
+              fontFamilyFallback: kYsMonoFontFallback,
+              fontSize: 13,
+              color: YsColors.foreground,
+              height: 1.5,
+            ),
+          ),
+        ]),
       ),
-      decoration: const InputDecoration(
-        border: InputBorder.none,
-        contentPadding: EdgeInsets.all(12),
-      ),
-      onChanged: widget.readOnly
-          ? null
-          : (_) {
-              if (!_isDirty) setState(() => _isDirty = true);
-            },
     );
     if (widget.readOnly) return field;
     return CallbackShortcuts(

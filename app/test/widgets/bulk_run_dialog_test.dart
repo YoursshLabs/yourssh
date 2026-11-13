@@ -7,15 +7,41 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/services/bulk_action_service.dart';
 import 'package:yourssh/widgets/bulk/bulk_run_dialog.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 import 'package:yourssh_snippets/yourssh_snippets.dart';
+import 'package:yourssh_ui/yourssh_ui.dart'
+    show FButton, FLucideIcons, showYsDialog, YsDialogFrame;
+
+import '../helpers/ys_test_app.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   Widget wrap(Widget child) => ChangeNotifierProvider(
         create: (_) => SnippetProvider(),
-        child: MaterialApp(home: Scaffold(body: child)),
+        child: ysTestApp(child),
       );
+
+  testWidgets('footer does not count an unknown/non-zero exit as ok',
+      (tester) async {
+    final hosts = [
+      Host(label: 'a', host: 'a.x', username: 'u'),
+      Host(label: 'b', host: 'b.x', username: 'u'),
+    ];
+    final service = BulkActionService(
+        exec: (h, c) async =>
+            (stdout: 'x', stderr: '', exitCode: h.label == 'a' ? 0 : -1));
+
+    await tester.pumpWidget(
+        wrap(BulkRunDialog(hosts: hosts, serviceOverride: service)));
+    await tester.enterText(
+        find.byKey(const Key('bulk-command-field')), 'uptime');
+    await tester.tap(find.text('Run'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('1 ok · 1 non-zero exit · 0 failed'),
+        findsOneWidget);
+  });
 
   testWidgets('runs a command and shows per-host results', (tester) async {
     final hosts = [
@@ -31,7 +57,7 @@ void main() {
 
     await tester.enterText(
         find.byKey(const Key('bulk-command-field')), 'uptime');
-    await tester.tap(find.text('RUN'));
+    await tester.tap(find.text('Run'));
     await tester.pumpAndSettle();
 
     expect(find.text('a'), findsOneWidget);
@@ -48,7 +74,7 @@ void main() {
     await tester.pumpWidget(wrap(BulkRunDialog(
         hosts: [Host(label: 'a', host: 'a.x', username: 'u')],
         serviceOverride: service)));
-    await tester.tap(find.text('RUN'));
+    await tester.tap(find.text('Run'));
     await tester.pumpAndSettle();
     expect(execCount, 0);
   });
@@ -61,16 +87,15 @@ void main() {
     late BuildContext dialogCtx;
     await tester.pumpWidget(ChangeNotifierProvider(
       create: (_) => SnippetProvider(),
-      child: MaterialApp(
+      child: MaterialApp(builder: ysRootBuilder,
         home: Builder(builder: (ctx) {
           dialogCtx = ctx;
           return const Scaffold(body: SizedBox());
         }),
       ),
     ));
-    showDialog<void>(
-      context: dialogCtx,
-      builder: (_) => BulkRunDialog(
+    showYsDialog<void>(
+dialogCtx, barrierDismissible: false, builder: (_) => BulkRunDialog(
         hosts: [Host(label: 'a', host: 'a.x', username: 'u')],
         serviceOverride: service,
       ),
@@ -79,14 +104,14 @@ void main() {
 
     await tester.enterText(
         find.byKey(const Key('bulk-command-field')), 'sleep 100');
-    await tester.tap(find.text('RUN'));
+    await tester.tap(find.text('Run'));
     // Pump once to start the run (futures fire, setState called).
     await tester.pump();
     // One more pump to let the state rebuild with isRunning=true.
     await tester.pump();
 
     // Confirm the CANCEL button is visible — proves isRunning is true.
-    expect(find.text('CANCEL'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
 
     // Verify route-level pop disposition is doNotPop (PopScope registered).
     final dialogEl = tester.element(find.byType(BulkRunDialog));
@@ -107,5 +132,86 @@ void main() {
 
     gate.complete((stdout: '', stderr: '', exitCode: 0));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('Enter in the command field starts the run', (tester) async {
+    var execCount = 0;
+    final service = BulkActionService(exec: (h, c) async {
+      execCount++;
+      return (stdout: 'ok', stderr: '', exitCode: 0);
+    });
+    await tester.pumpWidget(wrap(BulkRunDialog(
+        hosts: [Host(label: 'a', host: 'a.x', username: 'u')],
+        serviceOverride: service)));
+    await tester.tap(find.byKey(const Key('bulk-command-field')));
+    await tester.enterText(
+        find.byKey(const Key('bulk-command-field')), 'uptime');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(execCount, 1);
+    expect(find.textContaining('1 ok'), findsOneWidget);
+  });
+
+  testWidgets('does not overflow at 900x600 with long host labels',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final long = 'h' * 60;
+    final service = BulkActionService(
+        exec: (h, c) async => (stdout: 'x\n' * 5, stderr: '', exitCode: 0));
+    await tester.pumpWidget(wrap(BulkRunDialog(hosts: [
+      Host(label: long, host: 'a.x', username: 'u'),
+      Host(label: '${long}b', host: 'b.x', username: 'u'),
+    ], serviceOverride: service)));
+    await tester.pumpAndSettle();
+    final box = tester.getRect(find.byType(YsDialogFrame));
+    expect(box.height, lessThanOrEqualTo(600),
+        reason: 'dialog fits the 900x600 window');
+    expect(box.width, lessThanOrEqualTo(900));
+    expect(tester.takeException(), isNull);
+    await tester.enterText(
+        find.byKey(const Key('bulk-command-field')), 'uptime');
+    await tester.tap(find.text('Run'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Diff'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  group('snippet button', () {
+    final host = Host(label: 'a', host: 'a.x', username: 'u');
+    final svc = BulkActionService(
+        exec: (h, c) async => (stdout: '', stderr: '', exitCode: 0));
+    final snippetBtn = find.ancestor(
+        of: find.byIcon(FLucideIcons.braces), matching: find.byType(FButton));
+
+    testWidgets('is disabled with a tooltip when no snippets exist',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({'yourssh.snippets': '[]'});
+      await tester.pumpWidget(wrap(BulkRunDialog(hosts: [host], serviceOverride: svc)));
+      await tester.pumpAndSettle();
+      expect(tester.widget<FButton>(snippetBtn).onPress, isNull);
+      expect(find.byTooltip('No snippets saved'), findsOneWidget);
+    });
+
+    testWidgets('picking a snippet fills the command field', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(wrap(BulkRunDialog(hosts: [host], serviceOverride: svc)));
+      await tester.pumpAndSettle();
+      expect(tester.widget<FButton>(snippetBtn).onPress, isNotNull);
+      expect(find.byTooltip('Insert snippet'), findsOneWidget);
+
+      await tester.tap(snippetBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Disk usage'));
+      await tester.pumpAndSettle();
+
+      final field = tester.widget<EditableText>(find.descendant(
+          of: find.byKey(const Key('bulk-command-field')),
+          matching: find.byType(EditableText)));
+      expect(field.controller.text, 'df -h');
+    });
   });
 }

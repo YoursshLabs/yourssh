@@ -4,8 +4,11 @@ import 'package:yourssh/models/host.dart';
 import 'package:yourssh/util/host_sort.dart';
 import 'package:yourssh/widgets/hosts_dashboard.dart';
 
-Widget _wrap(Widget child) =>
-    MaterialApp(home: Scaffold(body: Column(children: [child])));
+import '../helpers/ys_test_app.dart';
+
+Widget _wrap(Widget child) => ysTestApp(Column(children: [child]));
+
+final _checkbox = find.byKey(const Key('host-card-checkbox'));
 
 void main() {
   group('host list row', () {
@@ -28,7 +31,7 @@ void main() {
       await tester.pumpWidget(_wrap(hostListRowForTest(
         host: Host(label: 'Web', host: '10.0.0.1', username: 'root'),
       )));
-      expect(find.byType(Checkbox), findsNothing);
+      expect(_checkbox, findsNothing);
     });
 
     testWidgets('selection mode shows checkbox and row tap toggles', (tester) async {
@@ -38,7 +41,7 @@ void main() {
         selectionMode: true,
         onToggleSelect: () => toggled++,
       )));
-      expect(find.byType(Checkbox), findsOneWidget);
+      expect(_checkbox, findsOneWidget);
       await tester.tap(find.text('Web'));
       expect(toggled, 1);
     });
@@ -51,14 +54,15 @@ void main() {
         viewMode: 'grid',
         onChanged: (v) => changed = v,
       )));
-      expect(find.byIcon(Icons.grid_view), findsOneWidget);
-      expect(find.byIcon(Icons.view_list), findsOneWidget);
+      expect(find.byTooltip('Grid view'), findsOneWidget);
+      expect(find.byTooltip('List view'), findsOneWidget);
 
-      await tester.tap(find.byIcon(Icons.view_list));
+      await tester.tap(find.byTooltip('List view'));
       expect(changed, 'list');
 
-      await tester.tap(find.byIcon(Icons.grid_view));
+      await tester.tap(find.byTooltip('Grid view'));
       expect(changed, 'grid');
+      await tester.pumpAndSettle();
     });
   });
 

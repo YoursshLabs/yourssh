@@ -21,6 +21,8 @@ import 'local_file_panel.dart';
 import 'sftp_panel.dart';
 import 'sftp_transfer_panel.dart';
 import 'source_picker_dialog.dart';
+import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Two-panel commander layout. Each slot points at a [PanelSource] (the
 /// local filesystem or any saved host) and can be switched at any time.
@@ -67,6 +69,8 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
   late final ExternalEditService _externalEditService;
   late final AppDiscoveryService _appDiscoveryService;
   final _localCopyService = LocalCopyService();
+  // Owned here so the transfer buttons can follow the resizable gutter.
+  final FResizableController _resizeController = FResizableController();
 
   @override
   void initState() {
@@ -105,6 +109,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
     _sftpLeft.dispose();
     _sftpRight.dispose();
     _transferProvider.dispose();
+    _resizeController.dispose();
     super.dispose();
   }
 
@@ -116,8 +121,8 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
 
   Future<void> _pickSource(bool left) async {
     final hosts = context.read<HostProvider>().allHosts;
-    final picked = await showDialog<PanelSource>(
-      context: context,
+    final picked = await showYsDialog<PanelSource>(
+      context,
       builder: (_) => SourcePickerDialog(hosts: hosts, current: _sourceOf(left)),
     );
     if (!mounted || picked == null || picked == _sourceOf(left)) return;
@@ -158,8 +163,7 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(message), backgroundColor: const Color(0xFF2A1A1A)));
+    AppSnack.error(context, message);
   }
 
   // ── Transfer dispatch ─────────────────────────────────
@@ -472,19 +476,44 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
       onAcceptWithDetails: (d) => _onDropLocalEntry(left, d.data),
       builder: (_, localCandidates, _) => DragTarget<SftpEntry>(
         onAcceptWithDetails: (d) => _onDropSftpEntry(left, d.data),
-        builder: (_, sftpCandidates, _) => Container(
-          decoration: BoxDecoration(
-            border: localCandidates.isNotEmpty || sftpCandidates.isNotEmpty
-                ? Border.all(
-                    color: const Color(0xFF22C55E).withValues(alpha: 0.4),
-                    width: 2)
-                : null,
-          ),
-          child: panel,
-        ),
+        builder: (_, sftpCandidates, _) {
+          final dropping =
+              localCandidates.isNotEmpty || sftpCandidates.isNotEmpty;
+          return DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(YsRadius.card),
+              border: dropping
+                  ? Border.all(
+                      color: YsColors.primary.withValues(alpha: 0.4),
+                      width: 2)
+                  : Border.all(color: YsColors.border),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(YsRadius.card),
+              child: ColoredBox(color: YsColors.card, child: panel),
+            ),
+          );
+        },
       ),
     );
   }
+
+  /// One resizable half: the slot plus its half of the gutter that holds
+  /// the transfer buttons ([_TransferBar.width] split evenly).
+  /// Each half keeps at least 35 % of the width (minFlex / total flex =
+  /// 14 / 40): about 245 px at the 900 px window minimum.
+  FResizableRegion _region(bool left) => FResizableRegion.flex(
+        flex: 20,
+        minFlex: 14,
+        builder: (_, _, child) => Padding(
+          padding: left
+              ? const EdgeInsets.only(right: _TransferBar.width / 2)
+              : const EdgeInsets.only(left: _TransferBar.width / 2),
+          child: child,
+        ),
+        child: _slot(left),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -502,17 +531,56 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
         builder: (context, _) => Column(
           children: [
             Expanded(
-              child: Row(
-                children: [
-                  Expanded(child: _slot(true)),
-                  _TransferBar(
-                    canLeft: _canTransferFrom(false),
-                    canRight: _canTransferFrom(true),
-                    onLeft: () => _transfer(fromLeft: false),
-                    onRight: () => _transfer(fromLeft: true),
-                  ),
-                  Expanded(child: _slot(false)),
-                ],
+              // The two slots split the width evenly and can be resized by
+              // dragging the gutter between them; the transfer buttons sit
+              // in that gutter and follow it.
+              child: LayoutBuilder(
+                builder: (context, constraints) => Stack(
+                  children: [
+                    FResizable(
+                      axis: Axis.horizontal,
+                      control: FResizableControl.managed(
+                          controller: _resizeController),
+                      divider: FResizableDivider.none,
+                      // Kept inside the gutter so it never covers the panels.
+                      hitRegionExtent: _TransferBar.width / 3,
+                      crossAxisExtent: constraints.maxHeight,
+                      children: [_region(true), _region(false)],
+                    ),
+                    // Laid out after FResizable (a positioned child), so it
+                    // reads the regions FResizable has just laid out, also
+                    // right after a window resize rescaled them.
+                    Positioned.fill(
+                      child: ListenableBuilder(
+                        listenable: _resizeController,
+                        builder: (context, _) => LayoutBuilder(
+                          builder: (context, box) {
+                            final regions = _resizeController.regions;
+                            final boundary = regions.isEmpty
+                                ? box.maxWidth / 2
+                                : regions.first.offset.max;
+                            return Stack(
+                              children: [
+                                Positioned(
+                                  left: boundary - _TransferBar.width / 2,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: _TransferBar.width,
+                                  child: _TransferBar(
+                                    canLeft: _canTransferFrom(false),
+                                    canRight: _canTransferFrom(true),
+                                    onLeft: () => _transfer(fromLeft: false),
+                                    onRight: () => _transfer(fromLeft: true),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             // Docked, minimizable transfer progress — non-modal so the
@@ -526,55 +594,49 @@ class _DualPanelSftpScreenState extends State<DualPanelSftpScreen> {
   }
 }
 
+/// Copy → / Copy ← buttons centred in the gutter between the slots. Only
+/// the buttons take pointer events, so the rest of the gutter stays a
+/// resize handle.
 class _TransferBar extends StatelessWidget {
+  static const double width = 36;
+
   final bool canLeft;
   final bool canRight;
   final VoidCallback onLeft;
   final VoidCallback onRight;
 
-  const _TransferBar({required this.canLeft, required this.canRight, required this.onLeft, required this.onRight});
+  const _TransferBar({
+    required this.canLeft,
+    required this.canRight,
+    required this.onLeft,
+    required this.onRight,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 36,
-      color: const Color(0xFF111111),
+    return Center(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _Btn(icon: Icons.arrow_forward, tooltip: 'Copy →', enabled: canRight, onTap: onRight),
-          const SizedBox(height: 8),
-          _Btn(icon: Icons.arrow_back, tooltip: 'Copy ←', enabled: canLeft, onTap: onLeft),
+          _button(FLucideIcons.arrowRight, 'Copy →', canRight ? onRight : null),
+          const SizedBox(height: YsSpace.s2),
+          _button(FLucideIcons.arrowLeft, 'Copy ←', canLeft ? onLeft : null),
         ],
       ),
     );
   }
-}
 
-class _Btn extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  const _Btn({required this.icon, required this.tooltip, required this.enabled, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: GestureDetector(
-        onTap: enabled ? onTap : null,
-        child: Container(
-          width: 26, height: 26,
-          decoration: BoxDecoration(
-            color: enabled ? const Color(0xFF22C55E).withValues(alpha: 0.12) : const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: enabled ? const Color(0xFF22C55E).withValues(alpha: 0.3) : const Color(0xFF252525)),
-          ),
-          child: Icon(icon, size: 14, color: enabled ? const Color(0xFF22C55E) : const Color(0xFF333333)),
+  Widget _button(IconData icon, String tooltip, VoidCallback? onPress) =>
+      Tooltip(
+        message: tooltip,
+        excludeFromSemantics: true,
+        child: FButton.icon(
+          variant: onPress == null ? .outline : .secondary,
+          size: .xs,
+          semanticsLabel: tooltip,
+          onPress: onPress,
+          child: Icon(icon,
+              color: onPress == null ? null : YsColors.accentText),
         ),
-      ),
-    );
-  }
+      );
 }

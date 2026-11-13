@@ -5,10 +5,36 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/keyword_highlight_rule.dart';
 import 'package:yourssh/providers/settings_provider.dart';
+import 'package:yourssh/theme/terminal_themes.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  test('fresh install defaults terminalTheme to YourSSH Amber and persists', () async {
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.terminalTheme, kDefaultTerminalTheme);
+    expect(provider.terminalTheme, 'YourSSH Amber');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('terminalTheme'), 'YourSSH Amber');
+  });
+
+  test('existing install (hosts, no terminalTheme) keeps Dracula and persists', () async {
+    SharedPreferences.setMockInitialValues({'yourssh.hosts': '[]'});
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.terminalTheme, 'Dracula');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('terminalTheme'), 'Dracula');
+  });
+
+  test('explicit terminalTheme is respected', () async {
+    SharedPreferences.setMockInitialValues({'terminalTheme': 'Nord'});
+    final provider = SettingsProvider();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.terminalTheme, 'Nord');
   });
 
   test('terminalFont defaults to MesloLGS NF', () async {

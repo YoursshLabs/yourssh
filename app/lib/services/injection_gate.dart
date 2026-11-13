@@ -88,7 +88,10 @@ class GateResult {
 /// bootstrap line plus sentinels. Discarding (rather than writing it and
 /// erasing afterwards) keeps the app-side cursor in sync with where the
 /// remote shell believes it is — erase-by-cursor-math desyncs the two and
-/// fancy prompts then paint over the wrong rows.
+/// fancy prompts then paint over the wrong rows. On a clean DONE only the
+/// cursor's own line is cleared (the last line of the prompt painted before
+/// the bootstrap) and the sentinel's line break is dropped, so the shell's
+/// next prompt takes that row instead of leaving an empty prompt above it.
 /// Pure (no IO/timers) — the caller owns the timeout.
 class InjectionGate {
   InjectionGate({
@@ -99,6 +102,10 @@ class InjectionGate {
 
   final String readySentinel;
   final String doneSentinel;
+
+  /// Written when the handshake completes: return to column 0 and clear the
+  /// line still holding the prompt the shell painted before the bootstrap.
+  static const kClearPromptLine = '\r\x1b[2K';
 
   /// Largest head that can plausibly be bootstrap echo. A bigger head means
   /// real server output (late MOTD) landed inside the hold window — it is
@@ -116,8 +123,13 @@ class InjectionGate {
   /// Size of the withheld buffer.
   int get heldLength => _held.length;
 
+  /// After a clean DONE: the line break the sentinel printed is still owed
+  /// (it can arrive in a later chunk, even split between `\r` and `\n`).
+  /// 0 = none, 1 = expecting `\r` or `\n`, 2 = saw `\r`, expecting `\n`.
+  int _breakToDrop = 0;
+
   GateResult feed(String text) {
-    if (_passthrough) return GateResult(emit: text);
+    if (_passthrough) return GateResult(emit: _dropSentinelBreak(text));
     _held.write(text);
     final buf = _held.toString();
     var sendPayload = false;
@@ -136,8 +148,18 @@ class InjectionGate {
       _held.clear();
       final head = buf.substring(0, idx);
       final tail = buf.substring(idx + doneSentinel.length);
-      final emit = head.length > maxHold ? _strip(head) + tail : tail;
-      return GateResult(emit: emit, sendPayload: sendPayload);
+      if (head.length > maxHold) {
+        // Real output was held: show it as if never held, no clearing.
+        return GateResult(emit: _strip(head) + tail, sendPayload: sendPayload);
+      }
+      // The cursor still sits after the prompt painted before the bootstrap
+      // (its echo was discarded). Clear that line and let the next prompt
+      // draw on it instead of below it; the sentinel's own line break is
+      // dropped so the two stay on the same row.
+      _breakToDrop = 1;
+      return GateResult(
+          emit: kClearPromptLine + _dropSentinelBreak(tail),
+          sendPayload: sendPayload);
     }
     return GateResult(sendPayload: sendPayload);
   }
@@ -148,6 +170,23 @@ class InjectionGate {
     final out = _strip(_held.toString());
     _held.clear();
     return out;
+  }
+
+  String _dropSentinelBreak(String text) {
+    var i = 0;
+    while (_breakToDrop != 0 && i < text.length) {
+      final c = text[i];
+      if (_breakToDrop == 1 && c == '\r') {
+        _breakToDrop = 2;
+        i++;
+      } else if (c == '\n') {
+        _breakToDrop = 0;
+        i++;
+      } else {
+        _breakToDrop = 0; // no break followed the sentinel: nothing to drop
+      }
+    }
+    return i == 0 ? text : text.substring(i);
   }
 
   String _strip(String s) =>

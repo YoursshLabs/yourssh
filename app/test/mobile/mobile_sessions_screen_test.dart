@@ -8,6 +8,7 @@ import 'package:yourssh/providers/settings_provider.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/tab_metadata_service.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilderTouch;
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -16,6 +17,7 @@ void main() {
     final sp =
         SessionProvider(SshService(StorageService()), TabMetadataService());
     await tester.pumpWidget(MaterialApp(
+      builder: ysRootBuilderTouch,
       home: MultiProvider(
         providers: [
           ChangeNotifierProvider<SessionProvider>.value(value: sp),

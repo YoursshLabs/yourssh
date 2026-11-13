@@ -15,7 +15,6 @@ import 'services/cli/single_instance.dart';
 import 'services/cli/url_channel.dart';
 import 'platform/runtime_platform.dart';
 import 'mobile/mobile_app.dart';
-import 'utils/bundled_plugin_installer.dart';
 import 'providers/ai_chat_provider.dart';
 import 'providers/command_history_provider.dart';
 import 'providers/host_provider.dart';
@@ -49,6 +48,7 @@ import 'services/recording_redaction_policy.dart';
 import 'services/tab_metadata_service.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'widgets/sudo_password_dialog.dart';
 import 'providers/recording_provider.dart';
 import 'providers/share_provider.dart';
@@ -218,7 +218,6 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   String? _lastUpdateNotifVersion;
 
   CliEndpointOwner? _cliOwner;
-  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
@@ -359,8 +358,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _ssh.sudoPasswordPrompt = (host) async {
       final ctx = _navigatorKey.currentContext;
       if (ctx == null) return null;
-      return showDialog<({String password, bool remember})>(
-        context: ctx,
+      return showYsDialog<({String password, bool remember})>(
+        ctx,
         builder: (_) => SudoPasswordDialog(host: host),
       );
     };
@@ -395,6 +394,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     late final PluginLoader loader;
     loader = PluginLoader(
       engine: engine,
+      reservedIds: {for (final p in kRegisteredPlugins) p.id},
       onConsentRequired: (id, manifest, dir) {
         _pluginEngineProvider.setPendingConsent(id, manifest, dir);
       },
@@ -408,11 +408,9 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
       hookBus: _hookBus,
       uiRegistry: _uiRegistry,
     );
-    // Install bundled plugins, warm up migration cache, then scan for plugins.
+    // Scan for plugins.
     // Runs async so initState() stays synchronous.
     Future(() async {
-      await BundledPluginInstaller.ensureInstalled('snippets');
-      await MigrationBridge.warmup();
       loader.scanAndLoad();
     });
 
@@ -499,10 +497,13 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     NotificationService.instance.enabled = _settingsProvider.commandNotificationsEnabled;
     _settingsProvider.addListener(_syncNotificationSetting);
     NotificationService.instance.onToast = (label) {
-      _messengerKey.currentState?.showSnackBar(SnackBar(
-        content: Text('✓ $label — command finished'),
-        duration: const Duration(seconds: 3),
-      ));
+      final ctx = _navigatorKey.currentContext;
+      if (ctx == null) return;
+      showYsToast(
+        ctx,
+        '✓ $label — command finished',
+        kind: YsToastKind.success,
+      );
     };
   }
 
@@ -688,10 +689,10 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
       child: MaterialApp(
         title: 'YourSSH',
         debugShowCheckedModeBanner: false,
-        scaffoldMessengerKey: _messengerKey,
         navigatorKey: _navigatorKey,
         theme: buildAppTheme(),
         darkTheme: buildAppTheme(),
+        builder: ysRootBuilder,
         themeMode: ThemeMode.dark,
         home: const MainScreen(),
       ),

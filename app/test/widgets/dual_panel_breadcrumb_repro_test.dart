@@ -8,6 +8,11 @@ import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/dual_panel_sftp_screen.dart';
 import 'package:yourssh/widgets/path_breadcrumb.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
+
+/// forui buttons and checkboxes settle their press feedback 100 ms after a
+/// tap; pump past it so no timer outlives the test.
+const _pressFeedback = Duration(milliseconds: 200);
 
 /// Repro for "breadcrumb not visible in the two-panel layout".
 void main() {
@@ -35,7 +40,7 @@ void main() {
           Provider<SshService>(create: (_) => SshService(storage)),
           ChangeNotifierProvider.value(value: hostProvider),
         ],
-        child: MaterialApp(
+        child: MaterialApp(builder: ysRootBuilder,
           home: Scaffold(body: DualPanelSftpScreen(connectionNotifier: notifier)),
         ),
       ),
@@ -47,9 +52,9 @@ void main() {
 
     // Connect the right slot to the host.
     await tester.tap(find.text('Select host'));
-    await tester.pump();
+    await tester.pump(_pressFeedback);
     await tester.tap(find.text('alpha'));
-    await tester.pump();
+    await tester.pump(_pressFeedback);
 
     // Remote panel path bar must show a breadcrumb too (issue #41).
     expect(find.byType(PathBreadcrumb), findsNWidgets(2));

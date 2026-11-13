@@ -14,7 +14,11 @@ class KeyProvider extends ChangeNotifier {
   /// Completes once the saved keys are loaded.
   late final Future<void> ready;
 
-  KeyProvider() {
+  /// Scan `~/.ssh` for default keys on load. Tests pass false so they never
+  /// read the real home directory.
+  final bool discoverSshKeys;
+
+  KeyProvider({this.discoverSshKeys = true}) {
     ready = _load();
   }
 
@@ -31,7 +35,7 @@ class KeyProvider extends ChangeNotifier {
       }
     }
     // Auto-discover keys from ~/.ssh
-    await _discoverSshKeys();
+    if (discoverSshKeys) await _discoverSshKeys();
     notifyListeners();
   }
 

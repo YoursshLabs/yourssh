@@ -1,3 +1,5 @@
+import 'package:yourssh_ui/yourssh_ui.dart';
+import 'package:yourssh/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
@@ -10,7 +12,11 @@ import 'package:yourssh/mobile/widgets/section_header.dart';
 import 'package:yourssh/mobile/widgets/status_dot.dart';
 
 Widget _wrap(Widget child) =>
-    MaterialApp(theme: buildMobileTheme(), home: Scaffold(body: child));
+    MaterialApp(
+      theme: buildMobileTheme(),
+      builder: ysRootBuilderTouch,
+      home: Scaffold(body: child),
+    );
 
 void main() {
   // ── LatencyBadge ──────────────────────────────────────────────────────────
@@ -158,7 +164,7 @@ void main() {
           const Text('row2'),
         ]),
       ));
-      expect(find.byType(Divider), findsOneWidget);
+      expect(find.byType(FDivider), findsOneWidget);
     });
 
     testWidgets('3 rows renders exactly 2 dividers', (tester) async {
@@ -169,7 +175,7 @@ void main() {
           const Text('row3'),
         ]),
       ));
-      expect(find.byType(Divider), findsNWidgets(2));
+      expect(find.byType(FDivider), findsNWidgets(2));
     });
 
     testWidgets('renders optional label', (tester) async {
@@ -194,14 +200,14 @@ void main() {
       await tester.pumpWidget(_wrap(
         SettingsRow(title: 'Option', toggle: true, onToggle: (_) {}),
       ));
-      expect(find.byType(Switch), findsOneWidget);
+      expect(find.byType(FSwitch), findsOneWidget);
     });
 
     testWidgets('toggle:false shows no Switch', (tester) async {
       await tester.pumpWidget(_wrap(
         const SettingsRow(title: 'Option'),
       ));
-      expect(find.byType(Switch), findsNothing);
+      expect(find.byType(FSwitch), findsNothing);
     });
 
     testWidgets('renders title', (tester) async {
@@ -222,14 +228,14 @@ void main() {
       await tester.pumpWidget(_wrap(
         SettingsRow(title: 'Host', onTap: () {}),
       ));
-      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+      expect(find.byIcon(FLucideIcons.chevronRight), findsOneWidget);
     });
 
     testWidgets('no chevron when onTap is null and no toggle', (tester) async {
       await tester.pumpWidget(_wrap(
         const SettingsRow(title: 'Version', value: '1.0'),
       ));
-      expect(find.byIcon(Icons.chevron_right), findsNothing);
+      expect(find.byIcon(FLucideIcons.chevronRight), findsNothing);
     });
   });
 }

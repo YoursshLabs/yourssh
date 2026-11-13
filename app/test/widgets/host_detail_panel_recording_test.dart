@@ -10,6 +10,8 @@ import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/host_detail_panel.dart';
 
+import '../helpers/ys_test_app.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -28,14 +30,12 @@ void main() {
               create: (_) => HostProvider(StorageService())),
           Provider<SshService>(create: (_) => SshService(StorageService())),
         ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: HostDetailPanel(
-              existing: existing,
-              agentProbe: () async => const AgentProbeSystem(1),
-              onClose: () {},
-              onSave: (host, _) async => saved = host,
-            ),
+        child: ysTestApp(
+          HostDetailPanel(
+            existing: existing,
+            agentProbe: () async => const AgentProbeSystem(1),
+            onClose: () {},
+            onSave: (host, _) async => saved = host,
           ),
         ),
       ),
@@ -60,7 +60,7 @@ void main() {
     await tester.tap(toggle);
     await tester.pumpAndSettle();
 
-    final save = find.text('SAVE ONLY');
+    final save = find.byKey(const ValueKey('host-save-button'));
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();
@@ -73,7 +73,7 @@ void main() {
       (tester) async {
     await pumpPanel(tester, existing: target(recordingRedaction: false));
 
-    final save = find.text('SAVE ONLY');
+    final save = find.byKey(const ValueKey('host-save-button'));
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();

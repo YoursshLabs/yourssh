@@ -1,3 +1,4 @@
+import 'package:xterm/xterm.dart' show CellAnchor;
 import 'shell_command.dart';
 
 class ShellSessionState {
@@ -10,9 +11,16 @@ class ShellSessionState {
 
   void setCwd(String path) => cwd = path;
 
-  void onPromptStart(int promptLine) {
-    commands.add(ShellCommand(promptLine));
-    if (commands.length > _maxCommands) commands.removeAt(0);
+  /// Commands whose prompt line still exists in the terminal buffer.
+  List<ShellCommand> get liveCommands =>
+      [for (final c in commands) if (c.isLive) c];
+
+  void onPromptStart(int promptLine, {CellAnchor? anchor}) {
+    commands.removeWhere((c) => !c.isLive);
+    commands.add(ShellCommand(promptLine, anchor: anchor));
+    if (commands.length > _maxCommands) {
+      commands.removeAt(0).anchor?.dispose();
+    }
   }
 
   void onFinished(int? exitCode) => _pending?.exitCode = exitCode;

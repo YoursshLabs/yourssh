@@ -10,6 +10,8 @@ import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/host_detail_panel.dart';
 
+import '../helpers/ys_test_app.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -33,14 +35,12 @@ void main() {
           ChangeNotifierProvider<HostProvider>.value(value: hostProvider),
           Provider<SshService>(create: (_) => SshService(StorageService())),
         ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: HostDetailPanel(
-              existing: existing,
-              agentProbe: () async => const AgentProbeSystem(1),
-              onClose: () {},
-              onSave: (host, _) async => saved = host,
-            ),
+        child: ysTestApp(
+          HostDetailPanel(
+            existing: existing,
+            agentProbe: () async => const AgentProbeSystem(1),
+            onClose: () {},
+            onSave: (host, _) async => saved = host,
           ),
         ),
       ),
@@ -49,7 +49,7 @@ void main() {
   }
 
   Future<void> save(WidgetTester tester) async {
-    final btn = find.text('SAVE ONLY');
+    final btn = find.byKey(const ValueKey('host-save-button'));
     await tester.ensureVisible(btn);
     await tester.tap(btn);
     await tester.pumpAndSettle();
@@ -82,7 +82,7 @@ void main() {
     expect(find.text('AUTH METHOD'), findsNothing);
     expect(find.text('SFTP MODE'), findsNothing);
     expect(find.text('SESSION TEMPLATE'), findsNothing);
-    expect(find.text('TEST CONNECTION'), findsNothing);
+    expect(find.byKey(const ValueKey('host-test-button')), findsNothing);
     expect(find.text('RDP SECURITY'), findsOneWidget);
     expect(find.text('3389'), findsOneWidget); // port auto-flipped from 22
   });
@@ -90,7 +90,7 @@ void main() {
   testWidgets('custom port survives the protocol flip', (tester) async {
     await pumpPanel(tester);
     await tester.enterText(
-        find.widgetWithText(TextFormField, '22').first, '2222');
+        find.byKey(const ValueKey('host-port-field')), '2222');
     await tester.tap(find.text('RDP'));
     await tester.pumpAndSettle();
     expect(find.text('2222'), findsOneWidget); // not stomped to 3389
@@ -122,11 +122,11 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'IP or Hostname'), '10.1.1.1');
+        find.byKey(const ValueKey('host-address-field')), '10.1.1.1');
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Username'), 'admin');
+        find.byKey(const ValueKey('host-username-field')), 'admin');
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Domain (optional)'), 'CORP');
+        find.byKey(const ValueKey('host-domain-field')), 'CORP');
     await save(tester);
 
     expect(saved!.protocol, HostProtocol.rdp);

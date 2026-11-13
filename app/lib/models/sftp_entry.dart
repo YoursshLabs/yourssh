@@ -3,7 +3,10 @@ class SftpEntry {
   final String path;
   final bool isDirectory;
   final int size;
-  final DateTime modifiedAt;
+
+  /// Server mtime; null when the listing did not report one (shown as "—"
+  /// and sorted last, never faked).
+  final DateTime? modifiedAt;
 
   /// Raw st_mode from the server (file-type + permission bits), null when
   /// the server did not report it. Used by the Edit Permissions dialog.

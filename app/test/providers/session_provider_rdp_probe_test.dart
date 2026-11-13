@@ -99,7 +99,7 @@ void main() {
     await pump();
 
     expect(p.sessions.whereType<RdpSession>().single, same(s));
-    expect(s.status, RdpSessionStatus.error);
+    expect(s.status, RdpSessionStatus.disconnected);
     expect(s.lastMessage, contains('not trusted'));
   });
 
@@ -111,7 +111,7 @@ void main() {
     ev.add(const frb.RdpEvent.certMismatch(fingerprint: 'real-fp'));
     await pump();
     expect(p.sessions.whereType<RdpSession>().single, same(s));
-    expect(s.status, RdpSessionStatus.error);
+    expect(s.status, RdpSessionStatus.disconnected);
   });
 
   test('real mismatch (pin existed) keeps the mismatch handler path', () async {
@@ -134,6 +134,36 @@ void main() {
     expect(seen, ['new']);
     expect(verifierCalls, 0);
     expect(s.lastMessage, contains('changed'));
+  });
+
+  test('first-use verifier error after the tab closed: no audit row, no notify',
+      () async {
+    final audit = AuditService()..initInMemory();
+    p.audit = audit;
+    p.rdpPinLookup = (_, _) => null;
+    final gate = Completer<bool>();
+    p.rdpCertVerifier = (_, _, _) => gate.future;
+    final s = (await p.connectRdp(_host()))!;
+    // No native lib under test: the tab starts in error; put it in the
+    // connecting state a real probe is in so a failure would be audited.
+    s.status = RdpSessionStatus.connecting;
+    // Test drives the state change a real Connecting event would make.
+    // ignore: invalid_use_of_protected_member
+    s.notifyState();
+    final ev = StreamController<frb.RdpEvent>();
+    s.attach(ev.stream);
+    ev.add(const frb.RdpEvent.certMismatch(fingerprint: 'real-fp'));
+    await pump();
+
+    p.closeSession(s.id); // tab closed while the prompt is pending
+    var notified = 0;
+    p.addListener(() => notified++);
+    gate.completeError(StateError('dialog failed'));
+    await pump();
+
+    expect(audit.query(const AuditFilter(type: 'connect')), isEmpty);
+    expect(notified, 0);
+    audit.dispose();
   });
 
   test('CLI-initiated RDP audit rows carry via: cli, source stays rdp',

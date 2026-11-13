@@ -19,3 +19,4 @@
     - The two Xcode `swiftpm/Package.resolved` files the build creates stay untracked, as in the main checkout.
   - **Analyzer.** 0 issues on 3.47.1 → 214 infos on 3.50.0, all `deprecated_member_use` for `package:flutter/material.dart`. The material_ui migration is a separate task.
   - **Docs.** CLAUDE.md gained a Toolchain section (the pin and the "bump Android with Flutter" rule). CHANGELOG `[Unreleased]` says "Built with Flutter 3.50".
+- 2026-11-12: PR #120 green (incl. new android job; only notice: third-party plugins still apply KGP); merged into develop.

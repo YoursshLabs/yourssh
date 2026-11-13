@@ -9,6 +9,9 @@ import 'package:yourssh/services/agent_probe.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/host_detail_panel.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show FSwitch;
+
+import '../helpers/ys_test_app.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -28,14 +31,12 @@ void main() {
               create: (_) => HostProvider(StorageService())),
           Provider<SshService>(create: (_) => SshService(StorageService())),
         ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: HostDetailPanel(
-              existing: existing,
-              agentProbe: () async => const AgentProbeSystem(1),
-              onClose: () {},
-              onSave: (host, _) async => saved = host,
-            ),
+        child: ysTestApp(
+          HostDetailPanel(
+            existing: existing,
+            agentProbe: () async => const AgentProbeSystem(1),
+            onClose: () {},
+            onSave: (host, _) async => saved = host,
           ),
         ),
       ),
@@ -50,14 +51,14 @@ void main() {
       (tester) async {
     await pumpPanel(tester, existing: hostWith());
 
-    final toggle = find.widgetWithText(SwitchListTile, 'OSC 52 clipboard');
+    final toggle = find.byKey(const ValueKey('osc52-switch'));
     await tester.ensureVisible(toggle);
-    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+    expect(tester.widget<FSwitch>(toggle).value, isFalse);
 
     await tester.tap(toggle);
     await tester.pumpAndSettle();
 
-    final save = find.text('SAVE ONLY');
+    final save = find.byKey(const ValueKey('host-save-button'));
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();
@@ -69,8 +70,8 @@ void main() {
   testWidgets('editing a host with osc52 on shows the switch on',
       (tester) async {
     await pumpPanel(tester, existing: hostWith(osc52: true));
-    final toggle = find.widgetWithText(SwitchListTile, 'OSC 52 clipboard');
+    final toggle = find.byKey(const ValueKey('osc52-switch'));
     await tester.ensureVisible(toggle);
-    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    expect(tester.widget<FSwitch>(toggle).value, isTrue);
   });
 }

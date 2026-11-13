@@ -18,6 +18,8 @@ import 'package:yourssh/services/sftp_transfer_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/code_editor_screen.dart';
+import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show FLucideIcons, FTextField;
 
 class FakeTransferService extends SftpTransferService {
   FakeTransferService(this.bytes) : super(SshService(StorageService()));
@@ -64,6 +66,7 @@ final _entry = SftpEntry(
 
 Widget _wrap(FakeTransferService service) {
   return MaterialApp(
+    builder: ysRootBuilder,
     home: Provider<SftpTransferService>.value(
       value: service,
       child: CodeEditorScreen(host: _host, entry: _entry),
@@ -90,33 +93,73 @@ void main() {
       (tester) async {
     final service = FakeTransferService(utf8.encode('hello from server'));
     await tester.pumpWidget(_wrap(service));
-    await _pumpUntilFound(tester, find.byType(TextField));
+    await _pumpUntilFound(tester, find.byType(FTextField));
 
-    final field = find.byType(TextField);
+    final field = find.byType(FTextField);
     expect(field, findsOneWidget);
-    expect(tester.widget<TextField>(field).controller!.text,
+    expect(tester.widget<EditableText>(find.descendant(of: field, matching: find.byType(EditableText))).controller.text,
         'hello from server');
   });
 
   testWidgets('save button uploads edited content', (tester) async {
     final service = FakeTransferService(utf8.encode('v1'));
     await tester.pumpWidget(_wrap(service));
-    await _pumpUntilFound(tester, find.byType(TextField));
+    await _pumpUntilFound(tester, find.byType(FTextField));
 
-    await tester.enterText(find.byType(TextField), 'v2 edited');
-    await tester.tap(find.byIcon(Icons.save_outlined));
+    await tester.enterText(find.byType(FTextField), 'v2 edited');
+    await tester.tap(find.byIcon(FLucideIcons.save));
     await _pumpUntilFound(tester, find.text('Saved'));
 
     expect(service.uploadedContent, 'v2 edited');
     expect(service.uploadedRemotePath, '/etc/config.txt');
+    await tester.pump(const Duration(milliseconds: 500)); // drain FTappable press timers
+  });
+
+  testWidgets('moving the caret does not mark the file dirty', (tester) async {
+    final service = FakeTransferService(utf8.encode('hello world'));
+    await tester.pumpWidget(_wrap(service));
+    await _pumpUntilFound(tester, find.byType(FTextField));
+
+    bool canPop() => tester.widget<PopScope<Object?>>(find.byWidgetPredicate((w) => w is PopScope)).canPop;
+    expect(canPop(), isTrue);
+
+    final editable = tester.widget<EditableText>(find.descendant(
+        of: find.byType(FTextField), matching: find.byType(EditableText)));
+    editable.controller.selection = const TextSelection.collapsed(offset: 3);
+    await tester.pump();
+    editable.controller.selection = const TextSelection(baseOffset: 0, extentOffset: 5);
+    await tester.pump();
+    expect(canPop(), isTrue, reason: 'selection-only changes are not edits');
+
+    await tester.enterText(find.byType(FTextField), 'hello there');
+    await tester.pump();
+    expect(canPop(), isFalse, reason: 'a real edit marks the file dirty');
+  });
+
+  testWidgets('after a save, moving the caret keeps the file clean', (tester) async {
+    final service = FakeTransferService(utf8.encode('v1'));
+    await tester.pumpWidget(_wrap(service));
+    await _pumpUntilFound(tester, find.byType(FTextField));
+
+    await tester.enterText(find.byType(FTextField), 'v2 edited');
+    await tester.tap(find.byIcon(FLucideIcons.save));
+    await _pumpUntilFound(tester, find.text('Saved'));
+    expect(tester.widget<PopScope<Object?>>(find.byWidgetPredicate((w) => w is PopScope)).canPop, isTrue);
+
+    final editable = tester.widget<EditableText>(find.descendant(
+        of: find.byType(FTextField), matching: find.byType(EditableText)));
+    editable.controller.selection = const TextSelection.collapsed(offset: 1);
+    await tester.pump();
+    expect(tester.widget<PopScope<Object?>>(find.byWidgetPredicate((w) => w is PopScope)).canPop, isTrue);
+    await tester.pump(const Duration(milliseconds: 500)); // drain FTappable press timers
   });
 
   testWidgets('Ctrl+S saves from the fallback editor', (tester) async {
     final service = FakeTransferService(utf8.encode('v1'));
     await tester.pumpWidget(_wrap(service));
-    await _pumpUntilFound(tester, find.byType(TextField));
+    await _pumpUntilFound(tester, find.byType(FTextField));
 
-    await tester.enterText(find.byType(TextField), 'keyboard save');
+    await tester.enterText(find.byType(FTextField), 'keyboard save');
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
@@ -130,6 +173,7 @@ void main() {
     final service = FakeTransferService(const [0x7f, 0x45, 0x4c, 0x46, 0x00]);
     final external = FakeExternalEditService(service);
     await tester.pumpWidget(MaterialApp(
+      builder: ysRootBuilder,
       home: Builder(
         builder: (ctx) => ElevatedButton(
           onPressed: () => Navigator.push(
@@ -156,12 +200,15 @@ void main() {
 
     expect(external.opened, hasLength(1));
     expect(find.byType(CodeEditorScreen), findsNothing);
+    // Let the dialog's exit transition timers drain.
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
   });
 
   testWidgets('readOnly mode: no save button, TextField is read-only',
       (tester) async {
     final service = FakeTransferService(utf8.encode('read only content'));
     await tester.pumpWidget(MaterialApp(
+      builder: ysRootBuilder,
       home: Provider<SftpTransferService>.value(
         value: service,
         child: CodeEditorScreen(
@@ -177,14 +224,14 @@ void main() {
         ),
       ),
     ));
-    await _pumpUntilFound(tester, find.byType(TextField));
+    await _pumpUntilFound(tester, find.byType(FTextField));
 
     // No save button
-    expect(find.byIcon(Icons.save_outlined), findsNothing);
+    expect(find.byIcon(FLucideIcons.save), findsNothing);
     // Lock icon present
-    expect(find.byIcon(Icons.lock_outline), findsOneWidget);
-    // TextField is read-only
-    final tf = tester.widget<TextField>(find.byType(TextField));
+    expect(find.byIcon(FLucideIcons.lock), findsOneWidget);
+    // FTextField is read-only
+    final tf = tester.widget<FTextField>(find.byType(FTextField));
     expect(tf.readOnly, isTrue);
   });
 }

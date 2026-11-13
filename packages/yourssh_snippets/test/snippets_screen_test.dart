@@ -1,12 +1,13 @@
 import 'dart:ui';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
 import 'package:yourssh_snippets/src/providers/snippet_provider.dart';
 import 'package:yourssh_snippets/src/screens/snippets_screen.dart';
+
+import 'helpers/ys_test_app.dart';
 
 class _FakePluginContext implements YourSSHPluginContext {
   _FakePluginContext({required this.activeSessions});
@@ -65,11 +66,7 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider(
         create: (_) => SnippetProvider(),
-        child: MaterialApp(
-          home: Scaffold(
-            body: SnippetsScreen(pluginContext: pluginContext),
-          ),
-        ),
+        child: ysTestApp(SnippetsScreen(pluginContext: pluginContext)),
       ),
     );
     await tester.pumpAndSettle();
@@ -79,7 +76,9 @@ void main() {
     await mouse.moveTo(tester.getCenter(find.text('Disk usage')));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Run in terminal'));
+    // Row actions are always built (painted on hover/focus); 'Disk usage' is
+    // the first row.
+    await tester.tap(find.byTooltip('Run in terminal').first);
     await tester.pumpAndSettle();
 
     expect(pluginContext.sentSessionId, 'session-1');

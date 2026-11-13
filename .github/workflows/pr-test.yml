@@ -64,6 +64,63 @@ jobs:
         working-directory: app
         run: flutter test
 
+  # forui-based UI kit: pure Dart widgets, no native bridge, so a small job.
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      # Pure shell, no Flutter needed: fails on new Material IconButton /
+      # AlertDialog / SnackBar / Icons. / ScaffoldMessenger outside yourssh_ui.
+      - name: UI lint gate
+        run: |
+          bash tool/check_ui_lint_selftest.sh
+          bash tool/check_ui_lint.sh
+
+      - name: Install dependencies
+        working-directory: packages/yourssh_ui
+        run: flutter pub get
+
+      - name: Analyze (yourssh_ui)
+        working-directory: packages/yourssh_ui
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test (yourssh_ui)
+        working-directory: packages/yourssh_ui
+        run: flutter test
+
+  # Plugin packages built on yourssh_ui; pure Dart/Flutter, no native bridge.
+  plugins:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [yourssh_snippets, yourssh_devops, yourssh_web_tools]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install dependencies
+        working-directory: packages/${{ matrix.package }}
+        run: flutter pub get
+
+      - name: Analyze (${{ matrix.package }})
+        working-directory: packages/${{ matrix.package }}
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test (${{ matrix.package }})
+        working-directory: packages/${{ matrix.package }}
+        run: flutter test
+
   # One job per Rust crate. The cargo tests, build.sh and the Dart bridge tests
   # stay together on purpose: both cargo invocations use --release, so the
   # library build reuses the test build's compilation. Splitting them across jobs
@@ -196,14 +253,15 @@ jobs:
   # forever instead of failing.
   test:
     name: test
-    needs: [app, bridge, android, cli, windows-cli]
+    needs: [app, ui, bridge, android, cli, windows-cli]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
         run: |
-          echo "app=${{ needs.app.result }} bridge=${{ needs.bridge.result }} android=${{ needs.android.result }} cli=${{ needs.cli.result }} windows-cli=${{ needs.windows-cli.result }}"
+          echo "app=${{ needs.app.result }} ui=${{ needs.ui.result }} bridge=${{ needs.bridge.result }} android=${{ needs.android.result }} cli=${{ needs.cli.result }} windows-cli=${{ needs.windows-cli.result }}"
           [ "${{ needs.app.result }}" = "success" ] || exit 1
+          [ "${{ needs.ui.result }}" = "success" ] || exit 1
           [ "${{ needs.bridge.result }}" = "success" ] || exit 1
           [ "${{ needs.android.result }}" = "success" ] || exit 1
           [ "${{ needs.cli.result }}" = "success" ] || exit 1

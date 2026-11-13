@@ -343,6 +343,7 @@ class Buffer {
       final line = lines[i];
       line.isWrapped = false;
       line.eraseRange(0, viewWidth, terminal.cursor);
+      line.dispose(); // whole line erased: its anchors no longer mean anything
     }
   }
 
@@ -355,6 +356,7 @@ class Buffer {
       final line = lines[i + scrollBack];
       line.isWrapped = false;
       line.eraseRange(0, viewWidth, terminal.cursor);
+      line.dispose();
     }
   }
 
@@ -364,6 +366,7 @@ class Buffer {
       final line = lines[i + scrollBack];
       line.isWrapped = false;
       line.eraseRange(0, viewWidth, terminal.cursor);
+      line.dispose();
     }
   }
 

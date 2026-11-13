@@ -102,9 +102,11 @@ class ShellIntegrationService {
   /// Second-phase line: optional hook installer, optional session-template
   /// setup (cd + exports), then the DONE sentinel. Sent only after RDY is
   /// seen, while `read -rs` is consuming stdin — never echoed. DONE carries
-  /// a trailing newline so both the remote shell and the app land on a
-  /// fresh line (col 0) once the client discards everything up to and
-  /// including the sentinel — the next prompt then renders in sync. A
+  /// a trailing newline so the remote shell lands on a fresh line (col 0);
+  /// the client discards everything up to and including the sentinel, drops
+  /// that line break and clears the line still holding the prompt painted
+  /// before the bootstrap (`InjectionGate.kClearPromptLine`), so the next
+  /// prompt replaces it instead of appearing as a second, empty one. A
   /// failing `cd` raises a flag whose warning prints *after* DONE:
   /// everything before the sentinel is discarded by the gate, the tail is
   /// shown.

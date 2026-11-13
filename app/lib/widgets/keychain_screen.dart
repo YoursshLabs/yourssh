@@ -1,15 +1,20 @@
 import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+
 import '../models/ssh_key.dart';
 import '../providers/key_provider.dart';
 import '../services/key_gen_service.dart';
 import '../theme/app_theme.dart';
 import 'deploy_key_dialog.dart';
+import 'ys_form_controls.dart';
+
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class KeychainScreen extends StatefulWidget {
   /// Test seam: a fake overrides the ssh-keygen probe and generation.
@@ -31,9 +36,10 @@ class _KeychainScreenState extends State<KeychainScreen> {
     );
     if (result == null || result.files.isEmpty) return;
     if (!mounted) return;
-    await context
-        .read<KeyProvider>()
-        .addKeyFromFile(result.files.first.path!, result.files.first.name);
+    await context.read<KeyProvider>().addKeyFromFile(
+      result.files.first.path!,
+      result.files.first.name,
+    );
   }
 
   @override
@@ -44,7 +50,7 @@ class _KeychainScreenState extends State<KeychainScreen> {
       children: [
         Expanded(
           child: Container(
-            color: AppColors.bg,
+            color: YsColors.background,
             child: Column(
               children: [
                 _TopBar(
@@ -55,8 +61,7 @@ class _KeychainScreenState extends State<KeychainScreen> {
                   child: provider.keys.isEmpty
                       ? _EmptyState(
                           onAdd: _addKeyFromFile,
-                          onGenerate: () =>
-                              setState(() => _showPanel = true),
+                          onGenerate: () => setState(() => _showPanel = true),
                         )
                       : ListView.separated(
                           padding: const EdgeInsets.all(24),
@@ -64,8 +69,9 @@ class _KeychainScreenState extends State<KeychainScreen> {
                           separatorBuilder: (ctx, i) =>
                               const SizedBox(height: 8),
                           itemBuilder: (_, i) => _KeyTile(
-                              key: ValueKey(provider.keys[i].id),
-                              entry: provider.keys[i]),
+                            key: ValueKey(provider.keys[i].id),
+                            entry: provider.keys[i],
+                          ),
                         ),
                 ),
               ],
@@ -92,91 +98,42 @@ class _TopBar extends StatelessWidget {
     return Container(
       height: 52,
       decoration: const BoxDecoration(
-        color: AppColors.sidebar,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+        color: YsColors.sidebar,
+        border: Border(bottom: BorderSide(color: YsColors.border)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s4 + YsSpace.s1),
       child: Row(
         children: [
-          const Text('SSH Keys',
+          const Expanded(
+            child: Text(
+              'SSH Keys',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600)),
-          const Spacer(),
-          _OutlinedBtn(
-              label: 'IMPORT', icon: Icons.upload_file, onTap: onAdd),
-          const SizedBox(width: 8),
-          _GreenBtn(
-              label: 'GENERATE', icon: Icons.add, onTap: onGenerate),
+                color: YsColors.foreground,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          FButton(
+            variant: .outline,
+            size: .xs,
+            mainAxisSize: MainAxisSize.min,
+            prefix: const Icon(FLucideIcons.upload),
+            onPress: onAdd,
+            child: const Text('Import'),
+          ),
+          const SizedBox(width: YsSpace.s2),
+          FButton(
+            variant: .primary,
+            size: .xs,
+            mainAxisSize: MainAxisSize.min,
+            prefix: const Icon(FLucideIcons.plus),
+            onPress: onGenerate,
+            child: const Text('Generate'),
+          ),
         ],
-      ),
-    );
-  }
-}
-
-class _OutlinedBtn extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-  const _OutlinedBtn(
-      {required this.label, required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.border),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 13, color: AppColors.textSecondary),
-            const SizedBox(width: 6),
-            Text(label,
-                style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                    letterSpacing: 0.3)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GreenBtn extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-  const _GreenBtn(
-      {required this.label, required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-            color: AppColors.accent, borderRadius: BorderRadius.circular(6)),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: Colors.black),
-            const SizedBox(width: 6),
-            Text(label,
-                style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.3)),
-          ],
-        ),
       ),
     );
   }
@@ -192,6 +149,7 @@ class _KeyTile extends StatefulWidget {
 
 class _KeyTileState extends State<_KeyTile> {
   bool _hovered = false;
+  bool _focused = false;
   bool? _exists;
 
   @override
@@ -215,160 +173,146 @@ class _KeyTileState extends State<_KeyTile> {
   Widget build(BuildContext context) {
     final e = widget.entry;
     final exists = _exists ?? true; // assume OK until first probe completes
+    // Actions appear on hover and while one of them holds keyboard focus.
+    final showActions = _hovered || _focused;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: _hovered ? AppColors.cardHover : AppColors.card,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppColors.purple.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (f) => setState(() => _focused = f),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: YsSpace.s4,
+            vertical: YsSpace.s3,
+          ),
+          decoration: BoxDecoration(
+            color: showActions ? YsColors.secondary : YsColors.card,
+            borderRadius: BorderRadius.circular(YsRadius.card),
+            border: Border.all(color: YsColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.purple.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(YsRadius.control + 2),
+                ),
+                child: const Icon(
+                  FLucideIcons.keyRound,
+                  color: AppColors.purple,
+                  size: 18,
+                ),
               ),
-              child: const Icon(Icons.vpn_key,
-                  color: AppColors.purple, size: 18),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(e.label,
-                          style: const TextStyle(
-                              color: AppColors.textPrimary,
+              const SizedBox(width: YsSpace.s3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            e.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: YsColors.foreground,
                               fontSize: 13,
-                              fontWeight: FontWeight.w500)),
-                      const SizedBox(width: 8),
-                      _Badge(e.algorithmLabel),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    e.privateKeyPath,
-                    style: const TextStyle(
-                        color: AppColors.textTertiary, fontSize: 11),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (!exists)
-                    const Text('File not found',
-                        style: TextStyle(
-                            color: AppColors.red, fontSize: 11)),
-                  const SizedBox(height: 4),
-                  _CertRow(entry: e),
-                ],
-              ),
-            ),
-            if (_hovered && e.publicKey.isNotEmpty) ...[
-              Tooltip(
-                message: 'Copy public key',
-                child: _tileAction(
-                  icon: Icons.copy_outlined,
-                  color: AppColors.textSecondary,
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: e.publicKey));
-                    AppSnack.success(context, 'Public key copied');
-                  },
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: YsSpace.s2),
+                        YsTag(e.algorithmLabel),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      e.privateKeyPath,
+                      style: const TextStyle(
+                        color: YsColors.mutedForeground,
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (!exists)
+                      const Text(
+                        'File not found',
+                        style: TextStyle(color: YsColors.error, fontSize: 11),
+                      ),
+                    const SizedBox(height: 4),
+                    _CertRow(entry: e),
+                  ],
                 ),
               ),
-              const SizedBox(width: 6),
-              Tooltip(
-                message: 'Deploy to host…',
-                child: _tileAction(
-                  icon: Icons.cloud_upload_outlined,
-                  color: AppColors.textSecondary,
-                  onTap: () => showDialog(
-                      context: context,
-                      builder: (_) => DeployKeyDialog(entry: e)),
+              // Always built and focusable so keyboard users can Tab onto them
+              // (focus reveals them). While hidden they are invisible, ignore
+              // pointer input and are left out of semantics.
+              IgnorePointer(
+                ignoring: !showActions,
+                child: ExcludeSemantics(
+                  excluding: !showActions,
+                  child: Opacity(
+                    opacity: showActions ? 1 : 0,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (e.publicKey.isNotEmpty) ...[
+                          SettingsIconButton(
+                            icon: FLucideIcons.copy,
+                            tooltip: 'Copy public key',
+                            onPress: () {
+                              Clipboard.setData(
+                                ClipboardData(text: e.publicKey),
+                              );
+                              AppSnack.success(context, 'Public key copied');
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          SettingsIconButton(
+                            icon: FLucideIcons.cloudUpload,
+                            tooltip: 'Deploy to host…',
+                            onPress: () => showYsDialog(
+                              context,
+                              builder: (_) => DeployKeyDialog(entry: e),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        SettingsIconButton(
+                          icon: FLucideIcons.trash2,
+                          tooltip: 'Remove key',
+                          onPress: () => _confirmDelete(context),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(width: 6),
             ],
-            if (_hovered)
-              _tileAction(
-                icon: Icons.delete_outlined,
-                color: AppColors.red,
-                onTap: () => _confirmDelete(context),
-              ),
-          ],
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _tileAction({
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 28,
-        height: 28,
-        decoration: BoxDecoration(
-          color: AppColors.bg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Icon(icon, size: 14, color: color),
       ),
     );
   }
 
   Future<void> _confirmDelete(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Remove Key'),
-        content: Text('Remove "${widget.entry.label}" from keychain?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove',
-                style: TextStyle(color: AppColors.red)),
-          ),
-        ],
-      ),
+    final ok = await showYsConfirm(
+      context,
+      title: 'Remove Key',
+      message: 'Remove "${widget.entry.label}" from keychain?',
+      confirmLabel: 'Remove',
+      destructive: true,
     );
-    if (ok == true && context.mounted) {
+    if (ok && context.mounted) {
       await context.read<KeyProvider>().deleteKey(widget.entry.id);
     }
-  }
-}
-
-class _Badge extends StatelessWidget {
-  final String label;
-  const _Badge(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.border,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(label,
-          style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 10,
-              fontWeight: FontWeight.w500)),
-    );
   }
 }
 
@@ -382,49 +326,50 @@ class _CertRow extends StatelessWidget {
       final filename = entry.certificatePath!.split('/').last.split('\\').last;
       return Row(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Text('CERT',
-                style: TextStyle(
-                    color: AppColors.accent,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700)),
-          ),
+          const YsStatusBadge('CERT', status: YsStatus.accent),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(filename,
-                style: const TextStyle(
-                    color: AppColors.textTertiary, fontSize: 11),
-                overflow: TextOverflow.ellipsis),
+            child: Text(
+              filename,
+              style: const TextStyle(
+                color: YsColors.mutedForeground,
+                fontSize: 11,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          GestureDetector(
-            onTap: () => context.read<KeyProvider>().removeCertificate(entry.id),
-            child: const Icon(Icons.link_off, size: 13, color: AppColors.textTertiary),
+          SettingsIconButton(
+            icon: FLucideIcons.unlink,
+            tooltip: 'Unlink certificate',
+            onPress: () =>
+                context.read<KeyProvider>().removeCertificate(entry.id),
           ),
         ],
       );
     }
 
-    return GestureDetector(
-      onTap: () async {
-        final result = await FilePicker.platform.pickFiles(
-          dialogTitle: 'Select Certificate File (*-cert.pub)',
-          allowMultiple: false,
-        );
-        if (result == null || result.files.isEmpty) return;
-        if (context.mounted) {
-          await context.read<KeyProvider>().setCertificate(
-                entry.id,
-                result.files.first.path!,
-              );
-        }
-      },
-      child: const Text('Link certificate…',
-          style: TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FButton(
+        variant: .ghost,
+        size: .xs,
+        mainAxisSize: MainAxisSize.min,
+        onPress: () async {
+          final result = await FilePicker.platform.pickFiles(
+            dialogTitle: 'Select Certificate File (*-cert.pub)',
+            allowMultiple: false,
+          );
+          if (result == null || result.files.isEmpty) return;
+          if (context.mounted) {
+            await context.read<KeyProvider>().setCertificate(
+              entry.id,
+              result.files.first.path!,
+            );
+          }
+        },
+        child: const Text('Link certificate…'),
+      ),
     );
   }
 }
@@ -436,64 +381,27 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 60),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.vpn_key_outlined,
-                size: 52, color: AppColors.textTertiary),
-            const SizedBox(height: 16),
-            const Text('No keys added',
-                style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500)),
-            const SizedBox(height: 8),
-            const Text('Keys from ~/.ssh are auto-discovered on startup',
-                style: TextStyle(
-                    color: AppColors.textSecondary, fontSize: 13)),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                GestureDetector(
-                  onTap: onAdd,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.border),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text('Import Key',
-                        style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 13)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                GestureDetector(
-                  onTap: onGenerate,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    decoration: BoxDecoration(
-                        color: AppColors.accent,
-                        borderRadius: BorderRadius.circular(8)),
-                    child: const Text('+ Generate Key',
-                        style: TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+    return YsEmptyState(
+      icon: FLucideIcons.keyRound,
+      title: 'No keys added',
+      message: 'Keys from ~/.ssh are auto-discovered on startup',
+      action: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FButton(
+            variant: .outline,
+            mainAxisSize: MainAxisSize.min,
+            onPress: onAdd,
+            child: const Text('Import Key'),
+          ),
+          const SizedBox(width: YsSpace.s3),
+          FButton(
+            variant: .primary,
+            mainAxisSize: MainAxisSize.min,
+            onPress: onGenerate,
+            child: const Text('+ Generate Key'),
+          ),
+        ],
       ),
     );
   }
@@ -550,17 +458,20 @@ class _GenerateKeyPanelState extends State<_GenerateKeyPanel> {
       final name = _label.text.trim();
       final result = _type == 'ed25519'
           ? await widget.keyGen.generateEd25519(
-              name: name, passphrase: _passphrase.text, dir: sshDir.path)
+              name: name,
+              passphrase: _passphrase.text,
+              dir: sshDir.path,
+            )
           : await widget.keyGen.generateWithSshKeygen(
               type: _type,
               name: name,
               passphrase: _passphrase.text,
-              dir: sshDir.path);
+              dir: sshDir.path,
+            );
 
       if (!mounted) return;
       final provider = context.read<KeyProvider>();
-      final entry =
-          await provider.addKeyFromFile(result.privateKeyPath, name);
+      final entry = await provider.addKeyFromFile(result.privateKeyPath, name);
       if (_passphrase.text.isNotEmpty) {
         // Saved as pp_<keyId> so the key works without re-prompting.
         await provider.savePassphrase?.call(entry.id, _passphrase.text);
@@ -580,16 +491,14 @@ class _GenerateKeyPanelState extends State<_GenerateKeyPanel> {
     return Container(
       width: 340,
       decoration: const BoxDecoration(
-        color: AppColors.sidebar,
-        border: Border(left: BorderSide(color: AppColors.border)),
+        color: YsColors.sidebar,
+        border: Border(left: BorderSide(color: YsColors.border)),
       ),
       child: Column(
         children: [
           _buildHeader(),
           Expanded(
-            child: _generatedPublicKey != null
-                ? _buildSuccess()
-                : _buildForm(),
+            child: _generatedPublicKey != null ? _buildSuccess() : _buildForm(),
           ),
         ],
       ),
@@ -599,47 +508,50 @@ class _GenerateKeyPanelState extends State<_GenerateKeyPanel> {
   Widget _buildSuccess() {
     final pub = _generatedPublicKey!;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      padding: const EdgeInsets.fromLTRB(
+        YsSpace.s4,
+        YsSpace.s4,
+        YsSpace.s4,
+        YsSpace.s5,
+      ),
       children: [
-        const Text('Key generated. Public key:',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-        const SizedBox(height: 8),
+        const Text(
+          'Key generated. Public key:',
+          style: TextStyle(color: YsColors.mutedForeground, fontSize: 12),
+        ),
+        const SizedBox(height: YsSpace.s2),
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.border),
+            color: YsColors.card,
+            borderRadius: BorderRadius.circular(YsRadius.card),
+            border: Border.all(color: YsColors.border),
           ),
-          child: SelectableText(pub,
-              style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 12,
-                  fontFamily: 'monospace')),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: pub));
-              AppSnack.success(context, 'Public key copied');
-            },
-            style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: Colors.black),
-            icon: const Icon(Icons.copy, size: 14),
-            label: const Text('Copy public key',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+          child: SelectableText(
+            pub,
+            style: const TextStyle(
+              color: YsColors.foreground,
+              fontSize: 12,
+              fontFamily: kYsMonoFontFamily,
+              fontFamilyFallback: kYsMonoFontFallback,
+            ),
           ),
         ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: TextButton(
-            onPressed: widget.onClose,
-            child: const Text('Done'),
-          ),
+        const SizedBox(height: YsSpace.s4),
+        FButton(
+          variant: .primary,
+          prefix: const Icon(FLucideIcons.copy),
+          onPress: () {
+            Clipboard.setData(ClipboardData(text: pub));
+            AppSnack.success(context, 'Public key copied');
+          },
+          child: const Text('Copy public key'),
+        ),
+        const SizedBox(height: YsSpace.s2),
+        FButton(
+          variant: .ghost,
+          onPress: widget.onClose,
+          child: const Text('Done'),
         ),
       ],
     );
@@ -650,73 +562,78 @@ class _GenerateKeyPanelState extends State<_GenerateKeyPanel> {
     return Form(
       key: _formKey,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        padding: const EdgeInsets.fromLTRB(
+          YsSpace.s4,
+          YsSpace.s4,
+          YsSpace.s4,
+          YsSpace.s5,
+        ),
         children: [
-          _field(_label, 'Key name',
-              autofocus: true,
-              validator: (v) => v?.isEmpty == true ? 'Required' : null),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _type,
-            isExpanded: true,
-            decoration: _inputDecoration('Algorithm').copyWith(
-              helperText: _sshKeygenAvailable == false
-                  ? 'RSA/ECDSA require OpenSSH client (ssh-keygen)'
-                  : null,
-              helperStyle: const TextStyle(
-                  color: AppColors.textTertiary, fontSize: 11),
+          FTextFormField(
+            key: const Key('keygen-name'),
+            control: .managed(controller: _label),
+            label: const Text('Key name'),
+            autofocus: true,
+            autocorrect: false,
+            enableSuggestions: false,
+            textInputAction: TextInputAction.done,
+            validator: (v) => v?.isEmpty == true ? 'Required' : null,
+            // Keep the caret in the field when Enter hits an invalid form.
+            onEditingComplete: _label.clearComposing,
+            onSubmit: (_) => _saving ? null : _submit(),
+          ),
+          const SizedBox(height: YsSpace.s3),
+          FSelect<String>.rich(
+            key: const Key('keygen-algorithm'),
+            control: .lifted(
+              value: _type,
+              onChange: (v) {
+                if (v != null) setState(() => _type = v);
+              },
             ),
-            dropdownColor: AppColors.card,
-            style:
-                const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-            items: [
-              const DropdownMenuItem(
-                  value: 'ed25519', child: Text('Ed25519 (recommended)')),
-              DropdownMenuItem(
-                  value: 'rsa',
-                  enabled: keygenOk,
-                  child: Text('RSA 4096',
-                      style: keygenOk
-                          ? null
-                          : const TextStyle(color: AppColors.textTertiary))),
-              DropdownMenuItem(
-                  value: 'ecdsa',
-                  enabled: keygenOk,
-                  child: Text('ECDSA P-256',
-                      style: keygenOk
-                          ? null
-                          : const TextStyle(color: AppColors.textTertiary))),
+            format: (v) => switch (v) {
+              'rsa' => 'RSA 4096',
+              'ecdsa' => 'ECDSA P-256',
+              _ => 'Ed25519 (recommended)',
+            },
+            label: const Text('Algorithm'),
+            description: _sshKeygenAvailable == false
+                ? const Text('RSA/ECDSA require OpenSSH client (ssh-keygen)')
+                : null,
+            children: [
+              const FSelectItem<String>(
+                title: Text('Ed25519 (recommended)'),
+                value: 'ed25519',
+              ),
+              FSelectItem<String>(
+                title: const Text('RSA 4096'),
+                value: 'rsa',
+                enabled: keygenOk,
+              ),
+              FSelectItem<String>(
+                title: const Text('ECDSA P-256'),
+                value: 'ecdsa',
+                enabled: keygenOk,
+              ),
             ],
-            onChanged: (v) => setState(() => _type = v!),
           ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _passphrase,
-            obscureText: true,
-            style:
-                const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-            decoration: _inputDecoration('Passphrase (optional)').copyWith(
-                helperText: 'Leave empty for no passphrase',
-                helperStyle: const TextStyle(
-                    color: AppColors.textTertiary, fontSize: 11)),
+          const SizedBox(height: YsSpace.s3),
+          FTextFormField.password(
+            key: const Key('keygen-passphrase'),
+            control: .managed(controller: _passphrase),
+            label: const Text('Passphrase (optional)'),
+            description: const Text('Leave empty for no passphrase'),
+            autofillHints: const [],
+            textInputAction: TextInputAction.done,
+            onSubmit: (_) => _saving ? null : _submit(),
           ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _saving ? null : _submit,
-              style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  foregroundColor: Colors.black),
-              child: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.black))
-                  : const Text('Generate Key',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-            ),
+          const SizedBox(height: YsSpace.s5),
+          FButton(
+            variant: .primary,
+            onPress: _saving ? null : _submit,
+            child: _saving
+                ? const FCircularProgress(size: .sm)
+                : const Text('Generate Key'),
           ),
         ],
       ),
@@ -727,72 +644,30 @@ class _GenerateKeyPanelState extends State<_GenerateKeyPanel> {
     return Container(
       height: 52,
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+        border: Border(bottom: BorderSide(color: YsColors.border)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s4),
       child: Row(
         children: [
           const Expanded(
-            child: Text('Generate SSH Key',
-                style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600)),
-          ),
-          GestureDetector(
-            onTap: widget.onClose,
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.border),
+            child: Text(
+              'Generate SSH Key',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: YsColors.foreground,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
-              child: const Icon(Icons.close,
-                  size: 14, color: AppColors.textSecondary),
             ),
+          ),
+          SettingsIconButton(
+            icon: FLucideIcons.x,
+            tooltip: 'Close',
+            onPress: widget.onClose,
           ),
         ],
       ),
-    );
-  }
-
-  InputDecoration _inputDecoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle:
-          const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-      filled: true,
-      fillColor: AppColors.card,
-      border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.border)),
-      enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.border)),
-      focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.accent)),
-      isDense: true,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    );
-  }
-
-  Widget _field(
-    TextEditingController ctrl,
-    String label, {
-    bool autofocus = false,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: ctrl,
-      autofocus: autofocus,
-      style:
-          const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-      decoration: _inputDecoration(label),
-      validator: validator,
     );
   }
 }

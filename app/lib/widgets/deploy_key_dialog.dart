@@ -7,6 +7,7 @@ import '../providers/host_provider.dart';
 import '../services/key_gen_service.dart';
 import '../services/ssh_service.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// ssh-copy-id-style deploy: pick a saved host, append [entry]'s public
 /// key to its ~/.ssh/authorized_keys (idempotent via grep -qxF). Failures
@@ -64,72 +65,86 @@ class _DeployKeyDialogState extends State<DeployKeyDialog> {
             h.host.toLowerCase().contains(q))
         .toList();
 
-    return AlertDialog(
-      backgroundColor: AppColors.card,
-      title: Text('Deploy "${widget.entry.label}" to host',
-          style: const TextStyle(color: AppColors.textPrimary, fontSize: 15)),
-      content: SizedBox(
+    return YsDialog(
+      title: 'Deploy "${widget.entry.label}" to host',
+      body: SizedBox(
         width: 380,
         height: 360,
-        child: Column(children: [
-          TextField(
-            autofocus: true,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-            decoration: const InputDecoration(
-              hintText: 'Search hosts…',
-              hintStyle: TextStyle(color: AppColors.textTertiary, fontSize: 13),
-              prefixIcon: Icon(Icons.search, size: 16),
-              isDense: true,
-            ),
-            onChanged: (v) => setState(() => _search = v),
-          ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(_error!,
-                  style: const TextStyle(color: AppColors.red, fontSize: 12)),
-            ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: hosts.isEmpty
-                ? const Center(
-                    child: Text('No hosts',
-                        style: TextStyle(
-                            color: AppColors.textTertiary, fontSize: 13)))
-                : ListView.builder(
-                    itemCount: hosts.length,
-                    itemBuilder: (_, i) {
-                      final h = hosts[i];
-                      final busy = _busyHostId == h.id;
-                      return ListTile(
-                        dense: true,
-                        enabled: _busyHostId == null,
-                        leading: const Icon(Icons.dns_outlined,
-                            size: 16, color: AppColors.textSecondary),
-                        title: Text(h.label,
-                            style: const TextStyle(
-                                color: AppColors.textPrimary, fontSize: 13)),
-                        subtitle: Text('${h.username}@${h.host}',
-                            style: const TextStyle(
-                                color: AppColors.textTertiary, fontSize: 11)),
-                        trailing: busy
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 1.5))
-                            : null,
-                        onTap: () => _deploy(h),
-                      );
-                    },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FTextField(
+              key: const Key('deploy-key-search'),
+              autofocus: true,
+              hint: 'Search hosts…',
+              autocorrect: false,
+              enableSuggestions: false,
+              control: FTextFieldControl.managed(
+                onChange: (v) => setState(() => _search = v.text),
+              ),
+              prefixBuilder: (context, style, variants) =>
+                  FTextField.prefixIconBuilder(
+                    context,
+                    style,
+                    variants,
+                    const Icon(FLucideIcons.search),
                   ),
-          ),
-        ]),
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: YsSpace.s2),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: YsColors.error, fontSize: 12),
+                ),
+              ),
+            const SizedBox(height: YsSpace.s2),
+            Expanded(
+              child: hosts.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No hosts',
+                        style: TextStyle(
+                          color: YsColors.mutedForeground,
+                          fontSize: 13,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: hosts.length,
+                      itemBuilder: (_, i) {
+                        final h = hosts[i];
+                        final busy = _busyHostId == h.id;
+                        return FTile(
+                          enabled: _busyHostId == null,
+                          prefix: const Icon(FLucideIcons.server),
+                          title: Text(
+                            h.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            '${h.username}@${h.host}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          suffix: busy
+                              ? const FCircularProgress(size: .sm)
+                              : null,
+                          onPress: () => _deploy(h),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
       actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close')),
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
       ],
     );
   }

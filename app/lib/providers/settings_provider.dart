@@ -7,6 +7,7 @@ import 'package:xterm/xterm.dart' as xterm;
 
 import '../models/keyword_highlight_rule.dart';
 import '../models/shell_profile.dart';
+import '../theme/terminal_themes.dart';
 
 /// Default audit-log retention — single source for the provider, its
 /// loader, and the launch-time prune in main.dart.
@@ -20,7 +21,7 @@ class SettingsProvider extends ChangeNotifier {
   int reconnectAttempts = 0;
   int keepAliveInterval = 10;
   double fontSize = 13;
-  String terminalTheme = 'Dracula';
+  String terminalTheme = kDefaultTerminalTheme;
   bool networkStatsEnabled = false;
   bool tmuxEnabled = false;
   bool commandNotificationsEnabled = false;
@@ -106,7 +107,16 @@ class SettingsProvider extends ChangeNotifier {
     reconnectAttempts = prefs.getInt('reconnectAttempts') ?? 0;
     keepAliveInterval = prefs.getInt('keepAliveInterval') ?? 10;
     fontSize = prefs.getDouble('fontSize') ?? 13;
-    terminalTheme = prefs.getString('terminalTheme') ?? 'Dracula';
+    final storedTheme = prefs.getString('terminalTheme');
+    if (storedTheme != null) {
+      terminalTheme = storedTheme;
+    } else {
+      // Decide once: installs that already have hosts predate the Amber
+      // default and keep Dracula; fresh installs get the new default.
+      terminalTheme =
+          prefs.containsKey('yourssh.hosts') ? 'Dracula' : kDefaultTerminalTheme;
+      await prefs.setString('terminalTheme', terminalTheme);
+    }
     networkStatsEnabled = prefs.getBool('networkStatsEnabled') ?? false;
     tmuxEnabled = prefs.getBool('tmuxEnabled') ?? false;
     commandNotificationsEnabled = prefs.getBool('commandNotificationsEnabled') ?? false;

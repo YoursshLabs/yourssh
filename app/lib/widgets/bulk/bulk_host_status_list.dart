@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../models/bulk_result.dart';
-import '../../theme/app_theme.dart';
 import '../../util/bulk_format.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Per-host rows shared by the Run-command and Push-files dialogs:
 /// status icon, label, error/exit info, transfer progress; tap to expand
@@ -15,14 +15,15 @@ class BulkHostStatusList extends StatelessWidget {
   Widget build(BuildContext context) {
     if (results.isEmpty) {
       return const Center(
-        child: Text('Nothing run yet.',
-            style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+        child: Text(
+          'Nothing run yet.',
+          style: TextStyle(color: YsColors.mutedForeground, fontSize: 12),
+        ),
       );
     }
     return ListView.separated(
       itemCount: results.length,
-      separatorBuilder: (_, _) =>
-          const Divider(height: 1, color: AppColors.border),
+      separatorBuilder: (_, _) => const FDivider(),
       itemBuilder: (_, i) => _ResultRow(result: results[i]),
     );
   }
@@ -47,23 +48,28 @@ class _ResultRowState extends State<_ResultRow> {
   Widget _statusIcon(BulkHostResult r) {
     switch (r.status) {
       case BulkHostStatus.pending:
-        return const Icon(Icons.radio_button_unchecked,
-            size: 14, color: AppColors.textTertiary);
+        return const Icon(
+          FLucideIcons.circleDashed,
+          size: 14,
+          color: YsColors.off,
+        );
       case BulkHostStatus.running:
-        return const SizedBox(
-            width: 12,
-            height: 12,
-            child: CircularProgressIndicator(
-                strokeWidth: 1.5, color: AppColors.textSecondary));
+        return const FCircularProgress(size: .xs);
       case BulkHostStatus.success:
-        final clean = (r.exitCode ?? 0) == 0;
-        return Icon(clean ? Icons.check_circle_outline : Icons.error_outline,
-            size: 14, color: clean ? AppColors.accent : AppColors.orange);
+        final clean = !r.exitedNonZero;
+        return Icon(
+          clean ? FLucideIcons.circleCheck : FLucideIcons.circleAlert,
+          size: 14,
+          color: clean ? YsColors.ok : YsColors.warn,
+        );
       case BulkHostStatus.failed:
-        return const Icon(Icons.error_outline,
-            size: 14, color: AppColors.red);
+        return const Icon(
+          FLucideIcons.circleAlert,
+          size: 14,
+          color: YsColors.error,
+        );
       case BulkHostStatus.cancelled:
-        return const Icon(Icons.block, size: 14, color: AppColors.textTertiary);
+        return const Icon(FLucideIcons.ban, size: 14, color: YsColors.off);
     }
   }
 
@@ -73,118 +79,127 @@ class _ResultRowState extends State<_ResultRow> {
   @override
   Widget build(BuildContext context) {
     final r = widget.result;
-    final transferring =
-        r.totalBytes > 0 && r.status == BulkHostStatus.running;
+    final transferring = r.totalBytes > 0 && r.status == BulkHostStatus.running;
     return InkWell(
       onTap: _expandable ? () => setState(() => _expanded = !_expanded) : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(
+          horizontal: YsSpace.s4 - 2,
+          vertical: YsSpace.s3 - 2,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                _statusIcon(r),
-                const SizedBox(width: 10),
+                SizedBox(width: 14, height: 14, child: _statusIcon(r)),
+                const SizedBox(width: YsSpace.s3 - 2),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(r.host.label,
-                          style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500)),
-                      Text('${r.host.username}@${r.host.host}',
-                          style: const TextStyle(
-                              color: AppColors.textTertiary, fontSize: 11)),
+                      Text(
+                        r.host.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: YsColors.foreground,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        '${r.host.username}@${r.host.host}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: YsColors.mutedForeground,
+                          fontSize: 11,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 if (r.error != null && !_expanded)
                   Flexible(
-                    child: Text(r.error!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: AppColors.red, fontSize: 11)),
-                  ),
-                if (r.status == BulkHostStatus.success &&
-                    (r.exitCode ?? 0) != 0) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.orange.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
+                    child: Text(
+                      r.error!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: YsColors.error,
+                        fontSize: 11,
+                      ),
                     ),
-                    child: Text('exit ${r.exitCode}',
-                        style: const TextStyle(
-                            color: AppColors.orange, fontSize: 10)),
+                  ),
+                if (r.exitedNonZero) ...[
+                  const SizedBox(width: YsSpace.s2),
+                  YsStatusBadge(
+                    r.exitUnknown ? 'exit unknown' : 'exit ${r.exitCode}',
+                    status: YsStatus.warn,
                   ),
                 ],
                 if (transferring) ...[
-                  const SizedBox(width: 8),
-                  Text('${formatByteSize(r.bytesTransferred)} / ${formatByteSize(r.totalBytes)}',
-                      style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 11)),
+                  const SizedBox(width: YsSpace.s2),
+                  Text(
+                    '${formatByteSize(r.bytesTransferred)} / ${formatByteSize(r.totalBytes)}',
+                    style: const TextStyle(
+                      color: YsColors.mutedForeground,
+                      fontSize: 11,
+                    ),
+                  ),
                 ],
                 if (r.elapsed != null) ...[
-                  const SizedBox(width: 8),
-                  Text(_elapsed(r.elapsed!),
-                      style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 11)),
+                  const SizedBox(width: YsSpace.s2),
+                  Text(
+                    _elapsed(r.elapsed!),
+                    style: const TextStyle(
+                      color: YsColors.mutedForeground,
+                      fontSize: 11,
+                    ),
+                  ),
                 ],
                 if (_expandable) ...[
-                  const SizedBox(width: 6),
-                  Icon(_expanded ? Icons.expand_less : Icons.expand_more,
-                      size: 14, color: AppColors.textTertiary),
+                  const SizedBox(width: YsSpace.s2 - 2),
+                  Icon(
+                    _expanded
+                        ? FLucideIcons.chevronUp
+                        : FLucideIcons.chevronDown,
+                    size: 14,
+                    color: YsColors.mutedForeground,
+                  ),
                 ],
               ],
             ),
             if (transferring) ...[
-              const SizedBox(height: 6),
-              LinearProgressIndicator(
-                value: r.totalBytes == 0
-                    ? null
-                    : r.bytesTransferred / r.totalBytes,
-                minHeight: 3,
-                backgroundColor: AppColors.border,
-                color: AppColors.accent,
-              ),
+              const SizedBox(height: YsSpace.s2 - 2),
+              FDeterminateProgress(value: r.bytesTransferred / r.totalBytes),
             ],
             if (_expanded) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: YsSpace.s2),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(YsSpace.s3 - 2),
                 decoration: BoxDecoration(
-                  color: AppColors.bg,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppColors.border),
+                  color: YsColors.background,
+                  borderRadius: BorderRadius.circular(YsRadius.control),
+                  border: Border.all(color: YsColors.border),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (r.stdout.isNotEmpty)
-                      SelectableText(r.stdout.trimRight(),
-                          style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 12,
-                              fontFamily: 'monospace')),
+                      SelectableText(
+                        r.stdout.trimRight(),
+                        style: _mono(YsColors.foreground),
+                      ),
                     if (r.stderr.isNotEmpty)
-                      SelectableText(r.stderr.trimRight(),
-                          style: const TextStyle(
-                              color: AppColors.orange,
-                              fontSize: 12,
-                              fontFamily: 'monospace')),
+                      SelectableText(
+                        r.stderr.trimRight(),
+                        style: _mono(YsColors.warn),
+                      ),
                     if (r.error != null)
-                      SelectableText(r.error!,
-                          style: const TextStyle(
-                              color: AppColors.red,
-                              fontSize: 12,
-                              fontFamily: 'monospace')),
+                      SelectableText(r.error!, style: _mono(YsColors.error)),
                   ],
                 ),
               ),
@@ -195,3 +210,10 @@ class _ResultRowState extends State<_ResultRow> {
     );
   }
 }
+
+TextStyle _mono(Color color) => TextStyle(
+  color: color,
+  fontSize: 12,
+  fontFamily: kYsMonoFontFamily,
+  fontFamilyFallback: kYsMonoFontFallback,
+);

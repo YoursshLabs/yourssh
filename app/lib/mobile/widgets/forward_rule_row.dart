@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../../models/port_forward.dart';
 import '../theme/mobile_theme.dart';
@@ -79,16 +80,19 @@ class ForwardRuleRow extends StatelessWidget {
               ),
             ),
             // Start / stop toggle
-            IconButton(
-              icon: Icon(
-                isRunning
-                    ? Icons.stop_circle_outlined
-                    : Icons.play_circle_outline,
-                color: isRunning ? MobileColors.red : MobileColors.green,
-                size: 22,
+            Tooltip(
+              message: isRunning ? 'Stop' : 'Start',
+              child: FButton.icon(
+                variant: .ghost,
+                size: .lg,
+                semanticsLabel: isRunning ? 'Stop' : 'Start',
+                onPress: onToggle,
+                child: Icon(
+                  isRunning ? FLucideIcons.circleStop : FLucideIcons.circlePlay,
+                  color: isRunning ? MobileColors.red : MobileColors.green,
+                  size: 22,
+                ),
               ),
-              tooltip: isRunning ? 'Stop' : 'Start',
-              onPressed: onToggle,
             ),
           ],
         ),

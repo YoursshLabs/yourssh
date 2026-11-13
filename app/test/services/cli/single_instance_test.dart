@@ -290,10 +290,16 @@ void main() {
           resolve: () => ep,
           exitApp: _throwExit,
           forwardRetry: const Duration(seconds: 15));
+      // Listen BEFORE the owner starts: the loser polls every 100 ms and can
+      // land its forward as soon as the socket is bound, i.e. while
+      // startCliEndpoint is still awaiting its last steps (chmod, app.path;
+      // slow under a loaded full-suite run). A claim that fails with _Exited
+      // with no listener yet is an uncaught async error and fails the test.
+      final exited = expectLater(claim,
+          throwsA(isA<_Exited>().having((e) => e.code, 'code', 0)));
       await Future<void>.delayed(const Duration(milliseconds: 300));
       owners.add(await startCliEndpoint(ep, serverFor(h), lock: lock!));
-      await expectLater(claim,
-          throwsA(isA<_Exited>().having((e) => e.code, 'code', 0)));
+      await exited;
       expect(h.calls, ['connect:prod:url']);
     });
 

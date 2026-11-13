@@ -1,17 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
+import '../mobile/theme/toast_inset.dart';
+
+/// Legacy colour aliases, kept so ~460 call sites do not churn for no visual
+/// change (a recorded deviation from the redesign spec's "delete at the end").
+/// New code uses [YsColors]; the user palettes [hostColors] / [tabColors] and
+/// [fromHex] live here until they get a home in yourssh_ui.
+@Deprecated('Use YsColors from package:yourssh_ui for new code.')
 class AppColors {
-  static const bg = Color(0xFF0F0F0F);
-  static const sidebar = Color(0xFF141414);
-  static const card = Color(0xFF1C1C1C);
-  static const cardHover = Color(0xFF242424);
-  static const border = Color(0xFF2A2A2A);
-  static const accent = Color(0xFF22C55E);
-  static const accentDim = Color(0xFF16A34A);
-  static const textPrimary = Color(0xFFE5E5E5);
-  static const textSecondary = Color(0xFF888888);
-  static const textTertiary = Color(0xFF555555);
-  static const red = Color(0xFFEF4444);
+  static const bg = YsColors.background;
+  static const sidebar = YsColors.sidebar;
+  static const card = YsColors.card;
+  static const cardHover = YsColors.secondary;
+  static const border = YsColors.border;
+  static const accent = YsColors.primary;
+  static const accentDim = Color(0xFFE87C08);
+  static const textPrimary = YsColors.foreground;
+  static const textSecondary = YsColors.mutedForeground;
+  static const textTertiary = Color(0xFF857E79);
+  static const red = YsColors.error;
+  static const success = YsColors.ok;
+  static const warning = YsColors.warn;
+  static const offline = YsColors.off;
   static const orange = Color(0xFFF97316);
   static const blue = Color(0xFF3B82F6);
   static const purple = Color(0xFF8B5CF6);
@@ -60,58 +71,58 @@ class AppColors {
   }
 }
 
-/// Consistent SnackBar styling. Callers should use these helpers rather than
-/// building `SnackBar(content: Text('…'), backgroundColor: const Color(...))`
-/// — the colors and durations should be tuned here once, not in every screen.
+/// Consistent toast helpers (forui toasts via [showYsToast]). Callers should
+/// use these rather than building their own; colors and durations are tuned
+/// once in `yourssh_ui`.
 class AppSnack {
   AppSnack._();
 
-  static void error(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message, style: const TextStyle(color: Colors.white)),
-      backgroundColor: AppColors.red,
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 5),
-    ));
-  }
+  static void error(BuildContext context, String message) =>
+      showYsToast(context, message, kind: YsToastKind.error);
 
-  static void info(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message, style: const TextStyle(color: AppColors.textPrimary)),
-      backgroundColor: AppColors.card,
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 3),
-    ));
-  }
+  static void info(BuildContext context, String message) =>
+      showYsToast(context, message);
 
-  static void success(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message, style: const TextStyle(color: Colors.white)),
-      backgroundColor: AppColors.accent,
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 3),
-    ));
-  }
+  static void success(BuildContext context, String message) =>
+      showYsToast(context, message, kind: YsToastKind.success);
 }
 
-ThemeData buildAppTheme() {
-  return ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: AppColors.bg,
-    colorScheme: const ColorScheme.dark(
-      surface: AppColors.bg,
-      primary: AppColors.accent,
-      onPrimary: Colors.black,
-      secondary: AppColors.accent,
-    ),
-    fontFamily: 'SF Pro Display',
-    textTheme: const TextTheme(
-      bodyMedium: TextStyle(color: AppColors.textPrimary, fontSize: 13),
-      bodySmall: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-      labelMedium: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-    ),
-    dividerColor: AppColors.border,
-    dividerTheme: const DividerThemeData(color: AppColors.border, thickness: 1, space: 1),
-  );
-}
+ThemeData buildAppTheme() => ysMaterialTheme();
+
+/// `MaterialApp.builder` for desktop: puts forui's [FTheme] and [FToaster]
+/// above the Navigator so dialogs, routes and toasts all inherit them.
+Widget ysRootBuilder(BuildContext context, Widget? child) =>
+    _wrap(ysThemeData(), child);
+
+/// Same as [ysRootBuilder] with touch sizing, for the mobile app. The toaster
+/// is lifted by the bottom tab bar's height, only while the mobile tab bar is
+/// visible, so toasts never cover it (the
+/// toaster already adds the bottom safe-area inset, which the tab bar also
+/// grows by).
+Widget ysRootBuilderTouch(BuildContext context, Widget? child) =>
+    ValueListenableBuilder<double>(
+      valueListenable: mobileToastInset,
+      builder: (_, inset, _) => _wrap(
+        ysThemeDataTouch(),
+        child,
+        toasterStyle: inset == 0
+            ? const FToasterStyleDelta.context()
+            : FToasterStyleDelta.delta(
+                padding: EdgeInsetsGeometryDelta.add(
+                  EdgeInsets.only(bottom: inset),
+                ),
+              ),
+      ),
+    );
+
+Widget _wrap(
+  FThemeData data,
+  Widget? child, {
+  FToasterStyleDelta toasterStyle = const FToasterStyleDelta.context(),
+}) => FTheme(
+  data: data,
+  child: FToaster(
+    style: toasterStyle,
+    child: child ?? const SizedBox.shrink(),
+  ),
+);

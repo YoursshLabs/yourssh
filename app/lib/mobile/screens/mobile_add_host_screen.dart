@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../../models/host.dart';
 import '../../models/ssh_key.dart';
@@ -11,7 +12,10 @@ import '../../providers/session_provider.dart';
 import '../security/app_lock_gate.dart';
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
+import '../widgets/button_label.dart';
 import '../widgets/list_group.dart';
+import '../widgets/section_header.dart';
+import '../widgets/settings_row.dart';
 
 /// Grouped add/edit host form for mobile (Design 02).
 ///
@@ -50,7 +54,16 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
     return a == AuthType.certificate || a == AuthType.agent;
   }
 
+  /// Empty means the default port (22); otherwise it must be 1-65535.
+  String? get _portError {
+    final t = _port.text.trim();
+    if (t.isEmpty) return null;
+    final n = int.tryParse(t);
+    return n == null || n < 1 || n > 65535 ? 'Invalid (1–65535)' : null;
+  }
+
   bool get _canSave =>
+      _portError == null &&
       _label.text.trim().isNotEmpty &&
       _address.text.trim().isNotEmpty &&
       _username.text.trim().isNotEmpty;
@@ -62,6 +75,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
     _label.addListener(_onFieldChanged);
     _address.addListener(_onFieldChanged);
     _username.addListener(_onFieldChanged);
+    _port.addListener(_onFieldChanged);
 
     final h = widget.existing;
     if (h != null) {
@@ -111,6 +125,7 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
     final label = _label.text.trim();
     final address = _address.text.trim();
     final username = _username.text.trim();
+    // Empty -> default 22; the 1-65535 range is enforced by _canSave.
     final port = int.tryParse(_port.text.trim()) ?? 22;
     final snippetVal = _snippet.text.trim();
     final provider = context.read<HostProvider>();
@@ -198,242 +213,204 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
 
     return Scaffold(
       backgroundColor: MobileColors.bg,
-      appBar: _buildAppBar(),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(
-            MobileTokens.space4,
-            MobileTokens.space4,
-            MobileTokens.space4,
-            MobileTokens.space5 * 2,
-          ),
+        // FHeader adds the top safe area itself.
+        top: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _generalGroup(),
-            const SizedBox(height: MobileTokens.space4),
-            _authGroup(keys),
-            const SizedBox(height: MobileTokens.space4),
-            _advancedGroup(),
-            const SizedBox(height: MobileTokens.space5),
-            _saveConnectButton(),
+            _buildHeader(),
+            Expanded(
+              // Not a lazy list: every field stays mounted so focus traversal
+              // (Next) reaches fields that are scrolled out of view.
+              child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(
+                  MobileTokens.space4,
+                  MobileTokens.space2,
+                  MobileTokens.space4,
+                  MobileTokens.space5 * 2,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _generalGroup(),
+                    const SizedBox(height: MobileTokens.space4),
+                    _authGroup(keys),
+                    const SizedBox(height: MobileTokens.space4),
+                    _advancedGroup(),
+                    const SizedBox(height: MobileTokens.space5),
+                    _saveConnectButton(),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: MobileColors.bg,
-      elevation: 0,
-      automaticallyImplyLeading: false,
-      leading: TextButton(
-        onPressed: () => Navigator.of(context).maybePop(),
-        style: TextButton.styleFrom(padding: EdgeInsets.zero),
-        child: Text(
-          'Hosts',
-          style: mobileBody(color: MobileColors.accent, weight: FontWeight.w500),
+  Widget _buildHeader() {
+    return FHeader.nested(
+      title: Text(_isEdit ? 'Edit host' : 'New host'),
+      prefixes: [
+        FButton(
+          variant: FButtonVariant.ghost,
+          onPress: () => Navigator.of(context).maybePop(),
+          child: const Text('Hosts'),
         ),
-      ),
-      leadingWidth: 72,
-      centerTitle: true,
-      title: Text(
-        _isEdit ? 'Edit host' : 'New host',
-        style: mobileHeading(size: 17),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _canSave ? _save : null,
-          child: Text(
-            'Save',
-            style: mobileBody(
-              color: _canSave ? MobileColors.accent : MobileColors.textFaint,
-              weight: FontWeight.w600,
-            ),
-          ),
+      ],
+      suffixes: [
+        FButton(
+          variant: FButtonVariant.ghost,
+          onPress: _canSave ? _save : null,
+          child: const Text('Save'),
         ),
-        const SizedBox(width: MobileTokens.space2),
       ],
     );
   }
 
   // ── Groups ────────────────────────────────────────────────────────────────
 
-  Widget _generalGroup() => ListGroup(
-        label: 'General',
+  /// A labelled block of stacked fields (section label + fields).
+  Widget _section(String label, List<Widget> children) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _inlineField(
-            fieldKey: 'host-label',
-            controller: _label,
-            label: 'Nickname',
-            textInputAction: TextInputAction.next,
-          ),
-          _inlineField(
-            fieldKey: 'host-address',
-            controller: _address,
-            label: 'Hostname',
-            mono: true,
-            keyboardType: TextInputType.url,
-            textInputAction: TextInputAction.next,
-          ),
-          _inlineField(
-            fieldKey: 'host-port',
-            controller: _port,
-            label: 'Port',
-            mono: true,
-            keyboardType: TextInputType.number,
-            formatters: [FilteringTextInputFormatter.digitsOnly],
-            textInputAction: TextInputAction.next,
-          ),
+          SectionHeader(label),
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) const SizedBox(height: MobileTokens.space3),
+            children[i],
+          ],
         ],
       );
 
+  Widget _generalGroup() => _section('General', [
+        _field(
+          fieldKey: 'host-label',
+          controller: _label,
+          label: 'Nickname',
+          textInputAction: TextInputAction.next,
+        ),
+        _field(
+          fieldKey: 'host-address',
+          controller: _address,
+          label: 'Hostname',
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.next,
+        ),
+        _field(
+          fieldKey: 'host-port',
+          controller: _port,
+          label: 'Port',
+          keyboardType: TextInputType.number,
+          formatters: [FilteringTextInputFormatter.digitsOnly],
+          textInputAction: TextInputAction.next,
+          error: _portError,
+        ),
+      ]);
+
   Widget _authGroup(List<SshKeyEntry> keys) {
-    final usernameRow = _inlineField(
+    final usernameRow = _field(
       fieldKey: 'host-username',
       controller: _username,
       label: 'Username',
-      mono: true,
       textInputAction: TextInputAction.next,
     );
 
     if (_isCertOrAgent) {
-      return ListGroup(
-        label: 'Authentication',
-        children: [
-          usernameRow,
-          _CertAgentNoteRow(authType: widget.existing!.authType),
-        ],
-      );
+      return _section('Authentication', [
+        usernameRow,
+        ListGroup(children: [_CertAgentNoteRow(authType: widget.existing!.authType)]),
+      ]);
     }
 
-    return ListGroup(
-      label: 'Authentication',
-      children: [
-        usernameRow,
-        _MethodRow(
-          useKey: _useKey,
-          keysAvailable: keys.isNotEmpty,
-          onChanged: (v) => setState(() => _useKey = v),
+    return _section('Authentication', [
+      usernameRow,
+      _MethodRow(
+        useKey: _useKey,
+        keysAvailable: keys.isNotEmpty,
+        onChanged: (v) => setState(() => _useKey = v),
+      ),
+      if (_useKey)
+        _KeyPickerRow(
+          keys: keys,
+          selectedId: _keyId,
+          onChanged: (v) => setState(() => _keyId = v),
+        )
+      else
+        _field(
+          fieldKey: 'host-password',
+          controller: _password,
+          label: 'Password',
+          obscure: true,
+          hint: _isEdit ? 'Leave blank to keep current' : null,
+          textInputAction: TextInputAction.done,
         ),
-        if (_useKey)
-          _KeyPickerRow(
-            keys: keys,
-            selectedId: _keyId,
-            onChanged: (v) => setState(() => _keyId = v),
-          )
-        else
-          _inlineField(
-            fieldKey: 'host-password',
-            controller: _password,
-            label: 'Password',
-            obscure: true,
-            hint: _isEdit ? 'Leave blank to keep current' : null,
-            textInputAction: TextInputAction.done,
-          ),
-        const _BiometricRow(),
-      ],
-    );
+      const ListGroup(children: [_BiometricRow()]),
+    ]);
   }
 
-  Widget _advancedGroup() => ListGroup(
-        label: 'Advanced',
-        children: [
-          _inlineField(
-            fieldKey: 'host-group',
-            controller: _group,
-            label: 'Group',
-            hint: 'e.g. Production',
-            textInputAction: TextInputAction.next,
-          ),
-          _inlineField(
-            fieldKey: 'host-startup-snippet',
-            controller: _snippet,
-            label: 'Run on connect',
-            mono: true,
-            hint: 'e.g. tmux attach',
-            textInputAction: TextInputAction.done,
-          ),
-        ],
-      );
-
-  Widget _saveConnectButton() => SizedBox(
-        width: double.infinity,
-        height: MobileTokens.touchTarget + 4,
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: MobileColors.accent,
-            foregroundColor: Colors.black,
-            disabledBackgroundColor: MobileColors.accentSoft,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-          onPressed: _canSave ? _saveAndConnect : null,
-          child: Text(
-            'Save & connect',
-            style: mobileBody(
-              color: _canSave ? Colors.black : MobileColors.textFaint,
-              weight: FontWeight.w600,
-              size: 16,
-            ),
-          ),
+  Widget _advancedGroup() => _section('Advanced', [
+        _field(
+          fieldKey: 'host-group',
+          controller: _group,
+          label: 'Group',
+          hint: 'e.g. Production',
+          textInputAction: TextInputAction.next,
         ),
+        _field(
+          fieldKey: 'host-startup-snippet',
+          controller: _snippet,
+          label: 'Run on connect',
+          hint: 'e.g. tmux attach',
+          textInputAction: TextInputAction.done,
+        ),
+      ]);
+
+  Widget _saveConnectButton() => FButton(
+        variant: FButtonVariant.primary,
+        size: FButtonSizeVariant.lg,
+        onPress: _canSave ? _saveAndConnect : null,
+        child: const ButtonLabel('Save & connect'),
       );
 
-  // ── Field helpers ─────────────────────────────────────────────────────────
+  // ── Field helper ──────────────────────────────────────────────────────────
 
-  Widget _inlineField({
+  /// A labelled [FTextField]; secrets use [FTextField.password] (obscured,
+  /// without the reveal toggle, which the mobile form never had).
+  Widget _field({
     required String fieldKey,
     required TextEditingController controller,
     required String label,
     bool obscure = false,
-    bool mono = false,
     String? hint,
     TextInputType? keyboardType,
     List<TextInputFormatter>? formatters,
     TextInputAction? textInputAction,
+    String? error,
   }) {
-    final valueStyle = mono
-        ? mobileMono(size: 14, color: MobileColors.textPrimary)
-        : mobileBody(size: 15, color: MobileColors.textPrimary);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: MobileTokens.space4,
-        vertical: MobileTokens.space3,
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 110,
-            child:
-                Text(label, style: mobileBody(color: MobileColors.textMuted)),
-          ),
-          Expanded(
-            child: TextField(
-              key: Key(fieldKey),
-              controller: controller,
-              obscureText: obscure,
-              keyboardType: keyboardType,
-              inputFormatters: formatters,
-              textInputAction: textInputAction,
-              style: valueStyle,
-              textAlign: TextAlign.end,
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle:
-                    mobileMono(size: 13, color: MobileColors.textFaint),
-                isDense: true,
-                border: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-              ),
-              cursorColor: MobileColors.accent,
-            ),
-          ),
-        ],
-      ),
+    final control = FTextFieldControl.managed(controller: controller);
+    if (obscure) {
+      return FTextField.password(
+        key: Key(fieldKey),
+        control: control,
+        label: Text(label),
+        hint: hint,
+        textInputAction: textInputAction ?? TextInputAction.next,
+        suffixBuilder: null,
+      );
+    }
+    return FTextField(
+      key: Key(fieldKey),
+      control: control,
+      label: Text(label),
+      hint: hint,
+      keyboardType: keyboardType,
+      inputFormatters: formatters,
+      textInputAction: textInputAction,
+      error: error == null ? null : Text(error),
     );
   }
 }
@@ -454,91 +431,62 @@ class _MethodRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: MobileTokens.space4,
-        vertical: MobileTokens.space3,
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 110,
-            child:
-                Text('Method', style: mobileBody(color: MobileColors.textMuted)),
-          ),
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                _MethodPill(
-                  label: 'Password',
-                  selected: !useKey,
-                  onTap: () => onChanged(false),
-                ),
-                const SizedBox(width: MobileTokens.space2),
-                _MethodPill(
-                  label: 'SSH key',
-                  selected: useKey,
-                  enabled: keysAvailable,
-                  onTap: keysAvailable ? () => onChanged(true) : null,
-                ),
-              ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Method', style: mobileBody(color: MobileColors.textMuted)),
+        const SizedBox(height: MobileTokens.space2),
+        Row(
+          children: [
+            Expanded(
+              child: _MethodPill(
+                label: 'Password',
+                selected: !useKey,
+                onTap: () => onChanged(false),
+              ),
             ),
-          ),
-        ],
-      ),
+            const SizedBox(width: MobileTokens.space2),
+            Expanded(
+              child: _MethodPill(
+                label: 'SSH key',
+                selected: useKey,
+                onTap: keysAvailable ? () => onChanged(true) : null,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
 
+/// One option of the method toggle; a disabled one (no keys) has no [onTap].
 class _MethodPill extends StatelessWidget {
   final String label;
   final bool selected;
-  final bool enabled;
   final VoidCallback? onTap;
 
   const _MethodPill({
     required this.label,
     required this.selected,
-    this.enabled = true,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? MobileColors.accent : MobileColors.surfaceAlt;
-    final fg = selected
-        ? Colors.black
-        : (enabled ? MobileColors.textPrimary : MobileColors.textFaint);
-
-    final pill = Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: MobileTokens.space3,
-        vertical: MobileTokens.space1 + 2,
+    return Semantics(
+      selected: selected,
+      inMutuallyExclusiveGroup: true,
+      child: FButton(
+        variant: selected ? FButtonVariant.primary : FButtonVariant.outline,
+        onPress: onTap,
+        child: ButtonLabel(label),
       ),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(MobileTokens.radiusPill),
-        border: Border.all(
-          color: selected ? MobileColors.accent : MobileColors.border,
-        ),
-      ),
-      child: Text(
-        label,
-        style: mobileBody(size: 13, color: fg, weight: FontWeight.w500),
-      ),
-    );
-
-    if (onTap == null) return pill;
-    return InkWell(
-      borderRadius: BorderRadius.circular(MobileTokens.radiusPill),
-      onTap: onTap,
-      child: pill,
     );
   }
 }
 
-/// Dropdown row for picking an SSH key (shown when auth method = SSH key).
+/// Select for picking an SSH key (shown when auth method = SSH key).
 class _KeyPickerRow extends StatelessWidget {
   final List<SshKeyEntry> keys;
   final String? selectedId;
@@ -552,44 +500,24 @@ class _KeyPickerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: MobileTokens.space4,
-        vertical: MobileTokens.space3,
+    final known = keys.any((k) => k.id == selectedId);
+    // Items are keyed by display text, so equal labels are disambiguated with
+    // the tail of the id; every key stays selectable.
+    final counts = <String, int>{};
+    for (final k in keys) {
+      counts[k.label] = (counts[k.label] ?? 0) + 1;
+    }
+    String shown(SshKeyEntry k) => counts[k.label]! > 1
+        ? '${k.label} (…${k.id.length > 6 ? k.id.substring(k.id.length - 6) : k.id})'
+        : k.label;
+    return FSelect<String>(
+      items: {for (final k in keys) shown(k): k.id},
+      control: FSelectControl.managed(
+        initial: known ? selectedId : null,
+        onChange: onChanged,
       ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text('Key', style: mobileBody(color: MobileColors.textMuted)),
-          ),
-          Expanded(
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: selectedId,
-                isExpanded: true,
-                alignment: Alignment.centerRight,
-                style: mobileMono(size: 13, color: MobileColors.textMuted),
-                dropdownColor: MobileColors.surface,
-                iconEnabledColor: MobileColors.textFaint,
-                items: [
-                  for (final k in keys)
-                    DropdownMenuItem(
-                      value: k.id,
-                      child: Text(
-                        k.label,
-                        textAlign: TextAlign.end,
-                        style: mobileMono(
-                            size: 13, color: MobileColors.textPrimary),
-                      ),
-                    ),
-                ],
-                onChanged: onChanged,
-              ),
-            ),
-          ),
-        ],
-      ),
+      label: const Text('Key'),
+      hint: 'Select a key',
     );
   }
 }
@@ -611,7 +539,7 @@ class _CertAgentNoteRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.verified_user_outlined,
+          const Icon(FLucideIcons.shieldCheck,
               color: MobileColors.textFaint, size: 16),
           const SizedBox(width: MobileTokens.space2),
           Expanded(
@@ -633,7 +561,7 @@ class _CertAgentNoteRow extends StatelessWidget {
   }
 }
 
-/// Amber toggle row for Face ID / biometric app-lock (reads/writes
+/// Toggle row for Face ID / biometric app-lock (reads/writes
 /// [kAppLockPrefKey] in SharedPreferences — same key as AppLockGate).
 class _BiometricRow extends StatefulWidget {
   const _BiometricRow();
@@ -667,25 +595,10 @@ class _BiometricRowState extends State<_BiometricRow> {
   @override
   Widget build(BuildContext context) {
     if (!_loaded) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: MobileTokens.space4,
-        vertical: MobileTokens.space1,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text('Unlock with biometrics',
-                style: mobileBody(color: MobileColors.textPrimary)),
-          ),
-          Switch(
-            value: _enabled,
-            onChanged: _toggle,
-            activeThumbColor: MobileColors.accent,
-            activeTrackColor: MobileColors.accent.withAlpha(77),
-          ),
-        ],
-      ),
+    return SettingsRow(
+      title: 'Unlock with biometrics',
+      toggle: _enabled,
+      onToggle: _toggle,
     );
   }
 }

@@ -9,6 +9,9 @@ import 'package:yourssh/services/agent_probe.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/host_detail_panel.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show FSwitch;
+
+import '../helpers/ys_test_app.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -35,15 +38,13 @@ void main() {
           ChangeNotifierProvider<HostProvider>.value(value: hostProvider),
           Provider<SshService>(create: (_) => SshService(StorageService())),
         ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: HostDetailPanel(
-              existing: existing,
-              initialProtocol: existing == null ? HostProtocol.vnc : null,
-              agentProbe: () async => const AgentProbeSystem(1),
-              onClose: () {},
-              onSave: (host, _) async => saved = host,
-            ),
+        child: ysTestApp(
+          HostDetailPanel(
+            existing: existing,
+            initialProtocol: existing == null ? HostProtocol.vnc : null,
+            agentProbe: () async => const AgentProbeSystem(1),
+            onClose: () {},
+            onSave: (host, _) async => saved = host,
           ),
         ),
       ),
@@ -84,11 +85,11 @@ void main() {
     await pumpPanel(tester, existing: vncHost());
     final toggle = find.byKey(const ValueKey('remote-clipboard-switch'));
     await tester.ensureVisible(toggle);
-    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    expect(tester.widget<FSwitch>(toggle).value, isTrue);
 
     await tester.tap(toggle);
     await tester.pumpAndSettle();
-    final save = find.text('SAVE ONLY');
+    final save = find.byKey(const ValueKey('host-save-button'));
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();

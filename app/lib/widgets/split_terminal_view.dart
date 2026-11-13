@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 import '../models/audit_event.dart';
@@ -18,10 +19,16 @@ import 'terminal_input_bar.dart';
 import 'broadcast_toolbar.dart';
 import 'terminal_config_panel.dart';
 import 'terminal_snippets_panel.dart';
+import 'terminal_header_chips.dart';
+import 'terminal_status_bar.dart';
 
 class SplitTerminalView extends StatelessWidget {
   final VoidCallback? onNavigateToSettings;
-  const SplitTerminalView({super.key, this.onNavigateToSettings});
+
+  /// Extra controls at the right end of the workspace header.
+  final Widget? toolbarTrailing;
+  const SplitTerminalView(
+      {super.key, this.onNavigateToSettings, this.toolbarTrailing});
 
   void _sendCommand(TerminalSession session, String command) {
     session.terminal.textInput(command);
@@ -72,14 +79,20 @@ class SplitTerminalView extends StatelessWidget {
     final active = activeRaw is TerminalSession ? activeRaw : (termSessions.isNotEmpty ? termSessions[0] : null);
 
     if (termSessions.isEmpty) {
-      return const Center(
-        child: Text('No active sessions', style: TextStyle(color: Color(0xFF555555))),
+      return const YsEmptyState(
+        icon: FLucideIcons.terminal,
+        title: 'No active sessions',
       );
     }
 
     return Column(
       children: [
-        const BroadcastToolbar(),
+        BroadcastToolbar(
+          leading: active == null
+              ? null
+              : TerminalHeaderChips(key: ValueKey(active.id), session: active),
+          trailing: toolbarTrailing,
+        ),
         Expanded(
           child: Row(
             children: [
@@ -102,6 +115,8 @@ class SplitTerminalView extends StatelessWidget {
             ],
           ),
         ),
+        if (active != null)
+          SessionStatusBar(key: ValueKey(active.id), session: active),
       ],
     );
   }
@@ -131,7 +146,7 @@ class SplitTerminalView extends StatelessWidget {
       case SplitLayout.horizontal:
         return Row(children: [
           Expanded(child: _buildPane(context, 0, sessions[0], sessions, layout)),
-          const VerticalDivider(width: 1, color: Color(0xFF2A2A2A)),
+          const _SplitDivider.vertical(),
           Expanded(
             child: sessions.length > 1
                 ? _buildPane(context, 1, sessions[1], sessions, layout)
@@ -142,7 +157,7 @@ class SplitTerminalView extends StatelessWidget {
       case SplitLayout.vertical:
         return Column(children: [
           Expanded(child: _buildPane(context, 0, sessions[0], sessions, layout)),
-          const Divider(height: 1, color: Color(0xFF2A2A2A)),
+          const _SplitDivider.horizontal(),
           Expanded(
             child: sessions.length > 1
                 ? _buildPane(context, 1, sessions[1], sessions, layout)
@@ -155,7 +170,7 @@ class SplitTerminalView extends StatelessWidget {
           Expanded(
             child: Row(children: [
               Expanded(child: _buildPane(context, 0, sessions[0], sessions, layout)),
-              const VerticalDivider(width: 1, color: Color(0xFF2A2A2A)),
+              const _SplitDivider.vertical(),
               Expanded(
                 child: sessions.length > 1
                     ? _buildPane(context, 1, sessions[1], sessions, layout)
@@ -163,7 +178,7 @@ class SplitTerminalView extends StatelessWidget {
               ),
             ]),
           ),
-          const Divider(height: 1, color: Color(0xFF2A2A2A)),
+          const _SplitDivider.horizontal(),
           Expanded(
             child: Row(children: [
               Expanded(
@@ -171,7 +186,7 @@ class SplitTerminalView extends StatelessWidget {
                     ? _buildPane(context, 2, sessions[2], sessions, layout)
                     : _buildEmptyPane(),
               ),
-              const VerticalDivider(width: 1, color: Color(0xFF2A2A2A)),
+              const _SplitDivider.vertical(),
               Expanded(
                 child: sessions.length > 3
                     ? _buildPane(context, 3, sessions[3], sessions, layout)
@@ -184,8 +199,26 @@ class SplitTerminalView extends StatelessWidget {
   }
 
   Widget _buildEmptyPane() {
+    // A pane shows the session at its position in the tab list, so the only
+    // way to fill it is to open another session.
     return const Center(
-      child: Text('No session', style: TextStyle(color: Color(0xFF555555), fontSize: 13)),
+      child: Padding(
+        padding: EdgeInsets.all(YsSpace.s4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('No session in this pane',
+                style:
+                    TextStyle(color: YsColors.mutedForeground, fontSize: 13)),
+            SizedBox(height: YsSpace.s1),
+            Text(
+              'Open another session with + in the tab bar and it appears here.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: YsColors.off, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -253,6 +286,22 @@ class SplitTerminalView extends StatelessWidget {
   }
 }
 
+/// 1 px token-coloured pane separator. [vertical] separates side-by-side
+/// panes (a vertical line); the other separates stacked panes.
+class _SplitDivider extends StatelessWidget {
+  final bool vertical;
+  const _SplitDivider.vertical() : vertical = true;
+  const _SplitDivider.horizontal() : vertical = false;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        key: const Key('split-divider'),
+        width: vertical ? 1 : null,
+        height: vertical ? null : 1,
+        child: const ColoredBox(color: YsColors.border),
+      );
+}
+
 class _WatchBanner extends StatelessWidget {
   final SshSession session;
   const _WatchBanner({required this.session});
@@ -268,16 +317,18 @@ class _WatchBanner extends StatelessWidget {
     String label;
 
     if (sessionEnded) {
-      bg = const Color(0xFF2A1A1A);
-      fg = const Color(0xFFCC4444);
+      bg = YsColors.error.withValues(alpha: 0.14);
+      fg = YsColors.error;
       label = 'Session ended by host';
     } else if (hasControl) {
-      bg = const Color(0xFF1A2A1A);
-      fg = const Color(0xFF22C55E);
+      bg = YsColors.ok.withValues(alpha: 0.12);
+      fg = YsColors.ok;
       label = 'You have control';
     } else {
-      bg = const Color(0xFF1A1A2A);
-      fg = const Color(0xFF6699CC);
+      // Informational: primary tint + amber text, distinct from the green
+      // in-control and red ended states.
+      bg = YsColors.primary.withValues(alpha: 0.12);
+      fg = YsColors.accentText;
       label = 'Watching: ${session.watchedTitle ?? ''} · Read-only';
     }
 
@@ -287,7 +338,7 @@ class _WatchBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
       child: Row(
         children: [
-          Icon(Icons.screen_share_outlined, size: 12, color: fg),
+          Icon(FLucideIcons.screenShare, size: 12, color: fg),
           const SizedBox(width: 6),
           Text(label, style: TextStyle(color: fg, fontSize: 11)),
           const Spacer(),

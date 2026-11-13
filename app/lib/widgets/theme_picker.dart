@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 import '../theme/terminal_themes.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class ThemePickerButton extends StatelessWidget {
   final String currentTheme;
@@ -19,28 +19,23 @@ class ThemePickerButton extends StatelessWidget {
       orElse: () => kTerminalThemes.first,
     );
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(6),
-      onTap: () => _openPicker(context),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _MiniSwatch(entry: entry, size: 18),
-            const SizedBox(width: 8),
-            Text(currentTheme, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)),
-            const SizedBox(width: 4),
-            const Icon(Icons.expand_more, size: 16, color: AppColors.textSecondary),
-          ],
-        ),
+    return FButton(
+      variant: .ghost,
+      size: .sm,
+      mainAxisSize: MainAxisSize.min,
+      onPress: () => _openPicker(context),
+      prefix: _MiniSwatch(entry: entry, size: 18),
+      suffix: const Icon(FLucideIcons.chevronDown),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 120),
+        child: Text(currentTheme, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
     );
   }
 
   void _openPicker(BuildContext context) {
-    showDialog<String>(
-      context: context,
+    showYsDialog<String>(
+      context,
       builder: (ctx) => _ThemePickerDialog(
         currentTheme: currentTheme,
         onSelected: (name) {
@@ -65,19 +60,16 @@ class _ThemePickerDialog extends StatefulWidget {
 class _ThemePickerDialogState extends State<_ThemePickerDialog> {
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: AppColors.sidebar,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
-      ),
+    return YsDialogFrame(
+      maxWidth: 580,
+      padding: EdgeInsets.zero,
       child: SizedBox(
         width: 580,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             _header(),
-            const Divider(height: 1, color: AppColors.border),
+            const FDivider(),
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -109,7 +101,7 @@ class _ThemePickerDialogState extends State<_ThemePickerDialog> {
           const Text(
             'Terminal Theme',
             style: TextStyle(
-              color: AppColors.textPrimary,
+              color: YsColors.foreground,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -117,14 +109,17 @@ class _ThemePickerDialogState extends State<_ThemePickerDialog> {
           const Spacer(),
           Text(
             '${kTerminalThemes.length} themes',
-            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+            style: const TextStyle(color: YsColors.mutedForeground, fontSize: 11),
           ),
           const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.close, size: 16, color: AppColors.textSecondary),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-            onPressed: () => Navigator.of(context).pop(),
+          Tooltip(
+            message: 'Close',
+            child: FButton.icon(
+              variant: .ghost,
+              size: .sm,
+              onPress: () => Navigator.of(context).pop(),
+              child: const Icon(FLucideIcons.x),
+            ),
           ),
         ],
       ),
@@ -150,10 +145,10 @@ class _ThemeCard extends StatelessWidget {
       child: Container(
         width: 160,
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.accent.withValues(alpha: 0.12) : AppColors.card,
+          color: isSelected ? YsColors.primary.withValues(alpha: 0.12) : YsColors.card,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? AppColors.accent : AppColors.border,
+            color: isSelected ? YsColors.primary : YsColors.border,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -169,7 +164,7 @@ class _ThemeCard extends StatelessWidget {
                     child: Text(
                       entry.name,
                       style: TextStyle(
-                        color: isSelected ? AppColors.accent : AppColors.textPrimary,
+                        color: isSelected ? YsColors.accentText : YsColors.foreground,
                         fontSize: 11,
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                       ),
@@ -177,7 +172,7 @@ class _ThemeCard extends StatelessWidget {
                     ),
                   ),
                   if (isSelected)
-                    const Icon(Icons.check_circle, size: 12, color: AppColors.accent),
+                    const Icon(FLucideIcons.circleCheck, size: 12, color: YsColors.primary),
                 ],
               ),
             ),

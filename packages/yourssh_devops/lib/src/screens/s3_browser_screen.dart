@@ -1,17 +1,25 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+// Tooltip is Material plumbing; the rest of the screen is forui.
+// Migrating the app to material_ui is a separate later step.
+// ignore: deprecated_member_use
+import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import '../models/s3_bucket_config.dart';
 import '../models/s3_bucket_entry.dart';
 import '../services/s3_service.dart';
-import '../theme.dart';
 
 class S3BrowserScreen extends StatefulWidget {
-  const S3BrowserScreen({super.key});
+  /// [serviceFactory] lets tests supply a fake [S3Service] so no request
+  /// leaves the process; the app uses the default.
+  const S3BrowserScreen({super.key, this.serviceFactory});
+
+  final S3Service Function(S3BucketConfig config)? serviceFactory;
 
   @override
   State<S3BrowserScreen> createState() => _S3BrowserScreenState();
@@ -48,7 +56,10 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       await _loadConfigsUnsafe();
     } catch (e) {
       if (mounted) {
-        setState(() => _error = 'Could not read saved S3 configs from secure storage: $e');
+        setState(
+          () => _error =
+              'Could not read saved S3 configs from secure storage: $e',
+        );
       }
     }
   }
@@ -69,12 +80,21 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       );
       // Keep the legacy keys if the new copy could not be stored.
       if (await _saveConfigs([config])) {
-        for (final k in ['s3_endpoint', 's3_bucket', 's3_region', 's3_access_key', 's3_secret_key']) {
+        for (final k in [
+          's3_endpoint',
+          's3_bucket',
+          's3_region',
+          's3_access_key',
+          's3_secret_key',
+        ]) {
           await _storage.delete(key: k);
         }
       }
       if (!mounted) return;
-      setState(() { _configs = [config]; _activeIndex = 0; });
+      setState(() {
+        _configs = [config];
+        _activeIndex = 0;
+      });
       _activateConfig(0);
       return;
     }
@@ -113,7 +133,9 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       return true;
     } catch (e) {
       if (mounted) {
-        setState(() => _error = 'Could not save S3 configs to secure storage: $e');
+        setState(
+          () => _error = 'Could not save S3 configs to secure storage: $e',
+        );
       }
       return false;
     }
@@ -122,13 +144,15 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
   void _activateConfig(int index) {
     if (index < 0 || index >= _configs.length) return;
     final c = _configs[index];
-    _service = S3Service(
-      endpoint: c.endpoint,
-      bucket: c.bucket,
-      accessKey: c.accessKey,
-      secretKey: c.secretKey,
-      region: c.region,
-    );
+    _service =
+        widget.serviceFactory?.call(c) ??
+        S3Service(
+          endpoint: c.endpoint,
+          bucket: c.bucket,
+          accessKey: c.accessKey,
+          secretKey: c.secretKey,
+          region: c.region,
+        );
     setState(() {
       _activeIndex = index;
       _prefix = '';
@@ -139,111 +163,109 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
     _listObjects();
   }
 
-  Future<void> _showConfigDialog({S3BucketConfig? existing, int? editIndex}) async {
-    final nameCtrl = TextEditingController(text: existing?.name ?? '');
-    final endpointCtrl = TextEditingController(text: existing?.endpoint ?? '');
-    final bucketCtrl = TextEditingController(text: existing?.bucket ?? '');
-    final regionCtrl = TextEditingController(text: existing?.region ?? 'us-east-1');
-    final accessCtrl = TextEditingController(text: existing?.accessKey ?? '');
-    final secretCtrl = TextEditingController(text: existing?.secretKey ?? '');
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          backgroundColor: DevOpsColors.sidebar,
-          title: Text(
-            existing == null ? 'Add Bucket' : 'Edit Bucket',
-            style: const TextStyle(color: DevOpsColors.textPrimary),
+  Future<void> _showConfigDialog({
+    S3BucketConfig? existing,
+    int? editIndex,
+  }) async {
+    final values = await showYsDialog<List<String>>(
+      context,
+      builder: (_) => _FieldsDialog(
+        title: existing == null ? 'Add Bucket' : 'Edit Bucket',
+        confirmLabel: 'Save',
+        fields: [
+          _FieldSpec(
+            's3-name',
+            'Display Name',
+            'production',
+            existing?.name ?? '',
           ),
-          content: SizedBox(
-            width: 400,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _field(nameCtrl, 'Display Name', 'production'),
-                  _field(endpointCtrl, 'Endpoint', 'https://s3.amazonaws.com'),
-                  _field(bucketCtrl, 'Bucket', 'my-bucket'),
-                  _field(regionCtrl, 'Region', 'us-east-1'),
-                  _field(accessCtrl, 'Access Key', 'AKIAIOSFODNN7EXAMPLE'),
-                  _field(secretCtrl, 'Secret Key', '••••', obscure: true),
-                ],
-              ),
-            ),
+          _FieldSpec(
+            's3-endpoint',
+            'Endpoint',
+            'https://s3.amazonaws.com',
+            existing?.endpoint ?? '',
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true || !mounted) return;
-      final id = existing?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
-      final displayName = nameCtrl.text.trim();
-      final config = S3BucketConfig(
-        id: id,
-        name: displayName.isEmpty ? bucketCtrl.text.trim() : displayName,
-        endpoint: endpointCtrl.text.trim(),
-        bucket: bucketCtrl.text.trim(),
-        region: regionCtrl.text.trim(),
-        accessKey: accessCtrl.text.trim(),
-        secretKey: secretCtrl.text.trim(),
-      );
-      final newConfigs = List<S3BucketConfig>.from(_configs);
-      final newActive = editIndex ?? newConfigs.length;
-      if (editIndex != null) {
-        newConfigs[editIndex] = config;
-      } else {
-        newConfigs.add(config);
-      }
-      final saved = await _saveConfigs(newConfigs);
-      if (!mounted) return;
-      final saveError = _error;
-      setState(() => _configs = newConfigs);
-      _activateConfig(newActive);
-      // _activateConfig clears _error; keep the save failure visible.
-      if (!saved && mounted) setState(() => _error = saveError);
-    } finally {
-      nameCtrl.dispose(); endpointCtrl.dispose(); bucketCtrl.dispose();
-      regionCtrl.dispose(); accessCtrl.dispose(); secretCtrl.dispose();
-    }
-  }
-
-  Future<void> _deleteConfig(int index) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: DevOpsColors.sidebar,
-        title: const Text('Remove Bucket', style: TextStyle(color: DevOpsColors.textPrimary)),
-        content: Text(
-          'Remove "${_configs[index].name}"?',
-          style: const TextStyle(color: DevOpsColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          _FieldSpec(
+            's3-bucket',
+            'Bucket',
+            'my-bucket',
+            existing?.bucket ?? '',
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: DevOpsColors.red),
-            child: const Text('Remove'),
+          _FieldSpec(
+            's3-region',
+            'Region',
+            'us-east-1',
+            existing?.region ?? 'us-east-1',
+          ),
+          _FieldSpec(
+            's3-access-key',
+            'Access Key',
+            'AKIAIOSFODNN7EXAMPLE',
+            existing?.accessKey ?? '',
+          ),
+          _FieldSpec(
+            's3-secret-key',
+            'Secret Key',
+            '••••',
+            existing?.secretKey ?? '',
+            obscure: true,
           ),
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (values == null || !mounted) return;
+    final [
+      nameText,
+      endpointText,
+      bucketText,
+      regionText,
+      accessText,
+      secretText,
+    ] = values;
+    final id = existing?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final displayName = nameText.trim();
+    final config = S3BucketConfig(
+      id: id,
+      name: displayName.isEmpty ? bucketText.trim() : displayName,
+      endpoint: endpointText.trim(),
+      bucket: bucketText.trim(),
+      region: regionText.trim(),
+      accessKey: accessText.trim(),
+      secretKey: secretText.trim(),
+    );
+    final newConfigs = List<S3BucketConfig>.from(_configs);
+    final newActive = editIndex ?? newConfigs.length;
+    if (editIndex != null) {
+      newConfigs[editIndex] = config;
+    } else {
+      newConfigs.add(config);
+    }
+    final saved = await _saveConfigs(newConfigs);
+    if (!mounted) return;
+    final saveError = _error;
+    setState(() => _configs = newConfigs);
+    _activateConfig(newActive);
+    // _activateConfig clears _error; keep the save failure visible.
+    if (!saved && mounted) setState(() => _error = saveError);
+  }
+
+  Future<void> _deleteConfig(int index) async {
+    final confirmed = await showYsConfirm(
+      context,
+      title: 'Remove Bucket',
+      message: 'Remove "${_configs[index].name}"?',
+      confirmLabel: 'Remove',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
     try {
       await _storage.delete(key: 's3_secret_${_configs[index].id}');
     } catch (e) {
       if (mounted) {
-        setState(() => _error = 'Could not remove the S3 secret from secure storage: $e');
+        setState(
+          () =>
+              _error = 'Could not remove the S3 secret from secure storage: $e',
+        );
       }
     }
     final newConfigs = List<S3BucketConfig>.from(_configs)..removeAt(index);
@@ -264,99 +286,69 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
   }
 
   Future<void> _createFolder() async {
-    final ctrl = TextEditingController();
+    final values = await showYsDialog<List<String>>(
+      context,
+      builder: (_) => const _FieldsDialog(
+        title: 'New Folder',
+        confirmLabel: 'Create',
+        fields: [_FieldSpec('s3-folder-name', 'Folder Name', 'images', '')],
+      ),
+    );
+    if (values == null || !mounted) return;
+    final name = values[0].trim();
+    if (name.isEmpty || name.contains('/')) {
+      setState(() => _error = 'Folder name must not be empty or contain "/"');
+      return;
+    }
+    setState(() => _loading = true);
     try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          backgroundColor: DevOpsColors.sidebar,
-          title: const Text('New Folder', style: TextStyle(color: DevOpsColors.textPrimary)),
-          content: _field(ctrl, 'Folder Name', 'images'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Create'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true || !mounted) return;
-      final name = ctrl.text.trim();
-      if (name.isEmpty || name.contains('/')) {
-        setState(() => _error = 'Folder name must not be empty or contain "/"');
-        return;
-      }
-      setState(() => _loading = true);
-      try {
-        await _service!.putObject('$_prefix$name/', Uint8List(0));
-        await _listObjects();
-      } catch (e) {
-        if (mounted) setState(() => _error = e.toString());
-      } finally {
-        if (mounted) setState(() => _loading = false);
-      }
+      await _service!.putObject('$_prefix$name/', Uint8List(0));
+      await _listObjects();
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      ctrl.dispose();
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _renameMove(S3BucketEntry entry) async {
-    final currentFolder = entry.key.substring(0, entry.key.length - entry.name.length);
-    final folderCtrl = TextEditingController(text: currentFolder);
-    final nameCtrl = TextEditingController(text: entry.name);
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          backgroundColor: DevOpsColors.sidebar,
-          title: const Text('Rename / Move', style: TextStyle(color: DevOpsColors.textPrimary)),
-          content: SizedBox(
-            width: 400,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _field(folderCtrl, 'Folder Path', 'images/2024/'),
-                _field(nameCtrl, 'File Name', 'photo.jpg'),
-              ],
-            ),
+    final currentFolder = entry.key.substring(
+      0,
+      entry.key.length - entry.name.length,
+    );
+    final values = await showYsDialog<List<String>>(
+      context,
+      builder: (_) => _FieldsDialog(
+        title: 'Rename / Move',
+        confirmLabel: 'Move',
+        fields: [
+          _FieldSpec(
+            's3-move-folder',
+            'Folder Path',
+            'images/2024/',
+            currentFolder,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Move'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true || !mounted) return;
-      final destKey = folderCtrl.text + nameCtrl.text.trim();
-      if (destKey == entry.key) return;
-      if (destKey.isEmpty || destKey.endsWith('/')) {
-        setState(() => _error = 'Invalid destination path');
-        return;
-      }
+          _FieldSpec('s3-move-name', 'File Name', 'photo.jpg', entry.name),
+        ],
+      ),
+    );
+    if (values == null || !mounted) return;
+    final destKey = values[0] + values[1].trim();
+    if (destKey == entry.key) return;
+    if (destKey.isEmpty || destKey.endsWith('/')) {
+      setState(() => _error = 'Invalid destination path');
+      return;
+    }
 
-      setState(() => _loading = true);
-      try {
-        await _service!.copyObject(entry.key, destKey);
-        await _service!.deleteObject(entry.key);
-        await _listObjects();
-      } catch (e) {
-        if (mounted) setState(() => _error = e.toString());
-      } finally {
-        if (mounted) setState(() => _loading = false);
-      }
+    setState(() => _loading = true);
+    try {
+      await _service!.copyObject(entry.key, destKey);
+      await _service!.deleteObject(entry.key);
+      await _listObjects();
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      folderCtrl.dispose();
-      nameCtrl.dispose();
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -415,35 +407,25 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       );
       if (mounted) setState(() => _uploadProgress = null);
       await _listObjects();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Uploaded ${file.name}')),
-        );
-      }
+      if (mounted) showYsToast(context, 'Uploaded ${file.name}');
     } catch (e) {
-      if (mounted) setState(() { _uploadProgress = null; _error = e.toString(); });
+      if (mounted)
+        setState(() {
+          _uploadProgress = null;
+          _error = e.toString();
+        });
     }
   }
 
   Future<void> _delete(S3BucketEntry entry) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: DevOpsColors.sidebar,
-        title: const Text('Delete object', style: TextStyle(color: DevOpsColors.textPrimary)),
-        content: Text('Delete "${entry.name}"?',
-            style: const TextStyle(color: DevOpsColors.textSecondary)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: DevOpsColors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await showYsConfirm(
+      context,
+      title: 'Delete object',
+      message: 'Delete "${entry.name}"?',
+      confirmLabel: 'Delete',
+      destructive: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed || !mounted) return;
 
     setState(() => _loading = true);
     try {
@@ -459,11 +441,7 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
   Future<void> _copyDownloadUrl(S3BucketEntry entry) async {
     final url = _service!.presignedDownloadUrl(entry.key);
     await Clipboard.setData(ClipboardData(text: url));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Download URL copied to clipboard')),
-      );
-    }
+    if (mounted) showYsToast(context, 'Download URL copied to clipboard');
   }
 
   Future<void> _openInBrowser(S3BucketEntry entry) async {
@@ -480,11 +458,7 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       final bytes = await _service!.downloadObject(entry.key);
       final path = '${_getDownloadsPath()}/${entry.name}';
       await File(path).writeAsBytes(bytes);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved to Downloads/${entry.name}')),
-        );
-      }
+      if (mounted) showYsToast(context, 'Saved to Downloads/${entry.name}');
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -502,49 +476,68 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
   @override
   Widget build(BuildContext context) {
     final hasConfig = _configs.isNotEmpty && _activeIndex >= 0;
-    return Column(
-      children: [
-        _buildToolbar(),
-        Container(height: 1, color: DevOpsColors.border),
-        if (!hasConfig)
-          Expanded(child: _buildEmptyState())
-        else ...[
-          _buildBreadcrumbs(),
-          Container(height: 1, color: DevOpsColors.border),
-          if (_uploadProgress != null)
-            LinearProgressIndicator(value: _uploadProgress, minHeight: 2),
-          Expanded(child: _buildFileList()),
+    return ColoredBox(
+      color: YsColors.background,
+      child: Column(
+        children: [
+          _buildToolbar(),
+          const FDivider(),
+          if (!hasConfig)
+            Expanded(child: _buildEmptyState())
+          else ...[
+            _buildBreadcrumbs(),
+            const FDivider(),
+            if (_uploadProgress != null)
+              FDeterminateProgress(
+                value: _uploadProgress!,
+                semanticsLabel: 'Upload progress',
+              ),
+            Expanded(child: _buildFileList()),
+          ],
         ],
-      ],
+      ),
     );
   }
 
   Widget _buildToolbar() {
     final hasConfig = _configs.isNotEmpty && _activeIndex >= 0;
     return Container(
-      height: 44,
-      color: DevOpsColors.sidebar,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      height: 48,
+      color: YsColors.sidebar,
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s4),
       child: Row(
         children: [
-          const Icon(Icons.cloud_outlined, size: 16, color: DevOpsColors.textSecondary),
-          const SizedBox(width: 8),
-          if (hasConfig)
-            _buildBucketSelector()
-          else
-            const Text(
-              'S3 Browser',
-              style: TextStyle(color: DevOpsColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
-            ),
-          const Spacer(),
-          _toolBtn(Icons.add, 'Add Bucket', () => _showConfigDialog()),
+          const Icon(
+            FLucideIcons.cloud,
+            size: 16,
+            color: YsColors.mutedForeground,
+          ),
+          const SizedBox(width: YsSpace.s2),
+          Expanded(
+            child: hasConfig
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildBucketSelector(),
+                  )
+                : const Text(
+                    'S3 Browser',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: YsColors.foreground,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+          ),
+          _toolBtn(FLucideIcons.plus, 'Add Bucket', () => _showConfigDialog()),
           if (hasConfig) ...[
-            const SizedBox(width: 4),
-            _toolBtn(Icons.create_new_folder_outlined, 'New Folder', _createFolder),
-            const SizedBox(width: 4),
-            _toolBtn(Icons.upload_outlined, 'Upload', _upload),
-            const SizedBox(width: 4),
-            _toolBtn(Icons.refresh, 'Refresh', _listObjects),
+            const SizedBox(width: YsSpace.s1),
+            _toolBtn(FLucideIcons.folderPlus, 'New Folder', _createFolder),
+            const SizedBox(width: YsSpace.s1),
+            _toolBtn(FLucideIcons.upload, 'Upload', _upload),
+            const SizedBox(width: YsSpace.s1),
+            _toolBtn(FLucideIcons.refreshCw, 'Refresh', _listObjects),
           ],
         ],
       ),
@@ -555,30 +548,46 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        DropdownButton<int>(
-          value: _activeIndex,
-          underline: const SizedBox(),
-          dropdownColor: DevOpsColors.card,
-          style: const TextStyle(
-            color: DevOpsColors.textPrimary,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
+        Flexible(
+          child: SizedBox(
+            width: 220,
+            child: FSelect<int>.rich(
+              key: const ValueKey('s3-bucket-select'),
+              size: .sm,
+              control: .lifted(
+                value: _activeIndex,
+                onChange: (index) {
+                  if (index != null && index != _activeIndex)
+                    _activateConfig(index);
+                },
+              ),
+              format: (i) => _configs[i].name,
+              children: [
+                for (final (i, c) in _configs.indexed)
+                  FSelectItem<int>(
+                    title: Text(
+                      c.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    value: i,
+                  ),
+              ],
+            ),
           ),
-          items: _configs.asMap().entries.map((e) => DropdownMenuItem<int>(
-            value: e.key,
-            child: Text(e.value.name),
-          )).toList(),
-          onChanged: (index) {
-            if (index != null && index != _activeIndex) _activateConfig(index);
-          },
         ),
+        const SizedBox(width: YsSpace.s1),
         _toolBtn(
-          Icons.edit_outlined,
+          FLucideIcons.pencil,
           'Edit Bucket',
-          () => _showConfigDialog(existing: _configs[_activeIndex], editIndex: _activeIndex),
+          () => _showConfigDialog(
+            existing: _configs[_activeIndex],
+            editIndex: _activeIndex,
+          ),
         ),
+        const SizedBox(width: YsSpace.s1),
         _toolBtn(
-          Icons.delete_outlined,
+          FLucideIcons.trash2,
           'Remove Bucket',
           () => _deleteConfig(_activeIndex),
         ),
@@ -587,23 +596,16 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.cloud_outlined, color: DevOpsColors.textTertiary, size: 48),
-          const SizedBox(height: 12),
-          const Text(
-            'No buckets configured',
-            style: TextStyle(color: DevOpsColors.textSecondary, fontSize: 14),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Add Bucket'),
-            onPressed: () => _showConfigDialog(),
-          ),
-        ],
+    return YsEmptyState(
+      icon: FLucideIcons.cloud,
+      title: 'No buckets configured',
+      action: IntrinsicWidth(
+        child: FButton(
+          prefix: const Icon(FLucideIcons.plus),
+          mainAxisSize: MainAxisSize.min,
+          onPress: () => _showConfigDialog(),
+          child: const Text('Add Bucket'),
+        ),
       ),
     );
   }
@@ -611,13 +613,13 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
   Widget _toolBtn(IconData icon, String tooltip, VoidCallback onTap) {
     return Tooltip(
       message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 16, color: DevOpsColors.textSecondary),
-        ),
+      excludeFromSemantics: true,
+      child: FButton.icon(
+        variant: .ghost,
+        size: .xs,
+        semanticsLabel: tooltip,
+        onPress: onTap,
+        child: Icon(icon),
       ),
     );
   }
@@ -625,83 +627,115 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
   Widget _buildBreadcrumbs() {
     final bucketName = _activeIndex >= 0 ? _configs[_activeIndex].bucket : '';
     return Container(
-      height: 36,
-      color: DevOpsColors.bg,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          InkWell(
-            onTap: _prefix.isEmpty ? null : () => _navigateTo(''),
-            child: Text(
-              bucketName,
-              style: TextStyle(
-                color: _prefix.isEmpty ? DevOpsColors.textPrimary : DevOpsColors.accent,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          ..._breadcrumbs.asMap().entries.map((e) {
-            final isLast = e.key == _breadcrumbs.length - 1;
-            final partPrefix = '${_breadcrumbs.sublist(0, e.key + 1).join('/')}/';
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(' / ', style: TextStyle(color: DevOpsColors.textTertiary, fontSize: 12)),
-                InkWell(
-                  onTap: isLast ? null : () => _navigateTo(partPrefix),
-                  child: Text(
-                    e.value,
+      height: 40,
+      color: YsColors.background,
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s2),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _crumb(bucketName, _prefix.isEmpty ? null : () => _navigateTo('')),
+            ..._breadcrumbs.asMap().entries.map((e) {
+              final isLast = e.key == _breadcrumbs.length - 1;
+              final partPrefix =
+                  '${_breadcrumbs.sublist(0, e.key + 1).join('/')}/';
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '/',
                     style: TextStyle(
-                      color: isLast ? DevOpsColors.textPrimary : DevOpsColors.accent,
+                      color: YsColors.mutedForeground,
                       fontSize: 12,
                     ),
                   ),
-                ),
-              ],
-            );
-          }),
-        ],
+                  _crumb(
+                    e.value,
+                    isLast ? null : () => _navigateTo(partPrefix),
+                  ),
+                ],
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _crumb(String label, VoidCallback? onPress) {
+    return FButton(
+      variant: .ghost,
+      size: .xs,
+      mainAxisSize: MainAxisSize.min,
+      onPress: onPress,
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: onPress == null ? YsColors.foreground : YsColors.primary,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }
 
   Widget _buildFileList() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(child: FCircularProgress());
     }
     if (_error != null) {
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline, color: DevOpsColors.red, size: 32),
-            const SizedBox(height: 8),
-            Text(_error!, style: const TextStyle(color: DevOpsColors.textSecondary, fontSize: 12)),
-            const SizedBox(height: 12),
-            TextButton(onPressed: _listObjects, child: const Text('Retry')),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(YsSpace.s5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                FLucideIcons.circleAlert,
+                color: YsColors.error,
+                size: 32,
+              ),
+              const SizedBox(height: YsSpace.s2),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: YsColors.mutedForeground,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: YsSpace.s3),
+              IntrinsicWidth(
+                child: FButton(
+                  variant: .outline,
+                  size: .sm,
+                  mainAxisSize: MainAxisSize.min,
+                  onPress: _listObjects,
+                  child: const Text('Retry'),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
     if (_entries.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.folder_open_outlined, color: DevOpsColors.textTertiary, size: 40),
-            const SizedBox(height: 8),
-            const Text('Empty folder', style: TextStyle(color: DevOpsColors.textTertiary, fontSize: 13)),
-            if (_prefix.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              TextButton.icon(
-                icon: const Icon(Icons.arrow_upward, size: 14),
-                label: const Text('Go up'),
-                onPressed: _navigateUp,
-              ),
-            ],
-          ],
-        ),
+      return YsEmptyState(
+        icon: FLucideIcons.folderOpen,
+        title: 'Empty folder',
+        action: _prefix.isNotEmpty
+            ? IntrinsicWidth(
+                child: FButton(
+                  variant: .outline,
+                  size: .sm,
+                  mainAxisSize: MainAxisSize.min,
+                  prefix: const Icon(FLucideIcons.arrowUp),
+                  onPress: _navigateUp,
+                  child: const Text('Go up'),
+                ),
+              )
+            : null,
       );
     }
 
@@ -709,15 +743,15 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       itemCount: _entries.length + (_prefix.isNotEmpty ? 1 : 0),
       itemBuilder: (context, i) {
         if (_prefix.isNotEmpty && i == 0) {
-          return ListTile(
-            dense: true,
-            leading: const Icon(Icons.arrow_upward, size: 16, color: DevOpsColors.textTertiary),
-            title: const Text('..', style: TextStyle(color: DevOpsColors.textSecondary, fontSize: 13)),
-            onTap: _navigateUp,
+          return FItem(
+            prefix: const Icon(FLucideIcons.arrowUp, size: 16),
+            title: const Text('..'),
+            onPress: _navigateUp,
           );
         }
         final entry = _entries[_prefix.isNotEmpty ? i - 1 : i];
         return _EntryTile(
+          key: ValueKey('s3-entry-${entry.key}'),
           entry: entry,
           onNavigate: entry.isPrefix ? () => _navigateTo(entry.key) : null,
           onDelete: entry.isPrefix ? null : () => _delete(entry),
@@ -729,38 +763,94 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       },
     );
   }
+}
 
-  Widget _field(TextEditingController ctrl, String label, String hint, {bool obscure = false}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(color: DevOpsColors.textSecondary, fontSize: 12)),
-          const SizedBox(height: 4),
-          TextField(
-            controller: ctrl,
-            obscureText: obscure,
-            style: const TextStyle(color: DevOpsColors.textPrimary, fontSize: 13),
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: const TextStyle(color: DevOpsColors.textTertiary, fontSize: 13),
-              filled: true,
-              fillColor: DevOpsColors.card,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: DevOpsColors.border),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: DevOpsColors.border),
-              ),
-            ),
+class _FieldSpec {
+  final String key;
+  final String label;
+  final String hint;
+  final String initial;
+  final bool obscure;
+  const _FieldSpec(
+    this.key,
+    this.label,
+    this.hint,
+    this.initial, {
+    this.obscure = false,
+  });
+}
+
+/// A dialog of labelled text fields that owns its controllers and pops the
+/// entered values (in field order), or null on Cancel.
+class _FieldsDialog extends StatefulWidget {
+  final String title;
+  final String confirmLabel;
+  final List<_FieldSpec> fields;
+  const _FieldsDialog({
+    required this.title,
+    required this.confirmLabel,
+    required this.fields,
+  });
+
+  @override
+  State<_FieldsDialog> createState() => _FieldsDialogState();
+}
+
+class _FieldsDialogState extends State<_FieldsDialog> {
+  late final List<TextEditingController> _ctrls = [
+    for (final f in widget.fields) TextEditingController(text: f.initial),
+  ];
+
+  @override
+  void dispose() {
+    for (final c in _ctrls) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return YsDialog(
+      title: widget.title,
+      body: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final (i, f) in widget.fields.indexed)
+                Padding(
+                  padding: EdgeInsets.only(
+                    bottom: i == widget.fields.length - 1 ? 0 : YsSpace.s3,
+                  ),
+                  child: FTextField(
+                    key: ValueKey(f.key),
+                    control: .managed(controller: _ctrls[i]),
+                    label: Text(f.label),
+                    hint: f.hint,
+                    obscureText: f.obscure,
+                    autofocus: i == 0,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                  ),
+                ),
+            ],
           ),
-        ],
+        ),
       ),
+      actions: [
+        FButton(
+          variant: .outline,
+          onPress: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FButton(
+          onPress: () =>
+              Navigator.pop(context, [for (final c in _ctrls) c.text]),
+          child: Text(widget.confirmLabel),
+        ),
+      ],
     );
   }
 }
@@ -775,6 +865,7 @@ class _EntryTile extends StatefulWidget {
   final VoidCallback? onRenameMove;
 
   const _EntryTile({
+    super.key,
     required this.entry,
     this.onNavigate,
     this.onDelete,
@@ -790,46 +881,84 @@ class _EntryTile extends StatefulWidget {
 
 class _EntryTileState extends State<_EntryTile> {
   bool _hovered = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final entry = widget.entry;
+    final hasActions = !entry.isPrefix;
+    // Actions are always built (so Tab reaches them); they are painted only
+    // while the row is hovered or one of them holds focus.
+    final showActions = _hovered || _focused;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: Container(
-        color: _hovered ? DevOpsColors.card.withValues(alpha: 0.6) : Colors.transparent,
-        child: ListTile(
-          dense: true,
-          leading: Icon(
-            entry.isPrefix ? Icons.folder_outlined : _fileIcon(entry.name),
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (f) => setState(() => _focused = f),
+        child: FItem(
+          prefix: Icon(
+            entry.isPrefix ? FLucideIcons.folder : _fileIcon(entry.name),
             size: 16,
-            color: entry.isPrefix ? const Color(0xFFE8B84D) : DevOpsColors.textSecondary,
+            color: entry.isPrefix ? YsColors.warn : YsColors.mutedForeground,
           ),
-          title: Text(entry.name,
-              style: const TextStyle(color: DevOpsColors.textPrimary, fontSize: 13)),
+          title: Text(entry.name, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: !entry.isPrefix && entry.lastModified != null
               ? Text(
                   '${_fmtDate(entry.lastModified!)}  •  ${entry.displaySize}',
-                  style: const TextStyle(color: DevOpsColors.textTertiary, fontSize: 11),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 )
               : null,
-          onTap: widget.onNavigate,
-          trailing: _hovered && !entry.isPrefix
-              ? Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (widget.onCopyUrl != null)
-                      _actionBtn(Icons.link_outlined, 'Copy URL', widget.onCopyUrl!),
-                    if (widget.onOpenUrl != null)
-                      _actionBtn(Icons.open_in_browser_outlined, 'Open', widget.onOpenUrl!),
-                    if (widget.onDownload != null)
-                      _actionBtn(Icons.download_outlined, 'Download', widget.onDownload!),
-                    if (widget.onRenameMove != null)
-                      _actionBtn(Icons.drive_file_rename_outline, 'Rename / Move', widget.onRenameMove!),
-                    if (widget.onDelete != null)
-                      _actionBtn(Icons.delete_outlined, 'Delete', widget.onDelete!, color: DevOpsColors.red),
-                  ],
+          onPress: widget.onNavigate,
+          suffix: hasActions
+              // Always built so Tab can focus them (focus reveals them); while
+              // hidden they are not hit-testable and not in semantics.
+              ? IgnorePointer(
+                  ignoring: !showActions,
+                  child: ExcludeSemantics(
+                    excluding: !showActions,
+                    child: Opacity(
+                      opacity: showActions ? 1 : 0,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.onCopyUrl != null)
+                            _actionBtn(
+                              FLucideIcons.link,
+                              'Copy URL',
+                              widget.onCopyUrl!,
+                            ),
+                          if (widget.onOpenUrl != null)
+                            _actionBtn(
+                              FLucideIcons.externalLink,
+                              'Open',
+                              widget.onOpenUrl!,
+                            ),
+                          if (widget.onDownload != null)
+                            _actionBtn(
+                              FLucideIcons.download,
+                              'Download',
+                              widget.onDownload!,
+                            ),
+                          if (widget.onRenameMove != null)
+                            _actionBtn(
+                              FLucideIcons.pencilLine,
+                              'Rename / Move',
+                              widget.onRenameMove!,
+                            ),
+                          if (widget.onDelete != null)
+                            _actionBtn(
+                              FLucideIcons.trash2,
+                              'Delete',
+                              widget.onDelete!,
+                              color: YsColors.error,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 )
               : null,
         ),
@@ -837,15 +966,23 @@ class _EntryTileState extends State<_EntryTile> {
     );
   }
 
-  Widget _actionBtn(IconData icon, String tooltip, VoidCallback onTap, {Color? color}) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Icon(icon, size: 14, color: color ?? DevOpsColors.textSecondary),
+  Widget _actionBtn(
+    IconData icon,
+    String tooltip,
+    VoidCallback onTap, {
+    Color? color,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(left: YsSpace.s1),
+      child: Tooltip(
+        message: tooltip,
+        excludeFromSemantics: true,
+        child: FButton.icon(
+          variant: .ghost,
+          size: .xs,
+          semanticsLabel: tooltip,
+          onPress: onTap,
+          child: Icon(icon, color: color),
         ),
       ),
     );
@@ -854,15 +991,26 @@ class _EntryTileState extends State<_EntryTile> {
   IconData _fileIcon(String name) {
     final ext = name.split('.').last.toLowerCase();
     return switch (ext) {
-      'jpg' || 'jpeg' || 'png' || 'gif' || 'webp' || 'svg' => Icons.image_outlined,
-      'mp4' || 'avi' || 'mov' || 'mkv' => Icons.video_file_outlined,
-      'mp3' || 'wav' || 'ogg' || 'flac' => Icons.audio_file_outlined,
-      'pdf' => Icons.picture_as_pdf_outlined,
-      'zip' || 'tar' || 'gz' || '7z' || 'rar' => Icons.archive_outlined,
-      'js' || 'ts' || 'dart' || 'py' || 'go' || 'rs' || 'sh' => Icons.code_outlined,
-      'json' || 'yaml' || 'yml' || 'toml' || 'xml' => Icons.data_object_outlined,
-      'md' || 'txt' || 'log' || 'csv' => Icons.description_outlined,
-      _ => Icons.insert_drive_file_outlined,
+      'jpg' ||
+      'jpeg' ||
+      'png' ||
+      'gif' ||
+      'webp' ||
+      'svg' => FLucideIcons.image,
+      'mp4' || 'avi' || 'mov' || 'mkv' => FLucideIcons.fileVideo,
+      'mp3' || 'wav' || 'ogg' || 'flac' => FLucideIcons.fileAudio,
+      'pdf' => FLucideIcons.fileText,
+      'zip' || 'tar' || 'gz' || '7z' || 'rar' => FLucideIcons.fileArchive,
+      'js' ||
+      'ts' ||
+      'dart' ||
+      'py' ||
+      'go' ||
+      'rs' ||
+      'sh' => FLucideIcons.fileCode,
+      'json' || 'yaml' || 'yml' || 'toml' || 'xml' => FLucideIcons.fileJson,
+      'md' || 'txt' || 'log' || 'csv' => FLucideIcons.fileText,
+      _ => FLucideIcons.file,
     };
   }
 

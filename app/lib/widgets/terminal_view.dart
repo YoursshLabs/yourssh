@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:xterm/xterm.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import '../models/host.dart';
 import '../models/ssh_session.dart';
 import '../providers/command_history_provider.dart';
@@ -49,6 +50,12 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
   final _controller = TerminalController();
   final _scrollController = ScrollController();
 
+  /// The terminal's focus (handed back when the search closes) and the
+  /// search field's (focused when the search opens, so the query is typed
+  /// into the field and never reaches the shell).
+  final _terminalFocus = FocusNode();
+  final _searchFocus = FocusNode();
+
   // Search state
   bool _searchVisible = false;
   String _searchQuery = '';
@@ -84,6 +91,8 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
     _controller.dispose();
     _scrollController.dispose();
     _searchTextController.dispose();
+    _terminalFocus.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -216,11 +225,11 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
     final st = context
         .read<ShellIntegrationProvider>()
         .maybeStateFor(widget.session.id);
-    if (st == null || st.commands.isEmpty || !_scrollController.hasClients) {
+    if (st == null || st.liveCommands.isEmpty || !_scrollController.hasClients) {
       return false;
     }
     final currentLine = _scrollController.offset / _lineHeightPx;
-    final lines = st.commands.map((c) => c.promptLine).toList()..sort();
+    final lines = st.liveCommands.map((c) => c.promptLine).toList()..sort();
     int? target;
     if (direction < 0) {
       for (final l in lines) {
@@ -310,6 +319,7 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
       _matches = [];
       _currentMatch = 0;
     });
+    _terminalFocus.requestFocus();
   }
 
   void _completeTo(String suggestion) {
@@ -336,6 +346,7 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
     // Open search (Cmd+F on macOS, Ctrl+F elsewhere)
     if ((meta || ctrl) && key == LogicalKeyboardKey.keyF) {
       setState(() => _searchVisible = true);
+      _searchFocus.requestFocus();
       return KeyEventResult.handled;
     }
 
@@ -431,6 +442,7 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
           widget.session.terminal,
           controller: _controller,
           scrollController: _scrollController,
+          focusNode: _terminalFocus,
           theme: theme,
           textStyle: TerminalStyle(
             fontSize: appearance.fontSize,
@@ -467,11 +479,14 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
             right: 0,
             child: _SearchBar(
               controller: _searchTextController,
+              focusNode: _searchFocus,
               useRegex: _searchRegex,
               hasError: _searchError,
               matchCount: _matches.length,
               currentMatch: _currentMatch,
               onQueryChanged: (q) {
+                // The field reports selection moves too; search on text only.
+                if (q == _searchQuery) return;
                 _searchQuery = q;
                 _runSearch();
               },
@@ -513,8 +528,12 @@ class _SearchMatch {
   const _SearchMatch(this.lineIdx, this.startCol, this.endCol);
 }
 
+/// Terminal search strip (Cmd/Ctrl+F): query field, match count, regex
+/// toggle, previous / next and close. In the focused field Enter goes to the
+/// next match, Shift+Enter to the previous one and Escape closes the search.
 class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
+  final FocusNode focusNode;
   final bool useRegex;
   final bool hasError;
   final int matchCount;
@@ -527,6 +546,7 @@ class _SearchBar extends StatelessWidget {
 
   const _SearchBar({
     required this.controller,
+    required this.focusNode,
     required this.useRegex,
     required this.hasError,
     required this.matchCount,
@@ -537,6 +557,39 @@ class _SearchBar extends StatelessWidget {
     required this.onPrev,
     required this.onClose,
   });
+
+  static const _mono = TextStyle(
+    fontFamily: kYsMonoFontFamily,
+    fontFamilyFallback: kYsMonoFontFallback,
+  );
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.escape) {
+      onClose();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      HardwareKeyboard.instance.isShiftPressed ? onPrev() : onNext();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  Widget _button(String tooltip, Widget icon, VoidCallback onPress,
+          {bool selected = false}) =>
+      Tooltip(
+        message: tooltip,
+        child: FButton.icon(
+          variant: selected ? .secondary : .ghost,
+          size: .xs,
+          selected: selected,
+          onPress: onPress,
+          child: icon,
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -549,138 +602,87 @@ class _SearchBar extends StatelessWidget {
                 ? '${currentMatch + 1} of $matchCount'
                 : 'No results';
     final countColor = hasError
-        ? Colors.red
+        ? YsColors.error
         : hasResults
-            ? const Color(0xFF888888)
-            : Colors.orange;
+            ? YsColors.mutedForeground
+            : YsColors.warn;
 
-    return Container(
-      height: 36,
-      color: const Color(0xFF141414),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              autofocus: true,
-              onChanged: onQueryChanged,
-              style: const TextStyle(
-                color: Color(0xFFEEEEEE),
-                fontSize: 12,
-                fontFamily: 'monospace',
-              ),
-              decoration: InputDecoration(
-                hintText: useRegex ? 'Search (regex)…' : 'Search…',
-                hintStyle:
-                    const TextStyle(color: Color(0xFF555555), fontSize: 12),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+    // Key handler only, never focusable itself: keys from the focused field
+    // bubble up to it.
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: _onKey,
+      child: Container(
+        height: 40,
+        decoration: const BoxDecoration(
+          color: YsColors.card,
+          border: Border(bottom: BorderSide(color: YsColors.border)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: YsSpace.s2),
+        child: Row(
+          children: [
+            Expanded(
+              child: FTextField(
+                key: const Key('terminal-search-field'),
+                control: FTextFieldControl.managed(
+                  controller: controller,
+                  onChange: (v) => onQueryChanged(v.text),
+                ),
+                focusNode: focusNode,
+                autofocus: true,
+                size: .sm,
+                hint: useRegex ? 'Search (regex)…' : 'Search…',
+                style: .delta(
+                  contentTextStyle: .delta([
+                    .base(
+                      const .delta(
+                        fontFamily: kYsMonoFontFamily,
+                        fontFamilyFallback: kYsMonoFontFallback,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ]),
+                ),
+                prefixBuilder: (context, style, variants) =>
+                    FTextField.prefixIconBuilder(
+                  context,
+                  style,
+                  variants,
+                  const Icon(FLucideIcons.search),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          if (countLabel.isNotEmpty)
-            Text(
-              countLabel,
-              style: TextStyle(
-                color: countColor,
-                fontSize: 11,
-                fontFamily: 'monospace',
+            const SizedBox(width: YsSpace.s2),
+            if (countLabel.isNotEmpty)
+              Text(
+                countLabel,
+                key: const Key('terminal-search-count'),
+                style: _mono.copyWith(color: countColor, fontSize: 11),
               ),
+            const SizedBox(width: YsSpace.s2),
+            _button(
+              'Use regex',
+              Text(
+                '.*',
+                style: _mono.copyWith(
+                  color: useRegex
+                      ? YsColors.accentText
+                      : YsColors.mutedForeground,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              onToggleRegex,
+              selected: useRegex,
             ),
-          const SizedBox(width: 8),
-          _SearchBtn(
-            tooltip: 'Use regex',
-            active: useRegex,
-            label: '.*',
-            onTap: onToggleRegex,
-          ),
-          const SizedBox(width: 4),
-          _SearchBtn(
-            tooltip: 'Previous match (Shift+Enter)',
-            icon: Icons.keyboard_arrow_up,
-            onTap: onPrev,
-          ),
-          const SizedBox(width: 2),
-          _SearchBtn(
-            tooltip: 'Next match (Enter)',
-            icon: Icons.keyboard_arrow_down,
-            onTap: onNext,
-          ),
-          const SizedBox(width: 4),
-          _SearchBtn(
-            tooltip: 'Close search (Escape)',
-            icon: Icons.close,
-            onTap: onClose,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SearchBtn extends StatefulWidget {
-  final String? tooltip;
-  final String? label;
-  final IconData? icon;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _SearchBtn({
-    this.tooltip,
-    this.label,
-    this.icon,
-    this.active = false,
-    required this.onTap,
-  }) : assert(label != null || icon != null);
-
-  @override
-  State<_SearchBtn> createState() => _SearchBtnState();
-}
-
-class _SearchBtnState extends State<_SearchBtn> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = widget.active
-        ? const Color(0xFF4FC3F7)
-        : _hovered
-            ? const Color(0xFFAAAAAA)
-            : const Color(0xFF666666);
-
-    final child = widget.label != null
-        ? Text(
-            widget.label!,
-            style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.w600),
-          )
-        : Icon(widget.icon, size: 14, color: color);
-
-    return Tooltip(
-      message: widget.tooltip ?? '',
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: Container(
-            width: 24,
-            height: 24,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: widget.active
-                  ? const Color(0xFF4FC3F7).withValues(alpha: 0.12)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: child,
-          ),
+            _button('Previous match (Shift+Enter)',
+                const Icon(FLucideIcons.chevronUp), onPrev),
+            _button('Next match (Enter)', const Icon(FLucideIcons.chevronDown),
+                onNext),
+            _button('Close search (Escape)', const Icon(FLucideIcons.x),
+                onClose),
+          ],
         ),
       ),
     );

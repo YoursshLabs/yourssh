@@ -9,6 +9,11 @@ import 'package:yourssh/widgets/dual_panel_sftp_screen.dart';
 import 'package:yourssh/widgets/local_file_panel.dart';
 import 'package:yourssh/widgets/sftp_panel.dart';
 import 'package:yourssh/widgets/source_picker_dialog.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
+
+/// forui buttons and checkboxes settle their press feedback 100 ms after a
+/// tap; pump past it so no timer outlives the test.
+const _pressFeedback = Duration(milliseconds: 200);
 
 void main() {
   late ValueNotifier<bool> notifier;
@@ -28,7 +33,7 @@ void main() {
           Provider<SshService>(create: (_) => SshService(storage)),
           ChangeNotifierProvider(create: (_) => HostProvider(storage)),
         ],
-        child: MaterialApp(
+        child: MaterialApp(builder: ysRootBuilder,
           home: Scaffold(
             body: DualPanelSftpScreen(connectionNotifier: notifier),
           ),
@@ -52,12 +57,12 @@ void main() {
 
     // Open the source picker from the unconnected right slot.
     await tester.tap(find.text('Select host'));
-    await tester.pump();
+    await tester.pump(_pressFeedback);
     expect(find.byType(SourcePickerDialog), findsOneWidget);
 
     await tester.tap(find.descendant(
         of: find.byType(SourcePickerDialog), matching: find.text('Local')));
-    await tester.pump();
+    await tester.pump(_pressFeedback);
 
     expect(find.byType(LocalFilePanel), findsNWidgets(2));
     expect(find.byType(SftpPanel), findsNothing);

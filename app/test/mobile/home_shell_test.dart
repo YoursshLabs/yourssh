@@ -1,3 +1,5 @@
+import 'package:yourssh/mobile/theme/toast_inset.dart';
+import 'package:yourssh/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -49,13 +51,18 @@ Widget _wrap(Widget child) {
     ],
     child: MaterialApp(
       theme: buildMobileTheme(),
+      builder: ysRootBuilderTouch,
       home: child,
     ),
   );
 }
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    mobileToastInset.value = 0;
+  });
+  tearDown(() => mobileToastInset.value = 0);
 
   testWidgets('shows four tab labels in MobileTabBar', (tester) async {
     await tester.pumpWidget(_wrap(const MobileHomeShell()));

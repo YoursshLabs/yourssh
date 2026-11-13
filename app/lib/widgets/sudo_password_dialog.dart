@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../models/host.dart';
+
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Prompts for the sudo password used by elevated SFTP. Pops with
 /// `(password:, remember:)` on OK, or null when cancelled. Persisting the
@@ -30,9 +33,9 @@ class _SudoPasswordDialogState extends State<SudoPasswordDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Sudo password'),
-      content: Column(
+    return YsDialog(
+      title: 'Sudo password',
+      body: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -41,34 +44,35 @@ class _SudoPasswordDialogState extends State<SudoPasswordDialog> {
             'needs the sudo password.',
             style: const TextStyle(fontSize: 13),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _controller,
+          const SizedBox(height: YsSpace.s3),
+          FTextField(
+            control: FTextFieldControl.managed(controller: _controller),
+            label: const Text('Password'),
             obscureText: true,
             autofocus: true,
             autofillHints: const [AutofillHints.password],
-            onSubmitted: (_) => _submit(),
-            decoration: const InputDecoration(
-              labelText: 'Password',
-              border: OutlineInputBorder(),
-            ),
+            textInputAction: TextInputAction.done,
+            onSubmit: (_) => _submit(),
           ),
-          CheckboxListTile(
+          const SizedBox(height: YsSpace.s2),
+          FCheckbox(
             value: _remember,
-            onChanged: (v) => setState(() => _remember = v ?? false),
-            title: const Text('Remember in system keychain',
-                style: TextStyle(fontSize: 13)),
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: EdgeInsets.zero,
-            dense: true,
+            onChange: (v) => setState(() => _remember = v),
+            label: const Text('Remember in system keychain'),
           ),
         ],
       ),
       actions: [
-        TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel')),
-        FilledButton(onPressed: _submit, child: const Text('OK')),
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FButton(
+          variant: FButtonVariant.primary,
+          onPress: _submit,
+          child: const Text('OK'),
+        ),
       ],
     );
   }

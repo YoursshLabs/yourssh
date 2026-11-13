@@ -11,6 +11,7 @@ import '../models/agent_forwarding_state.dart';
 import '../models/host.dart';
 import '../models/proxy_settings.dart';
 import '../models/ssh_key.dart';
+import 'package:xterm/xterm.dart' show CellAnchor;
 import '../models/ssh_session.dart';
 import 'certificate_key_pair.dart';
 import 'connection_proxy.dart';
@@ -145,6 +146,7 @@ class SshService {
     required bool siOn,
     required String sessionId,
     required int absoluteCursorY,
+    CellAnchor Function()? anchorFactory,
   }) {
     if (code == '52' && osc52On) {
       final r = Osc52Clipboard.parse(args);
@@ -152,7 +154,8 @@ class SshService {
       return;
     }
     if (siOn) {
-      shellIntegration?.handleOsc(sessionId, code, args, absoluteCursorY);
+      shellIntegration?.handleOsc(sessionId, code, args, absoluteCursorY,
+          anchorFactory: anchorFactory);
     }
   }
 
@@ -182,7 +185,27 @@ class SshService {
   /// the host's configured proxy when set. Used for a direct connect, the first
   /// bastion hop, and test-connection.
   @visibleForTesting
-  Future<SSHSocket> localDial(Host host, {Duration? timeout}) async {
+  Future<SSHSocket> localDial(Host host, {Duration? timeout}) {
+    final limit = timeout ?? connectTimeout;
+    // Socket.connect's own timeout does not cover every OS resolver stall (a
+    // single-label name can sit in DNS/mDNS lookup for 30 s+), so the whole
+    // dial is bounded here and surfaces a readable error.
+    final dial = _dial(host, limit);
+    return dial.timeout(limit, onTimeout: () {
+      // The abandoned dial may still finish: close its socket instead of
+      // leaking an open connection, and swallow its late error.
+      unawaited(dial.then<void>((s) => s.close(), onError: (_) {}));
+      throw TimeoutException(
+          'Timed out connecting to ${host.host}:${host.port} '
+          'after ${limit.inSeconds}s',
+          limit);
+    });
+  }
+
+  /// Upper bound for opening the first TCP transport of a connect.
+  Duration connectTimeout = const Duration(seconds: 15);
+
+  Future<SSHSocket> _dial(Host host, Duration timeout) async {
     if (host.proxyType == ProxyType.none) {
       return directDialer(host.host, host.port, timeout: timeout);
     }
@@ -757,6 +780,7 @@ class SshService {
             siOn: siOn,
             sessionId: session.id,
             absoluteCursorY: session.terminal.buffer.absoluteCursorY,
+            anchorFactory: session.terminal.buffer.createAnchorFromCursor,
           );
     }
 
@@ -1175,7 +1199,8 @@ class SshService {
         type: AuditEventType.exec,
         host: host,
         command: originalCommand,
-        exitCode: execResult.exitCode,
+        // null (not -1) when the server sent no exit status
+        exitCode: result.exitCode,
         meta: {'source': auditSource},
       ));
     }

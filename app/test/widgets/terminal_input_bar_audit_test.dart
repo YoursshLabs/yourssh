@@ -10,6 +10,8 @@ import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/tab_metadata_service.dart';
 import 'package:yourssh/widgets/terminal_input_bar.dart';
 
+import '../helpers/ys_test_app.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -27,15 +29,13 @@ void main() {
         ChangeNotifierProvider.value(value: sessions),
         Provider<AuditService>.value(value: audit),
       ],
-      child: MaterialApp(
-        home: Scaffold(
-          body: TerminalInputBar(
-              sessionId: 's1', onSubmit: (_) {}, onDismiss: () {}),
-        ),
+      child: ysTestApp(
+        TerminalInputBar(sessionId: 's1', onSubmit: (_) {}, onDismiss: () {}),
       ),
     ));
 
-    await tester.enterText(find.byType(TextField), 'systemctl restart nginx');
+    await tester.enterText(
+        find.byKey(const Key('terminal-input-field')), 'systemctl restart nginx');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
 

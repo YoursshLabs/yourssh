@@ -7,8 +7,9 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import '../models/host.dart';
 import '../services/ssh_service.dart';
-import '../theme/app_theme.dart';
 import '../util/safe_local_path.dart';
+import 'file_panel_chrome.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class SftpScreen extends StatefulWidget {
   final Host host;
@@ -137,25 +138,67 @@ class _SftpScreenState extends State<SftpScreen> {
     _loadDir(newPath);
   }
 
+  /// Built once: cells depend only on the entry (see YsColumn.cell).
+  late final List<YsColumn<SftpName>> _columns = [
+    YsColumn<SftpName>(
+      id: 'name',
+      label: 'Name',
+      flex: 5,
+      cell: (_, e) => FileNameCell(
+        name: e.filename,
+        isDirectory: e.attr.isDirectory,
+        extension: p.posix.extension(e.filename).replaceFirst('.', ''),
+      ),
+    ),
+    YsColumn<SftpName>(
+      id: 'size',
+      label: 'Size',
+      width: 70,
+      numeric: true,
+      cell: (_, e) => FileMetaCell(
+          e.attr.isDirectory || e.attr.size == null
+              ? ''
+              : _formatSize(e.attr.size!)),
+    ),
+    YsColumn<SftpName>(
+      id: 'download',
+      label: '',
+      width: 40,
+      cell: (_, e) => e.attr.isDirectory
+          ? const SizedBox.shrink()
+          : FilePanelIconButton(
+              icon: FLucideIcons.download,
+              tooltip: 'Download',
+              onPress: () => _download(e),
+            ),
+    ),
+  ];
+
+  /// The clicked row, highlighted.
+  SftpName? _selected;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: AppColors.bg,
+    return ColoredBox(
+      color: YsColors.background,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildTopBar(),
           if (_status.isNotEmpty)
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              color: AppColors.sidebar,
-              child: Text(_status, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: YsSpace.s4, vertical: 6),
+              color: YsColors.sidebar,
+              child: Text(
+                _status,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: YsColors.mutedForeground, fontSize: 12),
+              ),
             ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-                : _buildFileList(),
-          ),
+          Expanded(child: _buildFileList()),
         ],
       ),
     );
@@ -165,51 +208,46 @@ class _SftpScreenState extends State<SftpScreen> {
     return Container(
       height: 52,
       decoration: const BoxDecoration(
-        color: AppColors.sidebar,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+        color: YsColors.sidebar,
+        border: Border(bottom: BorderSide(color: YsColors.border)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s4),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_upward, size: 16, color: AppColors.textSecondary),
-            onPressed: _remotePath == '/' ? null : () => _loadDir(p.posix.dirname(_remotePath)),
+          FilePanelIconButton(
+            icon: FLucideIcons.arrowUp,
             tooltip: 'Go up',
+            onPress: _remotePath == '/'
+                ? null
+                : () => _loadDir(p.posix.dirname(_remotePath)),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: YsSpace.s1),
           Expanded(
             child: Text(
               '${widget.host.label} — $_remotePath',
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: YsColors.foreground, fontSize: 13),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 16, color: AppColors.textSecondary),
-            onPressed: () => _loadDir(_remotePath),
+          FilePanelIconButton(
+            icon: FLucideIcons.refreshCw,
             tooltip: 'Refresh',
+            onPress: () => _loadDir(_remotePath),
           ),
-          const SizedBox(width: 4),
-          GestureDetector(
-            onTap: _upload,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(6)),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.upload, size: 13, color: Colors.black),
-                  SizedBox(width: 5),
-                  Text('UPLOAD', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.3)),
-                ],
-              ),
-            ),
+          const SizedBox(width: YsSpace.s1),
+          FButton(
+            size: .xs,
+            mainAxisSize: MainAxisSize.min,
+            onPress: _upload,
+            prefix: const Icon(FLucideIcons.upload),
+            child: const Text('Upload'),
           ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(Icons.close, size: 16, color: AppColors.textSecondary),
-            onPressed: () => Navigator.of(context).pop(),
+          const SizedBox(width: YsSpace.s1),
+          FilePanelIconButton(
+            icon: FLucideIcons.x,
             tooltip: 'Close',
+            onPress: () => Navigator.of(context).pop(),
           ),
         ],
       ),
@@ -217,97 +255,35 @@ class _SftpScreenState extends State<SftpScreen> {
   }
 
   Widget _buildFileList() {
-    if (_sftp == null) {
-      return const Center(child: Text('Not connected', style: TextStyle(color: AppColors.textSecondary)));
-    }
-    if (_remoteEntries.isEmpty) {
-      return const Center(child: Text('Empty directory', style: TextStyle(color: AppColors.textTertiary)));
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _remoteEntries.length,
-      itemBuilder: (_, i) => _FileRow(
-        entry: _remoteEntries[i],
-        onTap: () => _navigate(_remoteEntries[i]),
-        onDownload: () => _download(_remoteEntries[i]),
+    // The table stays mounted while a folder loads so it keeps keyboard
+    // focus across Enter / double-click navigation.
+    final ready = _sftp != null && !_loading;
+    return Padding(
+      padding: const EdgeInsets.all(YsSpace.s2),
+      child: YsFileTable<SftpName>(
+        rows: ready ? _remoteEntries : const <SftpName>[],
+        rowKey: (e) => e.filename,
+        emptyState: _loading
+            ? const Center(child: FCircularProgress())
+            : FilePanelMessage(
+                _sftp == null ? 'Not connected' : 'Empty directory'),
+        columns: _columns,
+        selected: {?_selected},
+        onSelect: (e, {additive = false, range = false}) =>
+            setState(() => _selected = e),
+        // Double-click / Enter: folders (and "..") navigate, files download.
+        onOpen: _navigate,
+        rowLabel: (e) => e.filename,
       ),
     );
   }
 }
 
-class _FileRow extends StatefulWidget {
-  final SftpName entry;
-  final VoidCallback onTap;
-  final VoidCallback onDownload;
-  const _FileRow({required this.entry, required this.onTap, required this.onDownload});
-
-  @override
-  State<_FileRow> createState() => _FileRowState();
-}
-
-class _FileRowState extends State<_FileRow> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final entry = widget.entry;
-    final isDir = entry.attr.isDirectory;
-    final size = entry.attr.size;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onDoubleTap: widget.onTap,
-        child: Container(
-          height: 36,
-          margin: const EdgeInsets.only(bottom: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.cardHover : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                isDir ? Icons.folder : Icons.insert_drive_file_outlined,
-                size: 15,
-                color: isDir ? AppColors.orange : AppColors.textSecondary,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  entry.filename,
-                  style: TextStyle(
-                    color: isDir ? AppColors.textPrimary : AppColors.textSecondary,
-                    fontSize: 13,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (!isDir && size != null)
-                Text(
-                  _formatSize(size),
-                  style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
-                ),
-              if (_hovered && !isDir) ...[
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: widget.onDownload,
-                  child: const Icon(Icons.download, size: 14, color: AppColors.accent),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
+String _formatSize(int bytes) {
+  if (bytes < 1024) return '${bytes}B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}K';
+  if (bytes < 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}M';
   }
-
-  String _formatSize(int bytes) {
-    if (bytes < 1024) return '${bytes}B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}K';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}M';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)}G';
-  }
+  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)}G';
 }

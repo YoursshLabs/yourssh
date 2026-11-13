@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../models/host.dart';
 import '../services/os_detection.dart';
-import '../theme/app_theme.dart';
 
 /// Termius-style visual chain editor for a multi-hop jump chain.
 ///
@@ -42,10 +42,9 @@ class HostChainEditor extends StatelessWidget {
 
   Future<void> _addHop(BuildContext context) async {
     final chosen = chain.map((h) => h.id).toSet();
-    final pickable =
-        candidates.where((h) => !chosen.contains(h.id)).toList();
-    final picked = await showDialog<Host>(
-      context: context,
+    final pickable = candidates.where((h) => !chosen.contains(h.id)).toList();
+    final picked = await showYsDialog<Host>(
+      context,
       builder: (_) => _HostPickerDialog(candidates: pickable),
     );
     if (picked != null) onChanged([...chain.map((h) => h.id), picked.id]);
@@ -61,44 +60,49 @@ class HostChainEditor extends StatelessWidget {
     return chain.isEmpty ? _emptyState(context) : _chainView(context);
   }
 
+  Widget _addButton(BuildContext context) => FButton(
+    variant: .secondary,
+    size: .sm,
+    prefix: const Icon(FLucideIcons.plus),
+    onPress: () => _addHop(context),
+    child: const Text('Add a Host'),
+  );
+
   Widget _emptyState(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.border),
+        color: YsColors.card,
+        borderRadius: BorderRadius.circular(YsRadius.card),
+        border: Border.all(color: YsColors.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text.rich(
-            TextSpan(
-              text: 'Adding a host will route the connection to ',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-                height: 1.4,
-              ),
-              children: [
-                TextSpan(
-                  text: currentHostLabel,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
+      child: Padding(
+        padding: const EdgeInsets.all(YsSpace.s3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text.rich(
+              TextSpan(
+                text: 'Adding a host will route the connection to ',
+                style: const TextStyle(
+                  color: YsColors.mutedForeground,
+                  fontSize: 12,
+                  height: 1.4,
                 ),
-              ],
+                children: [
+                  TextSpan(
+                    text: currentHostLabel,
+                    style: const TextStyle(
+                      color: YsColors.foreground,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          _actionButton(
-            label: 'Add a Host',
-            color: AppColors.textPrimary,
-            bg: AppColors.cardHover,
-            onTap: () => _addHop(context),
-          ),
-        ],
+            const SizedBox(height: YsSpace.s3),
+            _addButton(context),
+          ],
+        ),
       ),
     );
   }
@@ -109,98 +113,88 @@ class HostChainEditor extends StatelessWidget {
       final hop = chain[i];
       if (i > 0) rows.add(_arrow());
       final isLast = i == chain.length - 1;
-      rows.add(_HostCard(
-        label: hop.label.isNotEmpty ? hop.label : '${hop.username}@${hop.host}',
-        detectedOs: hop.detectedOs,
-        trailing: (agentForwarding && isLast)
-            ? const Tooltip(
-                message:
-                    'Agent forwarding on — the destination uses your local keys',
-                child: Icon(Icons.key, size: 14, color: AppColors.accent),
-              )
-            : _RemoveButton(onTap: () => _removeAt(i)),
-      ));
+      rows.add(
+        _HostCard(
+          label: hop.label.isNotEmpty
+              ? hop.label
+              : '${hop.username}@${hop.host}',
+          detectedOs: hop.detectedOs,
+          trailing: (agentForwarding && isLast)
+              ? const Tooltip(
+                  message: 'Agent forwarding on — the destination uses your local keys',
+                  child: Icon(
+                    FLucideIcons.keyRound,
+                    size: 14,
+                    color: YsColors.primary,
+                  ),
+                )
+              : Tooltip(
+                  message: 'Remove hop',
+                  excludeFromSemantics: true,
+                  child: FButton.icon(
+                    variant: .ghost,
+                    size: .xs,
+                    semanticsLabel: 'Remove hop',
+                    onPress: () => _removeAt(i),
+                    child: const Icon(FLucideIcons.x),
+                  ),
+                ),
+        ),
+      );
     }
     rows.add(_arrow());
-    rows.add(_HostCard(label: currentHostLabel, detectedOs: currentHostOs));
-    rows.add(const SizedBox(height: 10));
-    rows.add(_actionButton(
-      label: 'Add a Host',
-      color: AppColors.textPrimary,
-      bg: AppColors.cardHover,
-      onTap: () => _addHop(context),
-    ));
-    rows.add(const SizedBox(height: 6));
-    rows.add(_actionButton(
-      label: 'Clear',
-      color: AppColors.red,
-      bg: AppColors.red.withValues(alpha: 0.12),
-      onTap: () => onChanged(const []),
-    ));
+    rows.add(
+      _HostCard(
+        label: currentHostLabel,
+        detectedOs: currentHostOs,
+        destination: true,
+      ),
+    );
+    rows.add(const SizedBox(height: YsSpace.s3));
+    rows.add(_addButton(context));
+    rows.add(const SizedBox(height: YsSpace.s2));
+    rows.add(
+      FButton(
+        variant: .ghost,
+        size: .sm,
+        style: .delta(
+          contentStyle: .delta(
+            textStyle: .delta([.all(const .delta(color: YsColors.error))]),
+          ),
+        ),
+        onPress: () => onChanged(const []),
+        child: const Text('Clear'),
+      ),
+    );
     return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: rows,
+    );
   }
 
   Widget _arrow() => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 6),
-        child: Icon(Icons.arrow_downward,
-            size: 16, color: AppColors.textTertiary),
-      );
-
-  Widget _actionButton({
-    required String label,
-    required Color color,
-    required Color bg,
-    required VoidCallback onTap,
-  }) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: 32,
-          decoration:
-              BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
-          alignment: Alignment.center,
-          child: Text(label,
-              style: TextStyle(
-                  color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-        ),
-      ),
-    );
-  }
-}
-
-/// Hover/tap × to drop one hop from the chain.
-class _RemoveButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _RemoveButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: const Tooltip(
-          message: 'Remove hop',
-          child: Icon(Icons.close, size: 14, color: AppColors.textTertiary),
-        ),
-      ),
-    );
-  }
+    padding: EdgeInsets.symmetric(vertical: YsSpace.s1),
+    child: Icon(
+      FLucideIcons.arrowDown,
+      size: 16,
+      color: YsColors.mutedForeground,
+    ),
+  );
 }
 
 /// One host row in the chain: OS glyph tile + label (+ optional trailing).
+/// The destination (the host being edited) has the amber border.
 class _HostCard extends StatelessWidget {
   final String label;
   final String? detectedOs;
   final Widget? trailing;
+  final bool destination;
 
   const _HostCard({
     required this.label,
     this.detectedOs,
     this.trailing,
+    this.destination = false,
   });
 
   @override
@@ -208,55 +202,62 @@ class _HostCard extends StatelessWidget {
     final asset = osIconAsset(detectedOs);
     return RepaintBoundary(
       child: Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  color: AppColors.cardHover,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                alignment: Alignment.center,
-                child: asset != null
-                    ? SvgPicture.asset(
-                        asset,
-                        width: 16,
-                        height: 16,
-                        colorFilter: const ColorFilter.mode(
-                          AppColors.textPrimary,
-                          BlendMode.srcIn,
-                        ),
-                      )
-                    : const Icon(
-                        Icons.dns_outlined,
-                        size: 15,
-                        color: AppColors.textSecondary,
-                      ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              ?trailing,
-            ],
+        height: 44,
+        padding: const EdgeInsets.only(left: 10, right: YsSpace.s1),
+        decoration: BoxDecoration(
+          color: YsColors.card,
+          borderRadius: BorderRadius.circular(YsRadius.card),
+          border: Border.all(
+            color: destination ? YsColors.primary : YsColors.border,
           ),
         ),
+        child: Row(
+          children: [
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                color: YsColors.secondary,
+                borderRadius: BorderRadius.circular(YsRadius.control),
+              ),
+              alignment: Alignment.center,
+              child: asset != null
+                  ? SvgPicture.asset(
+                      asset,
+                      width: 16,
+                      height: 16,
+                      colorFilter: const ColorFilter.mode(
+                        YsColors.foreground,
+                        BlendMode.srcIn,
+                      ),
+                    )
+                  : const Icon(
+                      FLucideIcons.server,
+                      size: 15,
+                      color: YsColors.mutedForeground,
+                    ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: YsColors.foreground,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            if (trailing != null)
+              Padding(
+                padding: const EdgeInsets.only(left: YsSpace.s1, right: 6),
+                child: trailing,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -285,96 +286,72 @@ class _HostPickerDialogState extends State<_HostPickerDialog> {
                     '${h.username}@${h.host}'.toLowerCase().contains(q),
               )
               .toList();
-    return Dialog(
-      backgroundColor: AppColors.sidebar,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return YsDialogFrame(
+      maxWidth: 360,
+      padding: const EdgeInsets.all(YsSpace.s3),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 360, maxHeight: 420),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: TextField(
-                autofocus: true,
-                onChanged: (v) => setState(() => _query = v),
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 13,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Search hosts…',
-                  hintStyle: const TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 13,
-                  ),
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    size: 16,
-                    color: AppColors.textTertiary,
-                  ),
-                  isDense: true,
-                  filled: true,
-                  fillColor: AppColors.card,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
+            FTextField(
+              key: const ValueKey('host-picker-search'),
+              autofocus: true,
+              size: .sm,
+              hint: 'Search hosts…',
+              control: .managed(
+                onChange: (v) => setState(() => _query = v.text),
               ),
+              prefixBuilder: (context, style, variants) =>
+                  FTextField.prefixIconBuilder(
+                    context,
+                    style,
+                    variants,
+                    const Icon(FLucideIcons.search),
+                  ),
             ),
+            const SizedBox(height: YsSpace.s2),
             if (filtered.isEmpty)
               const Padding(
-                padding: EdgeInsets.fromLTRB(12, 0, 12, 16),
+                padding: EdgeInsets.fromLTRB(
+                  YsSpace.s1,
+                  YsSpace.s1,
+                  YsSpace.s1,
+                  YsSpace.s2,
+                ),
                 child: Text(
                   'No hosts found',
-                  style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
+                  style: TextStyle(
+                    color: YsColors.mutedForeground,
+                    fontSize: 12,
+                  ),
                 ),
               )
             else
               Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: filtered.length,
-                  itemBuilder: (context, i) {
-                    final h = filtered[i];
-                    return InkWell(
-                      onTap: () => Navigator.of(context).pop(h),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+                child: FItemGroup(
+                  maxHeight: 340,
+                  children: [
+                    for (final h in filtered)
+                      FItem(
+                        title: Text(
+                          h.label.isNotEmpty
+                              ? h.label
+                              : '${h.username}@${h.host}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              h.label.isNotEmpty
-                                  ? h.label
-                                  : '${h.username}@${h.host}',
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Text(
-                              '${h.username}@${h.host}',
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: AppColors.textTertiary,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
+                        subtitle: Text(
+                          '${h.username}@${h.host}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                        onPress: () => Navigator.of(context).pop(h),
                       ),
-                    );
-                  },
+                  ],
                 ),
               ),
-            const SizedBox(height: 8),
           ],
         ),
       ),

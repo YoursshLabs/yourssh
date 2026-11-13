@@ -65,6 +65,14 @@ class SSHChannelController {
   /// Handler of channel requests from the remote side.
   late var _requestHandler = _defaultRequestHandler;
 
+  /// Reply-less requests (exit-status, exit-signal) that arrived before any
+  /// handler was installed. A fast command can finish in the same packet burst
+  /// as the exec reply, i.e. before the caller built its session; they are
+  /// replayed to the first handler instead of being dropped.
+  var _hasRequestHandler = false;
+  final _earlyRequests = <SSH_Message_Channel_Request>[];
+  static const _maxEarlyRequests = 16;
+
   /// An [AsyncQueue] of pending request replies from the remote side.
   final _requestReplyQueue = AsyncQueue<bool>();
 
@@ -290,6 +298,13 @@ class SSHChannelController {
   void _handleRequestMessage(SSH_Message_Channel_Request request) {
     printDebug?.call('SSHChannel._handleRequest: ${request.requestType}');
 
+    if (!_hasRequestHandler && !request.wantReply) {
+      if (_earlyRequests.length < _maxEarlyRequests) {
+        _earlyRequests.add(request);
+      }
+      return;
+    }
+
     final success = _requestHandler(request);
     if (!request.wantReply) return;
     success ? _sendRequestSuccess() : _sendRequestFailure();
@@ -441,6 +456,12 @@ class SSHChannel {
 
   void setRequestHandler(SSHChannelRequestHandler handler) {
     _controller._requestHandler = handler;
+    _controller._hasRequestHandler = true;
+    final early = List.of(_controller._earlyRequests);
+    _controller._earlyRequests.clear();
+    for (final request in early) {
+      handler(request);
+    }
   }
 
   Future<bool> sendExec(String command) async {

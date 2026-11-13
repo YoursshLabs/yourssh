@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +11,8 @@ import 'package:yourssh/services/recording_service.dart';
 import 'package:yourssh/theme/terminal_themes.dart';
 import 'package:yourssh/widgets/local_terminal_pane.dart';
 
+import '../helpers/ys_test_app.dart';
+
 void main() {
   testWidgets('exited pane shows Restart shell and fires onRestart',
       (tester) async {
@@ -21,17 +22,16 @@ void main() {
     );
     var restarted = false;
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: LocalTerminalPane(
-          session: session,
-          onRestart: () => restarted = true,
-        ),
+    await tester.pumpWidget(ysTestApp(
+      LocalTerminalPane(
+        session: session,
+        onRestart: () => restarted = true,
       ),
     ));
 
     expect(find.text('Shell exited'), findsOneWidget);
     await tester.tap(find.text('Restart shell'));
+    await tester.pumpAndSettle(); // forui press-feedback timer
     expect(restarted, isTrue);
   });
 
@@ -41,10 +41,8 @@ void main() {
       status: LocalSessionStatus.error,
     )..errorMessage = 'spawn failed';
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: LocalTerminalPane(session: session, onRestart: () {}),
-      ),
+    await tester.pumpWidget(ysTestApp(
+      LocalTerminalPane(session: session, onRestart: () {}),
     ));
 
     expect(find.text('spawn failed'), findsOneWidget);
@@ -74,10 +72,8 @@ void main() {
         ChangeNotifierProvider.value(value: settings),
         ChangeNotifierProvider.value(value: recording),
       ],
-      child: MaterialApp(
-        home: Scaffold(
-          body: LocalTerminalPane(session: session, onRestart: () {}),
-        ),
+      child: ysTestApp(
+        LocalTerminalPane(session: session, onRestart: () {}),
       ),
     ));
     await tester.pumpAndSettle();

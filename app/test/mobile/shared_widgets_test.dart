@@ -1,3 +1,4 @@
+import 'package:yourssh/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/mobile/widgets/tag_chip.dart';
@@ -18,11 +19,13 @@ void main() {
   testWidgets('MobileCard fires onTap', (t) async {
     var tapped = false;
     await t.pumpWidget(MaterialApp(
+      builder: ysRootBuilderTouch,
       home: Scaffold(
         body: MobileCard(onTap: () => tapped = true, child: const Text('x')),
       ),
     ));
     await t.tap(find.text('x'));
+    await t.pumpAndSettle();
     expect(tapped, isTrue);
   });
 }

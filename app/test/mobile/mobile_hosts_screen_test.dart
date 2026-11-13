@@ -1,6 +1,8 @@
+import 'package:yourssh/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/providers/host_provider.dart';
@@ -16,6 +18,7 @@ Future<void> _pump(WidgetTester tester, HostProvider hosts) async {
   final sessions = SessionProvider(SshService(StorageService()), TabMetadataService());
   final probe = HostReachabilityProbe(connector: (h, p, to) async {});
   await tester.pumpWidget(MaterialApp(
+    builder: ysRootBuilderTouch,
     home: MultiProvider(
       providers: [
         ChangeNotifierProvider<HostProvider>.value(value: hosts),
@@ -53,7 +56,7 @@ void main() {
     expect(find.text('prod-web'), findsOneWidget);
     expect(find.text('db-1'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField), 'prod');
+    await tester.enterText(find.byType(FTextField), 'prod');
     await tester.pumpAndSettle();
     expect(find.text('prod-web'), findsOneWidget);
     expect(find.text('db-1'), findsNothing);

@@ -1,3 +1,5 @@
+import 'package:yourssh_ui/yourssh_ui.dart';
+import 'package:yourssh/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -8,6 +10,7 @@ import 'package:yourssh/mobile/screens/mobile_settings_screen.dart';
 import 'package:yourssh/mobile/security/app_lock_gate.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
 import 'package:yourssh/mobile/util/mobile_prefs.dart';
+import 'package:yourssh/mobile/widgets/settings_row.dart';
 import 'package:yourssh/providers/host_provider.dart';
 import 'package:yourssh/providers/settings_provider.dart';
 import 'package:yourssh/providers/sync_provider.dart';
@@ -24,6 +27,7 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: buildMobileTheme(),
+      builder: ysRootBuilderTouch,
       home: MultiProvider(
         providers: [
           ChangeNotifierProvider<SettingsProvider>.value(value: settings),
@@ -85,11 +89,11 @@ void main() {
     ).last; // innermost Row wrapping the row content
     final biometricSwitch = find.descendant(
       of: biometricRow,
-      matching: find.byType(Switch),
+      matching: find.byType(FSwitch),
     );
     expect(biometricSwitch, findsOneWidget);
 
-    final initialValue = tester.widget<Switch>(biometricSwitch).value;
+    final initialValue = tester.widget<FSwitch>(biometricSwitch).value;
     await tester.tap(biometricSwitch);
     await tester.pumpAndSettle();
 
@@ -108,15 +112,50 @@ void main() {
     ).last;
     final shortcutSwitch = find.descendant(
       of: shortcutRow,
-      matching: find.byType(Switch),
+      matching: find.byType(FSwitch),
     );
     expect(shortcutSwitch, findsOneWidget);
 
-    final initialValue = tester.widget<Switch>(shortcutSwitch).value;
+    final initialValue = tester.widget<FSwitch>(shortcutSwitch).value;
     await tester.tap(shortcutSwitch);
     await tester.pumpAndSettle();
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(kAccessoryBarPrefKey), !initialValue);
+  });
+
+  group('forui screen behaviour', () {
+    testWidgets('360x640: no overflow, security wording unchanged',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pump(tester);
+      expect(tester.takeException(), isNull);
+      for (final t in [
+        'Biometric unlock',
+        'Auto-lock',
+        'After 1 min',
+        'Shortcut key bar',
+        'Supabase sync',
+        'Pair new device',
+      ]) {
+        expect(find.text(t), findsOneWidget, reason: t);
+      }
+    });
+
+    testWidgets('rows are >=44 px',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pump(tester);
+      for (final title in ['Biometric unlock', 'Supabase sync', 'Pair new device']) {
+        final row = find.ancestor(
+            of: find.text(title), matching: find.byType(SettingsRow));
+        expect(tester.getSize(row).height, greaterThanOrEqualTo(44),
+            reason: title);
+      }
+    });
   });
 }

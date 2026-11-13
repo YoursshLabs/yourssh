@@ -107,6 +107,8 @@ void main() {
 
       expect(provider.sessions, isNotEmpty);
       expect(provider.sshSessions.first.status, SessionStatus.connecting);
+      // The failure reason stays visible while the retry is pending.
+      expect(provider.sshSessions.first.errorMessage, isNotNull);
 
       provider.closeSession(provider.sessions.first.id);
     });

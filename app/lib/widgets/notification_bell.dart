@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:yourssh/models/app_notification.dart';
 import 'package:yourssh/providers/notification_center_provider.dart';
 import 'package:yourssh/providers/update_provider.dart';
-import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Bell button at the right end of the top tab bar. Shows an unread badge
 /// and toggles an anchored popover listing in-app notifications.
@@ -31,7 +31,6 @@ class _NotificationBellBtnState extends State<NotificationBellBtn> {
 
   final _link = LayerLink();
   final _portal = OverlayPortalController();
-  bool _hovered = false;
 
   void _toggle() {
     if (_portal.isShowing) {
@@ -45,8 +44,9 @@ class _NotificationBellBtnState extends State<NotificationBellBtn> {
 
   @override
   Widget build(BuildContext context) {
-    final unread =
-        context.select<NotificationCenterProvider, int>((p) => p.unreadCount);
+    final unread = context.select<NotificationCenterProvider, int>(
+      (p) => p.unreadCount,
+    );
 
     return CompositedTransformTarget(
       link: _link,
@@ -72,45 +72,56 @@ class _NotificationBellBtnState extends State<NotificationBellBtn> {
         ),
         child: TapRegion(
           groupId: _tapGroup,
-          child: MouseRegion(
-            onEnter: (_) => setState(() => _hovered = true),
-            onExit: (_) => setState(() => _hovered = false),
-            child: GestureDetector(
-              onTap: _toggle,
-              child: Container(
-                width: 36,
-                height: 38,
-                alignment: Alignment.center,
+          child: Tooltip(
+            message: 'Notifications',
+            child: SizedBox(
+              width: 36,
+              height: YsTab.height,
+              child: Center(
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    Icon(
-                      Icons.notifications_none,
-                      size: 16,
-                      color: _hovered
-                          ? const Color(0xFFAAAAAA)
-                          : const Color(0xFF555555),
+                    FButton.icon(
+                      variant: .ghost,
+                      size: .xs,
+                      semanticsLabel: 'Notifications',
+                      onPress: _toggle,
+                      child: const Icon(
+                        FLucideIcons.bell,
+                        size: 16,
+                        color: YsColors.mutedForeground,
+                      ),
                     ),
                     if (unread > 0)
                       Positioned(
-                        top: -4,
-                        right: -6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 1),
-                          constraints: const BoxConstraints(minWidth: 14),
-                          decoration: BoxDecoration(
-                            color: AppColors.red,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            unread > 9 ? '9+' : '$unread',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              height: 1.2,
+                        top: -2,
+                        right: -4,
+                        child: IgnorePointer(
+                          child: Semantics(
+                            container: true,
+                            value: '$unread unread',
+                            child: ExcludeSemantics(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 1,
+                                ),
+                                constraints: const BoxConstraints(minWidth: 14),
+                                decoration: BoxDecoration(
+                                  color: YsColors.error,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  unread > 9 ? '9+' : '$unread',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: YsColors.foreground,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.2,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -143,14 +154,15 @@ class _NotificationPanel extends StatelessWidget {
     final items = provider.notifications;
 
     return Material(
-      color: const Color(0xFF1E1E1E),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
+      key: const ValueKey('notification-panel'),
+      color: YsColors.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(YsRadius.card),
+        side: const BorderSide(color: YsColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
         constraints: const BoxConstraints(maxHeight: 420),
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.border),
-          borderRadius: BorderRadius.circular(12),
-        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -163,19 +175,19 @@ class _NotificationPanel extends StatelessWidget {
                     child: Text(
                       'Notifications',
                       style: TextStyle(
-                        color: AppColors.textPrimary,
+                        color: YsColors.foreground,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                   if (items.isNotEmpty)
-                    TextButton(
-                      onPressed: provider.clearAll,
-                      style: TextButton.styleFrom(
-                          foregroundColor: AppColors.textSecondary),
-                      child:
-                          const Text('Clear all', style: TextStyle(fontSize: 12)),
+                    FButton(
+                      variant: .ghost,
+                      size: .xs,
+                      mainAxisSize: MainAxisSize.min,
+                      onPress: provider.clearAll,
+                      child: const Text('Clear all'),
                     ),
                 ],
               ),
@@ -188,8 +200,7 @@ class _NotificationPanel extends StatelessWidget {
                   shrinkWrap: true,
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   itemCount: items.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 1, color: AppColors.border),
+                  separatorBuilder: (context, index) => const FDivider(),
                   itemBuilder: (context, i) => _NotificationTile(
                     item: items[i],
                     onShowUpdateDetails: onShowUpdateDetails,
@@ -214,16 +225,19 @@ class _NotificationPanel extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.cardHover,
-              borderRadius: BorderRadius.circular(12),
+              color: YsColors.secondary,
+              borderRadius: BorderRadius.circular(YsRadius.card),
             ),
-            child: const Icon(Icons.notifications,
-                size: 20, color: AppColors.textPrimary),
+            child: const Icon(
+              FLucideIcons.bellOff,
+              size: 20,
+              color: YsColors.foreground,
+            ),
           ),
           const SizedBox(height: 14),
           const Text(
             'No notifications',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+            style: TextStyle(color: YsColors.foreground, fontSize: 13),
           ),
         ],
       ),
@@ -247,23 +261,22 @@ class _NotificationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = switch (item.type) {
-      AppNotificationType.sessionDisconnect => Icons.link_off,
-      AppNotificationType.agentForwarding => Icons.key_off,
-      AppNotificationType.update => Icons.system_update_alt,
-      AppNotificationType.insecureStorage => Icons.lock_open,
-      AppNotificationType.linkRefused => Icons.link_off,
+      AppNotificationType.sessionDisconnect => FLucideIcons.unlink,
+      AppNotificationType.agentForwarding => FLucideIcons.keyRound,
+      AppNotificationType.update => FLucideIcons.download,
+      AppNotificationType.insecureStorage => FLucideIcons.lockOpen,
+      AppNotificationType.linkRefused => FLucideIcons.link2Off,
     };
     final iconColor = switch (item.type) {
       AppNotificationType.sessionDisconnect ||
       AppNotificationType.agentForwarding ||
-      AppNotificationType.linkRefused =>
-        AppColors.orange,
-      AppNotificationType.insecureStorage => AppColors.red,
-      AppNotificationType.update => AppColors.accent,
+      AppNotificationType.linkRefused => YsColors.warn,
+      AppNotificationType.insecureStorage => YsColors.error,
+      AppNotificationType.update => YsColors.primary,
     };
 
-    return InkWell(
-      onTap: item.sessionId != null
+    return FTappable(
+      onPress: item.sessionId != null
           ? () {
               onClose();
               onOpenSession?.call(item.sessionId!);
@@ -280,9 +293,13 @@ class _NotificationTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.title,
-                      style: const TextStyle(
-                          color: AppColors.textPrimary, fontSize: 12.5)),
+                  Text(
+                    item.title,
+                    style: const TextStyle(
+                      color: YsColors.foreground,
+                      fontSize: 12.5,
+                    ),
+                  ),
                   if (item.body != null && item.body!.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(
@@ -290,54 +307,43 @@ class _NotificationTile extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 11.5),
+                        color: YsColors.mutedForeground,
+                        fontSize: 11.5,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 2),
                   Text(
                     relativeTime(item.timestamp),
                     style: const TextStyle(
-                        color: AppColors.textTertiary, fontSize: 10.5),
+                      color: YsColors.mutedForeground,
+                      fontSize: 10.5,
+                    ),
                   ),
                   if (item.type == AppNotificationType.update) ...[
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        SizedBox(
-                          height: 24,
-                          child: FilledButton(
-                            onPressed: () {
-                              onClose();
-                              context
-                                  .read<UpdateProvider>()
-                                  .downloadAndInstall();
-                            },
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.accent,
-                              foregroundColor: Colors.black,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
-                              textStyle: const TextStyle(fontSize: 11.5),
-                            ),
-                            child: const Text('Update'),
-                          ),
+                        FButton(
+                          variant: .primary,
+                          size: .xs,
+                          mainAxisSize: MainAxisSize.min,
+                          onPress: () {
+                            onClose();
+                            context.read<UpdateProvider>().downloadAndInstall();
+                          },
+                          child: const Text('Update'),
                         ),
                         const SizedBox(width: 6),
-                        SizedBox(
-                          height: 24,
-                          child: TextButton(
-                            onPressed: () {
-                              onClose();
-                              onShowUpdateDetails?.call();
-                            },
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppColors.textSecondary,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
-                              textStyle: const TextStyle(fontSize: 11.5),
-                            ),
-                            child: const Text('Details'),
-                          ),
+                        FButton(
+                          variant: .ghost,
+                          size: .xs,
+                          mainAxisSize: MainAxisSize.min,
+                          onPress: () {
+                            onClose();
+                            onShowUpdateDetails?.call();
+                          },
+                          child: const Text('Details'),
                         ),
                       ],
                     ),

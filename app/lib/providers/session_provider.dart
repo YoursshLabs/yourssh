@@ -275,7 +275,10 @@ class SessionProvider extends ChangeNotifier {
           } else {
             s.markCertRejected();
           }
-        }, onError: (Object _) => s.markCertRejected()));
+        }, onError: (Object _) {
+          if (!_sessions.contains(s)) return;
+          s.markCertRejected();
+        }));
       };
     }
     final mismatchHandler = rdpCertMismatchHandler;
@@ -303,7 +306,9 @@ class SessionProvider extends ChangeNotifier {
     }
 
     _watchRdpStatus(session, auditSource: auditSource);
-    session.addListener(_safeNotify);
+    // State changes only: forwarding every frame would rebuild each
+    // SessionProvider listener (MainScreen, dashboard) at the frame rate.
+    session.stateChanges.addListener(_safeNotify);
     _sessions.add(session);
     _activeSessionId = session.id;
     if (session.isPinned) _sortSessions();
@@ -316,7 +321,8 @@ class SessionProvider extends ChangeNotifier {
   void _watchRdpStatus(RdpSession session, {String auditSource = 'app'}) {
     final via = auditSource == 'app' ? const <String, Object?>{} : {'via': auditSource};
     var last = session.status;
-    session.addListener(() {
+    // Every status change is a state change; frames are skipped.
+    session.stateChanges.addListener(() {
       final now = session.status;
       if (now == last) return;
       final was = last;
@@ -429,7 +435,9 @@ class SessionProvider extends ChangeNotifier {
     }
 
     _watchVncStatus(session, auditSource: auditSource);
-    session.addListener(_safeNotify);
+    // State changes only: forwarding every frame would rebuild each
+    // SessionProvider listener (MainScreen, dashboard) at the frame rate.
+    session.stateChanges.addListener(_safeNotify);
     _sessions.add(session);
     _activeSessionId = session.id;
     if (session.isPinned) _sortSessions();
@@ -442,7 +450,8 @@ class SessionProvider extends ChangeNotifier {
   void _watchVncStatus(VncSession session, {String auditSource = 'app'}) {
     final via = auditSource == 'app' ? const <String, Object?>{} : {'via': auditSource};
     var last = session.status;
-    session.addListener(() {
+    // Every status change is a state change; frames are skipped.
+    session.stateChanges.addListener(() {
       final now = session.status;
       if (now == last) return;
       final was = last;
@@ -495,6 +504,10 @@ class SessionProvider extends ChangeNotifier {
 
   Future<void> _doConnect(SshSession session, Host host,
       {required int attempt, String auditSource = 'app'}) async {
+    // Snapshot per attempt: this is the TERM the shell is opened with and
+    // the one the status bar shows, whatever Settings says later.
+    session.termType =
+        host.termType ?? terminalType?.call() ?? 'xterm-256color';
     try {
       final keyEntry = host.keyId != null ? keyLookup?.call(host.keyId!) : null;
       final jumpChain = SshService.resolveJumpChain(
@@ -549,7 +562,7 @@ class SessionProvider extends ChangeNotifier {
       await _ssh.openShell(
         session,
         useTmux: host.tmuxOverride ?? tmuxEnabled?.call() ?? false,
-        termType: host.termType ?? terminalType?.call() ?? 'xterm-256color',
+        termType: session.termType!,
       );
       _safeNotify();
 
@@ -585,6 +598,8 @@ class SessionProvider extends ChangeNotifier {
           (autoReconnectEnabled?.call() ?? false) &&
           (isUnlimited || attempt < maxAttempts);
       if (shouldRetry) {
+        // Keep the reason visible on the connecting screen between retries.
+        session.errorMessage = e.toString();
         _scheduleReconnect(session, host, attempt: attempt + 1);
       } else {
         session.status = SessionStatus.error;
@@ -733,7 +748,7 @@ class SessionProvider extends ChangeNotifier {
             sessionId: sessionId,
             meta: const {'source': 'rdp', 'reason': 'user-closed'}));
       }
-      session.removeListener(_safeNotify);
+      session.stateChanges.removeListener(_safeNotify);
       unawaited(session.close());
       _sessions.remove(session);
       if (_activeSessionId == sessionId) {
@@ -759,7 +774,7 @@ class SessionProvider extends ChangeNotifier {
             sessionId: sessionId,
             meta: const {'source': 'vnc', 'reason': 'user-closed'}));
       }
-      session.removeListener(_safeNotify);
+      session.stateChanges.removeListener(_safeNotify);
       unawaited(session.close());
       _sessions.remove(session);
       if (_activeSessionId == sessionId) {

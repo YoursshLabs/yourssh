@@ -16,6 +16,7 @@ import 'package:yourssh/services/external_edit_service.dart';
 import 'package:yourssh/services/sftp_transfer_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 import 'package:yourssh/widgets/sftp_panel.dart';
 
 class _FakeTransferService extends SftpTransferService {
@@ -74,6 +75,7 @@ void main() {
           Provider<ExternalEditService>.value(value: ExternalEditService(fake)),
         ],
         child: MaterialApp(
+          builder: ysRootBuilder,
           home: Scaffold(
             body: SftpPanel(
               host: snapshot,
