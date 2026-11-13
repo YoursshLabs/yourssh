@@ -115,6 +115,45 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500)); // drain FTappable press timers
   });
 
+  testWidgets('moving the caret does not mark the file dirty', (tester) async {
+    final service = FakeTransferService(utf8.encode('hello world'));
+    await tester.pumpWidget(_wrap(service));
+    await _pumpUntilFound(tester, find.byType(FTextField));
+
+    bool canPop() => tester.widget<PopScope<Object?>>(find.byWidgetPredicate((w) => w is PopScope)).canPop;
+    expect(canPop(), isTrue);
+
+    final editable = tester.widget<EditableText>(find.descendant(
+        of: find.byType(FTextField), matching: find.byType(EditableText)));
+    editable.controller.selection = const TextSelection.collapsed(offset: 3);
+    await tester.pump();
+    editable.controller.selection = const TextSelection(baseOffset: 0, extentOffset: 5);
+    await tester.pump();
+    expect(canPop(), isTrue, reason: 'selection-only changes are not edits');
+
+    await tester.enterText(find.byType(FTextField), 'hello there');
+    await tester.pump();
+    expect(canPop(), isFalse, reason: 'a real edit marks the file dirty');
+  });
+
+  testWidgets('after a save, moving the caret keeps the file clean', (tester) async {
+    final service = FakeTransferService(utf8.encode('v1'));
+    await tester.pumpWidget(_wrap(service));
+    await _pumpUntilFound(tester, find.byType(FTextField));
+
+    await tester.enterText(find.byType(FTextField), 'v2 edited');
+    await tester.tap(find.byIcon(FLucideIcons.save));
+    await _pumpUntilFound(tester, find.text('Saved'));
+    expect(tester.widget<PopScope<Object?>>(find.byWidgetPredicate((w) => w is PopScope)).canPop, isTrue);
+
+    final editable = tester.widget<EditableText>(find.descendant(
+        of: find.byType(FTextField), matching: find.byType(EditableText)));
+    editable.controller.selection = const TextSelection.collapsed(offset: 1);
+    await tester.pump();
+    expect(tester.widget<PopScope<Object?>>(find.byWidgetPredicate((w) => w is PopScope)).canPop, isTrue);
+    await tester.pump(const Duration(milliseconds: 500)); // drain FTappable press timers
+  });
+
   testWidgets('Ctrl+S saves from the fallback editor', (tester) async {
     final service = FakeTransferService(utf8.encode('v1'));
     await tester.pumpWidget(_wrap(service));

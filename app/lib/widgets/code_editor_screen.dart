@@ -47,6 +47,10 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
   bool _saving = false;
   bool _isDirty = false;
   String? _content;
+
+  /// Fallback editor text as of the last load or save. The forui field's
+  /// onChange also fires on caret/selection moves, so dirtiness compares text.
+  String _cleanText = '';
   String? _tmpPath;
 
   bool get _useWebView => _controller != null;
@@ -114,6 +118,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
         }
       } else {
         _textController.text = _content!;
+        _cleanText = _content!;
         setState(() => _ready = true);
       }
     } catch (e) {
@@ -230,6 +235,7 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
       await File(tmpPath).writeAsString(content);
       await service.uploadFile(widget.host, tmpPath, widget.entry.path);
       if (mounted) {
+        if (!_useWebView) _cleanText = content;
         setState(() => _isDirty = false);
         showYsToast(
           context,
@@ -374,8 +380,9 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
         controller: _textController,
         onChange: widget.readOnly
             ? null
-            : (_) {
-                if (!_isDirty) setState(() => _isDirty = true);
+            : (value) {
+                final dirty = value.text != _cleanText;
+                if (dirty != _isDirty) setState(() => _isDirty = dirty);
               },
       ),
       maxLines: null,
