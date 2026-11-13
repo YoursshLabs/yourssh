@@ -11,6 +11,7 @@ import '../../providers/session_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/terminal_themes.dart';
 import '../../util/terminal_appearance.dart';
+import '../navigation/open_session.dart';
 import '../terminal/accessory_bar_controller.dart';
 import '../terminal/accessory_key_bar.dart';
 import '../terminal/terminal_cursor_gestures.dart';
@@ -166,7 +167,11 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
       builder: (sheetCtx) {
         // Read hosts inside the builder so the list is live while the sheet
         // is open (not a stale snapshot captured before the sheet opened).
-        final hosts = sheetCtx.read<HostProvider>().allHosts;
+        final hosts = sheetCtx
+            .read<HostProvider>()
+            .allHosts
+            .where(canOpenOnMobile)
+            .toList();
         return SafeArea(
           top: false,
           child: Column(
