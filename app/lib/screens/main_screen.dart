@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import '../utils/safe_set_state.dart';
 import '../services/workspace_service.dart';
 import '../models/host.dart';
 import '../models/local_session.dart';
@@ -190,9 +191,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _onSftpConnectionChanged() {
-    if (mounted) setState(() {});
-  }
+  // Fired by DualPanelSftpScreen's initState/dispose too (e.g. when RDP
+  // fullscreen swaps the tree), i.e. while the framework is locked.
+  void _onSftpConnectionChanged() => setStateSafely();
 
   @override
   void didChangeDependencies() {
