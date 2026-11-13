@@ -96,6 +96,15 @@ void main() {
     expect(find.text('No active sessions'), findsOneWidget);
   });
 
+  testWidgets('an empty split pane says how to fill it', (tester) async {
+    add(ssh('a'));
+    layout.setLayout(SplitLayout.horizontal);
+    await tester.pumpWidget(harness());
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('No session in this pane'), findsOneWidget);
+    expect(find.textContaining('Open another session'), findsOneWidget);
+  });
+
   testWidgets('split layouts draw a token-styled divider', (tester) async {
     add(ssh('a'));
     add(ssh('b'));

@@ -199,9 +199,26 @@ class SplitTerminalView extends StatelessWidget {
   }
 
   Widget _buildEmptyPane() {
+    // A pane shows the session at its position in the tab list, so the only
+    // way to fill it is to open another session.
     return const Center(
-      child: Text('No session',
-          style: TextStyle(color: YsColors.mutedForeground, fontSize: 13)),
+      child: Padding(
+        padding: EdgeInsets.all(YsSpace.s4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('No session in this pane',
+                style:
+                    TextStyle(color: YsColors.mutedForeground, fontSize: 13)),
+            SizedBox(height: YsSpace.s1),
+            Text(
+              'Open another session with + in the tab bar and it appears here.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: YsColors.off, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
