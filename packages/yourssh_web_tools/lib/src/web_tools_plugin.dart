@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show YsPluginHost;
 import 'screens/web_tools_screen.dart';
 import 'web_tools_plugin_config.dart';
 
@@ -28,6 +29,6 @@ class YourSSHWebToolsPlugin extends YourSSHPlugin {
 
   @override
   Widget buildUI(BuildContext context, YourSSHPluginContext pluginContext) {
-    return WebToolsScreen(config: config);
+    return YsPluginHost(child: WebToolsScreen(config: config));
   }
 }

@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import '../theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import '../widgets/wt_widgets.dart';
 
 class EmbeddedBrowser extends StatefulWidget {
   final String? initialUrl;
@@ -81,21 +82,23 @@ class _EmbeddedBrowserState extends State<EmbeddedBrowser> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _AddressBar(
-          controller: _urlCtrl,
-          focusNode: _urlFocusNode,
-          loading: _loading,
-          onNavigate: _navigate,
-          onBack: () => _controller.goBack(),
-          onForward: () => _controller.goForward(),
-          onReload: () => _controller.reload(),
-          onStop: _stop,
-        ),
-        const Divider(height: 1, color: WebToolsColors.border),
-        Expanded(child: WebViewWidget(controller: _controller)),
-      ],
+    return ColoredBox(
+      color: YsColors.background,
+      child: Column(
+        children: [
+          _AddressBar(
+            controller: _urlCtrl,
+            focusNode: _urlFocusNode,
+            loading: _loading,
+            onNavigate: _navigate,
+            onBack: () => _controller.goBack(),
+            onForward: () => _controller.goForward(),
+            onReload: () => _controller.reload(),
+            onStop: _stop,
+          ),
+          Expanded(child: WebViewWidget(controller: _controller)),
+        ],
+      ),
     );
   }
 }
@@ -124,95 +127,45 @@ class _AddressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 48,
-      color: WebToolsColors.sidebar,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: const BoxDecoration(
+        color: YsColors.sidebar,
+        border: Border(bottom: BorderSide(color: YsColors.border)),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: YsSpace.s3,
+        vertical: YsSpace.s2,
+      ),
       child: Row(
         children: [
-          _NavBtn(icon: Icons.arrow_back_ios_new, size: 14, onTap: onBack),
-          const SizedBox(width: 4),
-          _NavBtn(icon: Icons.arrow_forward_ios, size: 14, onTap: onForward),
-          const SizedBox(width: 4),
-          _NavBtn(
-            icon: loading ? Icons.close : Icons.refresh,
-            size: 16,
-            onTap: loading ? onStop : onReload,
+          WtIconButton(
+            icon: FLucideIcons.arrowLeft,
+            tooltip: 'Back',
+            onPress: onBack,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: YsSpace.s1),
+          WtIconButton(
+            icon: FLucideIcons.arrowRight,
+            tooltip: 'Forward',
+            onPress: onForward,
+          ),
+          const SizedBox(width: YsSpace.s1),
+          WtIconButton(
+            icon: loading ? FLucideIcons.x : FLucideIcons.refreshCw,
+            tooltip: loading ? 'Stop' : 'Reload',
+            onPress: loading ? onStop : onReload,
+          ),
+          const SizedBox(width: YsSpace.s2),
           Expanded(
-            child: Container(
-              height: 30,
-              decoration: BoxDecoration(
-                color: WebToolsColors.card,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: WebToolsColors.border),
-              ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 10),
-                  if (loading)
-                    const SizedBox(
-                      width: 12, height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5, color: WebToolsColors.accent),
-                    )
-                  else
-                    const Icon(Icons.lock_outline, size: 12,
-                        color: WebToolsColors.textTertiary),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      focusNode: focusNode,
-                      style: const TextStyle(
-                          color: WebToolsColors.textPrimary, fontSize: 12),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                        border: InputBorder.none,
-                      ),
-                      onSubmitted: onNavigate,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ),
+            child: WtField(
+              key: const ValueKey('browser-url'),
+              controller: controller,
+              focusNode: focusNode,
+              mono: false,
+              prefixIcon: loading ? FLucideIcons.loader : FLucideIcons.lock,
+              onSubmit: onNavigate,
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _NavBtn extends StatefulWidget {
-  final IconData icon;
-  final double size;
-  final VoidCallback onTap;
-  const _NavBtn({required this.icon, required this.size, required this.onTap});
-
-  @override
-  State<_NavBtn> createState() => _NavBtnState();
-}
-
-class _NavBtnState extends State<_NavBtn> {
-  bool _hovered = false;
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          width: 28, height: 28,
-          decoration: BoxDecoration(
-            color: _hovered ? WebToolsColors.cardHover : Colors.transparent,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Icon(widget.icon, size: widget.size,
-              color: _hovered ? WebToolsColors.textPrimary : WebToolsColors.textSecondary),
-        ),
       ),
     );
   }

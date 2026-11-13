@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
-import '../theme.dart';
+import 'package:flutter/widgets.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import '../web_tools_plugin_config.dart';
 import 'embedded_browser.dart';
 import 'http_client.dart';
@@ -29,12 +29,14 @@ class _WebToolsScreenState extends State<WebToolsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _SubNav(active: _active, onSelect: (t) => setState(() => _active = t)),
-        Container(width: 1, color: WebToolsColors.border),
-        Expanded(child: _buildContent()),
-      ],
+    return ColoredBox(
+      color: YsColors.background,
+      child: Row(
+        children: [
+          _SubNav(active: _active, onSelect: (t) => setState(() => _active = t)),
+          Expanded(child: _buildContent()),
+        ],
+      ),
     );
   }
 
@@ -54,90 +56,42 @@ class _SubNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 160,
-      color: WebToolsColors.sidebar,
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Text(
-              'Web Tools',
-              style: TextStyle(
-                color: WebToolsColors.textSecondary,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.8,
-              ),
+    return SizedBox(
+      width: 184,
+      child: FSidebar(
+        header: const Padding(
+          padding: EdgeInsets.fromLTRB(YsSpace.s4, YsSpace.s4, YsSpace.s4, 0),
+          child: Text(
+            'Web Tools',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: YsColors.mutedForeground,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
             ),
           ),
-          _item(Icons.language, 'Browser', _WebTool.browser),
-          _item(Icons.http, 'HTTP Client', _WebTool.http),
-          _item(Icons.build_circle_outlined, 'Utilities', _WebTool.utilities),
-          _item(Icons.router_outlined, 'Port Tunnels', _WebTool.portForward),
+        ),
+        children: [
+          FSidebarGroup(
+            children: [
+              _item(FLucideIcons.globe, 'Browser', _WebTool.browser),
+              _item(FLucideIcons.globe, 'HTTP Client', _WebTool.http),
+              _item(FLucideIcons.wrench, 'Utilities', _WebTool.utilities),
+              _item(FLucideIcons.router, 'Port Tunnels', _WebTool.portForward),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _item(IconData icon, String label, _WebTool tool) {
-    final sel = active == tool;
-    return _SubNavItem(icon: icon, label: label, selected: sel, onTap: () => onSelect(tool));
-  }
-}
-
-class _SubNavItem extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _SubNavItem({required this.icon, required this.label, required this.selected, required this.onTap});
-
-  @override
-  State<_SubNavItem> createState() => _SubNavItemState();
-}
-
-class _SubNavItemState extends State<_SubNavItem> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = widget.selected
-        ? WebToolsColors.accent.withValues(alpha: 0.12)
-        : _hovered
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.transparent;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(6),
-            border: widget.selected ? Border.all(color: WebToolsColors.accent.withValues(alpha: 0.2)) : null,
-          ),
-          child: Row(
-            children: [
-              Icon(widget.icon, size: 14,
-                  color: widget.selected ? WebToolsColors.accent : WebToolsColors.textSecondary),
-              const SizedBox(width: 8),
-              Text(widget.label,
-                  style: TextStyle(
-                    color: widget.selected ? WebToolsColors.accent : WebToolsColors.textSecondary,
-                    fontSize: 12,
-                    fontWeight: widget.selected ? FontWeight.w500 : FontWeight.normal,
-                  )),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _item(IconData icon, String label, _WebTool tool) => FSidebarItem(
+        key: ValueKey('web-tools-nav-${tool.name}'),
+        icon: Icon(icon),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        selected: active == tool,
+        onPress: () => onSelect(tool),
+      );
 }

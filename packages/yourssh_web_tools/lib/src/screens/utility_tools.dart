@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../theme.dart';
+import 'package:flutter/widgets.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import '../widgets/wt_widgets.dart';
 
 @visibleForTesting
 String encodeBase64(String input) => base64.encode(utf8.encode(input));
@@ -60,12 +61,14 @@ class _UtilityToolsState extends State<UtilityTools> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _UtilSubNav(active: _tab, onSelect: (t) => setState(() => _tab = t)),
-        Container(width: 1, color: WebToolsColors.border),
-        Expanded(child: _buildTab()),
-      ],
+    return ColoredBox(
+      color: YsColors.background,
+      child: Row(
+        children: [
+          _UtilSubNav(active: _tab, onSelect: (t) => setState(() => _tab = t)),
+          Expanded(child: _buildTab()),
+        ],
+      ),
     );
   }
 
@@ -84,42 +87,29 @@ class _UtilSubNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 120,
-      color: WebToolsColors.card,
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return SizedBox(
+      width: 136,
+      child: FSidebar(
         children: [
-          _item('Base64', _UtilTab.base64),
-          _item('URL', _UtilTab.url),
-          _item('JSON', _UtilTab.json),
-          _item('Hash', _UtilTab.hash),
+          FSidebarGroup(
+            children: [
+              _item('Base64', _UtilTab.base64),
+              _item('URL', _UtilTab.url),
+              _item('JSON', _UtilTab.json),
+              _item('Hash', _UtilTab.hash),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _item(String label, _UtilTab tab) {
-    final sel = active == tab;
-    return GestureDetector(
-      onTap: () => onSelect(tab),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: sel ? WebToolsColors.accent.withValues(alpha: 0.12) : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(label,
-            style: TextStyle(
-              color: sel ? WebToolsColors.accent : WebToolsColors.textSecondary,
-              fontSize: 12,
-              fontWeight: sel ? FontWeight.w500 : FontWeight.normal,
-            )),
-      ),
-    );
-  }
+  Widget _item(String label, _UtilTab tab) => FSidebarItem(
+        key: ValueKey('util-nav-${tab.name}'),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        selected: active == tab,
+        onPress: () => onSelect(tab),
+      );
 }
 
 // ── Shared IO widget ──────────────────────────────────────
@@ -142,59 +132,45 @@ class _IoPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(YsSpace.s5 - 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(inputLabel,
-              style: const TextStyle(color: WebToolsColors.textSecondary, fontSize: 11)),
+          WtCaption(inputLabel),
           const SizedBox(height: 6),
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: WebToolsColors.card,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: WebToolsColors.border),
-              ),
-              padding: const EdgeInsets.all(10),
-              child: TextField(
-                controller: inputCtrl,
-                maxLines: null,
-                expands: true,
-                style: const TextStyle(
-                    color: WebToolsColors.textPrimary, fontSize: 12, fontFamily: 'monospace'),
-                decoration:
-                    const InputDecoration(border: InputBorder.none, isDense: true),
-              ),
+            child: WtCodeArea(
+              key: const ValueKey('util-input'),
+              controller: inputCtrl,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: YsSpace.s3),
           Row(children: [
-            Text(outputLabel,
-                style: const TextStyle(color: WebToolsColors.textSecondary, fontSize: 11)),
-            const Spacer(),
-            ...actions,
-            const SizedBox(width: 4),
-            _CopyBtn(text: output),
+            Expanded(child: WtCaption(outputLabel)),
+            Flexible(
+              flex: 0,
+              child: Wrap(
+                spacing: YsSpace.s2,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  ...actions,
+                  _CopyBtn(text: output),
+                ],
+              ),
+            ),
           ]),
           const SizedBox(height: 6),
           Expanded(
             child: Container(
               width: double.infinity,
               decoration: BoxDecoration(
-                color: WebToolsColors.bg,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: WebToolsColors.border),
+                color: YsColors.card,
+                borderRadius: BorderRadius.circular(YsRadius.control),
+                border: Border.all(color: YsColors.border),
               ),
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(YsSpace.s3 - 2),
               child: SingleChildScrollView(
-                child: SelectableText(
-                  output,
-                  style: const TextStyle(
-                      color: WebToolsColors.textPrimary,
-                      fontSize: 12,
-                      fontFamily: 'monospace'),
-                ),
+                child: WtSelectableText(output),
               ),
             ),
           ),
@@ -210,35 +186,31 @@ class _CopyBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.copy, size: 14),
-      color: WebToolsColors.textSecondary,
+    return WtIconButton(
+      buttonKey: const ValueKey('util-copy'),
+      icon: FLucideIcons.copy,
       tooltip: 'Copy output',
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
-      onPressed: () => Clipboard.setData(ClipboardData(text: text)),
+      onPress: () => Clipboard.setData(ClipboardData(text: text)),
     );
   }
 }
 
 class _ActionBtn extends StatelessWidget {
+  final String id;
   final String label;
   final VoidCallback onTap;
-  const _ActionBtn({required this.label, required this.onTap});
+  const _ActionBtn({required this.id, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: WebToolsColors.card,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: WebToolsColors.border),
-        ),
-        child: Text(label,
-            style: const TextStyle(color: WebToolsColors.textSecondary, fontSize: 11)),
+    return IntrinsicWidth(
+      child: FButton(
+        key: ValueKey('util-$id'),
+        variant: .outline,
+        size: .xs,
+        mainAxisSize: .min,
+        onPress: onTap,
+        child: Text(label),
       ),
     );
   }
@@ -274,9 +246,8 @@ class _Base64ToolState extends State<_Base64Tool> {
         inputCtrl: _inputCtrl,
         output: _output,
         actions: [
-          _ActionBtn(label: 'Encode', onTap: _encode),
-          const SizedBox(width: 6),
-          _ActionBtn(label: 'Decode', onTap: _decode),
+          _ActionBtn(id: 'encode', label: 'Encode', onTap: _encode),
+          _ActionBtn(id: 'decode', label: 'Decode', onTap: _decode),
         ],
       );
 }
@@ -311,9 +282,8 @@ class _UrlToolState extends State<_UrlTool> {
         inputCtrl: _inputCtrl,
         output: _output,
         actions: [
-          _ActionBtn(label: 'Encode', onTap: _encode),
-          const SizedBox(width: 6),
-          _ActionBtn(label: 'Decode', onTap: _decode),
+          _ActionBtn(id: 'encode', label: 'Encode', onTap: _encode),
+          _ActionBtn(id: 'decode', label: 'Decode', onTap: _decode),
         ],
       );
 }
@@ -348,9 +318,8 @@ class _JsonToolState extends State<_JsonTool> {
         inputCtrl: _inputCtrl,
         output: _output,
         actions: [
-          _ActionBtn(label: 'Format', onTap: _format),
-          const SizedBox(width: 6),
-          _ActionBtn(label: 'Minify', onTap: _minify),
+          _ActionBtn(id: 'format', label: 'Format', onTap: _format),
+          _ActionBtn(id: 'minify', label: 'Minify', onTap: _minify),
         ],
       );
 }
@@ -390,11 +359,9 @@ class _HashToolState extends State<_HashTool> {
         inputCtrl: _inputCtrl,
         output: _output,
         actions: [
-          _ActionBtn(label: 'SHA-256', onTap: () => _hash(Sha256(), 'SHA-256')),
-          const SizedBox(width: 6),
-          _ActionBtn(label: 'SHA-512', onTap: () => _hash(Sha512(), 'SHA-512')),
-          const SizedBox(width: 6),
-          _ActionBtn(label: 'SHA-1', onTap: () => _hash(Sha1(), 'SHA-1')),
+          _ActionBtn(id: 'sha256', label: 'SHA-256', onTap: () => _hash(Sha256(), 'SHA-256')),
+          _ActionBtn(id: 'sha512', label: 'SHA-512', onTap: () => _hash(Sha512(), 'SHA-512')),
+          _ActionBtn(id: 'sha1', label: 'SHA-1', onTap: () => _hash(Sha1(), 'SHA-1')),
         ],
       );
 }
