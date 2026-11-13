@@ -127,7 +127,12 @@ class RemoteStatusOverlay extends StatelessWidget {
             ),
             if (showRetry) ...[
               const SizedBox(height: YsSpace.s3),
-              FButton(onPress: onRetry, child: const Text('Retry')),
+              // FButton fills the width it is given unless told to shrink.
+              FButton(
+                mainAxisSize: MainAxisSize.min,
+                onPress: onRetry,
+                child: const Text('Retry'),
+              ),
             ],
           ],
         ),
