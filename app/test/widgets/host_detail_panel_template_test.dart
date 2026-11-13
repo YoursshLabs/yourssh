@@ -10,6 +10,8 @@ import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/host_detail_panel.dart';
 
+import '../helpers/ys_test_app.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -29,14 +31,12 @@ void main() {
               create: (_) => HostProvider(StorageService())),
           Provider<SshService>(create: (_) => SshService(StorageService())),
         ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: HostDetailPanel(
-              existing: existing,
-              agentProbe: () async => const AgentProbeSystem(1),
-              onClose: () {},
-              onSave: (host, _) async => saved = host,
-            ),
+        child: ysTestApp(
+          HostDetailPanel(
+            existing: existing,
+            agentProbe: () async => const AgentProbeSystem(1),
+            onClose: () {},
+            onSave: (host, _) async => saved = host,
           ),
         ),
       ),
@@ -45,7 +45,7 @@ void main() {
   }
 
   Future<void> save(WidgetTester tester) async {
-    final btn = find.text('SAVE ONLY');
+    final btn = find.byKey(const ValueKey('host-save-button'));
     await tester.ensureVisible(btn);
     await tester.tap(btn);
     await tester.pumpAndSettle();
@@ -98,7 +98,7 @@ void main() {
   testWidgets('invalid env var name blocks save', (tester) async {
     await pumpPanel(tester, existing: existingHost());
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'FOO'), 'BAD-NAME');
+        find.byKey(const ValueKey('env-key-0')), 'BAD-NAME');
     await save(tester);
     expect(saved, isNull, reason: 'form validation must block the save');
   });
@@ -111,9 +111,9 @@ void main() {
     await tester.tap(add);
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'NAME'), 'PATH_X');
+        find.byKey(const ValueKey('env-key-0')), 'PATH_X');
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'value'), '/opt/x');
+        find.byKey(const ValueKey('env-value-0')), '/opt/x');
     await save(tester);
     expect(saved, isNotNull);
     expect(saved!.envVars, {'PATH_X': '/opt/x'});

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh/providers/update_provider.dart';
-import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+
+import 'ys_form_controls.dart';
 
 /// Dismissible banner shown at the top of the app when a newer release is
 /// available. [onShowDetails] navigates to the Settings update section.
@@ -16,44 +18,53 @@ class UpdateBanner extends StatelessWidget {
     if (!provider.showBanner) return const SizedBox.shrink();
     final version = provider.latestRelease?.version ?? '';
 
-    return Material(
-      color: AppColors.accent.withValues(alpha: 0.12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppColors.border)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.system_update_alt, size: 16, color: AppColors.accent),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'New version v$version available',
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-              ),
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: YsSpace.s4,
+        vertical: YsSpace.s2,
+      ),
+      decoration: BoxDecoration(
+        color: YsColors.primary.withValues(alpha: 0.12),
+        border: const Border(bottom: BorderSide(color: YsColors.border)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            FLucideIcons.download,
+            size: 16,
+            color: YsColors.accentText,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'New version v$version available',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: YsColors.foreground, fontSize: 13),
             ),
-            TextButton(
-              onPressed: onShowDetails,
-              style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
-              child: const Text('Details'),
-            ),
-            const SizedBox(width: 4),
-            FilledButton(
-              onPressed: () => context.read<UpdateProvider>().downloadAndInstall(),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: Colors.black,
-              ),
-              child: const Text('Update'),
-            ),
-            IconButton(
-              tooltip: 'Dismiss',
-              icon: const Icon(Icons.close, size: 16, color: AppColors.textSecondary),
-              onPressed: () => context.read<UpdateProvider>().dismiss(),
-            ),
-          ],
-        ),
+          ),
+          FButton(
+            variant: .ghost,
+            size: .xs,
+            mainAxisSize: MainAxisSize.min,
+            onPress: onShowDetails,
+            child: const Text('Details'),
+          ),
+          const SizedBox(width: YsSpace.s1),
+          FButton(
+            variant: .primary,
+            size: .xs,
+            mainAxisSize: MainAxisSize.min,
+            onPress: () => context.read<UpdateProvider>().downloadAndInstall(),
+            child: const Text('Update'),
+          ),
+          const SizedBox(width: YsSpace.s1),
+          SettingsIconButton(
+            icon: FLucideIcons.x,
+            tooltip: 'Dismiss',
+            onPress: () => context.read<UpdateProvider>().dismiss(),
+          ),
+        ],
       ),
     );
   }

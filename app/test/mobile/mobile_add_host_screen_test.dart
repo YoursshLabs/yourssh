@@ -7,11 +7,13 @@ import 'package:yourssh/providers/host_provider.dart';
 import 'package:yourssh/providers/key_provider.dart';
 import 'package:yourssh/mobile/screens/mobile_add_host_screen.dart';
 import 'package:yourssh/services/storage_service.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   Widget wrap(HostProvider hosts, Widget child) => MaterialApp(
+        builder: ysRootBuilderTouch,
         home: MultiProvider(
           providers: [
             ChangeNotifierProvider.value(value: hosts),

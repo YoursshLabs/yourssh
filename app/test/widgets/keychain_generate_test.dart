@@ -6,6 +6,8 @@ import 'package:yourssh/providers/key_provider.dart';
 import 'package:yourssh/services/key_gen_service.dart';
 import 'package:yourssh/widgets/keychain_screen.dart';
 
+import '../helpers/ys_test_app.dart';
+
 class _FakeKeyGen extends KeyGenService {
   _FakeKeyGen({required this.sshKeygenAvailable});
   final bool sshKeygenAvailable;
@@ -23,9 +25,8 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1400, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => KeyProvider())],
-      child:
-          MaterialApp(home: Scaffold(body: KeychainScreen(keyGen: keyGen))),
+      providers: [ChangeNotifierProvider(create: (_) => KeyProvider(discoverSshKeys: false))],
+      child: ysTestApp(KeychainScreen(keyGen: keyGen)),
     ));
     await tester.pumpAndSettle();
   }
@@ -33,13 +34,13 @@ void main() {
   testWidgets('rsa/ecdsa options disabled when ssh-keygen is missing',
       (tester) async {
     await pump(tester, _FakeKeyGen(sshKeygenAvailable: false));
-    // 'GENERATE' renders in both the top bar and the empty state.
-    await tester.tap(find.text('GENERATE').first);
+    // 'Generate' renders in both the top bar and the empty state.
+    await tester.tap(find.text('Generate').first);
     await tester.pumpAndSettle();
 
     expect(find.textContaining('require OpenSSH client'), findsOneWidget);
     // Tapping a disabled item must not change the selection.
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.text('Ed25519 (recommended)'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('RSA 4096').last, warnIfMissed: false);
     await tester.pumpAndSettle();
@@ -51,7 +52,7 @@ void main() {
 
   testWidgets('rsa/ecdsa enabled when ssh-keygen exists', (tester) async {
     await pump(tester, _FakeKeyGen(sshKeygenAvailable: true));
-    await tester.tap(find.text('GENERATE').first);
+    await tester.tap(find.text('Generate').first);
     await tester.pumpAndSettle();
     expect(find.textContaining('require OpenSSH client'), findsNothing);
   });

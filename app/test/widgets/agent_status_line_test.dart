@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/services/agent_probe.dart';
 import 'package:yourssh/widgets/agent_status_line.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show FCircularProgress;
+
+import '../helpers/ys_test_app.dart';
 
 void main() {
-  Widget wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+  Widget wrap(Widget child) => ysTestApp(child);
 
   testWidgets('probes on mount and renders the system-agent state',
       (tester) async {
@@ -59,7 +62,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('System agent connected — 1 identity'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.refresh));
+    await tester.tap(find.byTooltip('Check again'));
     await tester.pumpAndSettle();
     expect(find.text('System agent connected — 2 identities'), findsOneWidget);
   });
@@ -72,20 +75,20 @@ void main() {
     )));
 
     // Initial probe in flight: spinner visible, refresh hidden.
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(find.byIcon(Icons.refresh), findsNothing);
+    expect(find.byType(FCircularProgress), findsOneWidget);
+    expect(find.byTooltip('Check again'), findsNothing);
 
     completer.complete(const AgentProbeSystem(1));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.refresh), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byTooltip('Check again'), findsOneWidget);
+    expect(find.byType(FCircularProgress), findsNothing);
 
     // Refresh returns to the loading state until the new probe resolves.
     completer = Completer<AgentProbeResult>();
-    await tester.tap(find.byIcon(Icons.refresh));
+    await tester.tap(find.byTooltip('Check again'));
     await tester.pump();
     expect(find.text('Checking SSH agent…'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(FCircularProgress), findsOneWidget);
 
     completer.complete(const AgentProbeKeychain(2));
     await tester.pumpAndSettle();

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:xterm/xterm.dart' show CellAnchor;
 import '../models/shell_session_state.dart';
 import '../services/shell_integration_service.dart';
 
@@ -31,7 +32,8 @@ class ShellIntegrationProvider extends ChangeNotifier {
   /// [absoluteCursorY] is `terminal.buffer.absoluteCursorY` captured by the
   /// caller at marker time (kept out of this class so it stays testable).
   void handleOsc(
-      String sessionId, String code, List<String> args, int absoluteCursorY) {
+      String sessionId, String code, List<String> args, int absoluteCursorY,
+      {CellAnchor Function()? anchorFactory}) {
     final ev = _service.parseOsc(code, args);
     if (ev == null) return;
     final st = _states.putIfAbsent(sessionId, ShellSessionState.new);
@@ -39,7 +41,7 @@ class ShellIntegrationProvider extends ChangeNotifier {
       case ShellOscKind.cwd:
         st.setCwd(ev.cwd!);
       case ShellOscKind.promptStart:
-        st.onPromptStart(absoluteCursorY);
+        st.onPromptStart(absoluteCursorY, anchor: anchorFactory?.call());
       case ShellOscKind.finished:
         st.onFinished(ev.exitCode);
     }

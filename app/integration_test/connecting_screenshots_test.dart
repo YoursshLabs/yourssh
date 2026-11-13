@@ -59,6 +59,7 @@ SshSession _session(SessionStatus status, {String? error}) {
 Future<void> _pump(WidgetTester tester, SshSession session) async {
   await tester.pumpWidget(MaterialApp(
     theme: buildAppTheme(),
+    builder: ysRootBuilder,
     debugShowCheckedModeBanner: false,
     home: Scaffold(
       backgroundColor: AppColors.bg,

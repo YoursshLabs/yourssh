@@ -131,6 +131,19 @@ class StorageService {
   Future<void> deleteSudoPassword(String hostId) =>
       _deleteSecret('sudopw_$hostId');
 
+  /// Per-host secret keys: login password, sudo password, proxy password
+  /// (the latter is written through [saveGenericSecret] by SshService).
+  static List<String> hostSecretKeys(String hostId) =>
+      ['pw_$hostId', 'sudopw_$hostId', 'proxy_pw_$hostId'];
+
+  /// Removes every secret saved for [hostId] from the secure store and from
+  /// any plaintext prefs fallback copy.
+  Future<void> deleteHostSecrets(String hostId) async {
+    for (final key in hostSecretKeys(hostId)) {
+      await _deleteSecret(key);
+    }
+  }
+
   Future<void> savePassphrase(String keyId, String passphrase) =>
       _saveSecret('pp_$keyId', passphrase);
 
@@ -148,7 +161,7 @@ class StorageService {
   // ── Plaintext-secret carry-over (issue #91) ────────────────
 
   /// Prefixes of the prefs keys that hold per-host / per-key secrets.
-  static const _secretKeyPrefixes = ['pw_', 'sudopw_', 'pp_'];
+  static const _secretKeyPrefixes = ['pw_', 'sudopw_', 'proxy_pw_', 'pp_'];
 
   /// App-scoped secret keys that carry no prefix.
   static const _secretKeys = {'sync_passphrase'};

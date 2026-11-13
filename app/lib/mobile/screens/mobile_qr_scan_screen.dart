@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../../providers/host_provider.dart';
 import '../../services/p2p_sync_encryption.dart';
@@ -14,7 +15,14 @@ import '../sync/transfer_code.dart';
 /// the local host list, then pops a result message (shown as a SnackBar by the
 /// caller).
 class MobileQrScanScreen extends StatefulWidget {
-  const MobileQrScanScreen({super.key});
+  /// Builds the camera view and wires its detections to `onDetect`. Defaults
+  /// to the real [MobileScanner]; tests inject a fake (no camera).
+  final Widget Function(
+    BuildContext context,
+    void Function(BarcodeCapture capture) onDetect,
+  )? scannerBuilder;
+
+  const MobileQrScanScreen({super.key, this.scannerBuilder});
 
   @override
   State<MobileQrScanScreen> createState() => _MobileQrScanScreenState();
@@ -62,18 +70,31 @@ class _MobileQrScanScreenState extends State<MobileQrScanScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: MobileColors.bg,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 18),
-          color: MobileColors.accent,
-          onPressed: () => Navigator.of(context).maybePop(),
-          tooltip: 'Back',
-        ),
-        title: Text('Scan transfer QR', style: mobileHeading()),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // FHeader adds the top safe area itself.
+          ColoredBox(
+            color: MobileColors.bg,
+            child: FHeader.nested(
+              prefixes: [
+                Tooltip(
+                  message: 'Back',
+                  child: FHeaderAction.back(
+                    semanticsLabel: 'Back',
+                    onPress: () => Navigator.of(context).maybePop(),
+                  ),
+                ),
+              ],
+              title: const Text('Scan transfer QR'),
+            ),
+          ),
+          Expanded(
+            child: widget.scannerBuilder?.call(context, _onDetect) ??
+                MobileScanner(onDetect: _onDetect),
+          ),
+        ],
       ),
-      body: MobileScanner(onDetect: _onDetect),
     );
   }
 }

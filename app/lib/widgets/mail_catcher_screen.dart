@@ -5,6 +5,8 @@ import '../providers/session_provider.dart';
 import '../services/mail_catcher_service.dart';
 import '../services/ssh_service.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import 'container_widgets.dart';
 
 class MailCatcherScreen extends StatefulWidget {
   const MailCatcherScreen({super.key});
@@ -42,13 +44,10 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
           Timer.periodic(const Duration(seconds: 3), (_) => _poll());
     } else {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_service.lastError ??
-              'Failed to start SMTP server. Ensure python3 is installed.'),
-          backgroundColor: AppColors.red,
-        ),
-      );
+      AppSnack.error(
+          context,
+          _service.lastError ??
+              'Failed to start SMTP server. Ensure python3 is installed.');
     }
   }
 
@@ -58,6 +57,37 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
     _pollTimer?.cancel();
     await _service.stop(session.host);
     setState(() => _running = false);
+  }
+
+  Future<void> _clearAll() async {
+    final count = _emails.length;
+    final ok = await showYsConfirm(
+      context,
+      title: 'Clear captured mail?',
+      message: count == 1
+          ? 'The captured message is removed here and from the catcher log on the host.'
+          : 'All $count captured messages are removed here and from the catcher log on the host.',
+      confirmLabel: 'Clear',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    final session = context.read<SessionProvider>().activeSshSession;
+    // Clear the remote log too, otherwise the next poll brings the mails back.
+    if (session != null) {
+      try {
+        await _service.clearLog(session.host);
+      } catch (e) {
+        if (!mounted) return;
+        final msg = e.toString().split('\n').first;
+        AppSnack.error(context, "Couldn't clear the mail log: $msg");
+        return;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _emails = [];
+      _selected = null;
+    });
   }
 
   Future<void> _poll() async {
@@ -78,6 +108,8 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final hasSession =
+        context.watch<SessionProvider>().activeSshSession != null;
     return Row(
       children: [
         SizedBox(
@@ -85,146 +117,148 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
           child: Column(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                color: AppColors.sidebar,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: YsSpace.s3,
+                  vertical: YsSpace.s1,
+                ),
+                color: YsColors.sidebar,
                 child: Row(
                   children: [
-                    const Text('Mail Catcher',
-                        style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w600)),
-                    if (_emails.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: AppColors.accent.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          '${_emails.length}',
-                          style: const TextStyle(
-                            color: AppColors.accent,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
+                    // Title + count badge share the free space; the title
+                    // ellipsizes only when the column is truly too narrow.
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Flexible(
+                              child: Text(
+                                'Mail Catcher',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: YsColors.foreground,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            if (_emails.isNotEmpty) ...[
+                              const SizedBox(width: YsSpace.s2),
+                              YsTag('${_emails.length}'),
+                            ],
+                          ],
                         ),
                       ),
-                    ],
-                    const Spacer(),
+                    ),
                     if (_emails.isNotEmpty)
-                      IconButton(
-                        icon: const Icon(Icons.delete_sweep_outlined,
-                            size: 16, color: AppColors.textTertiary),
-                        onPressed: () => setState(() {
-                          _emails = [];
-                          _selected = null;
-                        }),
+                      ContainerIconAction(
+                        icon: FLucideIcons.listX,
                         tooltip: 'Clear all',
+                        onPress: _clearAll,
                       ),
                     _running
-                        ? IconButton(
-                            icon: const Icon(Icons.stop,
-                                size: 16, color: AppColors.red),
-                            onPressed: _stop,
+                        ? ContainerIconAction(
+                            icon: FLucideIcons.square,
                             tooltip: 'Stop',
+                            onPress: _stop,
                           )
-                        : IconButton(
-                            icon: const Icon(Icons.play_arrow,
-                                size: 16, color: AppColors.accent),
-                            onPressed: context
-                                        .watch<SessionProvider>()
-                                        .activeSshSession !=
-                                    null
-                                ? _start
-                                : null,
+                        : ContainerIconAction(
+                            icon: FLucideIcons.play,
                             tooltip: 'Start on port 1025',
+                            active: true,
+                            onPress: hasSession ? _start : null,
                           ),
                   ],
                 ),
               ),
               if (_running)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  color: AppColors.accent.withValues(alpha: 0.1),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: YsSpace.s3,
+                    vertical: YsSpace.s1,
+                  ),
+                  color: YsColors.ok.withValues(alpha: 0.1),
                   child: const Row(
                     children: [
-                      Icon(Icons.circle, size: 8, color: AppColors.accent),
+                      Icon(FLucideIcons.circle, size: 8, color: YsColors.ok),
                       SizedBox(width: 6),
-                      Text('Listening on :1025',
-                          style: TextStyle(
-                              color: AppColors.accent, fontSize: 11)),
+                      Text(
+                        'Listening on :1025',
+                        style: TextStyle(color: YsColors.ok, fontSize: 11),
+                      ),
                     ],
                   ),
                 ),
               Expanded(
-                child: Material(
-                  color: AppColors.sidebar,
+                child: ColoredBox(
+                  color: YsColors.sidebar,
                   child: _emails.isEmpty
-                    ? const Center(
-                        child: Text('No emails captured',
-                            style: TextStyle(color: AppColors.textTertiary)),
-                      )
-                    : ListView.builder(
-                        itemCount: _emails.length,
-                        itemBuilder: (_, i) => ListTile(
-                          selected: _selected == _emails[i],
-                          title: Text(
-                            _emails[i].subject.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No emails captured',
+                            style: TextStyle(color: YsColors.mutedForeground),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: _emails.length,
+                          itemBuilder: (_, i) => _EmailRow(
+                            subject: _emails[i].subject.isEmpty
                                 ? '(no subject)'
                                 : _emails[i].subject,
-                            style: const TextStyle(
-                                color: AppColors.textPrimary, fontSize: 13),
+                            subtitle:
+                                '${_emails[i].from} · ${_fmtTime(_emails[i].receivedAt)}',
+                            selected: _selected == _emails[i],
+                            onTap: () => setState(() => _selected = _emails[i]),
                           ),
-                          subtitle: Text(
-                            '${_emails[i].from} · ${_fmtTime(_emails[i].receivedAt)}',
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                          ),
-                          onTap: () =>
-                              setState(() => _selected = _emails[i]),
                         ),
-                      ),
                 ),
               ),
             ],
           ),
         ),
-        const VerticalDivider(width: 1, color: AppColors.border),
+        const VerticalDivider(width: 1, color: YsColors.border),
         Expanded(
           child: _selected == null
               ? const Center(
-                  child: Text('Select an email',
-                      style: TextStyle(color: AppColors.textTertiary)),
+                  child: Text(
+                    'Select an email',
+                    style: TextStyle(color: YsColors.mutedForeground),
+                  ),
                 )
               : Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(YsSpace.s4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Subject: ${_selected!.subject}',
-                          style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 4),
-                      Text('From: ${_selected!.from}',
-                          style: const TextStyle(
-                              color: AppColors.textSecondary, fontSize: 12)),
-                      Text('To: ${_selected!.to}',
-                          style: const TextStyle(
-                              color: AppColors.textSecondary, fontSize: 12)),
+                      Text(
+                        'Subject: ${_selected!.subject}',
+                        style: const TextStyle(
+                          color: YsColors.foreground,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: YsSpace.s1),
+                      Text('From: ${_selected!.from}', style: _meta),
+                      Text('To: ${_selected!.to}', style: _meta),
                       Text(
                         'Received: ${_fmtTime(_selected!.receivedAt)}',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        style: _meta,
                       ),
-                      const Divider(color: AppColors.border, height: 24),
+                      const SizedBox(height: YsSpace.s2),
+                      const FDivider(
+                        style: .delta(padding: .value(EdgeInsets.zero)),
+                      ),
+                      const SizedBox(height: YsSpace.s2),
                       Expanded(
                         child: SingleChildScrollView(
                           child: SelectableText(
                             _selected!.body,
                             style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontFamily: 'monospace',
+                              color: YsColors.foreground,
+                              fontFamily: kYsMonoFontFamily,
+                              fontFamilyFallback: kYsMonoFontFallback,
                               fontSize: 12,
                               height: 1.6,
                             ),
@@ -238,4 +272,70 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
       ],
     );
   }
+
+  static const _meta = TextStyle(color: YsColors.mutedForeground, fontSize: 12);
+}
+
+class _EmailRow extends StatelessWidget {
+  const _EmailRow({
+    required this.subject,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String subject;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => FTappable(
+    semanticsLabel: subject,
+    selected: selected,
+    onPress: onTap,
+    builder: (context, variants, child) {
+      final hovered = variants.contains(FTappableVariant.hovered);
+      final focused = variants.contains(FTappableVariant.focused);
+      return Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: YsSpace.s3,
+          vertical: YsSpace.s2,
+        ),
+        decoration: BoxDecoration(
+          color: selected
+              ? YsColors.primary.withValues(alpha: 0.12)
+              : hovered || focused
+              ? YsColors.secondary
+              : null,
+          border: Border(
+            left: BorderSide(
+              color: selected || focused
+                  ? YsColors.primary
+                  : Colors.transparent,
+              width: 3,
+            ),
+          ),
+        ),
+        child: child,
+      );
+    },
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          subject,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: YsColors.foreground, fontSize: 13),
+        ),
+        Text(
+          subtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: YsColors.mutedForeground, fontSize: 11),
+        ),
+      ],
+    ),
+  );
 }

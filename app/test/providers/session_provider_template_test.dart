@@ -86,4 +86,23 @@ void main() {
     expect(ssh.capturedUseTmux, isTrue);
     p.dispose();
   });
+
+  test('the session keeps the TERM it connected with', () async {
+    final ssh = _CapturingSsh();
+    final p = SessionProvider(ssh, TabMetadataService());
+    var global = 'linux';
+    p.terminalType = () => global;
+
+    await p.connect(_host());
+    final session = p.sshSessions.single;
+    expect(session.termType, 'linux');
+    expect(session.termType, ssh.capturedTermType);
+
+    global = 'vt100'; // a later Settings change must not rewrite it
+    expect(session.termType, 'linux');
+
+    await p.connect(_host(termType: 'screen-256color'));
+    expect(p.sshSessions.last.termType, 'screen-256color');
+    p.dispose();
+  });
 }

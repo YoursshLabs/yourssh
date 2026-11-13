@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../../providers/session_provider.dart';
 import '../../services/ssh_service.dart';
@@ -8,6 +9,7 @@ import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 import '../widgets/snippet_card.dart';
 import '../widgets/tag_chip.dart';
+import '../../theme/app_theme.dart';
 
 /// Snippets tab — lists saved commands with a category filter.
 /// Tapping a card sends the command into the active SSH session.
@@ -47,37 +49,32 @@ class _MobileSnippetsScreenState extends State<MobileSnippetsScreen> {
     return Scaffold(
       backgroundColor: MobileColors.bg,
       body: SafeArea(
+        // FHeader adds the top safe area itself.
+        top: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Header ──────────────────────────────────────────────────────
+            const FHeader(title: Text('Snippets')),
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 MobileTokens.space4,
-                MobileTokens.space4,
+                0,
                 MobileTokens.space4,
                 MobileTokens.space2,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Snippets',
-                    style: mobileHeading(size: 30, weight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: MobileTokens.space1),
-                  Text(
-                    subtitle,
-                    style: mobileBody(size: 13, color: MobileColors.textMuted),
-                  ),
-                ],
+              child: Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: mobileBody(size: 13, color: MobileColors.textMuted),
               ),
             ),
 
             // ── Category filter chips ────────────────────────────────────────
             if (tags.isNotEmpty)
               SizedBox(
-                height: 38,
+                height: MobileTokens.touchTarget,
                 child: ListView(
                   padding: const EdgeInsets.symmetric(
                       horizontal: MobileTokens.space4),
@@ -130,9 +127,7 @@ class _MobileSnippetsScreenState extends State<MobileSnippetsScreen> {
 
   void _run(BuildContext context, Snippet snippet, String? sessionId) {
     if (sessionId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No active session')),
-      );
+      AppSnack.info(context, 'No active session');
       return;
     }
     context.read<SshService>().sendInput(sessionId, '${snippet.command}\n');
@@ -147,19 +142,9 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.code_off_outlined,
-              size: 48, color: MobileColors.textFaint),
-          const SizedBox(height: MobileTokens.space3),
-          Text(
-            hasFilter ? 'No snippets in this category' : 'No snippets yet',
-            style: mobileHeading(size: 17),
-          ),
-        ],
-      ),
+    return YsEmptyState(
+      icon: FLucideIcons.braces,
+      title: hasFilter ? 'No snippets in this category' : 'No snippets yet',
     );
   }
 }

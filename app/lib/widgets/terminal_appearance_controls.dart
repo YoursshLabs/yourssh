@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
-import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'theme_picker.dart';
 
 /// How [TerminalAppearanceControls] lays out each control.
@@ -26,7 +26,6 @@ const kBundledTerminalFonts = [
   'Roboto Mono for Powerline',
 ];
 
-const _kCustom = '__custom__';
 
 /// Terminal appearance settings (color theme, font size, font family),
 /// shared between the Settings screen and the terminal config side panel.
@@ -43,6 +42,9 @@ class TerminalAppearanceControls extends StatefulWidget {
 
 class _TerminalAppearanceControlsState
     extends State<TerminalAppearanceControls> {
+  static const double _minSize = 10;
+  static const double _maxSize = 24;
+
   final _customFontController = TextEditingController();
   bool _pendingCustom = false;
 
@@ -64,11 +66,19 @@ class _TerminalAppearanceControlsState
 
   bool get _isRows => widget.layout == AppearanceControlsLayout.rows;
 
+  double _sizeOf(FSliderValue v) =>
+      (_minSize + v.max * (_maxSize - _minSize)).roundToDouble();
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final showCustom =
         _pendingCustom || !kBundledTerminalFonts.contains(settings.terminalFont);
+    // Clamp: prefs may hold an out-of-range value.
+    final size = settings.fontSize.clamp(_minSize, _maxSize).toDouble();
+    // FSliderValue needs 0 < max <= 1.
+    final fraction =
+        ((size - _minSize) / (_maxSize - _minSize)).clamp(0.01, 1.0);
 
     // `inline` — compact control: in vertical layout it shares a row with the
     // label (right-aligned) instead of stacking below it.
@@ -86,23 +96,25 @@ class _TerminalAppearanceControlsState
         'Font size: ${settings.fontSize.round()}pt',
         SizedBox(
           width: _isRows ? 200 : double.infinity,
-          child: Slider(
-            // Clamp: prefs may hold an out-of-range value (Slider asserts).
-            value: settings.fontSize.clamp(10, 24).toDouble(),
-            min: 10,
-            max: 24,
-            divisions: 14,
-            // Preview while dragging (no prefs write per tick); persist once
-            // when the drag ends.
-            onChanged: (v) =>
-                context.read<SettingsProvider>().previewFontSize(v),
-            onChangeEnd: (v) =>
-                context.read<SettingsProvider>().save(fontSize: v),
+          child: FSlider(
+            control: .liftedContinuous(
+              value: FSliderValue(max: fraction),
+              // Preview while dragging (no prefs write per tick); persist
+              // once when the drag ends.
+              onChange: (v) =>
+                  context.read<SettingsProvider>().previewFontSize(_sizeOf(v)),
+            ),
+            // `onEnd`'s value can lag the lifted one, so persist what the
+            // drag previewed.
+            onEnd: (_) {
+              final provider = context.read<SettingsProvider>();
+              provider.save(fontSize: provider.fontSize);
+            },
           ),
         ),
         inline: false,
       ),
-      ('Terminal font', _buildFontDropdown(context, settings), inline: false),
+      ('Terminal font', _buildFontSelect(context, settings), inline: false),
       if (showCustom)
         ('Custom font name', _buildCustomFontField(context), inline: false),
     ];
@@ -118,16 +130,18 @@ class _TerminalAppearanceControlsState
 
   List<Widget> _buildEntry(int index, (String, Widget, {bool inline}) entry) {
     final (label, control, inline: inline) = entry;
-    const labelStyle = TextStyle(color: AppColors.textPrimary, fontSize: 13);
+    const labelStyle = TextStyle(color: YsColors.foreground, fontSize: 13);
+    final labelText =
+        Text(label, style: labelStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
     if (_isRows) {
       return [
-        if (index > 0)
-          const Divider(height: 1, color: AppColors.border, indent: 16),
+        if (index > 0) const FDivider(),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(
+              horizontal: YsSpace.s4, vertical: YsSpace.s3),
           child: Row(
             children: [
-              Expanded(child: Text(label, style: labelStyle)),
+              Expanded(child: labelText),
               control,
             ],
           ),
@@ -136,98 +150,102 @@ class _TerminalAppearanceControlsState
     }
     if (inline) {
       return [
-        if (index > 0) const SizedBox(height: 16),
+        if (index > 0) const SizedBox(height: YsSpace.s4),
         Row(
           children: [
-            Expanded(child: Text(label, style: labelStyle)),
+            Expanded(child: labelText),
             control,
           ],
         ),
       ];
     }
     return [
-      if (index > 0) const SizedBox(height: 16),
-      Text(label, style: labelStyle),
-      const SizedBox(height: 6),
+      if (index > 0) const SizedBox(height: YsSpace.s4),
+      labelText,
+      const SizedBox(height: YsSpace.s2 - 2),
       control,
     ];
   }
 
-  Widget _buildFontDropdown(BuildContext context, SettingsProvider settings) {
+  /// Bundled fonts followed by a trailing "Custom…" entry; the select's value
+  /// is the option index.
+  Widget _buildFontSelect(BuildContext context, SettingsProvider settings) {
     final isCustom = !kBundledTerminalFonts.contains(settings.terminalFont);
-    final ddValue =
-        (isCustom || _pendingCustom) ? _kCustom : settings.terminalFont;
-    return DropdownButton<String>(
-      value: ddValue,
-      isExpanded: !_isRows,
-      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-      dropdownColor: AppColors.card,
-      underline: const SizedBox(),
-      items: [
-        ...kBundledTerminalFonts.map((f) => DropdownMenuItem(
-              value: f,
-              // Render each option in its own typeface as a live preview.
-              child: Text(f == 'monospace' ? 'System Default' : f,
-                  style: TextStyle(fontSize: 12, fontFamily: f)),
-            )),
-        const DropdownMenuItem(
-          value: _kCustom,
-          child: Text('Custom…', style: TextStyle(fontSize: 12)),
+    final customIndex = kBundledTerminalFonts.length;
+    final index = (isCustom || _pendingCustom)
+        ? customIndex
+        : kBundledTerminalFonts.indexOf(settings.terminalFont);
+    String nameOf(int i) => i == customIndex
+        ? 'Custom…'
+        : (kBundledTerminalFonts[i] == 'monospace'
+            ? 'System Default'
+            : kBundledTerminalFonts[i]);
+    return SizedBox(
+      width: _isRows ? 220 : double.infinity,
+      child: FSelect<int>.rich(
+        key: const Key('terminal-font-select'),
+        control: .lifted(
+          value: index,
+          onChange: (i) {
+            if (i == null) return;
+            if (i == customIndex) {
+              setState(() {
+                _pendingCustom = true;
+                _customFontController.clear();
+              });
+            } else {
+              setState(() => _pendingCustom = false);
+              context
+                  .read<SettingsProvider>()
+                  .save(terminalFont: kBundledTerminalFonts[i]);
+            }
+          },
         ),
-      ],
-      onChanged: (v) {
-        if (v == _kCustom) {
-          setState(() {
-            _pendingCustom = true;
-            _customFontController.clear();
-          });
-        } else if (v != null) {
-          setState(() => _pendingCustom = false);
-          context.read<SettingsProvider>().save(terminalFont: v);
-        }
-      },
+        format: nameOf,
+        children: [
+          for (var i = 0; i <= customIndex; i++)
+            FSelectItem<int>(
+              value: i,
+              // Render each option in its own typeface as a live preview.
+              title: Text(
+                nameOf(i),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontFamily: i == customIndex ? null : kBundledTerminalFonts[i],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
   Widget _buildCustomFontField(BuildContext context) {
     return SizedBox(
-      width: _isRows ? 220 : double.infinity,
+      width: _isRows ? 260 : double.infinity,
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              controller: _customFontController,
-              style:
-                  const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-              decoration: InputDecoration(
-                hintText: 'e.g. Hack Nerd Font',
-                hintStyle: const TextStyle(
-                    color: AppColors.textTertiary, fontSize: 12),
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                filled: true,
-                fillColor: AppColors.bg,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: const BorderSide(color: AppColors.border),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: const BorderSide(color: AppColors.border),
-                ),
-              ),
+            child: FTextField(
+              key: const Key('custom-font-field'),
+              control:
+                  FTextFieldControl.managed(controller: _customFontController),
+              size: .sm,
+              hint: 'e.g. Hack Nerd Font',
             ),
           ),
-          const SizedBox(width: 6),
-          TextButton(
-            onPressed: () {
+          const SizedBox(width: YsSpace.s2 - 2),
+          FButton(
+            variant: .ghost,
+            size: .sm,
+            mainAxisSize: MainAxisSize.min,
+            onPress: () {
               final name = _customFontController.text.trim();
               if (name.isEmpty) return;
               setState(() => _pendingCustom = false);
               context.read<SettingsProvider>().save(terminalFont: name);
             },
-            child: const Text('Apply', style: TextStyle(fontSize: 12)),
+            child: const Text('Apply'),
           ),
         ],
       ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yourssh/mobile/theme/mobile_theme.dart';
 import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 void main() {
   group('AppColors.fromHex', () {
@@ -29,6 +31,42 @@ void main() {
       for (final (_, hex) in AppColors.tabColors) {
         expect(AppColors.fromHex(hex), isNot(AppColors.textSecondary));
       }
+    });
+  });
+
+  group('palette tokens', () {
+    test('AppColors alias the Amber Brand tokens', () {
+      expect(AppColors.bg, YsColors.background);
+      expect(AppColors.sidebar, YsColors.sidebar);
+      expect(AppColors.card, YsColors.card);
+      expect(AppColors.cardHover, YsColors.secondary);
+      expect(AppColors.border, YsColors.border);
+      expect(AppColors.accent, YsColors.primary);
+      expect(AppColors.accentDim, const Color(0xFFE87C08));
+      expect(AppColors.textPrimary, YsColors.foreground);
+      expect(AppColors.textSecondary, YsColors.mutedForeground);
+      expect(AppColors.textTertiary, const Color(0xFF857E79));
+      expect(AppColors.red, YsColors.error);
+      expect(AppColors.success, YsColors.ok);
+      expect(AppColors.warning, YsColors.warn);
+      expect(AppColors.offline, YsColors.off);
+    });
+
+    test('MobileColors alias the Amber Brand tokens', () {
+      expect(MobileColors.accent, YsColors.primary);
+      expect(MobileColors.accentSoft, const Color(0xFF2A2010));
+      expect(MobileColors.bg, YsColors.background);
+      expect(MobileColors.surface, YsColors.card);
+      expect(MobileColors.surfaceAlt, YsColors.chrome);
+      expect(MobileColors.border, YsColors.border);
+      expect(MobileColors.borderSoft, const Color(0x14FFEBD2));
+      expect(MobileColors.textPrimary, YsColors.foreground);
+      expect(MobileColors.textMuted, YsColors.mutedForeground);
+      expect(MobileColors.textFaint, const Color(0xFF857E79));
+      expect(MobileColors.green, YsColors.ok);
+      expect(MobileColors.red, YsColors.error);
+      expect(MobileColors.yellow, YsColors.warn);
+      expect(MobileColors.fieldFill, YsColors.secondary);
     });
   });
 }

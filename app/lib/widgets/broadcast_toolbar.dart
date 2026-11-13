@@ -2,11 +2,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import '../providers/plugin_provider.dart';
 import '../providers/terminal_layout_provider.dart';
 
+/// Workspace header: [leading] (host chips) on the left, layout / panel
+/// toggles and Broadcast on the right, then [trailing] (the main screen's
+/// network stats, Share and AI controls) at the right edge. The action
+/// cluster scrolls instead of overflowing when the workspace is narrow (side
+/// panel open).
 class BroadcastToolbar extends StatelessWidget {
-  const BroadcastToolbar({super.key});
+  final Widget? leading;
+  final Widget? trailing;
+  const BroadcastToolbar({super.key, this.leading, this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -15,95 +23,97 @@ class BroadcastToolbar extends StatelessWidget {
         .watch<PluginProvider>()
         .isEnabled(YourSSHSnippetsPlugin.pluginId);
 
-    return Container(
-      height: 36,
-      color: const Color(0xFF141414),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        children: [
-          const Text('Layout:', style: TextStyle(color: Color(0xFF888888), fontSize: 12)),
-          const SizedBox(width: 8),
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _LayoutButton(
+          icon: FLucideIcons.square,
+          tooltip: 'Single',
+          selected: layout.layout == SplitLayout.single,
+          onTap: () => layout.setLayout(SplitLayout.single),
+        ),
+        _LayoutButton(
+          icon: FLucideIcons.columns2,
+          tooltip: 'Split Horizontal',
+          selected: layout.layout == SplitLayout.horizontal,
+          onTap: () => layout.setLayout(SplitLayout.horizontal),
+        ),
+        _LayoutButton(
+          icon: FLucideIcons.rows2,
+          tooltip: 'Split Vertical',
+          selected: layout.layout == SplitLayout.vertical,
+          onTap: () => layout.setLayout(SplitLayout.vertical),
+        ),
+        _LayoutButton(
+          icon: FLucideIcons.layoutGrid,
+          tooltip: 'Quad',
+          selected: layout.layout == SplitLayout.quad,
+          onTap: () => layout.setLayout(SplitLayout.quad),
+        ),
+        const SizedBox(width: YsSpace.s2),
+        if (snippetsEnabled)
           _LayoutButton(
-            icon: Icons.crop_square,
-            tooltip: 'Single',
-            selected: layout.layout == SplitLayout.single,
-            onTap: () => layout.setLayout(SplitLayout.single),
+            icon: FLucideIcons.code,
+            tooltip: 'Toggle Snippets Panel',
+            selected: layout.snippetsPanelVisible,
+            onTap: layout.toggleSnippetsPanel,
           ),
-          _LayoutButton(
-            icon: Icons.view_column,
-            tooltip: 'Split Horizontal',
-            selected: layout.layout == SplitLayout.horizontal,
-            onTap: () => layout.setLayout(SplitLayout.horizontal),
-          ),
-          _LayoutButton(
-            icon: Icons.table_rows,
-            tooltip: 'Split Vertical',
-            selected: layout.layout == SplitLayout.vertical,
-            onTap: () => layout.setLayout(SplitLayout.vertical),
-          ),
-          _LayoutButton(
-            icon: Icons.grid_view,
-            tooltip: 'Quad',
-            selected: layout.layout == SplitLayout.quad,
-            onTap: () => layout.setLayout(SplitLayout.quad),
-          ),
-          const SizedBox(width: 8),
-          if (snippetsEnabled)
-            _LayoutButton(
-              icon: Icons.code,
-              tooltip: 'Toggle Snippets Panel',
-              selected: layout.snippetsPanelVisible,
-              onTap: layout.toggleSnippetsPanel,
+        _LayoutButton(
+          icon: FLucideIcons.slidersHorizontal,
+          tooltip: 'Toggle Terminal Settings',
+          selected: layout.configPanelVisible,
+          onTap: () => layout.toggleSidePanel(SidePanel.terminalConfig),
+        ),
+        if (layout.paneCount > 1) ...[
+          const SizedBox(width: YsSpace.s2),
+          FButton(
+            variant: layout.broadcastEnabled ? .secondary : .outline,
+            size: .sm,
+            mainAxisSize: MainAxisSize.min,
+            onPress: layout.toggleBroadcast,
+            prefix: Icon(
+              FLucideIcons.radioTower,
+              color: layout.broadcastEnabled
+                  ? YsColors.accentText
+                  : YsColors.mutedForeground,
             ),
-          _LayoutButton(
-            icon: Icons.tune,
-            tooltip: 'Toggle Terminal Settings',
-            selected: layout.configPanelVisible,
-            onTap: () => layout.toggleSidePanel(SidePanel.terminalConfig),
+            child: const Text('Broadcast'),
           ),
-          const Spacer(),
-          if (layout.paneCount > 1)
-            InkWell(
-              onTap: layout.toggleBroadcast,
-              borderRadius: BorderRadius.circular(4),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: layout.broadcastEnabled
-                      ? const Color(0xFF22C55E).withValues(alpha: 0.2)
-                      : Colors.transparent,
-                  border: Border.all(
-                    color: layout.broadcastEnabled
-                        ? const Color(0xFF22C55E)
-                        : const Color(0xFF2A2A2A),
-                  ),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.cell_tower,
-                      size: 14,
-                      color: layout.broadcastEnabled
-                          ? const Color(0xFF22C55E)
-                          : const Color(0xFF888888),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Broadcast',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: layout.broadcastEnabled
-                            ? const Color(0xFF22C55E)
-                            : const Color(0xFF888888),
-                      ),
-                    ),
-                  ],
-                ),
+        ],
+      ],
+    );
+
+    return Container(
+      height: 44,
+      decoration: const BoxDecoration(
+        color: YsColors.card,
+        border: Border(bottom: BorderSide(color: YsColors.border)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s3),
+      // Chips take the left, the actions hug the right edge (before
+      // [trailing]). The actions keep their natural width up to 60% of the
+      // bar and scroll beyond that, so a narrow window never overflows.
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            Expanded(child: leading ?? const SizedBox.shrink()),
+            const SizedBox(width: YsSpace.s2),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: constraints.maxWidth * 0.6,
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                child: actions,
               ),
             ),
-        ],
+            if (trailing != null) ...[
+              const SizedBox(width: YsSpace.s2),
+              trailing!,
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -126,16 +136,14 @@ class _LayoutButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          child: Icon(
-            icon,
-            size: 16,
-            color: selected ? const Color(0xFF22C55E) : const Color(0xFF555555),
-          ),
+      child: FButton.icon(
+        variant: selected ? .secondary : .ghost,
+        size: .sm,
+        selected: selected,
+        onPress: onTap,
+        child: Icon(
+          icon,
+          color: selected ? YsColors.accentText : YsColors.mutedForeground,
         ),
       ),
     );

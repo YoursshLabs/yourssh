@@ -6,6 +6,11 @@ import 'package:yourssh/services/container_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/compose_panel.dart';
+import 'package:flutter/services.dart';
+
+import '../helpers/tab_to.dart';
+import '../helpers/ys_test_app.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class _FakeSshService extends SshService {
   _FakeSshService() : super(StorageService());
@@ -22,8 +27,7 @@ class _FakeSshService extends SshService {
       const Stream.empty();
 }
 
-Widget _wrap(Widget child) =>
-    MaterialApp(home: Scaffold(body: child));
+Widget _wrap(Widget child) => ysTestApp(child);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -149,8 +153,9 @@ void main() {
     await tester.tap(find.byTooltip('Add path manually'));
     await tester.pump();
 
-    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(FTextField), findsOneWidget);
     expect(find.text('Add'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 200)); // tappable timer
   });
 
   testWidgets('entering a non-absolute manual path shows error snackbar and does not add a stack', (tester) async {
@@ -170,12 +175,13 @@ void main() {
     await tester.pump();
 
     // Enter a relative (non-absolute) path
-    await tester.enterText(find.byType(TextField), 'relative/path/compose.yml');
+    await tester.enterText(find.byType(FTextField), 'relative/path/compose.yml');
     await tester.tap(find.text('Add'));
     await tester.pump();
 
-    // An error snackbar should appear
-    expect(find.byType(SnackBar), findsOneWidget);
+    // An error toast should appear
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.textContaining('absolute'), findsOneWidget);
     // validateComposeFile was never called (no SSH exec for config --services)
     expect(execCalled, isFalse);
     // No stack was added
@@ -201,7 +207,7 @@ void main() {
     await tester.tap(find.byTooltip('Add path manually'));
     await tester.pump();
     await tester.enterText(
-        find.byType(TextField), '/data/app/docker-compose.yml');
+        find.byType(FTextField), '/data/app/docker-compose.yml');
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
     expect(find.text('app'), findsOneWidget);
@@ -245,5 +251,172 @@ void main() {
     expect(find.text('web'), findsOneWidget);
     expect(find.byTooltip('Stop service'), findsOneWidget);
     expect(find.byTooltip('Start service'), findsNothing);
+  });
+
+  testWidgets('900x600 with a 60-char stack and service name does not overflow',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final stack = 's' * 60;
+    final service = 'v' * 60;
+    final fake = _FakeSshService();
+    fake.execStub = (cmd) {
+      if (cmd.contains('docker compose ls')) {
+        return (
+          stdout:
+              '[{"Name":"$stack","Status":"running(1)","ConfigFiles":"/opt/$stack/compose.yml"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      if (cmd.contains('docker compose ps --format json')) {
+        return (
+          stdout:
+              '[{"Name":"$stack-$service-1","Service":"$service","State":"running","Image":"${'i' * 60}"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      return (stdout: '', stderr: '', exitCode: 0);
+    };
+    await tester.pumpWidget(
+        _wrap(ComposePanel(host: host, service: ContainerService(fake))));
+    await tester.pump();
+    await tester.tap(find.text(stack));
+    await tester.pumpAndSettle();
+    expect(find.text(service), findsOneWidget);
+    await tester.tap(find.byTooltip('Logs'));
+    await tester.pumpAndSettle();
+    expect(find.text('Logs: $service'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('keyboard: Enter on a focused stack row selects it',
+      (tester) async {
+    final fake = _FakeSshService();
+    fake.execStub = (cmd) {
+      if (cmd.contains('docker compose ls')) {
+        return (
+          stdout:
+              '[{"Name":"myapp","Status":"running(1)","ConfigFiles":"/opt/myapp/compose.yml"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      if (cmd.contains('docker compose ps --format json')) {
+        return (
+          stdout:
+              '[{"Name":"myapp-web-1","Service":"web","State":"running","Image":"nginx"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      return (stdout: '', stderr: '', exitCode: 0);
+    };
+    await tester.pumpWidget(
+        _wrap(ComposePanel(host: host, service: ContainerService(fake))));
+    await tester.pump();
+
+    Focus.of(tester.element(find.text('myapp'))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Services in myapp'), findsOneWidget);
+  });
+
+  group('Down confirmation', () {
+    Future<(_FakeSshService, List<String>)> pumpStack(WidgetTester tester) async {
+      final downs = <String>[];
+      final fake = _FakeSshService();
+      fake.execStub = (cmd) {
+        if (cmd.contains('docker compose ls')) {
+          return (
+            stdout:
+                '[{"Name":"myapp","Status":"running(1)","ConfigFiles":"/opt/myapp/compose.yml"}]',
+            stderr: '',
+            exitCode: 0,
+          );
+        }
+        if (cmd.contains(' down')) downs.add(cmd);
+        return (stdout: '', stderr: '', exitCode: 0);
+      };
+      await tester.pumpWidget(
+          _wrap(ComposePanel(host: host, service: ContainerService(fake))));
+      await tester.pump();
+      await tester.tap(find.text('Down'));
+      await tester.pumpAndSettle();
+      return (fake, downs);
+    }
+
+    testWidgets('asks first with the exact wording; nothing runs yet',
+        (tester) async {
+      final (_, downs) = await pumpStack(tester);
+      expect(find.text('Bring the stack down?'), findsOneWidget);
+      expect(
+          find.text(
+              'docker compose down stops and removes the containers and networks of myapp. Named volumes are kept.'),
+          findsOneWidget);
+      expect(downs, isEmpty);
+    });
+
+    testWidgets('Cancel does not call composeDown', (tester) async {
+      final (_, downs) = await pumpStack(tester);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(downs, isEmpty);
+      expect(find.text('Bring the stack down?'), findsNothing);
+    });
+
+    testWidgets('Escape does not call composeDown', (tester) async {
+      final (_, downs) = await pumpStack(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(downs, isEmpty);
+      expect(find.text('Bring the stack down?'), findsNothing);
+    });
+
+    testWidgets('Enter on the default focus (Cancel) does not call composeDown',
+        (tester) async {
+      final (_, downs) = await pumpStack(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(downs, isEmpty);
+      expect(find.text('Bring the stack down?'), findsNothing);
+    });
+
+    testWidgets('confirming calls composeDown once with the same command',
+        (tester) async {
+      final (_, downs) = await pumpStack(tester);
+      await tester.tap(find.descendant(
+          of: find.byType(FDialog), matching: find.text('Down')));
+      await tester.pumpAndSettle();
+      expect(downs, hasLength(1));
+      expect(downs.single, contains('docker compose'));
+    });
+  });
+
+  testWidgets('keyboard: Tab from the first control reaches the stack row, Enter selects it',
+      (tester) async {
+    final fake = _FakeSshService();
+    fake.execStub = (cmd) {
+      if (cmd.contains('docker compose ls')) {
+        return (
+          stdout:
+              '[{"Name":"myapp","Status":"running(1)","ConfigFiles":"/opt/myapp/compose.yml"}]',
+          stderr: '',
+          exitCode: 0,
+        );
+      }
+      return (stdout: '', stderr: '', exitCode: 0);
+    };
+    await tester.pumpWidget(
+        _wrap(ComposePanel(host: host, service: ContainerService(fake))));
+    await tester.pump();
+    final presses = await tabTo(tester, find.text('myapp'));
+    expect(presses, 3); // Add path, Refresh, stack row
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Services in myapp'), findsOneWidget);
   });
 }

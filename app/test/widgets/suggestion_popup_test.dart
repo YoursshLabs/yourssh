@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/widgets/suggestion_popup.dart';
 
+import '../helpers/ys_test_app.dart';
+
 void main() {
-  Widget wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+  Widget wrap(Widget child) => ysTestApp(child);
 
   group('SuggestionPopup', () {
     testWidgets('renders all suggestions', (tester) async {
@@ -43,7 +45,8 @@ void main() {
       expect(selected, 'git log');
     });
 
-    testWidgets('selected item has blue highlight background', (tester) async {
+    testWidgets('selected item has the selection highlight background',
+        (tester) async {
       await tester.pumpWidget(wrap(SuggestionPopup(
         suggestions: ['git status', 'git log'],
         selectedIndex: 0,
@@ -53,7 +56,7 @@ void main() {
           .widgetList<Container>(find.byType(Container))
           .where((c) {
         final d = c.decoration;
-        return d is BoxDecoration && d.color == const Color(0xFF1E3A5F);
+        return d is BoxDecoration && d.color == kSuggestionSelectedColor;
       });
       expect(highlighted.length, 1);
     });

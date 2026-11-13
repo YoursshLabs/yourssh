@@ -121,10 +121,11 @@ class SftpTransferService {
             isDirectory: isDir[i],
             size: item.attr.size ?? 0,
             mode: item.attr.mode?.value,
+            // No mtime in the listing stays unknown (null) instead of "now".
             modifiedAt: item.attr.modifyTime != null
                 ? DateTime.fromMillisecondsSinceEpoch(
                     item.attr.modifyTime! * 1000)
-                : DateTime.now(),
+                : null,
           ),
       ];
     } finally {

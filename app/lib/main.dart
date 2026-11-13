@@ -7,9 +7,14 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
+import 'package:yourssh_cli/yourssh_cli.dart' show CliEndpoint, generateToken;
+import 'services/cli/app_cli_handlers.dart';
+import 'services/cli/cli_server.dart';
+import 'services/cli/link_refused.dart';
+import 'services/cli/single_instance.dart';
+import 'services/cli/url_channel.dart';
 import 'platform/runtime_platform.dart';
 import 'mobile/mobile_app.dart';
-import 'utils/bundled_plugin_installer.dart';
 import 'providers/ai_chat_provider.dart';
 import 'providers/command_history_provider.dart';
 import 'providers/host_provider.dart';
@@ -43,6 +48,7 @@ import 'services/recording_redaction_policy.dart';
 import 'services/tab_metadata_service.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'widgets/sudo_password_dialog.dart';
 import 'providers/recording_provider.dart';
 import 'providers/share_provider.dart';
@@ -111,7 +117,16 @@ class _SshBridgeAdapter implements SshBridgeDelegate {
   }
 }
 
-void main() async {
+/// argv of this launch (a `yourssh://` URL or nothing); see single_instance.
+List<String> _launchArgs = const [];
+
+/// The CLI endpoint and the single-instance lock, taken in main() before any
+/// start-up work and held for the app's lifetime (null: no CLI this run).
+CliEndpoint? _cliEndpoint;
+InstanceLock? _instanceLock;
+
+void main(List<String> args) async {
+  _launchArgs = args;
   WidgetsFlutterBinding.ensureInitialized();
   final packageInfo = await PackageInfo.fromPlatform();
   kAppVersion = packageInfo.version;
@@ -122,6 +137,14 @@ void main() async {
     runApp(const YourSSHMobileApp());
     return;
   }
+
+  // Single instance, before any start-up work: a second launch hands its
+  // request (open URL / just focus) to the running instance and exits here,
+  // so it never starts port forwards, plugins, migrations, the update check
+  // or sync. Fail-soft: without an endpoint the app still starts.
+  final claim = await claimSingleInstance(args);
+  _cliEndpoint = claim?.endpoint;
+  _instanceLock = claim?.lock;
 
   // Before any provider reads prefs: carry data over from the old sandboxed
   // container, which a previous release stored everything in.
@@ -194,7 +217,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
   late final AuditProvider _auditProvider;
   String? _lastUpdateNotifVersion;
 
-  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  CliEndpointOwner? _cliOwner;
   final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
@@ -335,8 +358,8 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _ssh.sudoPasswordPrompt = (host) async {
       final ctx = _navigatorKey.currentContext;
       if (ctx == null) return null;
-      return showDialog<({String password, bool remember})>(
-        context: ctx,
+      return showYsDialog<({String password, bool remember})>(
+        ctx,
         builder: (_) => SudoPasswordDialog(host: host),
       );
     };
@@ -371,6 +394,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     late final PluginLoader loader;
     loader = PluginLoader(
       engine: engine,
+      reservedIds: {for (final p in kRegisteredPlugins) p.id},
       onConsentRequired: (id, manifest, dir) {
         _pluginEngineProvider.setPendingConsent(id, manifest, dir);
       },
@@ -384,11 +408,9 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
       hookBus: _hookBus,
       uiRegistry: _uiRegistry,
     );
-    // Install bundled plugins, warm up migration cache, then scan for plugins.
+    // Scan for plugins.
     // Runs async so initState() stays synchronous.
     Future(() async {
-      await BundledPluginInstaller.ensureInstalled('snippets');
-      await MigrationBridge.warmup();
       loader.scanAndLoad();
     });
 
@@ -399,6 +421,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _updateProvider = UpdateProvider(_updateService, currentVersion: kAppVersion);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateProvider.checkForUpdates();
+      unawaited(_startCliEndpoint());
     });
     _updateProvider.startPeriodicChecks();
     _notificationCenter = NotificationCenterProvider();
@@ -474,10 +497,13 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     NotificationService.instance.enabled = _settingsProvider.commandNotificationsEnabled;
     _settingsProvider.addListener(_syncNotificationSetting);
     NotificationService.instance.onToast = (label) {
-      _messengerKey.currentState?.showSnackBar(SnackBar(
-        content: Text('✓ $label — command finished'),
-        duration: const Duration(seconds: 3),
-      ));
+      final ctx = _navigatorKey.currentContext;
+      if (ctx == null) return;
+      showYsToast(
+        ctx,
+        '✓ $label — command finished',
+        kind: YsToastKind.success,
+      );
     };
   }
 
@@ -499,6 +525,23 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     ));
   }
 
+  /// Normal quit: remove the CLI socket/token and release the instance lock.
+  /// Not preventClose — this only observes the close.
+  @override
+  void onWindowClose() => _releaseCli();
+
+  /// Once an endpoint owner exists it owns the lock and releases it after
+  /// its listener stopped (stop() is idempotent, so close + dispose is
+  /// fine); without an endpoint the lock is released directly.
+  void _releaseCli() {
+    final owner = _cliOwner;
+    if (owner != null) {
+      unawaited(owner.stop());
+    } else {
+      _instanceLock?.release();
+    }
+  }
+
   @override
   void onWindowFocus() {
     NotificationService.instance.onWindowFocus();
@@ -518,8 +561,63 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     NotificationService.instance.onWindowBlur();
   }
 
+  /// Opens the local CLI endpoint after the first frame (the lock was taken
+  /// in main()). Never blocks or crashes start-up: a failure just means no
+  /// CLI.
+  Future<void> _startCliEndpoint() async {
+    try {
+      final handlers = AppCliHandlers(
+        sessions: _sessionProvider,
+        hostProvider: _hostProvider,
+        focus: () => raiseWindowForCli(
+          isMacOS: Platform.isMacOS,
+          show: windowManager.show,
+          focus: windowManager.focus,
+        ),
+        appVersion: kAppVersion,
+      );
+      // One server for every path (socket/pipe, macOS URL events, this
+      // launch's own URL): they share the wait for hosts/known hosts/keys
+      // and the same-URL debounce. A refused link lands in the bell.
+      final server = CliServer(
+        handlers: handlers,
+        token: generateToken(),
+        ready: Future.wait<void>([
+          _hostProvider.ready,
+          _knownHostsProvider.ready,
+          _keyProvider.ready,
+        ]),
+        onUrlRefused: (url, reason) =>
+            _notificationCenter.add(linkRefusedNotification(url, reason)),
+      );
+      final urls = UrlChannel(server: server);
+      final ep = _cliEndpoint;
+      final lock = _instanceLock;
+      if (ep != null && lock != null) {
+        try {
+          final owner = await startCliEndpoint(ep, server, lock: lock);
+          if (!mounted) {
+            await owner.stop();
+          } else {
+            _cliOwner = owner;
+          }
+        } catch (e) {
+          // Still the single instance (the lock stays held): only the CLI
+          // endpoint is missing.
+          debugPrint('[main] CLI endpoint failed to start: $e');
+        }
+      }
+      // The trusted URL path needs no endpoint.
+      urls.attach();
+      unawaited(urls.openLaunchUrl(_launchArgs));
+    } catch (e) {
+      debugPrint('[main] CLI endpoint failed to start: $e');
+    }
+  }
+
   @override
   void dispose() {
+    _releaseCli();
     _settingsProvider.removeListener(_syncNotificationSetting);
     _updateProvider.removeListener(_pushUpdateNotification);
     // A queued reconnect timer may still fire onSessionDropped during
@@ -591,10 +689,10 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
       child: MaterialApp(
         title: 'YourSSH',
         debugShowCheckedModeBanner: false,
-        scaffoldMessengerKey: _messengerKey,
         navigatorKey: _navigatorKey,
         theme: buildAppTheme(),
         darkTheme: buildAppTheme(),
+        builder: ysRootBuilder,
         themeMode: ThemeMode.dark,
         home: const MainScreen(),
       ),

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 
-import '../theme/mobile_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+
 import '../theme/mobile_tokens.dart';
 import 'accessory_bar_controller.dart';
 
@@ -53,13 +54,14 @@ class AccessoryKeyBar extends StatelessWidget {
       builder: (context, _) {
         return Container(
           height: MobileTokens.accessoryBarHeight,
-          color: MobileColors.surfaceAlt,
+          color: YsColors.chrome,
           child: ListView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            // 48 px bar - 2 x 2 px padding = 44 px key hit targets.
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             children: [
               if (onOpenPanel != null)
-                _icon(Icons.keyboard_outlined, 'Keyboard panel', onOpenPanel!),
+                _icon(FLucideIcons.keyboard, 'Keyboard panel', onOpenPanel!),
               _btn('Esc', onTap: () => _key(TerminalKey.escape)),
               _btn('Tab', onTap: () => _key(TerminalKey.tab)),
               _btn('Ctrl',
@@ -67,13 +69,13 @@ class AccessoryKeyBar extends StatelessWidget {
               _btn('Alt', armed: controller.altArmed, onTap: controller.armAlt),
               _btn('^C', onTap: () => _ctrlKey(TerminalKey.keyC)),
               _btn('^D', onTap: () => _ctrlKey(TerminalKey.keyD)),
-              _icon(Icons.keyboard_arrow_left, 'Left',
+              _icon(FLucideIcons.chevronLeft, 'Left',
                   () => _key(TerminalKey.arrowLeft)),
-              _icon(Icons.keyboard_arrow_up, 'Up',
+              _icon(FLucideIcons.chevronUp, 'Up',
                   () => _key(TerminalKey.arrowUp)),
-              _icon(Icons.keyboard_arrow_down, 'Down',
+              _icon(FLucideIcons.chevronDown, 'Down',
                   () => _key(TerminalKey.arrowDown)),
-              _icon(Icons.keyboard_arrow_right, 'Right',
+              _icon(FLucideIcons.chevronRight, 'Right',
                   () => _key(TerminalKey.arrowRight)),
               for (final ch in const ['/', '-', '|', '~', ':', '\$'])
                 _btn(ch, onTap: () => _text(ch)),
@@ -84,22 +86,19 @@ class AccessoryKeyBar extends StatelessWidget {
     );
   }
 
+  /// Minimum key size: the 44 px touch target (Review Focus 5).
+  static const double _key44 = MobileTokens.touchTarget;
+
   Widget _btn(String label, {required VoidCallback onTap, bool armed = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 3),
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: armed ? MobileColors.accent : MobileColors.bg,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(label,
-              style: TextStyle(
-                  color: armed ? Colors.black : MobileColors.textPrimary,
-                  fontSize: 14)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: _key44, minHeight: _key44),
+        child: FButton(
+          size: .sm,
+          variant: armed ? .primary : .secondary,
+          onPress: onTap,
+          child: Text(label),
         ),
       ),
     );
@@ -110,16 +109,15 @@ class AccessoryKeyBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 3),
       child: Tooltip(
         message: tooltip,
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: MobileColors.bg,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: MobileColors.textPrimary, size: 20),
+        child: ConstrainedBox(
+          constraints:
+              const BoxConstraints(minWidth: _key44, minHeight: _key44),
+          child: FButton.icon(
+            size: .sm,
+            variant: .secondary,
+            semanticsLabel: tooltip,
+            onPress: onTap,
+            child: Icon(icon, size: 20),
           ),
         ),
       ),

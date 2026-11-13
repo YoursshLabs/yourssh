@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/plugin_engine_provider.dart';
-import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class PluginConsoleScreen extends StatelessWidget {
   final String pluginId;
@@ -12,16 +12,17 @@ class PluginConsoleScreen extends StatelessWidget {
     final logs = context.watch<PluginEngineProvider>().logsFor(pluginId);
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: YsColors.background,
       body: logs.isEmpty
           ? Center(
-              child: Text('No logs for $pluginId.',
-                  style:
-                      const TextStyle(color: AppColors.textSecondary)),
+              child: Text(
+                'No logs for $pluginId.',
+                style: const TextStyle(color: YsColors.mutedForeground),
+              ),
             )
           : ListView.builder(
               reverse: true,
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(YsSpace.s2),
               itemCount: logs.length,
               itemBuilder: (_, i) {
                 final entry = logs[logs.length - 1 - i];
@@ -31,9 +32,10 @@ class PluginConsoleScreen extends StatelessWidget {
                     entry,
                     style: TextStyle(
                       color: entry.contains('[ERROR]')
-                          ? Colors.redAccent
-                          : AppColors.textPrimary,
-                      fontFamily: 'monospace',
+                          ? YsColors.error
+                          : YsColors.foreground,
+                      fontFamily: kYsMonoFontFamily,
+                      fontFamilyFallback: kYsMonoFontFallback,
                       fontSize: 12,
                     ),
                   ),

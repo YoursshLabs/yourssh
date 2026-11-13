@@ -1,0 +1,7 @@
+# Justified exceptions to tool/check_ui_lint.sh.
+# Format, one per line:   path:pattern  # reason
+#   path     relative to the repo root
+#   pattern  IconButton( | AlertDialog( | SnackBar( | Icons. | ScaffoldMessenger | showDialog( |
+#           showModalBottomSheet | TextField( | *
+# Empty on purpose after the redesign: every Material site was migrated. Add an
+# entry (with a concrete reason) only when a Material widget is unavoidable.

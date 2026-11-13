@@ -5,6 +5,9 @@ import '../providers/session_provider.dart';
 import '../services/mcp_gateway_service.dart';
 import '../services/ssh_service.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import 'container_widgets.dart';
+import 'devops_widgets.dart';
 
 class McpServerScreen extends StatefulWidget {
   const McpServerScreen({super.key});
@@ -47,12 +50,7 @@ class _McpServerScreenState extends State<McpServerScreen> {
     } else {
       final port = int.tryParse(_portCtrl.text) ?? 0;
       if (port < 1 || port > 65535) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Port must be between 1 and 65535'),
-            backgroundColor: AppColors.red,
-          ),
-        );
+        AppSnack.error(context, 'Port must be between 1 and 65535');
         return;
       }
       final endpoint = McpEndpoint(
@@ -76,144 +74,123 @@ class _McpServerScreenState extends State<McpServerScreen> {
   Widget build(BuildContext context) {
     final session = context.watch<SessionProvider>().activeSshSession;
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(YsSpace.s5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('MCP Server Gateway',
-              style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
+          const Text(
+            'MCP Server Gateway',
+            style: TextStyle(
+              color: YsColors.foreground,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: YsSpace.s2),
           const Text(
             'Run an MCP server on your remote host and expose it locally for AI tools.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            style: TextStyle(color: YsColors.mutedForeground, fontSize: 13),
           ),
-          const SizedBox(height: 24),
-          _label('MCP Server Command'),
-          const SizedBox(height: 6),
-          TextField(
+          const SizedBox(height: YsSpace.s5),
+          DevopsTextField(
+            key: const ValueKey('mcp-command'),
             controller: _commandCtrl,
-            style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontFamily: 'monospace',
-                fontSize: 13),
-            decoration: const InputDecoration(
-              hintText: 'npx @anthropic-ai/mcp-server',
-              hintStyle: TextStyle(color: AppColors.textTertiary),
-              filled: true,
-              fillColor: AppColors.card,
-              border: OutlineInputBorder(
-                  borderSide: BorderSide(color: AppColors.border)),
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
+            label: 'MCP Server Command',
+            hint: 'npx @anthropic-ai/mcp-server',
+            mono: true,
           ),
-          const SizedBox(height: 16),
-          _label('Local Port'),
-          const SizedBox(height: 6),
+          const SizedBox(height: YsSpace.s4),
           SizedBox(
-            width: 120,
-            child: TextField(
+            width: 160,
+            child: DevopsTextField(
+              key: const ValueKey('mcp-port'),
               controller: _portCtrl,
-              style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontFamily: 'monospace',
-                  fontSize: 13),
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                filled: true,
-                fillColor: AppColors.card,
-                border: OutlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.border)),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              ),
+              label: 'Local Port',
+              mono: true,
             ),
           ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: session != null ? _toggle : null,
-            icon: Icon(_running ? Icons.stop : Icons.play_arrow, size: 16),
-            label: Text(_running ? 'Stop MCP Server' : 'Start MCP Server'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _running ? AppColors.red : AppColors.accent,
-              foregroundColor: Colors.black,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          const SizedBox(height: YsSpace.s5),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FButton(
+              key: const ValueKey('mcp-toggle'),
+              variant: _running ? .destructive : .primary,
+              mainAxisSize: MainAxisSize.min,
+              onPress: session != null ? _toggle : null,
+              prefix: Icon(_running ? FLucideIcons.square : FLucideIcons.play),
+              child: Text(_running ? 'Stop MCP Server' : 'Start MCP Server'),
             ),
           ),
           const SizedBox(height: 28),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
+          _card(
+            border: YsColors.border,
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('How it works',
-                    style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.4)),
-                const SizedBox(height: 10),
-                _tip(Icons.terminal_outlined,
+                Text(
+                  'How it works',
+                  style: TextStyle(
+                    color: YsColors.mutedForeground,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                SizedBox(height: 10),
+                _Tip(FLucideIcons.terminal,
                     'The MCP server command runs on your remote SSH host'),
-                const SizedBox(height: 8),
-                _tip(Icons.swap_horiz_outlined,
+                SizedBox(height: YsSpace.s2),
+                _Tip(FLucideIcons.arrowLeftRight,
                     'A port-forward tunnel exposes it on localhost'),
-                const SizedBox(height: 8),
-                _tip(Icons.smart_toy_outlined,
+                SizedBox(height: YsSpace.s2),
+                _Tip(FLucideIcons.bot,
                     'Point AI tools (Claude, Cursor, etc.) to the endpoint'),
               ],
             ),
           ),
           if (_running && _activePort != null) ...[
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                border: Border.all(
-                    color: AppColors.accent.withValues(alpha: 0.4)),
-                borderRadius: BorderRadius.circular(8),
-              ),
+            const SizedBox(height: YsSpace.s5),
+            _card(
+              border: YsColors.ok.withValues(alpha: 0.4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.circle, size: 8, color: AppColors.accent),
-                      SizedBox(width: 8),
-                      Text('MCP Server Running',
-                          style: TextStyle(
-                              color: AppColors.accent,
-                              fontWeight: FontWeight.w600)),
+                      Icon(FLucideIcons.circle, size: 8, color: YsColors.ok),
+                      SizedBox(width: YsSpace.s2),
+                      Text(
+                        'MCP Server Running',
+                        style: TextStyle(
+                          color: YsColors.ok,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  _label('MCP Endpoint for AI tools:'),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: YsSpace.s3),
+                  const DevopsCaption('MCP Endpoint for AI tools:'),
+                  const SizedBox(height: YsSpace.s1),
                   Row(
                     children: [
-                      SelectableText(
-                        'http://localhost:$_activePort/mcp',
-                        style: const TextStyle(
-                            color: AppColors.blue,
-                            fontFamily: 'monospace',
-                            fontSize: 13),
+                      Flexible(
+                        child: SelectableText(
+                          'http://localhost:$_activePort/mcp',
+                          maxLines: 1,
+                          style: const TextStyle(
+                            color: YsColors.accentText,
+                            fontFamily: kYsMonoFontFamily,
+                            fontFamilyFallback: kYsMonoFontFallback,
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.copy,
-                            size: 14, color: AppColors.textSecondary),
-                        onPressed: () => Clipboard.setData(ClipboardData(
+                      const SizedBox(width: YsSpace.s2),
+                      ContainerIconAction(
+                        icon: FLucideIcons.copy,
+                        tooltip: 'Copy endpoint',
+                        onPress: () => Clipboard.setData(ClipboardData(
                             text: 'http://localhost:$_activePort/mcp')),
                       ),
                     ],
@@ -227,23 +204,35 @@ class _McpServerScreenState extends State<McpServerScreen> {
     );
   }
 
-  Widget _label(String text) =>
-      Text(text,
-          style: const TextStyle(
-              color: AppColors.textSecondary, fontSize: 12));
+  Widget _card({required Color border, required Widget child}) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(YsSpace.s4),
+    decoration: BoxDecoration(
+      color: YsColors.card,
+      borderRadius: BorderRadius.circular(YsRadius.card),
+      border: Border.all(color: border),
+    ),
+    child: child,
+  );
+}
 
-  Widget _tip(IconData icon, String text) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 14, color: AppColors.textTertiary),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(text,
-              style: const TextStyle(
-                  color: AppColors.textSecondary, fontSize: 12)),
+class _Tip extends StatelessWidget {
+  const _Tip(this.icon, this.text);
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: 14, color: YsColors.mutedForeground),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Text(
+          text,
+          style: const TextStyle(color: YsColors.mutedForeground, fontSize: 12),
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }

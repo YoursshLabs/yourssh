@@ -23,6 +23,10 @@ class RecordingService {
 
   bool isRecording(String sessionId) => _active.containsKey(sessionId);
 
+  /// Time since [sessionId]'s recording started (the clock that stamps its
+  /// events), or null when it is not recording.
+  Duration? elapsed(String sessionId) => _active[sessionId]?.stopwatch.elapsed;
+
   Future<void> startRecording(
     String sessionId, {
     required String filePath,

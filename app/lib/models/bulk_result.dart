@@ -31,4 +31,16 @@ class BulkHostResult {
     this.bytesTransferred = 0,
     this.totalBytes = 0,
   });
+
+  /// `SshService.exec` reports -1 when the server sent no exit status
+  /// (killed by a signal, or a server that never reports one).
+  bool get exitUnknown => status == BulkHostStatus.success && exitCode == -1;
+
+  /// Exec ran and reported a non-zero (or unknown) exit status. One rule for
+  /// the row and the footer: such a host is a warning, never counted as "ok".
+  bool get exitedNonZero =>
+      status == BulkHostStatus.success && exitCode != null && exitCode != 0;
+
+  /// Ran to completion with exit 0 (a push has no exit code: success = clean).
+  bool get ranClean => status == BulkHostStatus.success && !exitedNonZero;
 }

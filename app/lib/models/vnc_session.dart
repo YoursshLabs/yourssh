@@ -10,12 +10,15 @@ import 'package:yourssh_vnc/src/generated/api.dart' as frb;
 import '../services/loopback_tunnel_proxy.dart';
 import 'app_session.dart';
 import 'host.dart';
+import 'remote_desktop_notifier.dart';
 
 enum VncSessionStatus { connecting, connected, disconnected, error }
 
 /// One VNC tab. Mirrors [RdpSession] but with no TLS/cert layer (plain VNC has
 /// none — security is the SSH tunnel).
-class VncSession extends ChangeNotifier implements AppSession {
+class VncSession extends ChangeNotifier
+    with RemoteDesktopNotifier
+    implements AppSession {
   VncSession({required this.host, required this.client, this.tunnelProxy});
 
   final Host host;
@@ -71,7 +74,7 @@ class VncSession extends ChangeNotifier implements AppSession {
     _sub = events.listen(_onEvent, onError: (Object e) {
       status = VncSessionStatus.error;
       lastMessage = '$e';
-      notifyListeners();
+      notifyState();
     });
   }
 
@@ -82,14 +85,14 @@ class VncSession extends ChangeNotifier implements AppSession {
       case frb.VncEvent_Connected(:final width, :final height):
         if (!_applyDesktopSize(width, height)) {
           unawaited(client.disconnect());
-          notifyListeners();
+          notifyState();
           return;
         }
         status = VncSessionStatus.connected;
       case frb.VncEvent_Resize(:final width, :final height):
         if (!_applyDesktopSize(width, height)) {
           unawaited(client.disconnect());
-          notifyListeners();
+          notifyState();
           return;
         }
       case frb.VncEvent_FrameUpdate(
@@ -100,6 +103,8 @@ class VncSession extends ChangeNotifier implements AppSession {
           :final rgba
         ):
         _patch(x, y, width, height, rgba);
+        notifyListeners(); // repaint only — not a state change
+        return;
       case frb.VncEvent_ClipboardText(:final text):
         _deliverClipboard(text);
         return; // no repaint needed
@@ -112,7 +117,7 @@ class VncSession extends ChangeNotifier implements AppSession {
         status = VncSessionStatus.error;
         lastMessage = _tunnelClosed ? 'SSH tunnel closed' : message;
     }
-    notifyListeners();
+    notifyState();
   }
 
   /// Largest remote clipboard text accepted (UTF-8 bytes).
@@ -192,9 +197,12 @@ class VncSession extends ChangeNotifier implements AppSession {
         decoded.dispose();
         break;
       }
+      // The first picture is a state change (the workspace leaves its
+      // placeholder); later ones only repaint.
+      final first = image == null;
       image?.dispose();
       image = decoded;
-      notifyListeners();
+      first ? notifyState() : notifyListeners();
     } while (_dirtyAgain);
     _decodeInFlight = false;
   }

@@ -5,10 +5,12 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../models/vnc_session.dart';
 import '../services/hotkey_service.dart';
-import '../theme/app_theme.dart';
+import 'remote_workspace_chrome.dart';
+import 'terminal_status_bar.dart';
 import '../util/vnc_input_mapping.dart';
 
 /// Full workspace for an active VNC tab: rendered remote framebuffer,
@@ -169,25 +171,22 @@ class _VncWorkspaceState extends State<VncWorkspace> {
             : () => widget.onFullscreenChanged!.call(true),
       ),
       Expanded(child: _buildBody()),
+      // Same bar as the terminal workspace; listens to stateChanges only,
+      // so decoded frames never rebuild it.
+      SessionStatusBar(key: ValueKey(session.id), session: session),
     ]);
   }
 
   Widget _buildBody() {
     switch (session.status) {
       case VncSessionStatus.connecting:
-        return const Center(
-            child: Text('Connecting…',
-                style: TextStyle(color: AppColors.textSecondary)));
+        return const RemoteStatusOverlay(message: 'Connecting…');
       case VncSessionStatus.error:
       case VncSessionStatus.disconnected:
-        return Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(session.lastMessage ?? 'Disconnected',
-                style: const TextStyle(color: AppColors.textSecondary)),
-            const SizedBox(height: 12),
-            FilledButton(
-                onPressed: widget.onReconnect, child: const Text('Retry')),
-          ]),
+        return RemoteStatusOverlay(
+          message: session.lastMessage ?? 'Disconnected',
+          showRetry: true,
+          onRetry: widget.onReconnect,
         );
       case VncSessionStatus.connected:
         return LayoutBuilder(builder: (context, constraints) {
@@ -279,9 +278,8 @@ class _VncWorkspaceState extends State<VncWorkspace> {
                   // Connected but no frame decoded yet — keep the surface
                   // interactive while showing the cue (restored from M2).
                   if (session.image == null)
-                    const Center(
-                        child: Text('Waiting for first frame…',
-                            style: TextStyle(color: AppColors.textSecondary))),
+                    const RemoteStatusOverlay(
+                        message: 'Waiting for first frame…'),
                 ],
               ),
             ),
@@ -298,34 +296,26 @@ class _Toolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 34,
-      color: AppColors.card,
-      child: Row(children: [
-        const SizedBox(width: 8),
-        Text(session.tabLabel, style: Theme.of(context).textTheme.labelMedium),
-        const Spacer(),
-        IconButton(
-          tooltip: 'Push clipboard to remote',
-          icon: const Icon(Icons.content_paste_go, size: 16),
-          onPressed: () => _pushClipboard(session),
+    return RemoteWorkspaceToolbar(label: session.tabLabel, actions: [
+      RemoteIconAction(
+        tooltip: 'Push clipboard to remote',
+        icon: FLucideIcons.clipboardPaste,
+        onPressed: () => _pushClipboard(session),
+      ),
+      if (onEnterFullscreen != null)
+        RemoteIconAction(
+          tooltip: 'Fullscreen',
+          icon: FLucideIcons.maximize,
+          onPressed: session.status == VncSessionStatus.connected
+              ? onEnterFullscreen
+              : null,
         ),
-        if (onEnterFullscreen != null)
-          IconButton(
-            tooltip: 'Fullscreen',
-            icon: const Icon(Icons.fullscreen, size: 16),
-            onPressed: session.status == VncSessionStatus.connected
-                ? onEnterFullscreen
-                : null,
-          ),
-        IconButton(
-          tooltip: 'Disconnect',
-          icon: const Icon(Icons.power_settings_new, size: 16),
-          onPressed: () => session.client.disconnect(),
-        ),
-        const SizedBox(width: 4),
-      ]),
-    );
+      RemoteIconAction(
+        tooltip: 'Disconnect',
+        icon: FLucideIcons.power,
+        onPressed: () => session.client.disconnect(),
+      ),
+    ]);
   }
 }
 
@@ -336,29 +326,21 @@ class _ExitFullscreenPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.card,
-      borderRadius: BorderRadius.circular(8),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        IconButton(
-          tooltip: 'Push clipboard to remote',
-          icon: const Icon(Icons.content_paste_go, size: 16),
-          onPressed: () => _pushClipboard(session),
-        ),
-        InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onExit,
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.fullscreen_exit, size: 16),
-              SizedBox(width: 6),
-              Text('Exit fullscreen'),
-            ]),
-          ),
-        ),
-      ]),
-    );
+    return RemoteFloatingPill(children: [
+      RemoteIconAction(
+        tooltip: 'Push clipboard to remote',
+        icon: FLucideIcons.clipboardPaste,
+        onPressed: () => _pushClipboard(session),
+      ),
+      FButton(
+        variant: .ghost,
+        size: .sm,
+        mainAxisSize: MainAxisSize.min,
+        onPress: onExit,
+        prefix: const Icon(FLucideIcons.minimize, size: 16),
+        child: const Text('Exit fullscreen'),
+      ),
+    ]);
   }
 }
 

@@ -5,19 +5,22 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../services/p2p_sync_encryption.dart';
 import '../services/p2p_sync_service.dart';
-import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class QrExportDialog extends StatefulWidget {
   final Future<String> Function() getPayload;
 
-  const QrExportDialog({super.key, required this.getPayload});
+  /// Test seam: replaces the real network-facing sync service.
+  final P2PSyncService? service;
+
+  const QrExportDialog({super.key, required this.getPayload, this.service});
 
   @override
   State<QrExportDialog> createState() => _QrExportDialogState();
 }
 
 class _QrExportDialogState extends State<QrExportDialog> {
-  final _service = P2PSyncService();
+  late final P2PSyncService _service = widget.service ?? P2PSyncService();
   List<NetworkInterfaceInfo> _interfaces = [];
   NetworkInterfaceInfo? _selectedInterface;
   String? _qrData;
@@ -106,39 +109,55 @@ class _QrExportDialogState extends State<QrExportDialog> {
     return '$m:$s';
   }
 
+  /// Cancel and Escape: stop the one-shot LAN server and countdown, then close.
+  void _cancel() {
+    _countdown?.cancel();
+    _service.stop();
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.sidebar,
-      title: const Text('Export via QR'),
-      content: SizedBox(
+    // The barrier is deliberately non-dismissible (see sync_section), so the
+    // route does not handle Escape; do it here, like Cancel.
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _cancel},
+      child: _buildDialog(context),
+    );
+  }
+
+  Widget _buildDialog(BuildContext context) {
+    return YsDialog(
+      title: 'Export via QR',
+      body: SizedBox(
         width: 320,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (_interfaces.length > 1) ...[
-              DropdownButtonFormField<NetworkInterfaceInfo>(
-                initialValue: _selectedInterface,
-                decoration: const InputDecoration(labelText: 'Network interface'),
-                items: _interfaces.map((i) => DropdownMenuItem(
-                  value: i,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(i.displayName, style: const TextStyle(fontSize: 13)),
-                      const SizedBox(width: 8),
-                      Text(i.address, style: const TextStyle(fontSize: 11, color: Color(0xFF888888))),
-                    ],
-                  ),
-                )).toList(),
-                onChanged: (v) async {
-                  if (v == null) return;
-                  setState(() => _selectedInterface = v);
-                  await _service.stop();
-                  await _startServer();
-                },
+              FSelect<NetworkInterfaceInfo>.rich(
+                key: const Key('qr-export-interface'),
+                control: .lifted(
+                  value: _selectedInterface,
+                  onChange: (v) async {
+                    if (v == null) return;
+                    setState(() => _selectedInterface = v);
+                    await _service.stop();
+                    await _startServer();
+                  },
+                ),
+                format: (i) => '${i.displayName}  ${i.address}',
+                label: const Text('Network interface'),
+                children: [
+                  for (final i in _interfaces)
+                    FSelectItem<NetworkInterfaceInfo>(
+                      title: Text(i.displayName),
+                      subtitle: Text(i.address),
+                      value: i,
+                    ),
+                ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: YsSpace.s4),
             ],
             if (_qrData != null) ...[
               QrImageView(
@@ -155,12 +174,15 @@ class _QrExportDialogState extends State<QrExportDialog> {
             ] else
               const SizedBox(
                 height: 240,
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(child: FCircularProgress()),
               ),
             const SizedBox(height: 8),
             Text(
               _status,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style: const TextStyle(
+                color: YsColors.mutedForeground,
+                fontSize: 13,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -168,25 +190,25 @@ class _QrExportDialogState extends State<QrExportDialog> {
       ),
       actions: [
         if (_qrData != null)
-          TextButton.icon(
-            icon: const Icon(Icons.copy, size: 16),
-            label: const Text('Copy transfer code'),
-            onPressed: () {
+          FButton(
+            key: const ValueKey('qr-export-copy'),
+            variant: FButtonVariant.outline,
+            prefix: const Icon(FLucideIcons.copy, size: 16),
+            child: const Text('Copy transfer code'),
+            onPress: () {
               Clipboard.setData(ClipboardData(text: _qrData!));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Transfer code copied'),
-                  duration: Duration(seconds: 2),
-                ),
+              showYsToast(
+                context,
+                'Transfer code copied',
+                duration: const Duration(seconds: 2),
               );
             },
           ),
-        TextButton(
-          onPressed: () {
-            _countdown?.cancel();
-            _service.stop();
-            Navigator.of(context).pop();
-          },
+        FButton(
+          key: const ValueKey('qr-export-cancel'),
+          variant: FButtonVariant.outline,
+          autofocus: true,
+          onPress: _cancel,
           child: const Text('Cancel'),
         ),
       ],

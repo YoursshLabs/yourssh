@@ -1,5 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
+/// Background of the selected suggestion row (amber selection tint).
+final Color kSuggestionSelectedColor = YsColors.primary.withValues(
+  alpha: 0x29 / 255,
+); // primary @ 16%
+
+/// Command / path completion list shown by the terminal and the input bar.
+/// At most 8 rows; tap a row to pick it. Plain token-styled rows (no
+/// per-row state), so rebuilding it on each keystroke stays as cheap as
+/// before.
 class SuggestionPopup extends StatelessWidget {
   final List<String> suggestions;
   final int selectedIndex;
@@ -20,29 +30,38 @@ class SuggestionPopup extends StatelessWidget {
     return Container(
       constraints: BoxConstraints(maxHeight: maxHeight),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1C),
-        border: Border.all(color: const Color(0xFF2A2A2A)),
-        borderRadius: BorderRadius.circular(4),
+        color: YsColors.card,
+        border: Border.all(color: YsColors.border),
+        borderRadius: BorderRadius.circular(YsRadius.control),
       ),
+      clipBehavior: Clip.antiAlias,
       child: ListView.builder(
         shrinkWrap: true,
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(vertical: YsSpace.s1),
         itemCount: items.length,
         itemBuilder: (_, i) {
           final selected = i == selectedIndex;
-          return InkWell(
-            onTap: () => onSelect(items[i]),
-            child: Container(
-              decoration: BoxDecoration(
-                color: selected ? const Color(0xFF1E3A5F) : Colors.transparent,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Text(
-                items[i],
-                style: TextStyle(
-                  color: selected ? const Color(0xFF7DD3FC) : const Color(0xFFD4D4D4),
-                  fontFamily: 'monospace',
-                  fontSize: 13,
+          return MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onSelect(items[i]),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: selected ? kSuggestionSelectedColor : Colors.transparent,
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: YsSpace.s3,
+                  vertical: YsSpace.s1 + 2,
+                ),
+                child: Text(
+                  items[i],
+                  style: TextStyle(
+                    color: selected ? YsColors.accentText : YsColors.foreground,
+                    fontFamily: kYsMonoFontFamily,
+                    fontFamilyFallback: kYsMonoFontFallback,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ),

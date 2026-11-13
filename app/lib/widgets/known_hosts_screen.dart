@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../models/known_host.dart';
 import '../providers/known_hosts_provider.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import 'ys_form_controls.dart';
 import '../util/known_hosts_importer.dart';
 
 class KnownHostsScreen extends StatefulWidget {
@@ -30,9 +32,7 @@ class _KnownHostsScreenState extends State<KnownHostsScreen> {
 
     if (!await file.exists()) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('~/.ssh/known_hosts not found')),
-      );
+      AppSnack.error(context, '~/.ssh/known_hosts not found');
       return;
     }
 
@@ -44,24 +44,28 @@ class _KnownHostsScreenState extends State<KnownHostsScreen> {
 
     if (!mounted) return;
     final msg = added > 0 ? 'Imported $added ${added == 1 ? 'entry' : 'entries'}' : 'No new entries found';
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    AppSnack.info(context, msg);
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<KnownHostsProvider>();
-    return Container(
-      color: AppColors.bg,
+    return ColoredBox(
+      color: YsColors.background,
       child: Column(
         children: [
           _TopBar(onImport: _importFromSystem),
           Expanded(
             child: provider.hosts.isEmpty
-                ? const _EmptyState()
+                ? const YsEmptyState(
+                    icon: FLucideIcons.shieldCheck,
+                    title: 'No known hosts yet',
+                    message: 'Connect to a server to add one.',
+                  )
                 : ListView.separated(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(YsSpace.s5),
                     itemCount: provider.hosts.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    separatorBuilder: (_, _) => const SizedBox(height: YsSpace.s2),
                     itemBuilder: (_, i) => _HostTile(entry: provider.hosts[i]),
                   ),
           ),
@@ -76,72 +80,44 @@ class _TopBar extends StatelessWidget {
   const _TopBar({required this.onImport});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        color: AppColors.sidebar,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Text('Known Hosts',
-                style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600)),
-          ),
-          GestureDetector(
-            onTap: onImport,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.download_outlined, size: 13, color: AppColors.textSecondary),
-                  SizedBox(width: 6),
-                  Text('IMPORT',
-                      style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                          letterSpacing: 0.3)),
-                ],
-              ),
+  Widget build(BuildContext context) => Container(
+    height: 48,
+    padding: const EdgeInsets.symmetric(horizontal: YsSpace.s4),
+    decoration: const BoxDecoration(
+      color: YsColors.sidebar,
+      border: Border(bottom: BorderSide(color: YsColors.border)),
+    ),
+    child: Row(
+      children: [
+        const Expanded(
+          child: Text(
+            'Known Hosts',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: YsColors.foreground,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+        FButton(
+          variant: .outline,
+          size: .sm,
+          mainAxisSize: MainAxisSize.min,
+          prefix: const Icon(FLucideIcons.download),
+          onPress: onImport,
+          child: const Text('Import'),
+        ),
+      ],
+    ),
+  );
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.fact_check_outlined, size: 48, color: AppColors.textTertiary),
-          SizedBox(height: 12),
-          Text('No known hosts yet',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-          SizedBox(height: 4),
-          Text('Connect to a server to add one.',
-              style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
-        ],
-      ),
-    );
-  }
-}
+const _mono = TextStyle(
+  fontFamily: kYsMonoFontFamily,
+  fontFamilyFallback: kYsMonoFontFallback,
+);
 
 class _HostTile extends StatelessWidget {
   final KnownHost entry;
@@ -153,60 +129,81 @@ class _HostTile extends StatelessWidget {
     return '${parts.take(4).join(':')}…';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Text('${entry.host}:${entry.port}',
-                style: const TextStyle(
-                    color: AppColors.textPrimary, fontSize: 13)),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(entry.keyType,
-                style: const TextStyle(
-                    color: AppColors.textSecondary, fontSize: 12)),
-          ),
-          Expanded(
-            flex: 3,
-            child: Tooltip(
-              message: entry.fingerprint,
-              child: Text(_shortFp(entry.fingerprint),
-                  style: const TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 11,
-                      fontFamily: 'monospace')),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.content_copy,
-                size: 14, color: AppColors.textTertiary),
-            tooltip: 'Copy fingerprint',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            onPressed: () =>
-                Clipboard.setData(ClipboardData(text: entry.fingerprint)),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.delete_outline,
-                size: 16, color: AppColors.textTertiary),
-            tooltip: 'Remove',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            onPressed: () => context.read<KnownHostsProvider>().remove(entry),
-          ),
-        ],
-      ),
+  /// Removing a pinned key means the next connect trusts whatever key the
+  /// server presents, so ask first. Cancel holds default focus.
+  Future<void> _confirmRemove(BuildContext context, KnownHost entry) async {
+    final provider = context.read<KnownHostsProvider>();
+    final ok = await showYsConfirm(
+      context,
+      title: 'Remove host key?',
+      message: 'YourSSH will trust whatever key ${entry.host}:${entry.port} '
+          'presents on the next connection.',
+      confirmLabel: 'Remove',
+      destructive: true,
     );
+    if (ok) provider.remove(entry);
   }
+
+  @override
+  Widget build(BuildContext context) => settingsTileGroup(
+    children: [
+      FTile.raw(
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Text(
+                '${entry.host}:${entry.port}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _mono.copyWith(
+                  color: YsColors.foreground,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                entry.keyType,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: YsColors.mutedForeground,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: Tooltip(
+                message: entry.fingerprint,
+                child: Text(
+                  _shortFp(entry.fingerprint),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _mono.copyWith(
+                    color: YsColors.mutedForeground,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ),
+            SettingsIconButton(
+              icon: FLucideIcons.copy,
+              tooltip: 'Copy fingerprint',
+              onPress: () =>
+                  Clipboard.setData(ClipboardData(text: entry.fingerprint)),
+            ),
+            const SizedBox(width: YsSpace.s2),
+            SettingsIconButton(
+              icon: FLucideIcons.trash2,
+              tooltip: 'Remove',
+              onPress: () => _confirmRemove(context, entry),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
 }

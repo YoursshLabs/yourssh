@@ -6,12 +6,16 @@ import 'package:yourssh_snippets/yourssh_snippets.dart';
 
 import 'package:yourssh/mobile/screens/mobile_snippets_screen.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
+import 'package:yourssh/mobile/widgets/snippet_card.dart';
+import 'package:yourssh/mobile/widgets/tag_chip.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/ssh_session.dart';
 import 'package:yourssh/providers/session_provider.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/tab_metadata_service.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 // ── Fake SnippetProvider ──────────────────────────────────────────────────────
 
@@ -66,6 +70,7 @@ Future<void> _pump(
       ],
       child: MaterialApp(
         theme: buildMobileTheme(),
+        builder: ysRootBuilderTouch,
         home: const MobileSnippetsScreen(),
       ),
     ),
@@ -124,6 +129,7 @@ void main() {
         ],
         child: MaterialApp(
           theme: buildMobileTheme(),
+          builder: ysRootBuilderTouch,
           home: const MobileSnippetsScreen(),
         ),
       ),
@@ -189,6 +195,7 @@ void main() {
         ],
         child: MaterialApp(
           theme: buildMobileTheme(),
+          builder: ysRootBuilderTouch,
           home: const MobileSnippetsScreen(),
         ),
       ),
@@ -215,6 +222,64 @@ void main() {
 
     expect(find.text('Tail log'), findsOneWidget);
     expect(find.text('Disk usage'), findsNothing);
+  });
+
+  testWidgets('360x640, 60-char label/command/tag/host: no overflow',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final long = 'x' * 60;
+    final snippets = _FakeSnippetProvider([
+      Snippet(label: long, command: long, tag: long),
+    ]);
+    final session = _FakeSessionProvider(SshSession(
+        host: Host(label: long, host: '10.0.0.1', username: 'root')));
+    await _pump(tester,
+        snippetProvider: snippets, sessionProvider: session, sshService: fakeSsh);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('filter chips and snippet cards have >=44 px hit size',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(tester,
+        snippetProvider: fakeSnippets,
+        sessionProvider: fakeSession,
+        sshService: fakeSsh);
+    final chips = find.descendant(
+      of: find.byWidgetPredicate((w) => w is TagChip && w.large),
+      matching: find.bySubtype<FTappable>(),
+    );
+    expect(chips, findsNWidgets(3)); // All + 2 tags
+    for (var i = 0; i < 3; i++) {
+      expect(tester.getSize(chips.at(i)).height, greaterThanOrEqualTo(44));
+    }
+    expect(tester.getSize(find.byType(SnippetCard).first).height,
+        greaterThanOrEqualTo(44));
+  });
+
+  testWidgets('All chip clears the category filter', (tester) async {
+    await _pump(tester,
+        snippetProvider: fakeSnippets,
+        sessionProvider: fakeSession,
+        sshService: fakeSsh);
+    await tester.tap(find.text('logs').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('All'));
+    await tester.pumpAndSettle();
+    expect(find.text('Disk usage'), findsOneWidget);
+    expect(find.text('Tail log'), findsOneWidget);
+  });
+
+  testWidgets('empty state wording, with and without a filter', (tester) async {
+    await _pump(tester,
+        snippetProvider: _FakeSnippetProvider([]),
+        sessionProvider: fakeSession,
+        sshService: fakeSsh);
+    expect(find.text('No snippets yet'), findsOneWidget);
   });
 }
 

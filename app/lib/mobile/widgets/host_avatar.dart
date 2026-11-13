@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../../theme/app_theme.dart';
 import '../theme/mobile_tokens.dart';
@@ -58,7 +59,7 @@ class HostAvatar extends StatelessWidget {
       child: icon != null
           ? Icon(icon, color: color, size: size * 0.5)
           : initials.isEmpty
-              ? Icon(Icons.dns_outlined, color: color, size: size * 0.5)
+              ? Icon(FLucideIcons.server, color: color, size: size * 0.5)
               : Text(
                   initials,
                   style: TextStyle(

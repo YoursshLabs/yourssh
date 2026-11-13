@@ -12,4 +12,3 @@ export 'src/native/quickjs_runtime.dart';
 export 'src/bridge/ssh_bridge.dart' show SshBridgeDelegate;
 export 'src/bridge/sftp_bridge.dart' show SftpBridgeDelegate;
 export 'src/bridge/terminal_inject_bridge.dart' show TerminalInjectDelegate;
-export 'src/bridge/migration_bridge.dart';

@@ -7,6 +7,7 @@ import 'package:yourssh/models/host.dart';
 import 'package:yourssh/services/sftp_transfer_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
+import 'package:yourssh/theme/app_theme.dart';
 
 // Updated after Task 13 redesign: MobileSftpScreen is now contextual and
 // requires a [Host]. The full smoke-test suite lives in
@@ -28,6 +29,7 @@ void main() {
     );
 
     await tester.pumpWidget(MaterialApp(
+      builder: ysRootBuilderTouch,
       home: MultiProvider(
         providers: [
           Provider<SshService>.value(value: ssh),

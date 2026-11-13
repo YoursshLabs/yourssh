@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../../providers/sync_provider.dart';
 import '../../widgets/terminal_appearance_controls.dart';
@@ -10,6 +11,7 @@ import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 import '../util/mobile_prefs.dart';
 import '../widgets/list_group.dart';
+import '../widgets/mobile_card.dart';
 import '../widgets/settings_row.dart';
 import 'mobile_sync_screen.dart';
 
@@ -57,29 +59,32 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
 
     return Scaffold(
       backgroundColor: MobileColors.bg,
-      appBar: AppBar(
-        backgroundColor: MobileColors.bg,
-        surfaceTintColor: Colors.transparent,
-        title: Text('Settings', style: mobileHeading()),
-        actions: const [],
-      ),
-      body: ListView(
-        padding: EdgeInsets.only(
-          top: MobileTokens.space4,
-          left: MobileTokens.space4,
-          right: MobileTokens.space4,
-          bottom: MobileTokens.space5,
-        ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _syncBanner(sync),
-          const SizedBox(height: MobileTokens.space5),
-          _terminalGroup(),
-          const SizedBox(height: MobileTokens.space5),
-          _securityGroup(),
-          const SizedBox(height: MobileTokens.space5),
-          _keyboardSyncGroup(sync),
-          const SizedBox(height: MobileTokens.space5),
-          _footer(),
+          // FHeader adds the top safe area itself.
+          const FHeader(title: Text('Settings')),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(
+                top: MobileTokens.space4,
+                left: MobileTokens.space4,
+                right: MobileTokens.space4,
+                bottom: MobileTokens.space5,
+              ),
+              children: [
+                _syncBanner(sync),
+                const SizedBox(height: MobileTokens.space5),
+                _terminalGroup(),
+                const SizedBox(height: MobileTokens.space5),
+                _securityGroup(),
+                const SizedBox(height: MobileTokens.space5),
+                _keyboardSyncGroup(sync),
+                const SizedBox(height: MobileTokens.space5),
+                _footer(),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -89,12 +94,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
 
   Widget _syncBanner(SyncProvider sync) {
     final active = sync.isSupabaseConfigured;
-    return Container(
-      decoration: BoxDecoration(
-        color: MobileColors.surface,
-        borderRadius: BorderRadius.circular(MobileTokens.radiusCard),
-        border: Border.all(color: MobileColors.border),
-      ),
+    return MobileCard(
       padding: const EdgeInsets.symmetric(
         horizontal: MobileTokens.space4,
         vertical: MobileTokens.space3,
@@ -121,22 +121,9 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: active
-                  ? MobileColors.accent.withAlpha(38)
-                  : MobileColors.border,
-              borderRadius: BorderRadius.circular(MobileTokens.radiusPill),
-            ),
-            child: Text(
-              active ? 'On' : 'Off',
-              style: mobileBody(
-                size: 12,
-                weight: FontWeight.w600,
-                color: active ? MobileColors.accent : MobileColors.textFaint,
-              ),
-            ),
+          FBadge(
+            variant: active ? FBadgeVariant.primary : FBadgeVariant.secondary,
+            child: Text(active ? 'On' : 'Off'),
           ),
         ],
       ),
@@ -166,7 +153,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
       label: 'Security',
       children: [
         SettingsRow(
-          leading: Icon(Icons.fingerprint, color: MobileColors.textMuted, size: 20),
+          leading: Icon(FLucideIcons.fingerprintPattern, color: MobileColors.textMuted, size: 20),
           title: 'Biometric unlock',
           toggle: _appLock,
           onToggle: (v) async {
@@ -176,7 +163,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
           },
         ),
         SettingsRow(
-          leading: const Icon(Icons.lock_clock_outlined, color: MobileColors.textMuted, size: 20),
+          leading: const Icon(FLucideIcons.timer, color: MobileColors.textMuted, size: 20),
           title: 'Auto-lock',
           value: 'After 1 min',
         ),
@@ -191,7 +178,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
       label: 'Keyboard & Sync',
       children: [
         SettingsRow(
-          leading: Icon(Icons.keyboard_outlined, color: MobileColors.textMuted, size: 20),
+          leading: Icon(FLucideIcons.keyboard, color: MobileColors.textMuted, size: 20),
           title: 'Shortcut key bar',
           toggle: _accessoryBar,
           onToggle: (v) async {
@@ -201,13 +188,13 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
           },
         ),
         SettingsRow(
-          leading: Icon(Icons.cloud_sync_outlined, color: MobileColors.textMuted, size: 20),
+          leading: Icon(FLucideIcons.cloudUpload, color: MobileColors.textMuted, size: 20),
           title: 'Supabase sync',
           value: sync.isSupabaseConfigured ? 'Configured' : null,
           onTap: _pushSyncScreen,
         ),
         SettingsRow(
-          leading: Icon(Icons.qr_code_scanner, color: MobileColors.textMuted, size: 20),
+          leading: Icon(FLucideIcons.scanQrCode, color: MobileColors.textMuted, size: 20),
           title: 'Pair new device',
           onTap: _pushSyncScreen,
         ),

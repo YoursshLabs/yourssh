@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
-import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 
-/// 56-px rounded-square (r18) amber FAB with a white "+" icon.
+/// 56-px amber primary FAB with a "+" icon, on [FButton.icon]. Needs an
+/// ancestor [FTheme] (the app root provides one).
 class MobileFab extends StatelessWidget {
   const MobileFab({super.key, required this.onTap});
 
@@ -11,16 +12,17 @@ class MobileFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: MobileTokens.fabSize,
-        height: MobileTokens.fabSize,
-        decoration: BoxDecoration(
-          color: MobileColors.accent,
-          borderRadius: BorderRadius.circular(18),
+    return Tooltip(
+      message: 'Add host',
+      child: SizedBox.square(
+        dimension: MobileTokens.fabSize,
+        child: FButton.icon(
+          variant: .primary,
+          size: .lg,
+          onPress: onTap,
+          semanticsLabel: 'Add host',
+          child: const Icon(FLucideIcons.plus, size: 28),
         ),
-        child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
     );
   }

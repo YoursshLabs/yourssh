@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import '../models/local_entry.dart';
+import '../util/entry_sort.dart';
 import '../util/fs_error.dart';
 
 enum LocalFilePanelLoadState { idle, loading, loaded, error }
@@ -17,6 +18,10 @@ class LocalFilePanelProvider extends ChangeNotifier {
   int _historyIndex = -1;
   LocalFilePanelLoadState loadState = LocalFilePanelLoadState.idle;
   String? errorMessage;
+  String _sortColumn = EntrySortColumn.name;
+  bool _sortAscending = true;
+  String? _anchorPath;
+  List<LocalEntry>? _filtered;
 
   LocalFilePanelProvider() : _currentPath = _defaultPath() {
     _history.add(_currentPath);
@@ -43,11 +48,42 @@ class LocalFilePanelProvider extends ChangeNotifier {
   bool get canGoBack => _historyIndex > 0;
   bool get canGoForward => _historyIndex < _history.length - 1;
 
+  /// Column the listing is sorted by ([EntrySortColumn]); folders first.
+  String get sortColumn => _sortColumn;
+  bool get sortAscending => _sortAscending;
+
+  /// Entries matching the filter query, in display order. Cached until the
+  /// entries, filter or sort change, so the file table sees the same list
+  /// across selection changes.
   List<LocalEntry> get filteredEntries {
-    if (_filterQuery.isEmpty) return List.unmodifiable(_entries);
+    if (_filtered case final cached?) return cached;
     final q = _filterQuery.toLowerCase();
-    return _entries.where((e) => e.name.toLowerCase().contains(q)).toList();
+    return _filtered = List.unmodifiable(_filterQuery.isEmpty
+        ? _entries
+        : _entries.where((e) => e.name.toLowerCase().contains(q)));
   }
+
+  Comparator<LocalEntry> get _comparator => entryComparator<LocalEntry>(
+        _sortColumn,
+        ascending: _sortAscending,
+        isDirectory: (e) => e.isDirectory,
+        name: (e) => e.name,
+        size: (e) => e.size,
+        modified: (e) => e.modifiedAt,
+        kind: (e) => e.kindLabel,
+      );
+
+  /// Re-sorts the listing by [column] (folders stay first).
+  void setSort(String column, {required bool ascending}) {
+    if (column == _sortColumn && ascending == _sortAscending) return;
+    _sortColumn = column;
+    _sortAscending = ascending;
+    _entries = List.of(_entries)..sort(_comparator);
+    _filtered = null;
+    notifyListeners();
+  }
+
+  bool isSelected(LocalEntry entry) => _selectedPaths.contains(entry.path);
 
   List<LocalEntry> get entries => List.unmodifiable(_entries);
 
@@ -82,6 +118,7 @@ class LocalFilePanelProvider extends ChangeNotifier {
     _historyIndex = _history.length - 1;
     _currentPath = path;
     _selectedPaths.clear();
+    _anchorPath = null;
     notifyListeners();
   }
 
@@ -90,6 +127,7 @@ class LocalFilePanelProvider extends ChangeNotifier {
     _historyIndex--;
     _currentPath = _history[_historyIndex];
     _selectedPaths.clear();
+    _anchorPath = null;
     notifyListeners();
     _fetchDirectory(_currentPath);
   }
@@ -99,6 +137,7 @@ class LocalFilePanelProvider extends ChangeNotifier {
     _historyIndex++;
     _currentPath = _history[_historyIndex];
     _selectedPaths.clear();
+    _anchorPath = null;
     notifyListeners();
     _fetchDirectory(_currentPath);
   }
@@ -141,8 +180,9 @@ class LocalFilePanelProvider extends ChangeNotifier {
         ));
       }
       if (token != _fetchToken) return;
-      entries.sort((a, b) => a.sortKey.compareTo(b.sortKey));
+      entries.sort(_comparator);
       _entries = entries;
+      _filtered = null;
       loadState = LocalFilePanelLoadState.loaded;
     } catch (e) {
       if (token != _fetchToken) return;
@@ -174,6 +214,27 @@ class LocalFilePanelProvider extends ChangeNotifier {
 
   void clearSelection() {
     _selectedPaths.clear();
+    _anchorPath = null;
+    notifyListeners();
+  }
+
+  /// A file-table selection gesture on [entry]: plain selects only it,
+  /// [additive] toggles it, [range] selects the visible run from the last
+  /// anchor to it.
+  void select(LocalEntry entry, {bool additive = false, bool range = false}) {
+    final (next, anchor) = applyTableSelection<LocalEntry, String>(
+      visible: filteredEntries,
+      keyOf: (e) => e.path,
+      selected: _selectedPaths,
+      anchor: _anchorPath,
+      entry: entry,
+      additive: additive,
+      range: range,
+    );
+    _selectedPaths
+      ..clear()
+      ..addAll(next);
+    _anchorPath = anchor;
     notifyListeners();
   }
 
@@ -189,6 +250,7 @@ class LocalFilePanelProvider extends ChangeNotifier {
   void toggleFilterVisible() {
     _filterVisible = !_filterVisible;
     if (!_filterVisible) _filterQuery = '';
+    _filtered = null;
     notifyListeners();
   }
 
@@ -201,6 +263,7 @@ class LocalFilePanelProvider extends ChangeNotifier {
   void setFilterQuery(String query) {
     if (_filterQuery == query) return;
     _filterQuery = query;
+    _filtered = null;
     // Selection must stay within what the user can see (parity with
     // SftpPanelProvider): drop selected paths the new filter hides.
     if (query.isNotEmpty) {
@@ -214,6 +277,7 @@ class LocalFilePanelProvider extends ChangeNotifier {
 
   void setEntriesForTest(List<LocalEntry> entries) {
     _entries = List.of(entries);
+    _filtered = null;
     loadState = LocalFilePanelLoadState.loaded;
     notifyListeners();
   }

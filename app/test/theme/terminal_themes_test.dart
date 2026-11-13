@@ -1,5 +1,7 @@
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/theme/terminal_themes.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 void main() {
   // xterm paints the selection rectangle ON TOP of the text layer, so a
@@ -24,13 +26,26 @@ void main() {
     expect(names.toSet().length, names.length);
   });
 
-  test('YourSSH Dark leads the catalog and is the fallback theme', () {
-    expect(kTerminalThemes.first.name, 'YourSSH Dark');
-    expect(terminalThemeByName('No Such Theme'), kTerminalThemes.first.data);
+  test('YourSSH Amber leads the catalog and is the fallback theme', () {
+    expect(kDefaultTerminalTheme, 'YourSSH Amber');
+    expect(kTerminalThemes.first.name, 'YourSSH Amber');
+    expect(kTerminalThemes[1].name, 'YourSSH Dark');
+    expect(terminalThemeByName('nope'), kTerminalThemes.first.data);
+  });
+
+  test('YourSSH Amber uses the Amber Brand tokens', () {
+    final t = terminalThemeByName('YourSSH Amber');
+    expect(t.background, YsColors.terminalSurface);
+    expect(t.cursor, YsColors.primary);
+    expect(t.selection, YsColors.primary.withAlpha(0x55));
+    expect(t.foreground, const Color(0xFFE7E5E4));
+    expect(t.searchHitBackground, YsColors.primary);
+    expect(t.searchHitBackgroundCurrent, YsColors.accentText);
+    expect(t.searchHitForeground, YsColors.terminalSurface);
   });
 
   test('catalog contains the nine added themes', () {
-    expect(kTerminalThemes.length, 45);
+    expect(kTerminalThemes.length, 46);
     const added = [
       'Kanagawa Dragon',
       'Kanagawa Lotus',

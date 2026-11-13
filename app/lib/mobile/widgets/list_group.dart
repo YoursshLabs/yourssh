@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 
@@ -16,13 +18,18 @@ class ListGroup extends StatelessWidget {
     for (int i = 0; i < children.length; i++) {
       rows.add(children[i]);
       if (i < children.length - 1) {
-        rows.add(const Divider(
-          height: 1,
-          thickness: 0.5,
-          indent: 15,
-          endIndent: 0,
-          color: MobileColors.border,
-        ));
+        rows.add(
+          const Padding(
+            padding: EdgeInsets.only(left: 15),
+            child: FDivider(
+              style: .delta(
+                color: MobileColors.border,
+                width: 0.5,
+                padding: EdgeInsetsGeometryDelta.value(EdgeInsets.zero),
+              ),
+            ),
+          ),
+        );
       }
     }
 

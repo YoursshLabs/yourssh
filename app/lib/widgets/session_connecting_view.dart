@@ -7,7 +7,7 @@ import '../models/connection_log.dart';
 import '../models/host.dart';
 import '../models/ssh_session.dart';
 import '../services/os_detection.dart';
-import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Full-area screen shown inside a session tab while an SSH session is
 /// connecting, has errored, or has disconnected. Mirrors mstsc-style connect
@@ -67,9 +67,9 @@ class _SessionConnectingViewState extends State<SessionConnectingView>
   }
 
   Color get _nodeColor => switch (widget.session.status) {
-        SessionStatus.error => AppColors.red,
-        SessionStatus.disconnected => AppColors.textTertiary,
-        _ => AppColors.blue,
+        SessionStatus.error => YsColors.error,
+        SessionStatus.disconnected => YsColors.off,
+        _ => YsColors.primary,
       };
 
   @override
@@ -84,61 +84,78 @@ class _SessionConnectingViewState extends State<SessionConnectingView>
     final message = switch (status) {
       SessionStatus.error => session.errorMessage ?? 'Connection error',
       SessionStatus.disconnected => 'Disconnected',
+      // Between auto-retries the status stays `connecting`; show why the last
+      // attempt failed so a bad host name isn't an endless bare "Connecting…".
+      _ when session.errorMessage != null =>
+        '${session.errorMessage} — retrying (attempt ${session.reconnectCount + 1})',
       _ => 'Connecting…',
     };
     final messageColor = switch (status) {
-      SessionStatus.error => AppColors.red,
-      SessionStatus.disconnected => AppColors.textSecondary,
-      _ => AppColors.textSecondary,
+      SessionStatus.error => YsColors.error,
+      SessionStatus.disconnected => YsColors.mutedForeground,
+      _ => YsColors.mutedForeground,
     };
 
     // Centered when it fits; scrolls instead of overflowing when the pane is
     // short (split view / small window) — especially with the logs panel open.
-    return Container(
-      color: AppColors.bg,
+    return ColoredBox(
+      color: YsColors.background,
       child: LayoutBuilder(
         builder: (context, constraints) => SingleChildScrollView(
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(YsSpace.s5),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 520),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.border),
+                      color: YsColors.card,
+                      borderRadius: BorderRadius.circular(YsRadius.card),
+                      border: Border.all(color: YsColors.border),
                     ),
                     padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-              _header(host),
-              const SizedBox(height: 22),
-              _ConnectionGraphic(
-                animation: _anim,
-                active: status == SessionStatus.connecting,
-                nodeColor: _nodeColor,
-              ),
-              const SizedBox(height: 14),
-              Text(message, style: TextStyle(color: messageColor, fontSize: 12.5)),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  _PillButton(label: 'Close', onTap: widget.onClose),
-                  if (canRetry) ...[
-                    const SizedBox(width: 10),
-                    _PillButton(
-                      label: 'Retry',
-                      accent: true,
-                      onTap: widget.onRetry,
-                    ),
-                  ],
-                ],
-              ),
+                        _header(host),
+                        const SizedBox(height: 22),
+                        _ConnectionGraphic(
+                          animation: _anim,
+                          active: status == SessionStatus.connecting,
+                          nodeColor: _nodeColor,
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          message,
+                          style: TextStyle(color: messageColor, fontSize: 12.5),
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            FButton(
+                              key: const Key('connecting-close'),
+                              variant: .outline,
+                              size: .sm,
+                              mainAxisSize: MainAxisSize.min,
+                              onPress: widget.onClose,
+                              child: const Text('Close'),
+                            ),
+                            if (canRetry) ...[
+                              const SizedBox(width: 10),
+                              FButton(
+                                key: const Key('connecting-retry'),
+                                size: .sm,
+                                mainAxisSize: MainAxisSize.min,
+                                onPress: widget.onRetry,
+                                prefix: const Icon(FLucideIcons.refreshCw),
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ],
+                        ),
                         if (_showLogs) ...[
                           const SizedBox(height: 16),
                           _LogsPanel(lines: session.connectionLog),
@@ -171,7 +188,7 @@ class _SessionConnectingViewState extends State<SessionConnectingView>
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: AppColors.textPrimary,
+                  color: YsColors.foreground,
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
@@ -181,15 +198,36 @@ class _SessionConnectingViewState extends State<SessionConnectingView>
                 'SSH ${host.host}:${host.port}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                style: const TextStyle(
+                  color: YsColors.mutedForeground,
+                  fontSize: 12,
+                  fontFamily: kYsMonoFontFamily,
+                  fontFamilyFallback: kYsMonoFontFallback,
+                ),
               ),
             ],
           ),
         ),
         const SizedBox(width: 12),
-        _PillButton(
-          label: _showLogs ? 'Hide logs' : 'Show logs',
-          onTap: () => setState(() => _showLogs = !_showLogs),
+        // Flexible: in a narrow split pane the button shrinks (ellipsis)
+        // instead of overflowing the header.
+        Flexible(
+          flex: 2,
+          child: FButton(
+            key: const Key('connecting-logs'),
+            variant: .ghost,
+            size: .sm,
+            mainAxisSize: MainAxisSize.min,
+            onPress: () => setState(() => _showLogs = !_showLogs),
+            prefix: const Icon(FLucideIcons.scrollText),
+            child: Flexible(
+              child: Text(
+                _showLogs ? 'Hide logs' : 'Show logs',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -207,8 +245,8 @@ class _OsAvatar extends StatelessWidget {
       width: 44,
       height: 44,
       decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(12),
+        color: YsColors.secondary,
+        borderRadius: BorderRadius.circular(YsRadius.card),
       ),
       alignment: Alignment.center,
       child: asset != null
@@ -217,9 +255,9 @@ class _OsAvatar extends StatelessWidget {
               width: 22,
               height: 22,
               colorFilter:
-                  const ColorFilter.mode(AppColors.textPrimary, BlendMode.srcIn),
+                  const ColorFilter.mode(YsColors.foreground, BlendMode.srcIn),
             )
-          : const Icon(Icons.dns_outlined, size: 22, color: AppColors.textPrimary),
+          : const Icon(FLucideIcons.server, size: 22, color: YsColors.foreground),
     );
   }
 }
@@ -259,8 +297,9 @@ class _ConnectionGraphic extends StatelessWidget {
                 ),
               ),
               _node(
-                color: AppColors.cardHover,
-                child: const Icon(Icons.terminal, size: 20, color: AppColors.textPrimary),
+                color: YsColors.secondary,
+                child: const Icon(FLucideIcons.terminal,
+                    size: 20, color: YsColors.foreground),
               ),
             ],
           );
@@ -270,10 +309,10 @@ class _ConnectionGraphic extends StatelessWidget {
   }
 
   Widget _spinningRing(double t) {
-    final icon = const Icon(Icons.link, size: 18, color: Colors.white);
+    const icon = Icon(FLucideIcons.link, size: 18, color: YsColors.foreground);
     if (!active) return icon;
     return CustomPaint(
-      painter: _ArcPainter(turn: t, color: Colors.white),
+      painter: _ArcPainter(turn: t, color: YsColors.foreground),
       child: SizedBox(width: 38, height: 38, child: Center(child: icon)),
     );
   }
@@ -330,7 +369,7 @@ class _LinePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final y = size.height / 2;
     final base = Paint()
-      ..color = AppColors.border
+      ..color = YsColors.border
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(Offset(0, y), Offset(size.width, y), base);
@@ -365,15 +404,20 @@ class _LogsPanel extends StatelessWidget {
       constraints: const BoxConstraints(maxHeight: 180),
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.bg,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
+        color: YsColors.background,
+        borderRadius: BorderRadius.circular(YsRadius.control),
+        border: Border.all(color: YsColors.border),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: lines.isEmpty
           ? const Text(
               'No logs yet',
-              style: TextStyle(color: AppColors.textTertiary, fontSize: 12, fontFamily: 'monospace'),
+              style: TextStyle(
+                color: YsColors.off,
+                fontSize: 12,
+                fontFamily: kYsMonoFontFamily,
+                fontFamilyFallback: kYsMonoFontFallback,
+              ),
             )
           : SingleChildScrollView(
               reverse: true,
@@ -387,18 +431,23 @@ class _LogsPanel extends StatelessWidget {
 
   Widget _line(ConnectionLogLine l) {
     final color = switch (l.level) {
-      ConnectionLogLevel.success => AppColors.accent,
-      ConnectionLogLevel.warn => AppColors.orange,
-      ConnectionLogLevel.error => AppColors.red,
-      ConnectionLogLevel.info => AppColors.textSecondary,
+      ConnectionLogLevel.success => YsColors.ok,
+      ConnectionLogLevel.warn => YsColors.warn,
+      ConnectionLogLevel.error => YsColors.error,
+      ConnectionLogLevel.info => YsColors.mutedForeground,
     };
-    const base = TextStyle(fontSize: 12, fontFamily: 'monospace', height: 1.35);
+    const base = TextStyle(
+      fontSize: 12,
+      fontFamily: kYsMonoFontFamily,
+      fontFamilyFallback: kYsMonoFontFallback,
+      height: 1.35,
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(_hms(l.time), style: base.copyWith(color: AppColors.textTertiary)),
+          Text(_hms(l.time), style: base.copyWith(color: YsColors.off)),
           const SizedBox(width: 10),
           Expanded(child: Text(l.message, style: base.copyWith(color: color))),
         ],
@@ -409,48 +458,5 @@ class _LogsPanel extends StatelessWidget {
   String _hms(DateTime t) {
     String two(int n) => n.toString().padLeft(2, '0');
     return '${two(t.hour)}:${two(t.minute)}:${two(t.second)}';
-  }
-}
-
-class _PillButton extends StatefulWidget {
-  final String label;
-  final bool accent;
-  final VoidCallback onTap;
-  const _PillButton({required this.label, this.accent = false, required this.onTap});
-
-  @override
-  State<_PillButton> createState() => _PillButtonState();
-}
-
-class _PillButtonState extends State<_PillButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = widget.accent;
-    final bg = accent
-        ? (_hovered ? AppColors.accentDim : AppColors.accent)
-        : (_hovered ? AppColors.cardHover : AppColors.bg);
-    final fg = accent ? Colors.black : AppColors.textPrimary;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: accent ? AppColors.accent : AppColors.border),
-          ),
-          child: Text(
-            widget.label,
-            style: TextStyle(color: fg, fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-        ),
-      ),
-    );
   }
 }

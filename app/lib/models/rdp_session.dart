@@ -10,6 +10,7 @@ import 'package:yourssh_rdp/src/generated/api.dart' as frb;
 import '../services/loopback_tunnel_proxy.dart';
 import 'app_session.dart';
 import 'host.dart';
+import 'remote_desktop_notifier.dart';
 
 enum RdpSessionStatus { connecting, connected, disconnected, error }
 
@@ -21,7 +22,9 @@ const String kRdpUnpinnedProbe = 'unpinned-probe';
 
 /// One RDP tab. Holds the event subscription, framebuffer, and status.
 /// Pure model: no widget imports; UI listens via [ChangeNotifier].
-class RdpSession extends ChangeNotifier implements AppSession {
+class RdpSession extends ChangeNotifier
+    with RemoteDesktopNotifier
+    implements AppSession {
   RdpSession({
     required this.host,
     required this.client,
@@ -85,12 +88,20 @@ class RdpSession extends ChangeNotifier implements AppSession {
   bool get isFirstUseProbe =>
       client.config.expectedFingerprint == kRdpUnpinnedProbe;
 
+  /// True while the first-use probe waits for the user's trust decision. The
+  /// engine aborts the probe after reporting the fingerprint and then emits a
+  /// trailing Error ("server certificate changed…"); that is the probe ending
+  /// as designed, not a failure, so it is ignored while this is set.
+  bool awaitingCertApproval = false;
+
   /// The user declined (or could not complete) the first-use verification.
+  /// A normal end of the session, not an error.
   void markCertRejected() {
-    status = RdpSessionStatus.error;
+    awaitingCertApproval = false;
+    status = RdpSessionStatus.disconnected;
     lastMessage = 'Server certificate not trusted — connection aborted '
         'before authentication';
-    notifyListeners();
+    notifyState();
   }
 
   @override
@@ -106,7 +117,7 @@ class RdpSession extends ChangeNotifier implements AppSession {
     _sub = events.listen(_onEvent, onError: (Object e) {
       status = RdpSessionStatus.error;
       lastMessage = '$e';
-      notifyListeners();
+      notifyState();
     });
   }
 
@@ -126,7 +137,7 @@ class RdpSession extends ChangeNotifier implements AppSession {
         certFingerprint = cert.sha256Fingerprint;
         if (!_applyDesktopSize(desktopWidth, desktopHeight)) {
           unawaited(client.disconnect());
-          notifyListeners();
+          notifyState();
           return;
         }
         final fp = certFingerprint;
@@ -145,9 +156,9 @@ class RdpSession extends ChangeNotifier implements AppSession {
               lastMessage = 'Certificate rejected';
               unawaited(client.disconnect());
             }
-            notifyListeners();
+            notifyState();
           });
-          return; // notifyListeners called inside scheduleMicrotask
+          return; // notifyState called inside scheduleMicrotask
         }
         status = RdpSessionStatus.connected;
       case frb.RdpEvent_CertMismatch(:final fingerprint):
@@ -156,6 +167,8 @@ class RdpSession extends ChangeNotifier implements AppSession {
           // Stay in `connecting`: this is verification, not a failure (no
           // audit/notification noise). The handler resolves it.
           lastMessage = 'Verifying server certificate…';
+          awaitingCertApproval = true;
+          notifyState(); // repaint the neutral waiting overlay
           onFirstUseCert?.call(fingerprint);
           if (onFirstUseCert == null) markCertRejected();
           return;
@@ -172,9 +185,15 @@ class RdpSession extends ChangeNotifier implements AppSession {
           :final rgba
         ):
         _patch(x, y, width, height, rgba);
+        notifyListeners(); // repaint only — not a state change
+        return;
       case frb.RdpEvent_ClipboardText(:final text):
         _deliverClipboard(text);
         return; // no repaint needed
+      case frb.RdpEvent_Disconnected() || frb.RdpEvent_Error()
+          when awaitingCertApproval:
+        // Trailing end-of-probe event; the trust dialog decides what's next.
+        return;
       case frb.RdpEvent_Disconnected(:final reason):
         status = RdpSessionStatus.disconnected;
         lastMessage = _tunnelClosed ? 'SSH tunnel closed' : reason;
@@ -182,7 +201,7 @@ class RdpSession extends ChangeNotifier implements AppSession {
         status = RdpSessionStatus.error;
         lastMessage = _tunnelClosed ? 'SSH tunnel closed' : message;
     }
-    notifyListeners();
+    notifyState();
   }
 
   /// Largest remote clipboard text accepted (UTF-8 bytes).
@@ -262,9 +281,12 @@ class RdpSession extends ChangeNotifier implements AppSession {
         decoded.dispose();
         break;
       }
+      // The first picture is a state change (the workspace leaves its
+      // placeholder); later ones only repaint.
+      final first = image == null;
       image?.dispose();
       image = decoded;
-      notifyListeners();
+      first ? notifyState() : notifyListeners();
     } while (_dirtyAgain);
     _decodeInFlight = false;
   }

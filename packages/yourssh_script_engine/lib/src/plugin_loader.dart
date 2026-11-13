@@ -47,6 +47,10 @@ class PluginLoader {
       onConsentRequired;
   final void Function(String pluginId, String message) onError;
 
+  /// Ids of built-in (compiled) plugins. A script plugin claiming one is never
+  /// loaded or prompted for; its directory is left untouched.
+  final Set<String> reservedIds;
+
   StreamSubscription<WatchEvent>? _watchSub;
 
   /// Content hash shown to the user when consent was requested, per plugin id.
@@ -56,6 +60,7 @@ class PluginLoader {
     required ScriptEngineService engine,
     required this.onConsentRequired,
     required this.onError,
+    this.reservedIds = const {},
   }) : _engine = engine;
 
   Future<void> scanAndLoad() async {
@@ -70,6 +75,13 @@ class PluginLoader {
     _watchSub = DirectoryWatcher(dir.path).events.listen(_onWatchEvent);
   }
 
+  bool _reserved(String pluginId) {
+    if (!reservedIds.contains(pluginId)) return false;
+    onError(pluginId,
+        'Skipped: id conflicts with a built-in plugin (directory left untouched)');
+    return true;
+  }
+
   Future<void> approvePermissions(
       String pluginId, Set<String> granted, String pluginDir) async {
     final String currentHash;
@@ -82,6 +94,7 @@ class PluginLoader {
       onError(pluginId, 'Load failed after approval: $e');
       return;
     }
+    if (_reserved(manifest.id)) return;
     final approvedHash = _pendingHashes.remove(pluginId);
     if (approvedHash != null && approvedHash != currentHash) {
       // Files changed between the prompt and the approval.
@@ -120,6 +133,8 @@ class PluginLoader {
           'Entry "${manifest.entry}" is missing or outside the plugin directory');
       return;
     }
+
+    if (_reserved(manifest.id)) return;
 
     String currentHash;
     try {

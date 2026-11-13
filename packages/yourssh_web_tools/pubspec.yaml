@@ -10,8 +10,15 @@ dependencies:
   flutter:
     sdk: flutter
 
+  yourssh_ui:
+    path: ../yourssh_ui
+
   yourssh_plugin_api:
     path: ../yourssh_plugin_api
 
   webview_flutter: ^4.8.0
   cryptography: ^2.7.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

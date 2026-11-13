@@ -15,7 +15,9 @@ import '../providers/shell_integration_provider.dart';
 import '../services/health_monitor_service.dart';
 import '../services/os_detection.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'health_dot.dart';
+import 'ys_menu.dart';
 
 class SessionTab extends StatefulWidget {
   final AppSession session;
@@ -29,7 +31,6 @@ class SessionTab extends StatefulWidget {
 }
 
 class _SessionTabState extends State<SessionTab> {
-  bool _hovered = false;
   bool _isRenaming = false;
   late TextEditingController _renameController;
 
@@ -85,51 +86,27 @@ class _SessionTabState extends State<SessionTab> {
       position: RelativeRect.fromLTRB(
         globalPos.dx, globalPos.dy, globalPos.dx + 1, globalPos.dy + 1,
       ),
-      color: const Color(0xFF1E1E1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      color: kYsMenuColor,
+      shape: kYsMenuShape,
       items: [
-        PopupMenuItem(
-          value: 'rename',
-          child: const Row(children: [
-            Icon(Icons.edit_outlined, size: 14, color: Color(0xFFAAAAAA)),
-            SizedBox(width: 8),
-            Text('Rename', style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
-          ]),
+        ysMenuItem('rename', FLucideIcons.pencil, 'Rename'),
+        ysMenuItem(
+          'pin',
+          session.isPinned ? FLucideIcons.pinOff : FLucideIcons.pin,
+          session.isPinned ? 'Unpin' : 'Pin',
         ),
-        PopupMenuItem(
-          value: 'pin',
-          child: Row(children: [
-            Icon(
-              session.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
-              size: 14,
-              color: const Color(0xFFAAAAAA),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              session.isPinned ? 'Unpin' : 'Pin',
-              style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13),
-            ),
-          ]),
-        ),
-        PopupMenuItem(
-          value: 'color',
-          child: const Row(children: [
-            Icon(Icons.circle_outlined, size: 14, color: Color(0xFFAAAAAA)),
-            SizedBox(width: 8),
-            Text('Color tag', style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
-            Spacer(),
-            Icon(Icons.chevron_right, size: 14, color: Color(0xFF666666)),
-          ]),
+        ysMenuItem(
+          'color',
+          FLucideIcons.palette,
+          'Color tag',
+          trailing: const Icon(
+            FLucideIcons.chevronRight,
+            size: 14,
+            color: YsColors.mutedForeground,
+          ),
         ),
         const PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'close',
-          child: const Row(children: [
-            Icon(Icons.close, size: 14, color: Color(0xFF888888)),
-            SizedBox(width: 8),
-            Text('Close', style: TextStyle(color: Color(0xFF888888), fontSize: 13)),
-          ]),
-        ),
+        ysMenuItem('close', FLucideIcons.x, 'Close', muted: true),
       ],
     );
 
@@ -154,21 +131,11 @@ class _SessionTabState extends State<SessionTab> {
         globalPos.dx + 160, globalPos.dy + 60,
         globalPos.dx + 161, globalPos.dy + 61,
       ),
-      color: const Color(0xFF1E1E1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      color: kYsMenuColor,
+      shape: kYsMenuShape,
       items: [
-        PopupMenuItem(
-          value: 'none',
-          child: const Row(children: [
-            SizedBox(
-              width: 14, height: 14,
-              child: Icon(Icons.block, size: 12, color: Color(0xFF666666)),
-            ),
-            SizedBox(width: 8),
-            Text('None', style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 13)),
-          ]),
-        ),
-        ...AppColors.tabColors.map((c) => PopupMenuItem(
+        ysMenuItem('none', FLucideIcons.ban, 'None', muted: true),
+        ...AppColors.tabColors.map((c) => PopupMenuItem<String>(
           value: c.$2,
           child: Row(children: [
             Container(
@@ -179,7 +146,9 @@ class _SessionTabState extends State<SessionTab> {
               ),
             ),
             const SizedBox(width: 8),
-            Text(c.$1, style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
+            Text(c.$1,
+                style: const TextStyle(
+                    color: YsColors.foreground, fontSize: 13)),
           ]),
         )),
       ],
@@ -195,193 +164,155 @@ class _SessionTabState extends State<SessionTab> {
 
   @override
   Widget build(BuildContext context) {
-    final labelColor = widget.isActive ? AppColors.accent : const Color(0xFF888888);
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: () {
-          widget.provider.setActive(widget.session.id);
-          widget.onTap();
-        },
-        onDoubleTap: _startRename,
-        onSecondaryTapUp: (details) =>
-            _showTabContextMenu(context, details.globalPosition),
-        // Middle-click closes the tab; pinned tabs are protected (consistent
-        // with the hidden X button — close stays reachable via the menu).
-        onTertiaryTapUp: widget.session.isPinned
-            ? null
-            : (_) => widget.provider.closeSession(widget.session.id),
-        child: Container(
-          height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: widget.isActive
-                ? const Color(0xFF1C1C1C)
-                : _hovered
-                    ? const Color(0xFF141414)
-                    : Colors.transparent,
-            border: widget.isActive
-                ? const Border(bottom: BorderSide(color: AppColors.accent, width: 2))
-                : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Connection health dot for SSH (hidden for watch sessions);
-              // laptop glyph for local tabs.
-              if (widget.session case final SshSession ssh
-                  when !ssh.isWatch)
-                Builder(builder: (context) {
-                  final health = context
-                      .watch<HealthMonitorService>()
-                      .healthFor(ssh.host.id);
-                  final tone = badgeToneFor(ssh.status, health);
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 5),
-                    child: Tooltip(
-                      message: _healthTooltip(ssh, health),
-                      child: HealthDot(tone: tone),
-                    ),
-                  );
-                })
-              else if (widget.session case TerminalSession ts when ts.isLocal)
-                const Padding(
-                  padding: EdgeInsets.only(right: 5),
-                  child: Icon(Icons.laptop_mac,
-                      size: 12, color: Color(0xFF888888)),
-                ),
-              // Distro/OS glyph — reads detectedOs from HostProvider (the
-              // session's Host snapshot goes stale after copyWith on detect).
-              if (widget.session case final SshSession ssh when !ssh.isWatch)
-                Builder(builder: (context) {
-                  final os = context.select<HostProvider, String?>((hp) {
-                    for (final h in hp.allHosts) {
-                      if (h.id == ssh.host.id) return h.detectedOs;
-                    }
-                    return null;
-                  });
-                  final asset = osIconAsset(os);
-                  if (asset == null) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 5),
-                    child: SvgPicture.asset(
-                      asset,
-                      width: 14,
-                      height: 14,
-                      colorFilter: const ColorFilter.mode(
-                          Color(0xFF888888), BlendMode.srcIn),
-                    ),
-                  );
-                }),
-              // Red recording indicator
-              Consumer<RecordingProvider>(
-                builder: (context, rec, _) => rec.isRecording(widget.session.id)
-                    ? Container(
-                        width: 7,
-                        height: 7,
-                        margin: const EdgeInsets.only(right: 5),
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      )
-                    : const SizedBox.shrink(),
+    final session = widget.session;
+    final leading = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Connection health dot for SSH (hidden for watch sessions);
+        // laptop glyph for local tabs.
+        if (session case final SshSession ssh when !ssh.isWatch)
+          Builder(builder: (context) {
+            final health = context
+                .watch<HealthMonitorService>()
+                .healthFor(ssh.host.id);
+            final tone = badgeToneFor(ssh.status, health);
+            return Padding(
+              padding: const EdgeInsets.only(right: 5),
+              child: Tooltip(
+                message: _healthTooltip(ssh, health),
+                child: HealthDot(tone: tone),
               ),
-              // Agent-forwarding key icon — only for sessions whose host
-              // opted in (state != off), colored by live state.
-              if (widget.session case final SshSession ssh
-                  when ssh.agentForwardingState != AgentForwardingState.off)
-                Padding(
-                  padding: const EdgeInsets.only(right: 5),
-                  child: Tooltip(
-                    message: agentForwardingTooltip(ssh.agentForwardingState),
-                    child: Icon(Icons.key,
-                        size: 12,
-                        color:
-                            agentForwardingColor(ssh.agentForwardingState)),
-                  ),
-                ),
-              // Color dot (shown when colorTag is set)
-              if (widget.session.colorTag != null)
-                Container(
+            );
+          })
+        else if (session case TerminalSession ts when ts.isLocal)
+          const Padding(
+            padding: EdgeInsets.only(right: 5),
+            child: Icon(FLucideIcons.laptop,
+                size: 12, color: YsColors.mutedForeground),
+          ),
+        // Distro/OS glyph — reads detectedOs from HostProvider (the
+        // session's Host snapshot goes stale after copyWith on detect).
+        if (session case final SshSession ssh when !ssh.isWatch)
+          Builder(builder: (context) {
+            final os = context.select<HostProvider, String?>((hp) {
+              for (final h in hp.allHosts) {
+                if (h.id == ssh.host.id) return h.detectedOs;
+              }
+              return null;
+            });
+            final asset = osIconAsset(os);
+            if (asset == null) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(right: 5),
+              child: SvgPicture.asset(
+                asset,
+                width: 14,
+                height: 14,
+                colorFilter: const ColorFilter.mode(
+                    YsColors.mutedForeground, BlendMode.srcIn),
+              ),
+            );
+          }),
+        // Red recording indicator
+        Consumer<RecordingProvider>(
+          builder: (context, rec, _) => rec.isRecording(session.id)
+              ? Container(
                   width: 7,
                   height: 7,
                   margin: const EdgeInsets.only(right: 5),
-                  decoration: BoxDecoration(
-                    color: AppColors.fromHex(widget.session.colorTag!),
+                  decoration: const BoxDecoration(
+                    color: YsColors.error,
                     shape: BoxShape.circle,
                   ),
-                ),
-              // X close button — hidden when pinned
-              if (!widget.session.isPinned)
-                GestureDetector(
-                  onTap: () => widget.provider.closeSession(widget.session.id),
-                  child: Icon(
-                    Icons.close,
-                    size: 11,
-                    color: _hovered || widget.isActive ? const Color(0xFF888888) : const Color(0xFF444444),
-                  ),
-                ),
-              const SizedBox(width: 8),
-              // Host label — switches to Focus+TextField when renaming
-              if (_isRenaming)
-                SizedBox(
-                  width: 100,
-                  height: 20,
-                  child: Focus(
-                    onKeyEvent: (node, event) {
-                      if (event is KeyDownEvent &&
-                          event.logicalKey == LogicalKeyboardKey.escape) {
-                        setState(() => _isRenaming = false);
-                        return KeyEventResult.handled;
-                      }
-                      return KeyEventResult.ignored;
-                    },
-                    child: TextField(
-                      controller: _renameController,
-                      autofocus: true,
-                      style: const TextStyle(color: Color(0xFFE0E0E0), fontSize: 12),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      onSubmitted: (_) => _commitRename(),
-                      onTapOutside: (_) => _commitRename(),
-                      // Suppress default focus-traversal on Enter; commit is
-                      // handled by onSubmitted/onTapOutside.
-                      onEditingComplete: () {},
-                    ),
-                  ),
                 )
-              else
-                Text(
-                  _composedLabel(context),
-                  style: TextStyle(
-                    color: labelColor,
-                    fontSize: 12,
-                    fontWeight: widget.isActive ? FontWeight.w500 : FontWeight.normal,
-                  ),
-                ),
-              const SizedBox(width: 8),
-              // Pin icon (shown when pinned)
-              if (widget.session.isPinned)
-                const Padding(
-                  padding: EdgeInsets.only(right: 4),
-                  child: Icon(Icons.push_pin, size: 11, color: Color(0xFF888888)),
-                ),
-              // Terminal icon (right)
-              Icon(
-                Icons.monitor_outlined,
-                size: 13,
-                color: widget.isActive ? AppColors.accent : const Color(0xFF555555),
-              ),
-            ],
-          ),
+              : const SizedBox.shrink(),
         ),
-      ),
+        // Agent-forwarding key icon — only for sessions whose host opted in
+        // (state != off), colored by live state.
+        if (session case final SshSession ssh
+            when ssh.agentForwardingState != AgentForwardingState.off)
+          Padding(
+            padding: const EdgeInsets.only(right: 5),
+            child: Tooltip(
+              message: agentForwardingTooltip(ssh.agentForwardingState),
+              child: Icon(FLucideIcons.keyRound,
+                  size: 12,
+                  color: agentForwardingColor(ssh.agentForwardingState)),
+            ),
+          ),
+      ],
+    );
+
+    // Host label — switches to Focus+TextField when renaming.
+    final Widget label = _isRenaming
+        ? SizedBox(
+            width: 100,
+            height: 20,
+            child: Focus(
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.escape) {
+                  setState(() => _isRenaming = false);
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: FTextField(
+                control: FTextFieldControl.managed(
+                    controller: _renameController),
+                autofocus: true,
+                // Borderless, padding-free: the field sits inside the tab.
+                style: .delta(
+                  border: .delta([.all(.none)]),
+                  constraints: const BoxConstraints(),
+                  contentPadding: .value(EdgeInsets.zero),
+                  contentTextStyle: .delta([
+                    .base(
+                      const .delta(color: YsColors.foreground, fontSize: 12),
+                    ),
+                  ]),
+                ),
+                onSubmit: (_) => _commitRename(),
+                onTapOutside: (_) => _commitRename(),
+                // Suppress default focus-traversal on Enter; commit is
+                // handled by onSubmit/onTapOutside.
+                onEditingComplete: () {},
+              ),
+            ),
+          )
+        : Text(_composedLabel(context));
+
+    return YsTab(
+      active: widget.isActive,
+      leading: leading,
+      colorTag: session.colorTag == null
+          ? null
+          : AppColors.fromHex(session.colorTag!),
+      label: label,
+      trailing: [
+        if (session.isPinned)
+          const Padding(
+            padding: EdgeInsets.only(left: 8),
+            child: Icon(FLucideIcons.pin,
+                size: 11, color: YsColors.mutedForeground),
+          ),
+      ],
+      onTap: () {
+        widget.provider.setActive(session.id);
+        widget.onTap();
+      },
+      onDoubleTap: _startRename,
+      onSecondaryTap: (pos) => _showTabContextMenu(context, pos),
+      // Middle-click closes the tab; pinned tabs are protected (consistent
+      // with the hidden X button — close stays reachable via the menu).
+      onMiddleClick: session.isPinned
+          ? null
+          : () => widget.provider.closeSession(session.id),
+      // Close button hidden when pinned.
+      onClose: session.isPinned
+          ? null
+          : () => widget.provider.closeSession(session.id),
+      closeTooltip: 'Close tab',
     );
   }
 }
@@ -413,7 +344,7 @@ String _fmtDuration(Duration d) {
 /// Tab key-icon color per live forwarding state (off renders no icon).
 Color agentForwardingColor(AgentForwardingState state) => switch (state) {
       AgentForwardingState.ready => AppColors.textSecondary,
-      AgentForwardingState.active => AppColors.accent,
+      AgentForwardingState.active => AppColors.success,
       AgentForwardingState.fallback => AppColors.orange,
       AgentForwardingState.refused => AppColors.red,
       // Unreachable from the tab (the icon is gated on state != off); kept

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xterm/xterm.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../../models/host.dart';
 import '../../models/ssh_session.dart';
@@ -120,51 +121,35 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
   }
 
   void _showMenu(SshSession? active) {
-    showModalBottomSheet<void>(
+    showFSheet<void>(
       context: context,
-      backgroundColor: MobileColors.surfaceAlt,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => SafeArea(
+      side: .btt,
+      builder: (sheetCtx) => SafeArea(
+        top: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: MobileColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              leading: const Icon(Icons.folder_outlined,
-                  color: MobileColors.textPrimary),
-              title: Text('Files',
-                  style: mobileBody(color: MobileColors.textPrimary)),
-              onTap: () {
-                Navigator.pop(context);
+            FItem(
+              prefix: const Icon(FLucideIcons.folder),
+              title: const Text('Files'),
+              onPress: () {
+                Navigator.pop(sheetCtx);
                 if (widget.onOpenFiles != null && active != null) {
                   widget.onOpenFiles!(active.host);
                 }
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.compare_arrows_outlined,
-                  color: MobileColors.textPrimary),
-              title: Text('Port forwarding',
-                  style: mobileBody(color: MobileColors.textPrimary)),
-              onTap: () {
-                Navigator.pop(context);
+            FItem(
+              prefix: const Icon(FLucideIcons.arrowLeftRight),
+              title: const Text('Port forwarding'),
+              onPress: () {
+                Navigator.pop(sheetCtx);
                 if (widget.onOpenPortForward != null && active != null) {
                   widget.onOpenPortForward!(active.host);
                 }
               },
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: MobileTokens.space2),
           ],
         ),
       ),
@@ -175,29 +160,18 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
   /// without leaving the terminal. Picking a host calls [SessionProvider.connectAny].
   Future<void> _showHostPicker(BuildContext ctx) async {
     if (!mounted) return;
-    await showModalBottomSheet<void>(
+    await showFSheet<void>(
       context: ctx,
-      backgroundColor: MobileColors.surfaceAlt,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      side: .btt,
       builder: (sheetCtx) {
         // Read hosts inside the builder so the list is live while the sheet
         // is open (not a stale snapshot captured before the sheet opened).
         final hosts = sheetCtx.read<HostProvider>().allHosts;
         return SafeArea(
+          top: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 8),
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: MobileColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: MobileTokens.space4,
@@ -218,28 +192,29 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
                   ),
                 )
               else
-                ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: hosts.length,
-                  itemBuilder: (_, i) {
-                    final host = hosts[i];
-                    return ListTile(
-                      leading: const Icon(Icons.dns_outlined,
-                          color: MobileColors.textPrimary),
-                      title: Text(host.label,
-                          style: mobileBody(
-                              size: 15, color: MobileColors.textPrimary)),
-                      subtitle: Text(
-                        '${host.username}@${host.host}',
-                        style: mobileMono(
-                            size: 12, color: MobileColors.textMuted),
-                      ),
-                      onTap: () {
-                        Navigator.pop(sheetCtx);
-                        sheetCtx.read<SessionProvider>().connectAny(host);
-                      },
-                    );
-                  },
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: hosts.length,
+                    itemBuilder: (_, i) {
+                      final host = hosts[i];
+                      return FItem(
+                        prefix: const Icon(FLucideIcons.server),
+                        title: Text(host.label,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(
+                          '${host.username}@${host.host}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: mobileMono(size: 12),
+                        ),
+                        onPress: () {
+                          Navigator.pop(sheetCtx);
+                          sheetCtx.read<SessionProvider>().connectAny(host);
+                        },
+                      );
+                    },
+                  ),
                 ),
               const SizedBox(height: MobileTokens.space2),
             ],
@@ -259,22 +234,27 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
     if (ssh.isEmpty) {
       return Scaffold(
         backgroundColor: MobileColors.bg,
-        appBar: AppBar(
-          backgroundColor: MobileColors.surfaceAlt,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new,
-                color: MobileColors.accent, size: 20),
-            onPressed: () => Navigator.maybePop(context),
-          ),
-          title: Text('Terminal',
-              style: mobileBody(size: 16, weight: FontWeight.w600)),
-          centerTitle: true,
-        ),
-        body: const Center(
-          child: Text(
-            'No active sessions — connect from Hosts',
-            style: TextStyle(color: MobileColors.textMuted),
-          ),
+        body: Column(
+          children: [
+            FHeader.nested(
+              title: const Text('Terminal'),
+              prefixes: [
+                _action(
+                    'Back',
+                    FHeaderAction.back(
+                        onPress: () => Navigator.maybePop(context),
+                        semanticsLabel: 'Back')),
+              ],
+            ),
+            const Expanded(
+              child: Center(
+                child: Text(
+                  'No active sessions — connect from Hosts',
+                  style: TextStyle(color: MobileColors.textMuted),
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -294,6 +274,7 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
     return Scaffold(
       backgroundColor: MobileColors.bg,
       body: SafeArea(
+        top: false, // FHeader adds its own top safe area.
         child: Column(
           children: [
             _TerminalHeader(
@@ -328,6 +309,16 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
 
 // ── Header ────────────────────────────────────────────────────────────────────
 
+/// Wraps an icon action in a tooltip (forui actions only carry semantics).
+Widget _action(String tooltip, Widget action) =>
+    Tooltip(message: tooltip, child: action);
+
+Color _statusColor(SessionStatus status) => switch (status) {
+      SessionStatus.connected => YsColors.ok,
+      SessionStatus.connecting => YsColors.primary,
+      _ => YsColors.error,
+    };
+
 class _TerminalHeader extends StatelessWidget {
   final SshSession session;
   final VoidCallback onBack;
@@ -343,64 +334,57 @@ class _TerminalHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = session.host.label;
     final subtitle = '${session.host.username}@${session.host.host}';
-    return Container(
-      height: 52,
-      color: MobileColors.surfaceAlt,
-      child: Row(
+    return FHeader.nested(
+      prefixes: [
+        _action('Back',
+            FHeaderAction.back(onPress: onBack, semanticsLabel: 'Back')),
+      ],
+      title: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new,
-                color: MobileColors.accent, size: 20),
-            onPressed: onBack,
-          ),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: session.status == SessionStatus.connected
-                            ? MobileColors.green
-                            : session.status == SessionStatus.connecting
-                                ? MobileColors.accent
-                                : MobileColors.red,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(label,
-                        style: mobileBody(
-                            size: 14, weight: FontWeight.w600)),
-                  ],
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: MobileTokens.statusDot,
+                height: MobileTokens.statusDot,
+                decoration: BoxDecoration(
+                  color: _statusColor(session.status),
+                  shape: BoxShape.circle,
                 ),
-                Text(
-                  subtitle,
-                  style: mobileMono(
-                      size: 11, color: MobileColors.textMuted),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: mobileBody(size: 14, weight: FontWeight.w600)),
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.more_vert,
-                color: MobileColors.textMuted, size: 20),
-            tooltip: 'More',
-            onPressed: onMenu,
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: mobileMono(size: 11, color: MobileColors.textMuted),
           ),
-          const SizedBox(width: 4),
         ],
       ),
+      suffixes: [
+        _action(
+          'More',
+          FHeaderAction(
+            icon: const Icon(FLucideIcons.ellipsisVertical),
+            semanticsLabel: 'More',
+            onPress: onMenu,
+          ),
+        ),
+      ],
     );
   }
 }
 
-// ── Session-tab strip ─────────────────────────────────────────────────────────
+// ── Session-chip strip ────────────────────────────────────────────────────────
 
 class _SessionTabStrip extends StatelessWidget {
   final List<SshSession> sessions;
@@ -416,11 +400,12 @@ class _SessionTabStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 44,
-      color: MobileColors.surfaceAlt,
+      // 44 px chips + 2 x 4 px padding.
+      height: MobileTokens.touchTarget + 8,
+      color: YsColors.chrome,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         children: [
           for (final s in sessions)
             Padding(
@@ -435,19 +420,16 @@ class _SessionTabStrip extends StatelessWidget {
               ),
             ),
           // "+" tile
-          GestureDetector(
-            onTap: onAdd,
-            child: Container(
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: MobileColors.surface,
-                borderRadius:
-                    BorderRadius.circular(MobileTokens.radiusPill),
-                border: Border.all(color: MobileColors.border),
+          Tooltip(
+            message: 'New session',
+            child: SizedBox.square(
+              dimension: MobileTokens.touchTarget,
+              child: FButton.icon(
+                variant: .outline,
+                onPress: onAdd,
+                semanticsLabel: 'New session',
+                child: const Icon(FLucideIcons.plus, size: 18),
               ),
-              child: const Icon(Icons.add,
-                  size: 16, color: MobileColors.textMuted),
             ),
           ),
         ],
@@ -456,6 +438,9 @@ class _SessionTabStrip extends StatelessWidget {
   }
 }
 
+/// One session chip: status dot + label (tap = switch) and a close button
+/// (tap = close). Both hit targets are >= 44 px; the label is ellipsised so a
+/// long host label cannot overflow.
 class _SessionTab extends StatelessWidget {
   final SshSession session;
   final bool isActive;
@@ -471,44 +456,69 @@ class _SessionTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        decoration: BoxDecoration(
-          color: isActive ? MobileColors.accentSoft : MobileColors.surface,
-          borderRadius: BorderRadius.circular(MobileTokens.radiusPill),
-          border: Border.all(
-            color: isActive ? MobileColors.accent : MobileColors.border,
-          ),
+    final id = session.id;
+    return Material(
+      key: ValueKey('session-chip-$id'),
+      color: isActive ? MobileColors.accentSoft : YsColors.card,
+      shape: StadiumBorder(
+        side: BorderSide(
+          color: isActive ? YsColors.primary : YsColors.border,
         ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        height: MobileTokens.touchTarget,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 7,
-              height: 7,
-              decoration: const BoxDecoration(
-                color: MobileColors.green,
-                shape: BoxShape.circle,
+            InkWell(
+              key: ValueKey('session-chip-label-$id'),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 14, right: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: _statusColor(session.status),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 160),
+                      child: Text(
+                        session.tabLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: mobileBody(
+                          size: 13,
+                          color: isActive
+                              ? MobileColors.textPrimary
+                              : MobileColors.textMuted,
+                          weight:
+                              isActive ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(width: 7),
-            Text(
-              session.tabLabel,
-              style: mobileBody(
-                size: 13,
-                color: isActive
-                    ? MobileColors.textPrimary
-                    : MobileColors.textMuted,
-                weight: isActive ? FontWeight.w600 : FontWeight.w400,
+            Tooltip(
+              message: 'Close session',
+              child: InkWell(
+                key: ValueKey('session-chip-close-$id'),
+                onTap: onClose,
+                child: const SizedBox.square(
+                  dimension: MobileTokens.touchTarget,
+                  child: Icon(FLucideIcons.x,
+                      size: 14, color: MobileColors.textFaint),
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            GestureDetector(
-              onTap: onClose,
-              child: const Icon(Icons.close,
-                  size: 14, color: MobileColors.textFaint),
             ),
           ],
         ),
@@ -606,7 +616,7 @@ class _SessionBodyState extends State<_SessionBody> {
           if (widget.session.status == SessionStatus.connecting)
             const Padding(
               padding: EdgeInsets.only(bottom: 12),
-              child: CircularProgressIndicator(color: MobileColors.accent),
+              child: FCircularProgress(),
             ),
           Text(
             widget.session.statusLabel,

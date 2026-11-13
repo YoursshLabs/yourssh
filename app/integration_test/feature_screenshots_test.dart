@@ -180,7 +180,7 @@ void main() {
       await prefs.setString('yourssh.port_forwards', portForwardsJson);
 
       // ── Launch app ───────────────────────────────────────────────────────
-      app.main();
+      app.main(const <String>[]);
       await tester.pump(const Duration(seconds: 2));
       await _waitFor(
         tester,
@@ -194,8 +194,8 @@ void main() {
       // 1a. Hosts dashboard
       await _snap(tester, '$_g1/01-hosts-dashboard.png');
 
-      // 1b. NEW HOST panel open (SSH mode)
-      await tester.tap(find.text('NEW HOST').first);
+      // 1b. New host panel open (SSH mode)
+      await tester.tap(find.text('New host').first);
       await tester.pump(const Duration(milliseconds: 500));
       await _snap(tester, '$_g1/02-new-host-panel-ssh.png');
 

@@ -9,7 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/local_entry.dart';
 import 'package:yourssh/providers/local_file_panel_provider.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
 import 'package:yourssh/widgets/local_file_panel.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show FCheckbox;
 
 LocalEntry _entry(String name) => LocalEntry(
       name: name,
@@ -19,6 +21,10 @@ LocalEntry _entry(String name) => LocalEntry(
       modifiedAt: DateTime(2026),
       permissions: '-rw-r--r--',
     );
+
+/// forui buttons and checkboxes settle their press feedback 100 ms after a
+/// tap; pump past it so no timer outlives the test.
+const _pressFeedback = Duration(milliseconds: 200);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +40,7 @@ void main() {
   Future<void> pumpPanel(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        builder: ysRootBuilder,
         home: Scaffold(
           body: LocalFilePanel(provider: provider, onChangeSource: () {}),
         ),
@@ -47,7 +54,7 @@ void main() {
   testWidgets('renders a checkbox per row plus a select-all header',
       (tester) async {
     await pumpPanel(tester);
-    expect(find.byType(Checkbox), findsNWidgets(3),
+    expect(find.byType(FCheckbox), findsNWidgets(3),
         reason: '2 rows + 1 select-all header');
     expect(find.text('2 items'), findsOneWidget);
   });
@@ -56,12 +63,12 @@ void main() {
     await pumpPanel(tester);
 
     await tester.tap(find.byKey(const Key('local_select_all')));
-    await tester.pump();
+    await tester.pump(_pressFeedback);
     expect(provider.selectedEntries.length, 2);
     expect(find.text('2 selected'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('local_select_all')));
-    await tester.pump();
+    await tester.pump(_pressFeedback);
     expect(provider.selectedEntries, isEmpty);
   });
 
@@ -69,13 +76,13 @@ void main() {
     await pumpPanel(tester);
 
     // Index 0 is the header; rows follow in list order.
-    await tester.tap(find.byType(Checkbox).at(1));
-    await tester.pump();
+    await tester.tap(find.byType(FCheckbox).at(1));
+    await tester.pump(_pressFeedback);
     expect(provider.selectedEntries.map((e) => e.name), ['a.txt']);
     expect(find.text('1 selected'), findsOneWidget);
 
-    await tester.tap(find.byType(Checkbox).at(1));
-    await tester.pump();
+    await tester.tap(find.byType(FCheckbox).at(1));
+    await tester.pump(_pressFeedback);
     expect(provider.selectedEntries, isEmpty);
   });
 }

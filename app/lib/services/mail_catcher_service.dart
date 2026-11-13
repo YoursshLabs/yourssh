@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../models/host.dart';
 import 'ssh_service.dart';
 import 'web_tools_service.dart';
@@ -39,9 +41,9 @@ class MailCatcherService {
     const cmd = '''
       d=\$(mktemp -d) || exit 1
       if python3 -c 'import smtpd' 2>/dev/null; then
-        nohup python3 -m smtpd -n -c DebuggingServer localhost:$_smtpPort > "\$d/log" 2>&1 &
+        nohup python3 -u -m smtpd -n -c DebuggingServer localhost:$_smtpPort >> "\$d/log" 2>&1 &
       elif python3 -c 'import aiosmtpd' 2>/dev/null; then
-        nohup python3 -m aiosmtpd -n -l localhost:$_smtpPort > "\$d/log" 2>&1 &
+        nohup python3 -u -m aiosmtpd -n -l localhost:$_smtpPort >> "\$d/log" 2>&1 &
       else
         rm -rf "\$d"
         echo "ERR:no-smtp-server"
@@ -95,32 +97,36 @@ class MailCatcherService {
         auditSource: 'devops');
   }
 
-  List<CaughtEmail> _parseSmtpdLog(String log) {
+  List<CaughtEmail> _parseSmtpdLog(String log) => parseLog(log);
+
+  static final _startMarker = RegExp(r'^-{5,}\s*MESSAGE FOLLOWS\s*-{5,}$');
+  static final _endMarker = RegExp(r'^-{5,}\s*END MESSAGE\s*-{5,}$');
+  // Python 3 smtpd DebuggingServer prints bytes lines as their repr: b'...'.
+  // aiosmtpd / smtpd print the ESMTP parameters before the headers.
+  static final _optionsLine = RegExp(r'^(mail|rcpt) options:');
+  static final _bytesRepr = RegExp(r'''^b(['"])(.*)\1$''');
+
+  /// Parses the output of `python3 -m smtpd -n -c DebuggingServer` (Python
+  /// 3 prints each line as a bytes repr such as `b'From: a@b'`, the blank
+  /// header/body separator as `b''`) and of `python3 -m aiosmtpd -n` (plain
+  /// text). `mail options:` / `rcpt options:` lines and blank lines before
+  /// the first header are ignored; the first blank line after a header ends
+  /// the headers and everything up to the END MESSAGE marker is the body.
+  static List<CaughtEmail> parseLog(String rawLog) {
+    // A truncate-while-open can leave NUL padding before the next write.
+    final log = rawLog.replaceAll('\u0000', '');
     final emails = <CaughtEmail>[];
-    final blocks = log.split(RegExp(r'-{10,}'));
+    String from = '', to = '', subject = '';
+    var inMessage = false;
+    var inBody = false;
+    var sawHeader = false;
+    var bodyLines = <String>[];
 
-    for (final block in blocks) {
-      if (block.trim().isEmpty) continue;
-      final lines = block.split('\n').where((l) => l.isNotEmpty).toList();
-      String from = '', to = '', subject = '';
-      final bodyLines = <String>[];
-      bool inBody = false;
-
-      for (final line in lines) {
-        if (line.startsWith('From: ')) {
-          from = line.substring(6);
-        } else if (line.startsWith('To: ')) {
-          to = line.substring(4);
-        } else if (line.startsWith('Subject: ')) {
-          subject = line.substring(9);
-        } else if (line.isEmpty) {
-          inBody = true;
-        } else if (inBody) {
-          bodyLines.add(line);
+    void finish() {
+      if (from.isNotEmpty || to.isNotEmpty || subject.isNotEmpty) {
+        while (bodyLines.isNotEmpty && bodyLines.last.trim().isEmpty) {
+          bodyLines.removeLast();
         }
-      }
-
-      if (from.isNotEmpty || to.isNotEmpty) {
         emails.add(CaughtEmail(
           from: from,
           to: to,
@@ -129,7 +135,79 @@ class MailCatcherService {
           receivedAt: DateTime.now(),
         ));
       }
+      from = to = subject = '';
+      inMessage = false;
+      inBody = false;
+      sawHeader = false;
+      bodyLines = <String>[];
     }
+
+    for (final raw in log.split('\n')) {
+      final trimmedRight = raw.endsWith('\r') ? raw.substring(0, raw.length - 1) : raw;
+      if (_startMarker.hasMatch(trimmedRight)) {
+        if (inMessage) finish();
+        inMessage = true;
+        continue;
+      }
+      if (_endMarker.hasMatch(trimmedRight)) {
+        if (inMessage) finish();
+        continue;
+      }
+      if (!inMessage) continue;
+      final line = _unwrap(trimmedRight);
+      if (inBody) {
+        bodyLines.add(line);
+      } else if (_optionsLine.hasMatch(line)) {
+        continue;
+      } else if (line.isEmpty) {
+        if (sawHeader) inBody = true;
+      } else {
+        sawHeader = true;
+        if (line.startsWith('From: ')) {
+          from = line.substring(6);
+        } else if (line.startsWith('To: ')) {
+          to = line.substring(4);
+        } else if (line.startsWith('Subject: ')) {
+          subject = line.substring(9);
+        }
+      }
+    }
+    if (inMessage) finish();
     return emails;
+  }
+
+  static String _unwrap(String line) {
+    final m = _bytesRepr.firstMatch(line);
+    if (m == null) return line;
+    final bytes = <int>[];
+    final src = m.group(2)!;
+    for (var i = 0; i < src.length; i++) {
+      final c = src[i];
+      if (c != r'\' || i + 1 >= src.length) {
+        bytes.addAll(utf8.encode(c));
+        continue;
+      }
+      final n = src[++i];
+      switch (n) {
+        case 'n':
+          bytes.add(10);
+        case 'r':
+          bytes.add(13);
+        case 't':
+          bytes.add(9);
+        case 'x':
+          final hex = i + 2 < src.length ? src.substring(i + 1, i + 3) : '';
+          final v = int.tryParse(hex, radix: 16);
+          if (v == null) {
+            bytes.addAll(utf8.encode(r'\x'));
+          } else {
+            bytes.add(v);
+            i += 2;
+          }
+        default:
+          bytes.addAll(utf8.encode(n));
+      }
+    }
+    return utf8.decode(bytes, allowMalformed: true);
   }
 }

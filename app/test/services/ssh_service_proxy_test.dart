@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
@@ -17,9 +18,14 @@ class _FakeSocket implements SSHSocket {
   @override
   Future<void> get done => Future.value();
   @override
-  Future<void> close() async {}
+  Future<void> close() async {
+    closed = true;
+  }
   @override
-  void destroy() {}
+  void destroy() {
+    closed = true;
+  }
+  bool closed = false;
 }
 
 void main() {
@@ -81,5 +87,48 @@ void main() {
     expect(got!.password, 'secret');
     expect(gotTarget, 'target');
     expect(gotPort, 2222);
+  });
+
+  test('localDial gives up on a dial that never completes (stalled DNS)',
+      () async {
+    final svc = SshService(StorageService())
+      ;
+    svc.directDialer = (h, p, {timeout}) => Completer<SSHSocket>().future;
+    final host = Host(label: 'a', host: 'db-internal', port: 22, username: 'u');
+
+    await expectLater(
+      svc.localDial(host),
+      throwsA(isA<TimeoutException>().having(
+          (e) => e.message, 'message', contains('db-internal:22'))),
+    );
+  });
+
+  test('a dial that completes after the timeout has its socket closed',
+      () async {
+    final svc = SshService(StorageService())
+      ..connectTimeout = const Duration(milliseconds: 50);
+    final late = Completer<SSHSocket>();
+    svc.directDialer = (h, p, {timeout}) => late.future;
+    final host = Host(label: 'a', host: 'slow', port: 22, username: 'u');
+
+    await expectLater(svc.localDial(host), throwsA(isA<TimeoutException>()));
+    final sock = _FakeSocket();
+    late.complete(sock);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(sock.closed, isTrue);
+  });
+
+  test('a dial that fails after the timeout raises no unhandled error',
+      () async {
+    final svc = SshService(StorageService())
+      ..connectTimeout = const Duration(milliseconds: 50);
+    final late = Completer<SSHSocket>();
+    svc.directDialer = (h, p, {timeout}) => late.future;
+    final host = Host(label: 'a', host: 'slow', port: 22, username: 'u');
+
+    await expectLater(svc.localDial(host), throwsA(isA<TimeoutException>()));
+    late.completeError(const SocketException('late failure'));
+    await Future<void>.delayed(Duration.zero);
   });
 }

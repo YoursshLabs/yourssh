@@ -5,6 +5,8 @@ import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/ssh_session.dart';
 import 'package:yourssh/widgets/session_connecting_view.dart';
 
+import '../helpers/ys_test_app.dart';
+
 SshSession _session({
   SessionStatus status = SessionStatus.connecting,
   String? error,
@@ -23,13 +25,11 @@ Future<void> _pump(
   VoidCallback? onClose,
   VoidCallback? onRetry,
 }) async {
-  await tester.pumpWidget(MaterialApp(
-    home: Scaffold(
-      body: SessionConnectingView(
-        session: session,
-        onClose: onClose ?? () {},
-        onRetry: onRetry ?? () {},
-      ),
+  await tester.pumpWidget(ysTestApp(
+    SessionConnectingView(
+      session: session,
+      onClose: onClose ?? () {},
+      onRetry: onRetry ?? () {},
     ),
   ));
   await tester.pump(); // start the spinner animation; don't settle (it repeats).
@@ -46,6 +46,17 @@ void main() {
     await _pump(tester, _session(status: SessionStatus.connecting));
     expect(find.text('Close'), findsOneWidget);
     expect(find.text('Retry'), findsNothing);
+  });
+
+  testWidgets('connecting between auto-retries shows the last failure reason',
+      (tester) async {
+    final s = _session(
+        status: SessionStatus.connecting,
+        error: 'Failed host lookup: db-internal')
+      ..reconnectCount = 2;
+    await _pump(tester, s);
+    expect(find.textContaining('Failed host lookup: db-internal'), findsOneWidget);
+    expect(find.textContaining('attempt 3'), findsOneWidget);
   });
 
   testWidgets('error state shows the error message and a Retry button', (tester) async {
@@ -66,6 +77,7 @@ void main() {
 
     await tester.tap(find.text('Show logs'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200)); // forui press timer
 
     expect(find.text('Resolving thngs-macbook-pro'), findsOneWidget);
     expect(find.text('TCP established'), findsOneWidget);
@@ -84,6 +96,7 @@ void main() {
     await _pump(tester, s);
     await tester.tap(find.text('Show logs'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200)); // forui press timer
 
     expect(tester.takeException(), isNull);
   });
@@ -99,7 +112,7 @@ void main() {
 
     await tester.tap(find.text('Retry'));
     await tester.tap(find.text('Close'));
-    await tester.pump();
+    await tester.pumpAndSettle(); // error state: no spinner; flush press timers
 
     expect(retried, 1);
     expect(closed, 1);

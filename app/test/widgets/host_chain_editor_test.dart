@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/widgets/host_chain_editor.dart';
+import 'package:yourssh/theme/app_theme.dart' show ysRootBuilder;
+import 'package:yourssh_ui/yourssh_ui.dart' show FLucideIcons, YsDialogFrame;
 
 Host makeHost(String id, String label,
         {String user = 'root', String addr = '10.0.0.1', String? os}) =>
     Host(id: id, label: label, host: addr, username: user, detectedOs: os);
 
-Widget wrap(Widget child) => MaterialApp(
+Widget wrap(Widget child) => MaterialApp(builder: ysRootBuilder,
       home: Scaffold(
         body: SingleChildScrollView(
           child: SizedBox(width: 360, child: child),
@@ -40,7 +42,7 @@ void main() {
 
     expect(find.text('bastion'), findsOneWidget);
     expect(find.text('prod-db'), findsOneWidget);
-    expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+    expect(find.byIcon(FLucideIcons.arrowDown), findsOneWidget);
     expect(find.text('Add a Host'), findsOneWidget); // append more
     expect(find.text('Clear'), findsOneWidget);
   });
@@ -54,7 +56,7 @@ void main() {
       candidates: [jump],
       onChanged: (_) {},
     )));
-    expect(find.byIcon(Icons.key), findsOneWidget);
+    expect(find.byIcon(FLucideIcons.keyRound), findsOneWidget);
 
     await tester.pumpWidget(wrap(HostChainEditor(
       currentHostLabel: 'prod-db',
@@ -63,7 +65,7 @@ void main() {
       candidates: [jump],
       onChanged: (_) {},
     )));
-    expect(find.byIcon(Icons.key), findsNothing);
+    expect(find.byIcon(FLucideIcons.keyRound), findsNothing);
   });
 
   testWidgets('appending a hop calls onChanged with both ids', (tester) async {
@@ -96,7 +98,7 @@ void main() {
     expect(find.text('b2'), findsOneWidget);
     expect(
         find.descendant(
-            of: find.byType(Dialog), matching: find.text('bastion')),
+            of: find.byType(YsDialogFrame), matching: find.text('bastion')),
         findsNothing);
   });
 
@@ -110,7 +112,7 @@ void main() {
     )));
 
     // Two remove buttons (one per hop); tap the first.
-    await tester.tap(find.byIcon(Icons.close).first);
+    await tester.tap(find.byTooltip('Remove hop').first);
     await tester.pumpAndSettle();
     expect(got, ['h2']);
   });

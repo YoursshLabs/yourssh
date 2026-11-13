@@ -9,6 +9,7 @@ import '../providers/session_provider.dart';
 import '../services/audit_service.dart';
 import '../services/path_completion.dart';
 import 'suggestion_popup.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class TerminalInputBar extends StatefulWidget {
   final String sessionId;
@@ -37,6 +38,8 @@ class TerminalInputBar extends StatefulWidget {
 
 class _TerminalInputBarState extends State<TerminalInputBar> {
   final _controller = TextEditingController();
+  /// The text field's own node: focusing it opens the text-input
+  /// connection, so typing right after the bar opens lands in the field.
   final _focus = FocusNode();
   List<String> _suggestions = [];
   int _selectedIndex = -1;
@@ -167,38 +170,64 @@ class _TerminalInputBarState extends State<TerminalInputBar> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_suggestions.isNotEmpty)
-          SuggestionPopup(
-            suggestions: _suggestions,
-            selectedIndex: _selectedIndex,
-            onSelect: _submit,
-          ),
-        Focus(
-          focusNode: _focus,
-          onKeyEvent: _handleKey,
-          child: TextField(
-            controller: _controller,
-            style: const TextStyle(
-              color: Color(0xFFD4D4D4),
-              fontFamily: 'monospace',
-              fontSize: 13,
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: YsColors.card,
+        border: Border(top: BorderSide(color: YsColors.border)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(YsSpace.s2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_suggestions.isNotEmpty) ...[
+              SuggestionPopup(
+                suggestions: _suggestions,
+                selectedIndex: _selectedIndex,
+                onSelect: _submit,
+              ),
+              const SizedBox(height: YsSpace.s1),
+            ],
+            // Key handler only: never focusable itself. Keys from the
+            // focused field bubble up to it (Tab, ↑/↓, Enter, Escape).
+            Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: _handleKey,
+              child: FTextField(
+                key: const Key('terminal-input-field'),
+                control: FTextFieldControl.managed(controller: _controller),
+                focusNode: _focus,
+                size: .sm,
+                hint:
+                    'Type command… (↑↓ history/suggestions, Tab complete, Esc dismiss)',
+                style: .delta(
+                  contentTextStyle: .delta([
+                    .base(
+                      const .delta(
+                        fontFamily: kYsMonoFontFamily,
+                        fontFamilyFallback: kYsMonoFontFallback,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ]),
+                ),
+                prefixBuilder: (context, style, variants) =>
+                    FTextField.prefixIconBuilder(
+                  context,
+                  style,
+                  variants,
+                  const Icon(FLucideIcons.terminal, color: YsColors.primary),
+                ),
+                onSubmit: _submit,
+                // Non-null so Enter does not unfocus the field (the default
+                // for a "done" action): the next command can be typed at once.
+                onEditingComplete: () {},
+              ),
             ),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: const Color(0xFF141414),
-              hintText: 'Type command… (↑↓ history/suggestions, Tab complete, Esc dismiss)',
-              hintStyle: const TextStyle(color: Color(0xFF555555)),
-              border: const OutlineInputBorder(borderSide: BorderSide.none),
-              prefixIcon: const Icon(Icons.terminal, color: Color(0xFF22C55E), size: 16),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
-            onSubmitted: _submit,
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

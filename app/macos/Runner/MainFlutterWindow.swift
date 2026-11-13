@@ -20,6 +20,7 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     registerAppDiscoveryChannel(messenger: flutterViewController.engine.binaryMessenger)
+    registerUrlChannel(messenger: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }
@@ -66,4 +67,80 @@ class MainFlutterWindow: NSWindow {
       result(mapped)
     }
   }
+
+  // MARK: yourssh:// URLs
+
+  private var urlChannel: FlutterMethodChannel?
+  private var urlDartReady = false
+  private var pendingUrls: [String] = []
+
+  /// Registers the `yourssh/url` channel (Dart → native: `ready` flushes
+  /// queued URLs, `activate` brings the app to the front for a CLI / URL
+  /// request; native → Dart: `open`) and the Apple Event handler for
+  /// `yourssh://` URLs. Lives here (not AppDelegate) for the same reason as
+  /// the app_discovery channel. The handler is installed in awakeFromNib,
+  /// before the app finishes launching, so a cold-launch URL event is not
+  /// missed; URLs arriving before Dart calls `ready` are queued.
+  private func registerUrlChannel(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: "yourssh/url",
+      binaryMessenger: messenger)
+    urlChannel = channel
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self = self else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      switch call.method {
+      case "ready":
+        self.urlDartReady = true
+        let queued = self.pendingUrls
+        self.pendingUrls.removeAll()
+        for url in queued { channel.invokeMethod("open", arguments: url) }
+        result(nil)
+      case "activate":
+        // A CLI request or a link arrives while another app is frontmost;
+        // window_manager's focus() alone leaves YourSSH in the background.
+        NSApp.activate(ignoringOtherApps: true)
+        self.makeKeyAndOrderFront(nil)
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    // NSApplication installs its own kAEGetURL handler while it finishes
+    // launching, replacing one set earlier. Install ours from the will-finish
+    // notification (still before the cold-launch event is dispatched) and
+    // again after launch for safety.
+    installUrlEventHandler()
+    for name in [NSApplication.willFinishLaunchingNotification,
+                 NSApplication.didFinishLaunchingNotification] {
+      NotificationCenter.default.addObserver(
+        forName: name, object: nil, queue: .main
+      ) { [weak self] _ in self?.installUrlEventHandler() }
+    }
+  }
+
+  private func installUrlEventHandler() {
+    NSAppleEventManager.shared().setEventHandler(
+      self,
+      andSelector: #selector(handleGetURLEvent(_:withReplyEvent:)),
+      forEventClass: AEEventClass(kInternetEventClass),
+      andEventID: AEEventID(kAEGetURL))
+  }
+
+  @objc private func handleGetURLEvent(
+    _ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor
+  ) {
+    guard let url = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
+          url.lowercased().hasPrefix("yourssh://") else { return }
+    if urlDartReady {
+      urlChannel?.invokeMethod("open", arguments: url)
+    } else {
+      // Bounded: a flood before Dart listens keeps only the newest 8.
+      pendingUrls.append(url)
+      if pendingUrls.count > 8 { pendingUrls.removeFirst(pendingUrls.count - 8) }
+    }
+  }
 }
+

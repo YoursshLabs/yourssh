@@ -1,11 +1,20 @@
 // app/lib/widgets/workspace_side_panel.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Shared frame for right-side workspace panels (snippets, terminal config):
-/// fixed width, dark background, left border, and a header with a title,
+/// fixed width, card background, left border, and a header with a title,
 /// optional extra header content (e.g. a search field), and a close button.
+///
+/// Rebuilds only when its owner does (layout / settings state), never on
+/// terminal output; [debugBuildCount] lets a test assert that.
 class WorkspaceSidePanel extends StatelessWidget {
   static const double panelWidth = 340;
+
+  /// Debug-only build counter (asserts are stripped from release builds).
+  @visibleForTesting
+  static int debugBuildCount = 0;
 
   final String title;
   final String closeTooltip;
@@ -24,51 +33,65 @@ class WorkspaceSidePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    assert(() {
+      debugBuildCount++;
+      return true;
+    }());
+    return SizedBox(
       width: panelWidth,
-      decoration: const BoxDecoration(
-        color: Color(0xFF141414),
-        border: Border(left: BorderSide(color: Color(0xFF2A2A2A))),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
-            ),
-            child: Column(
-              children: [
-                Row(
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: YsColors.card,
+          border: Border(left: BorderSide(color: YsColors.border)),
+        ),
+        child: Column(
+          children: [
+            DecoratedBox(
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: YsColors.border)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    YsSpace.s3, YsSpace.s3, YsSpace.s3, YsSpace.s3),
+                child: Column(
                   children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Color(0xFFE5E5E5),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: YsColors.foreground,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (onClose != null)
+                          Tooltip(
+                            message: closeTooltip,
+                            child: FButton.icon(
+                              variant: .ghost,
+                              size: .sm,
+                              onPress: onClose,
+                              child: const Icon(FLucideIcons.x),
+                            ),
+                          ),
+                      ],
                     ),
-                    const Spacer(),
-                    if (onClose != null)
-                      IconButton(
-                        tooltip: closeTooltip,
-                        onPressed: onClose,
-                        icon: const Icon(Icons.close,
-                            size: 16, color: Color(0xFF888888)),
-                        visualDensity: VisualDensity.compact,
-                      ),
+                    if (headerExtra != null) ...[
+                      const SizedBox(height: YsSpace.s2),
+                      headerExtra!,
+                    ],
                   ],
                 ),
-                if (headerExtra != null) ...[
-                  const SizedBox(height: 8),
-                  headerExtra!,
-                ],
-              ],
+              ),
             ),
-          ),
-          Expanded(child: child),
-        ],
+            Expanded(child: child),
+          ],
+        ),
       ),
     );
   }

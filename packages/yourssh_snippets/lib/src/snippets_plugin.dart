@@ -1,5 +1,8 @@
+// Migrating the app to material_ui is a separate later step.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show YsPluginHost, FLucideIcons;
 import 'screens/snippets_screen.dart';
 
 class YourSSHSnippetsPlugin extends YourSSHPlugin {
@@ -16,7 +19,7 @@ class YourSSHSnippetsPlugin extends YourSSHPlugin {
   String get description => 'Save and recall reusable shell commands.';
 
   @override
-  IconData get icon => Icons.code;
+  IconData get icon => FLucideIcons.code;
 
   @override
   String get version => '1.0.0';
@@ -26,6 +29,6 @@ class YourSSHSnippetsPlugin extends YourSSHPlugin {
 
   @override
   Widget buildUI(BuildContext context, YourSSHPluginContext pluginContext) {
-    return SnippetsScreen(pluginContext: pluginContext);
+    return YsPluginHost(child: SnippetsScreen(pluginContext: pluginContext));
   }
 }

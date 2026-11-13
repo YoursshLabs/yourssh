@@ -1,10 +1,10 @@
 name: yourssh
 description: YourSSH - A professional SSH client for macOS, Windows, and Linux with advanced features like SFTP, port forwarding, and a built-in code editor.
 publish_to: 'none'
-version: 0.3.0+3
+version: 0.4.0+4
 
 environment:
-  sdk: ^3.12.0
+  sdk: ^3.13.0
 
 dependencies:
   flutter:
@@ -44,6 +44,7 @@ dependencies:
 
   # UUID generation
   uuid: ^4.5.1
+  unorm_dart: ^0.3.0
 
   # Path utilities
   path: ^1.9.0
@@ -82,10 +83,14 @@ dependencies:
     path: ../packages/yourssh_snippets
   yourssh_script_engine:
     path: ../packages/yourssh_script_engine
+  yourssh_cli:
+    path: ../packages/yourssh_cli
   yourssh_rdp:
     path: ../packages/yourssh_rdp
   yourssh_vnc:
     path: ../packages/yourssh_vnc
+  yourssh_ui:
+    path: ../packages/yourssh_ui
 
   # Cryptography utilities
   cryptography: ^2.7.0
@@ -124,9 +129,6 @@ dependencies:
 
   package_info_plus: ^9.0.1
 
-  # Google Fonts (Manrope, Inter, Roboto Mono) for the mobile UI
-  google_fonts: ^6.2.1
-
 
 dependency_overrides:
   dartssh2:
@@ -162,10 +164,17 @@ flutter:
     - assets/monaco_editor.html
     - assets/app_icon.png
     - assets/os/
-    - assets/bundled_plugins/snippets/plugin.json
-    - assets/bundled_plugins/snippets/index.js
-    - assets/bundled_plugins/snippets/panel/index.html
   fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/inter/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/inter/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/inter/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/inter/Inter-Bold.ttf
+          weight: 700
     - family: DejaVu Sans Mono for Powerline
       fonts:
         - asset: assets/fonts/powerline/DejaVu Sans Mono for Powerline.ttf

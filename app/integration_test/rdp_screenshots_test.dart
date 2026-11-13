@@ -106,7 +106,7 @@ void main() {
       // ── Launch the real app ────────────────────────────────────────────
       // main() is `void` (async internally) — give it real time to finish
       // window setup + provider wiring and render the first frames.
-      app.main();
+      app.main(const <String>[]);
       await tester.pump(const Duration(seconds: 2));
       await _waitFor(
         tester,
@@ -122,18 +122,18 @@ void main() {
       // 2. Host editor in RDP mode (protocol selector + RDP-only fields).
       // Scope finds to the panel — the dashboard card's RDP badge shares the
       // 'RDP' text and other widgets share the close icon.
-      await tester.ensureVisible(find.text('NEW HOST').first);
-      await tester.tap(find.text('NEW HOST').first);
+      await tester.ensureVisible(find.text('New host').first);
+      await tester.tap(find.text('New host').first);
       await tester.pump(const Duration(milliseconds: 400));
       final panel = find.byType(HostDetailPanel);
       await tester.tap(find.descendant(
-          of: find.byType(SegmentedButton<HostProtocol>),
+          of: find.byKey(const ValueKey('host-protocol-tabs')),
           matching: find.text('RDP')));
       await tester.pump(const Duration(milliseconds: 400));
       await _snap(tester, '02-host-editor-rdp-form');
       // Close the panel via its header X.
       await tester.tap(
-          find.descendant(of: panel, matching: find.byIcon(Icons.close)).first);
+          find.descendant(of: panel, matching: find.byTooltip('Close')).first);
       await tester.pump(const Duration(milliseconds: 400));
 
       // 3. Connect (double-tap the card) → TOFU certificate dialog.

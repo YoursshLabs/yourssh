@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-11-13
+
+A new look (forui "Amber Brand" design system on desktop and mobile), a `yourssh` command-line client with `yourssh://` links, and a round of fixes found by driving the finished app end to end.
+
+### Added
+- **`yourssh` command-line client (phase 1, macOS, Linux and Windows, run from source)** — `yourssh connect <host>`, `ls [--json] [--tag T] [--filter Q]`, `version`, `open <url>` and `help` talk to the running app (NDJSON protocol v1) and start the app if it is not running. Hosts resolve by id, label or `user@host[:port]`; ad-hoc `user@host[:port]` works from the CLI only and signs in with the SSH agent's keys (a password-only server needs a saved host). `yourssh version` never starts the app. A debug build of the app uses its own endpoint (`YourSSH-dev`, `\\.\pipe\yourssh-cli-dev-<SID>`); the CLI reaches it with `YOURSSH_DEV=1`. macOS/Linux: a per-user Unix socket, 0600 in a 0700 run dir, that checks the peer uid. Windows: the named pipe `\\.\pipe\yourssh-cli-<SID>` with a current-user-only DACL and remote clients rejected; the app drops clients running as another user, and the CLI checks the pipe's server the same way before sending anything (a pipe owned by another user exits 4). Every request carries a token rotated at every launch, and the app is single-instance on all three (a second launch, including a clicked link, is handed to the running app before it starts anything else). Exit codes: 0 ok, 1 error, 2 usage, 3 app unreachable, 4 denied. Not yet: packaging the CLI binary in releases (today `yourssh` in a release is the GUI app) and an install button, `sftp`/`tunnel`/`import`/`export`, MCP.
+- **`yourssh://connect/<host-id-or-label>` links** — open a saved host from a browser or script; saved hosts only, repeats of the same link within 2 s are ignored, and a refused link (unknown host, unsupported form) is listed in the notification bell. The scheme is registered by the macOS app, the Windows installer (current user) and the Linux .deb; the portable zip and tarball do not register it.
+- **Audit source for CLI and URL connects** — SSH connect rows carry `meta.source` = `cli` / `url`; RDP and VNC rows keep `source: rdp|vnc` and carry `via` = `cli` / `url`.
+
+### Fixed
+- A new SSH session shows a single prompt; the prompt printed before the invisible shell-integration setup no longer stays behind as an empty line.
+- **Snippets no longer disappear after allowing the bundled "Snippets" plugin.** Earlier builds shipped a half-migrated script copy of Snippets that moved your snippets out of the built-in plugin's storage on first load and then failed, so the next launch showed only the defaults. The script copy is no longer installed, a leftover copy in `~/.yourssh/plugins/snippets` is ignored (script plugins can't reuse a built-in plugin's id), and the moved snippets are restored once at startup (merged, no duplicates).
+- Bulk "Run command" no longer reports `exit -1` for fast commands: the SSH layer kept an exit status that arrived before the session was ready. The footer counts non-zero exits separately (`N ok · M non-zero exit · K failed`) and an unknown exit status is shown as such.
+- A host whose name doesn't resolve no longer sits on "Connecting…" forever: the TCP dial times out after 15 s and the connecting screen shows the last error with the retry attempt.
+- Entering RDP/VNC fullscreen no longer raises a framework error; the first RDP connect shows a neutral "verifying certificate" state behind the trust dialog instead of an error with Retry; Retry buttons have a normal width.
+- Shell-integration gutter markers follow their prompt line and disappear on `clear` instead of floating on empty rows.
+- Field errors in the host editor and port-forward editor clear as soon as the value is fixed, and the port error fits on one line.
+- The hosts toolbar fits the 900×600 minimum window (lower-priority controls collapse into a menu); the Mail Catcher and AI chat titles no longer truncate with room to spare; multi-line Web Tools editors start at the top; the mobile Generate/Import key sheets have an opaque surface; Esc closes the LAN-sync QR dialog.
+- SFTP shows readable errors (e.g. '"releases" already exists') instead of raw `SftpStatusError` codes when creating or renaming.
+- An empty split pane explains how to fill it; remaining all-caps buttons and titles (Keychain, Port forwarding, Audit log, bulk dialogs) use sentence case.
+- **The host editor no longer leaks one host's form into another.** Opening "Edit" on a second host (or "New host" / "Duplicate") while the editor was open kept the first host's fields, and Save wrote them (including the password) into the second host.
+- The terminal header and status bar follow edits to the host (label, user, tags, jump chain) instead of showing the values from when the tab was opened.
+- Mail catcher: messages whose log starts with ESMTP options (`mail options: ['BODY=8BITMIME']`) are no longer dropped; the body is parsed separately from the headers, *Clear all* persists, and the log is written unbuffered in append mode.
+- Port validation ("Invalid (1–65535)") in both host editors (SSH/RDP/VNC port and proxy port), port forwarding and the Cloudflare tunnel panel; an empty port keeps its default.
+- Deleting a host also removes its stored proxy password.
+- The mobile sync code and anonymous key are hidden behind a reveal toggle.
+- The status bar also shows in RDP and VNC sessions.
+- Terminal search and input bars keep or return focus correctly (Esc, Enter, clicking away).
+- The read-only "Watching" banner has its own informational colour again.
+- Session and DevOps result tabs can be selected and closed from the keyboard (Tab to a tab, Enter/Space to select, Tab again to its close button).
+- List items in bottom sheets on mobile are at least 44 px tall.
+- The Cloudflare tunnel panel shows "Required" / "Invalid (1–65535)" for a missing label or a bad port instead of silently adding nothing or falling back to 3000 (an empty port still means 3000).
+
+### Changed
+- **New confirmations:** clearing captured mail in the Mail Catcher, deleting a host from the dashboard card menu, removing a Known Hosts entry (its pinned key), Sync *Disconnect*, Docker Compose *Down* and opening an executable file externally now ask first; the safe choice has default focus.
+- **SFTP click model:** on both panels a single click selects, and double-click or Enter opens.
+- **Host editor:** a *Delete* button was added to the footer and the *CONNECT* button was removed.
+- **AI chat:** Enter sends, Shift+Enter inserts a new line.
+- **New look:** the app moves to the Amber Brand palette (warm dark surfaces, amber accent), the Inter font and a forui-based UI foundation on desktop and mobile.
+- **New "YourSSH Amber" terminal theme**, the default for new installs. Existing installs keep their current terminal theme.
+- Built with Flutter 3.50.
+- **New sidebar** with grouped sections and an amber selected item.
+- **New tab bar** for sessions, with the active tab marked in amber.
+- **New toasts** for notifications, shown bottom-right on desktop.
+- **UI clean-up:** a lint gate (`tool/check_ui_lint.sh`, run in PR CI) keeps Material `IconButton`/`AlertDialog`/`SnackBar`/`Icons`/`ScaffoldMessenger` out of the app and the plugin packages, remaining colour literals moved to tokens, the discovery and server-monitor sheets and the inline tab rename / fallback code editor fields moved to forui, the gate also rejecting `showDialog(`, `showModalBottomSheet` and `TextField(`, and `AppColors`/`MobileColors` are now `@Deprecated` aliases of the new tokens (kept rather than deleted, to avoid churn across ~460 call sites).
+- **New dialogs** across the app; security prompts (host key, RDP certificate) now focus the safe choice by default.
+
+---
+
 ## [0.3.0] — 2026-11-12
 
 ### Performance

@@ -7,7 +7,9 @@ import '../providers/session_provider.dart';
 import '../providers/tunnel_provider.dart';
 import '../services/cloudflare_tunnel_service.dart';
 import '../services/ssh_service.dart';
-import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import 'container_widgets.dart';
+import 'devops_widgets.dart';
 
 class CloudflareTunnelScreen extends StatelessWidget {
   const CloudflareTunnelScreen({super.key});
@@ -78,63 +80,58 @@ class _CloudflareTunnelBodyState extends State<_CloudflareTunnelBody> {
       children: [
         Expanded(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(YsSpace.s3),
                 child: Row(
                   children: [
-                    const Text('Cloudflare Tunnels',
+                    const Expanded(
+                      child: Text(
+                        'Cloudflare Tunnels',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600)),
-                    const Spacer(),
-                    ElevatedButton.icon(
-                      onPressed: () => setState(() => _showPanel = true),
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('New Tunnel'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accent,
-                        foregroundColor: Colors.black,
+                          color: YsColors.foreground,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
+                    ),
+                    FButton(
+                      key: const ValueKey('tunnel-new'),
+                      mainAxisSize: MainAxisSize.min,
+                      onPress: () => setState(() => _showPanel = true),
+                      prefix: const Icon(FLucideIcons.plus),
+                      child: const Text('New Tunnel'),
                     ),
                   ],
                 ),
               ),
               if (session == null)
                 const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('Connect to a host to manage tunnels',
-                      style: TextStyle(
-                          color: AppColors.orange, fontSize: 12)),
+                  padding: EdgeInsets.symmetric(horizontal: YsSpace.s3),
+                  child: Text(
+                    'Connect to a host to manage tunnels',
+                    style: TextStyle(color: YsColors.warn, fontSize: 12),
+                  ),
                 ),
               Expanded(
                 child: provider.tunnels.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.cloud_off_outlined,
-                                size: 40, color: AppColors.textTertiary),
-                            const SizedBox(height: 12),
-                            const Text('No tunnels yet',
+                    ? YsEmptyState(
+                        icon: FLucideIcons.cloudOff,
+                        title: 'No tunnels yet',
+                        message:
+                            'Add a tunnel to expose a local port via Cloudflare.',
+                        action: session == null
+                            ? const Text(
+                                'Connect to a host first.',
                                 style: TextStyle(
-                                    color: AppColors.textPrimary,
-                                    fontSize: 14)),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Add a tunnel to expose a local port via Cloudflare.',
-                              style: TextStyle(
-                                  color: AppColors.textTertiary, fontSize: 12),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            if (session == null)
-                              const Text('Connect to a host first.',
-                                  style: TextStyle(
-                                      color: AppColors.orange, fontSize: 12)),
-                          ],
-                        ),
+                                  color: YsColors.warn,
+                                  fontSize: 12,
+                                ),
+                              )
+                            : null,
                       )
                     : ListView.builder(
                         itemCount: provider.tunnels.length,
@@ -157,95 +154,110 @@ class _CloudflareTunnelBodyState extends State<_CloudflareTunnelBody> {
     );
   }
 
+  Future<void> _confirmRemove(TunnelConfig tunnel) async {
+    final confirmed = await showYsConfirm(
+      context,
+      title: 'Remove tunnel',
+      message: 'Remove "${tunnel.label}"?',
+      confirmLabel: 'Remove',
+      destructive: true,
+    );
+    if (confirmed && mounted) {
+      context.read<TunnelProvider>().remove(tunnel.id);
+    }
+  }
+
   Widget _buildTunnelTile(TunnelConfig tunnel, bool hasSession) {
     final statusColor = switch (tunnel.status) {
-      TunnelStatus.idle => AppColors.textTertiary,
-      TunnelStatus.starting => AppColors.orange,
-      TunnelStatus.active => AppColors.accent,
-      TunnelStatus.error => AppColors.red,
+      TunnelStatus.idle => YsColors.off,
+      TunnelStatus.starting => YsColors.warn,
+      TunnelStatus.active => YsColors.ok,
+      TunnelStatus.error => YsColors.error,
     };
 
-    return ListTile(
-      leading: Icon(Icons.cloud_queue, color: statusColor),
-      title: Text(tunnel.label,
-          style: const TextStyle(color: AppColors.textPrimary)),
-      subtitle: tunnel.publicUrl != null
-          ? GestureDetector(
-              onTap: () => launchUrl(Uri.parse(tunnel.publicUrl!)),
-              child: Text(tunnel.publicUrl!,
-                  style: const TextStyle(
-                      color: AppColors.blue, fontSize: 12)),
-            )
-          : tunnel.errorMessage != null
-              ? Text(tunnel.errorMessage!,
-                  style: const TextStyle(
-                      color: AppColors.red, fontSize: 11))
-              : Text('Port: ${tunnel.localPort}',
-                  style: const TextStyle(
-                      color: AppColors.textTertiary, fontSize: 12)),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
+    final Widget subtitle;
+    if (tunnel.publicUrl != null) {
+      subtitle = FTappable(
+        semanticsLabel: tunnel.publicUrl!,
+        onPress: () => launchUrl(Uri.parse(tunnel.publicUrl!)),
+        child: Text(
+          tunnel.publicUrl!,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: YsColors.accentText, fontSize: 12),
+        ),
+      );
+    } else if (tunnel.errorMessage != null) {
+      subtitle = Text(
+        tunnel.errorMessage!,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: YsColors.error, fontSize: 11),
+      );
+    } else {
+      subtitle = Text(
+        'Port: ${tunnel.localPort}',
+        style: const TextStyle(color: YsColors.mutedForeground, fontSize: 12),
+      );
+    }
+
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: YsColors.border)),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: YsSpace.s3,
+        vertical: YsSpace.s2,
+      ),
+      child: Row(
         children: [
+          Icon(FLucideIcons.cloud, color: statusColor),
+          const SizedBox(width: YsSpace.s3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tunnel.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: YsColors.foreground),
+                ),
+                subtitle,
+              ],
+            ),
+          ),
+          const SizedBox(width: YsSpace.s2),
           if (tunnel.publicUrl != null)
-            IconButton(
-              icon: const Icon(Icons.copy,
-                  size: 16, color: AppColors.textSecondary),
-              onPressed: () =>
-                  Clipboard.setData(ClipboardData(text: tunnel.publicUrl!)),
+            ContainerIconAction(
+              icon: FLucideIcons.copy,
               tooltip: 'Copy URL',
+              onPress: () =>
+                  Clipboard.setData(ClipboardData(text: tunnel.publicUrl!)),
             ),
           if (tunnel.status == TunnelStatus.idle ||
               tunnel.status == TunnelStatus.error)
-            IconButton(
-              icon: const Icon(Icons.play_arrow,
-                  size: 16, color: AppColors.accent),
-              onPressed: hasSession ? () => _startTunnel(tunnel) : null,
+            ContainerIconAction(
+              icon: FLucideIcons.play,
               tooltip: 'Start tunnel',
+              active: true,
+              onPress: hasSession ? () => _startTunnel(tunnel) : null,
             ),
           if (tunnel.status == TunnelStatus.active)
-            IconButton(
-              icon: const Icon(Icons.stop, size: 16, color: AppColors.red),
-              onPressed: hasSession ? () => _stopTunnel(tunnel) : null,
+            ContainerIconAction(
+              icon: FLucideIcons.square,
               tooltip: 'Stop tunnel',
+              onPress: hasSession ? () => _stopTunnel(tunnel) : null,
             ),
           if (tunnel.status == TunnelStatus.starting)
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.orange),
+            const Padding(
+              padding: EdgeInsets.all(YsSpace.s2),
+              child: ContainerSpinner(size: 16),
             ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline,
-                size: 16, color: AppColors.textTertiary),
-            onPressed: () async {
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (_) => AlertDialog(
-                  backgroundColor: AppColors.sidebar,
-                  title: const Text('Remove tunnel',
-                      style: TextStyle(color: AppColors.textPrimary)),
-                  content: Text('Remove "${tunnel.label}"?',
-                      style: const TextStyle(
-                          color: AppColors.textSecondary)),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel')),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: TextButton.styleFrom(
-                          foregroundColor: AppColors.red),
-                      child: const Text('Remove'),
-                    ),
-                  ],
-                ),
-              );
-              if (confirmed == true && mounted) {
-                context.read<TunnelProvider>().remove(tunnel.id);
-              }
-            },
+          ContainerIconAction(
+            icon: FLucideIcons.trash2,
             tooltip: 'Remove',
+            onPress: () => _confirmRemove(tunnel),
           ),
         ],
       ),
@@ -267,22 +279,40 @@ class _TunnelPanel extends StatefulWidget {
 class _TunnelPanelState extends State<_TunnelPanel> {
   final _labelCtrl = TextEditingController(text: 'My Service');
   final _portCtrl = TextEditingController(text: '3000');
+  final _portFocus = FocusNode();
 
   @override
   void dispose() {
     _labelCtrl.dispose();
     _portCtrl.dispose();
+    _portFocus.dispose();
     super.dispose();
   }
 
+  String? _labelError;
+  String? _portError;
+
   void _submit() {
     final label = _labelCtrl.text.trim();
-    final port = int.tryParse(_portCtrl.text) ?? 3000;
-    if (label.isEmpty) return;
+    final portText = _portCtrl.text.trim();
+    // An empty port keeps the documented 3000 default; anything else must be
+    // a valid port.
+    final port = portText.isEmpty ? 3000 : int.tryParse(portText);
+    final labelError = label.isEmpty ? 'Required' : null;
+    final portError = (port == null || port < 1 || port > 65535)
+        ? 'Invalid (1–65535)'
+        : null;
+    if (labelError != null || portError != null) {
+      setState(() {
+        _labelError = labelError;
+        _portError = portError;
+      });
+      return;
+    }
     widget.onSave(TunnelConfig(
       label: label,
       type: TunnelType.cloudflare,
-      localPort: port,
+      localPort: port!,
     ));
   }
 
@@ -291,104 +321,77 @@ class _TunnelPanelState extends State<_TunnelPanel> {
     return Container(
       width: 340,
       decoration: const BoxDecoration(
-        color: AppColors.sidebar,
-        border: Border(left: BorderSide(color: AppColors.border)),
+        color: YsColors.sidebar,
+        border: Border(left: BorderSide(color: YsColors.border)),
       ),
       child: Column(
         children: [
-          _buildHeader(),
+          Container(
+            height: 52,
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: YsColors.border)),
+            ),
+            padding: const EdgeInsets.only(left: YsSpace.s4, right: YsSpace.s2),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'New Cloudflare Tunnel',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: YsColors.foreground,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                ContainerIconAction(
+                  icon: FLucideIcons.x,
+                  tooltip: 'Close',
+                  onPress: widget.onClose,
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              padding: const EdgeInsets.fromLTRB(
+                YsSpace.s4,
+                YsSpace.s4,
+                YsSpace.s4,
+                YsSpace.s5,
+              ),
               children: [
-                _field(_labelCtrl, 'Label', autofocus: true),
-                const SizedBox(height: 12),
-                _field(_portCtrl, 'Local Port',
-                    keyboardType: TextInputType.number),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: _submit,
-                    style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.accent,
-                        foregroundColor: Colors.black),
-                    child: const Text('Add Tunnel',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
-                  ),
+                DevopsTextField(
+                  key: const ValueKey('tunnel-label'),
+                  controller: _labelCtrl,
+                  label: 'Label',
+                  autofocus: true,
+                  errorText: _labelError,
+                  textInputAction: TextInputAction.next,
+                  onSubmit: _portFocus.requestFocus,
+                ),
+                const SizedBox(height: YsSpace.s3),
+                DevopsTextField(
+                  key: const ValueKey('tunnel-port'),
+                  controller: _portCtrl,
+                  label: 'Local Port',
+                  number: true,
+                  focusNode: _portFocus,
+                  errorText: _portError,
+                  onSubmit: _submit,
+                ),
+                const SizedBox(height: YsSpace.s5),
+                FButton(
+                  key: const ValueKey('tunnel-add'),
+                  onPress: _submit,
+                  child: const Text('Add Tunnel'),
                 ),
               ],
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      height: 52,
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Text('New Cloudflare Tunnel',
-                style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600)),
-          ),
-          GestureDetector(
-            onTap: widget.onClose,
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Icon(Icons.close,
-                  size: 14, color: AppColors.textSecondary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _field(
-    TextEditingController ctrl,
-    String label, {
-    bool autofocus = false,
-    TextInputType? keyboardType,
-  }) {
-    return TextField(
-      controller: ctrl,
-      autofocus: autofocus,
-      keyboardType: keyboardType,
-      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle:
-            const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-        filled: true,
-        fillColor: AppColors.card,
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: AppColors.border)),
-        enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: AppColors.border)),
-        focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: AppColors.accent)),
-        isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),
     );
   }

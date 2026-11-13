@@ -433,7 +433,8 @@ class BufferLine with IndexedItem {
   }
 
   void dispose() {
-    for (final anchor in _anchors) {
+    // Anchor.dispose removes itself from _anchors, so walk a copy.
+    for (final anchor in List.of(_anchors)) {
       anchor.dispose();
     }
   }

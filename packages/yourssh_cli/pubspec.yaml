@@ -1,0 +1,17 @@
+name: yourssh_cli
+description: Wire protocol, endpoint paths and token file shared by the YourSSH app and the yourssh CLI. Pure Dart.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  args: ^2.5.0
+  # Same constraint as app/pubspec.yaml: Utf16 strings, calloc and Arena for
+  # the Windows named-pipe bindings (lib/src/win_pipe.dart).
+  ffi: ^2.1.3
+  path: ^1.9.0
+
+dev_dependencies:
+  test: ^1.25.0

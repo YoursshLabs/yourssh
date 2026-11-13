@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/shell_integration_provider.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// One paintable marker: an absolute buffer line + its success state.
 typedef _Dot = ({int line, bool? ok});
@@ -11,11 +12,8 @@ typedef _Dot = ({int line, bool? ok});
 /// pixel height, matching the scroll-offset unit). Repaints when the command
 /// set or any status changes, and as the view scrolls.
 ///
-/// Known limitation: [promptLine] is an absolute buffer index captured at
-/// marker time. After the terminal's scrollback cap (maxLines) starts trimming
-/// old lines, those indices drift relative to the rendered content, so dots for
-/// very old commands in a >maxLines session may sit a few rows off. Off-screen
-/// dots are culled, so the impact is bounded.
+/// Marker lines come from buffer anchors, so they follow their lines through
+/// scrollback trimming and disappear when the line is erased (clear).
 class CommandGutter extends StatelessWidget {
   const CommandGutter({
     super.key,
@@ -37,20 +35,21 @@ class CommandGutter extends StatelessWidget {
     // Rebuild only when THIS session changes: the provider notifies globally,
     // select scopes us to our own session's revision.
     context.select<ShellIntegrationProvider, int>((p) => p.revisionFor(sessionId));
-    final commands =
-        context.read<ShellIntegrationProvider>().maybeStateFor(sessionId)?.commands;
-    if (commands == null || commands.isEmpty) return const SizedBox.shrink();
-    // Snapshot to immutable records each build. The provider mutates the same
-    // List/ShellCommand instances in place, so the painter must compare against
-    // a fresh snapshot (not the shared list) to detect status/append changes.
-    final dots = <_Dot>[
-      for (final c in commands) (line: c.promptLine, ok: c.succeeded),
-    ];
+    final state = context.read<ShellIntegrationProvider>().maybeStateFor(sessionId);
+    if (state == null || state.commands.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       width: width,
       child: AnimatedBuilder(
         animation: scrollController,
         builder: (context, _) {
+          // Snapshot to immutable records on every scroll tick: marker lines
+          // are anchored in the terminal buffer, so reading them here keeps
+          // the dots on their rows (and drops those whose line was erased).
+          // The painter compares against a fresh snapshot, not shared state.
+          final dots = <_Dot>[
+            for (final c in state.liveCommands)
+              (line: c.promptLine, ok: c.succeeded),
+          ];
           final offset =
               scrollController.hasClients ? scrollController.offset : 0.0;
           return GestureDetector(
@@ -90,9 +89,9 @@ class _GutterPainter extends CustomPainter {
   final double scrollOffset;
   final double lineHeight;
 
-  static const _green = Color(0xFF22C55E);
-  static const _red = Color(0xFFEF4444);
-  static const _grey = Color(0xFF6B7280);
+  static const _green = YsColors.ok;
+  static const _red = YsColors.error;
+  static const _grey = YsColors.off;
 
   @override
   void paint(Canvas canvas, Size size) {

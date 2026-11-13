@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 import '../models/ai_provider_config.dart';
 import '../models/chat_message.dart';
 import '../providers/ai_chat_provider.dart';
-import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+import 'ys_form_controls.dart';
 
 class AiChatSidebar extends StatefulWidget {
   final VoidCallback onClose;
@@ -48,7 +50,7 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
 
     return Container(
       width: 340,
-      color: AppColors.sidebar,
+      color: YsColors.sidebar,
       child: Column(
         children: [
           _buildHeader(context, provider),
@@ -62,62 +64,75 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
 
   Widget _buildHeader(BuildContext context, AiChatProvider provider) {
     final configured = provider.configuredProviders;
+    final active = configured.contains(provider.activeProvider)
+        ? provider.activeProvider
+        : (configured.isEmpty ? null : configured.first);
     return Container(
       height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s3),
       decoration: const BoxDecoration(
-        color: AppColors.card,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+        color: YsColors.card,
+        border: Border(bottom: BorderSide(color: YsColors.border)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.smart_toy_outlined,
-              size: 16, color: AppColors.accent),
-          const SizedBox(width: 8),
-          const Text('AI Assistant',
-              style: TextStyle(
-                  color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
-          if (configured.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            DropdownButton<AiProvider>(
-              value: configured.contains(provider.activeProvider)
-                  ? provider.activeProvider
-                  : configured.first,
-              style: const TextStyle(
-                  color: AppColors.textSecondary, fontSize: 11),
-              dropdownColor: AppColors.card,
-              underline: const SizedBox(),
-              isDense: true,
-              items: configured
-                  .map((p) => DropdownMenuItem(
-                        value: p,
-                        child: Text(
-                          _providerLabel(p),
-                          style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondary),
-                        ),
-                      ))
-                  .toList(),
-              onChanged: (p) {
-                if (p != null) {
-                  context.read<AiChatProvider>().setActiveProvider(p);
-                }
-              },
+          const Icon(FLucideIcons.bot, size: 16, color: YsColors.primary),
+          const SizedBox(width: YsSpace.s2),
+          // One Expanded group: a bare Flexible title next to a Spacer would
+          // split the free width 50/50 and ellipsize the title needlessly.
+          Expanded(
+            child: Row(
+              children: [
+                const Flexible(
+                  child: Text(
+                    'AI Assistant',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: YsColors.foreground,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (active != null) ...[
+                  const SizedBox(width: YsSpace.s2),
+                  SizedBox(
+                    width: 112,
+                    child: FSelect<AiProvider>.rich(
+                      key: const ValueKey('ai-chat-provider'),
+                      size: .sm,
+                      control: .lifted(
+                        value: active,
+                        onChange: (p) {
+                          if (p != null) {
+                            context.read<AiChatProvider>().setActiveProvider(p);
+                          }
+                        },
+                      ),
+                      format: _providerLabel,
+                      children: [
+                        for (final p in configured)
+                          FSelectItem<AiProvider>(
+                            title: Text(_providerLabel(p)),
+                            value: p,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ],
-          const Spacer(),
+          ),
           if (provider.messages.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.clear_all,
-                  size: 16, color: AppColors.textSecondary),
-              onPressed: provider.clear,
+            SettingsIconButton(
+              icon: FLucideIcons.brushCleaning,
               tooltip: 'Clear chat',
+              onPress: provider.clear,
             ),
-          IconButton(
-            icon: const Icon(Icons.close,
-                size: 16, color: AppColors.textSecondary),
-            onPressed: widget.onClose,
+          SettingsIconButton(
+            icon: FLucideIcons.x,
+            tooltip: 'Close',
+            onPress: widget.onClose,
           ),
         ],
       ),
@@ -125,23 +140,23 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
   }
 
   String _providerLabel(AiProvider p) => switch (p) {
-        AiProvider.anthropic => 'Anthropic',
-        AiProvider.openai => 'OpenAI',
-        AiProvider.gemini => 'Gemini',
-      };
+    AiProvider.anthropic => 'Anthropic',
+    AiProvider.openai => 'OpenAI',
+    AiProvider.gemini => 'Gemini',
+  };
 
   Widget _buildUnconfiguredBanner() {
     return Container(
-      margin: const EdgeInsets.all(12),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.all(YsSpace.s3),
+      padding: const EdgeInsets.all(YsSpace.s3),
       decoration: BoxDecoration(
-        color: AppColors.card,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(8),
+        color: YsColors.card,
+        border: Border.all(color: YsColors.border),
+        borderRadius: BorderRadius.circular(YsRadius.control),
       ),
       child: const Text(
         'Configure API keys in Settings → AI Providers to enable AI assistance.',
-        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        style: TextStyle(color: YsColors.mutedForeground, fontSize: 12),
         textAlign: TextAlign.center,
       ),
     );
@@ -151,10 +166,10 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
     if (provider.messages.isEmpty) {
       return const Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: EdgeInsets.all(YsSpace.s5),
           child: Text(
             'Ask anything about SSH commands, debugging errors, or DevOps tasks.',
-            style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+            style: TextStyle(color: YsColors.mutedForeground, fontSize: 13),
             textAlign: TextAlign.center,
           ),
         ),
@@ -163,120 +178,127 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
 
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(YsSpace.s2),
       itemCount: provider.messages.length,
       itemBuilder: (_, i) => _buildMessage(provider.messages[i]),
     );
   }
 
+  Widget _avatar(IconData icon, Color background, Color foreground) =>
+      Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+        child: Icon(icon, size: 14, color: foreground),
+      );
+
   Widget _buildMessage(ChatMessage msg) {
     final isUser = msg.role == 'user';
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: YsSpace.s1),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
           if (!isUser) ...[
-            const CircleAvatar(
-              radius: 12,
-              backgroundColor: AppColors.accent,
-              child: Icon(Icons.smart_toy_outlined,
-                  size: 14, color: Colors.black),
-            ),
-            const SizedBox(width: 8),
+            _avatar(FLucideIcons.bot, YsColors.primary, YsColors.primaryForeground),
+            const SizedBox(width: YsSpace.s2),
           ],
           Flexible(
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(
+                horizontal: YsSpace.s3,
+                vertical: YsSpace.s2,
+              ),
               decoration: BoxDecoration(
                 color: isUser
-                    ? AppColors.accent.withValues(alpha: 0.15)
-                    : AppColors.card,
-                border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(8),
+                    ? YsColors.primary.withValues(alpha: 0.15)
+                    : YsColors.card,
+                border: Border.all(color: YsColors.border),
+                borderRadius: BorderRadius.circular(YsRadius.control),
               ),
               child: msg.isStreaming
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.accent),
-                    )
+                  ? const FCircularProgress(size: .sm)
                   : MarkdownBody(
                       data: msg.content,
                       styleSheet: MarkdownStyleSheet(
                         p: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 13,
-                            height: 1.5),
+                          color: YsColors.foreground,
+                          fontSize: 13,
+                          height: 1.5,
+                        ),
                         code: const TextStyle(
-                          color: AppColors.accent,
-                          fontFamily: 'monospace',
+                          color: YsColors.accentText,
+                          fontFamily: kYsMonoFontFamily,
+                          fontFamilyFallback: kYsMonoFontFallback,
                           fontSize: 12,
-                          backgroundColor: AppColors.bg,
+                          backgroundColor: YsColors.background,
                         ),
                         codeblockDecoration: BoxDecoration(
-                          color: AppColors.bg,
-                          border: Border.all(color: AppColors.border),
-                          borderRadius: BorderRadius.circular(4),
+                          color: YsColors.background,
+                          border: Border.all(color: YsColors.border),
+                          borderRadius: BorderRadius.circular(YsRadius.control),
                         ),
                       ),
                     ),
             ),
           ),
           if (isUser) ...[
-            const SizedBox(width: 8),
-            const CircleAvatar(
-              radius: 12,
-              backgroundColor: AppColors.card,
-              child: Icon(Icons.person,
-                  size: 14, color: AppColors.textSecondary),
-            ),
+            const SizedBox(width: YsSpace.s2),
+            _avatar(FLucideIcons.user, YsColors.card, YsColors.mutedForeground),
           ],
         ],
       ),
     );
   }
 
+  KeyEventResult _onInputKey(KeyEvent event, bool canSend) {
+    if (event.logicalKey != LogicalKeyboardKey.enter &&
+        event.logicalKey != LogicalKeyboardKey.numpadEnter) {
+      return KeyEventResult.ignored;
+    }
+    // Shift+Enter keeps the default newline; IME composition owns Enter.
+    if (HardwareKeyboard.instance.isShiftPressed ||
+        _controller.value.composing.isValid) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent && canSend) _send();
+    return KeyEventResult.handled;
+  }
+
   Widget _buildInput(AiChatProvider provider) {
+    final canSend = provider.configured && !provider.loading;
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(YsSpace.s2),
       decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.border)),
+        border: Border(top: BorderSide(color: YsColors.border)),
       ),
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              controller: _controller,
-              style: const TextStyle(
-                  color: AppColors.textPrimary, fontSize: 13),
-              maxLines: 3,
-              minLines: 1,
-              decoration: const InputDecoration(
-                hintText: 'Ask a command question…',
-                hintStyle: TextStyle(color: AppColors.textTertiary),
-                filled: true,
-                fillColor: AppColors.card,
-                border: OutlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.border)),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            // Enter sends, Shift+Enter inserts a newline. The Focus sits above
+            // the text field so it sees key events bubbling up from it.
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: (_, event) => _onInputKey(event, canSend),
+              child: FTextField(
+                key: const ValueKey('ai-chat-input'),
+                control: .managed(controller: _controller),
+                maxLines: 3,
+                minLines: 1,
+                hint: 'Ask a command question…',
+                onSubmit: (_) => canSend ? _send() : null,
               ),
-              onSubmitted: (_) =>
-                  provider.configured && !provider.loading
-                      ? _send()
-                      : null,
             ),
           ),
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: provider.configured && !provider.loading ? _send : null,
-            icon: const Icon(Icons.send, size: 18, color: AppColors.accent),
+          const SizedBox(width: YsSpace.s2),
+          SettingsIconButton(
+            icon: FLucideIcons.send,
             tooltip: 'Send',
+            onPress: canSend ? _send : null,
           ),
         ],
       ),

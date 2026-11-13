@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import '../utils/safe_set_state.dart';
 import '../services/workspace_service.dart';
 import '../models/host.dart';
-import '../models/known_host.dart';
 import '../models/local_session.dart';
 import '../models/ssh_session.dart';
 import '../models/terminal_session.dart';
@@ -13,15 +13,18 @@ import '../providers/host_provider.dart';
 import '../providers/known_hosts_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/recording_provider.dart';
-import '../main.dart' show kAppVersion;
 import '../theme/app_theme.dart';
+import 'shell/app_sidebar.dart';
+import 'shell/session_tab_bar.dart';
+import '../widgets/plugin_status_bar_item.dart';
 import '../widgets/host_detail_panel.dart';
 import '../widgets/hosts_dashboard.dart';
 import '../widgets/keychain_screen.dart';
+import '../widgets/rdp_password_dialog.dart';
 import '../widgets/known_hosts_screen.dart';
 import '../widgets/port_forwarding_screen.dart';
 import '../widgets/settings_screen.dart';
-import '../widgets/network_stats_overlay.dart';
+import '../widgets/terminal_header_actions.dart';
 import '../widgets/dual_panel_sftp_screen.dart';
 import '../widgets/keep_alive_offstage.dart';
 import '../widgets/split_terminal_view.dart';
@@ -30,6 +33,7 @@ import '../widgets/import_panel.dart';
 import '../widgets/ai_chat_sidebar.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/plugin_consent_dialog.dart';
+import '../widgets/tofu_dialogs.dart';
 import '../widgets/plugin_manager_screen.dart';
 import '../widgets/audit_screen.dart';
 import '../widgets/recording_library_screen.dart';
@@ -45,19 +49,17 @@ import '../services/hotkey_service.dart';
 import 'package:yourssh_script_engine/yourssh_script_engine.dart';
 import '../widgets/script_plugin_panel_screen.dart';
 import '../providers/share_provider.dart';
-import '../widgets/share_session_dialog.dart';
 import '../widgets/join_share_dialog.dart';
 import '../widgets/update_banner.dart';
-import '../widgets/notification_bell.dart';
-import '../widgets/session_tab.dart';
 import '../models/rdp_session.dart';
 import '../widgets/rdp_workspace.dart';
 import '../models/vnc_session.dart';
 import '../widgets/vnc_workspace.dart';
 import '../services/storage_service.dart';
 import '../widgets/network_discovery_sheet.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
-enum NavSection { hosts, keychain, portForwarding, sftp, knownHosts, recordings, audit, settings, plugins }
+export 'shell/app_sidebar.dart' show NavSection;
 
 enum _SidePanel { none, host, newGroup, import }
 
@@ -78,6 +80,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   _SidePanel _sidePanel = _SidePanel.none;
   final Map<String, PluginContextImpl> _pluginContexts = {};
   Host? _editingHost;
+  int _panelSerial = 0;
   String? _initialGroup;
   bool _viewingTerminal = false;
   bool _showAiChat = false;
@@ -188,9 +191,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _onSftpConnectionChanged() {
-    if (mounted) setState(() {});
-  }
+  // Fired by DualPanelSftpScreen's initState/dispose too (e.g. when RDP
+  // fullscreen swaps the tree), i.e. while the framework is locked.
+  void _onSftpConnectionChanged() => setStateSafely();
 
   @override
   void didChangeDependencies() {
@@ -239,10 +242,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         !_hostKeyDialogShowing &&
         mounted) {
       _hostKeyDialogShowing = true;
-      showDialog<bool>(
-        context: context,
+      showYsDialog<bool>(
+        context,
         barrierDismissible: false,
-        builder: (_) => _HostKeyDialog(challenge: challenge),
+        builder: (_) => HostKeyDialog(challenge: challenge),
       ).then((trusted) {
         challenge.resolve(trusted ?? false);
         _hostKeyDialogShowing = false;
@@ -258,10 +261,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         !_rdpCertDialogShowing &&
         mounted) {
       _rdpCertDialogShowing = true;
-      showDialog<bool>(
-        context: context,
+      showYsDialog<bool>(
+        context,
         barrierDismissible: false,
-        builder: (_) => _RdpCertDialog(challenge: rdpChallenge),
+        builder: (_) => RdpCertDialog(challenge: rdpChallenge),
       ).then((trusted) {
         rdpChallenge.resolve(trusted ?? false);
         _rdpCertDialogShowing = false;
@@ -341,6 +344,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   void _openHostPanel({Host? existing, String? initialGroup}) {
     setState(() {
       _sidePanel = _SidePanel.host;
+      _panelSerial++;
       _editingHost = existing;
       _initialGroup = initialGroup;
     });
@@ -436,7 +440,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         id: 'action_new_host',
         title: 'New Host',
         subtitle: 'Add a new SSH connection',
-        icon: Icons.add_circle_outline,
+        icon: FLucideIcons.circlePlus,
         type: CommandType.action,
         execute: () => WidgetsBinding.instance.addPostFrameCallback((_) => _openHostPanel()),
       ),
@@ -444,7 +448,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         id: 'action_import',
         title: 'Import SSH Config',
         subtitle: 'Import from ~/.ssh/config',
-        icon: Icons.upload_file_outlined,
+        icon: FLucideIcons.fileUp,
         type: CommandType.action,
         execute: () => WidgetsBinding.instance.addPostFrameCallback((_) => _openImportPanel()),
       ),
@@ -453,10 +457,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           id: 'action_join_share',
           title: 'Join Shared Session',
           subtitle: 'Watch a colleague\'s terminal using a share code',
-          icon: Icons.screen_share_outlined,
+          icon: FLucideIcons.screenShare,
           type: CommandType.action,
           execute: () => WidgetsBinding.instance.addPostFrameCallback(
-            (_) => showDialog(context: context, builder: (_) => const JoinShareDialog()),
+            (_) => showYsDialog(context, builder: (_) => const JoinShareDialog()),
           ),
         ),
       // Nav sections
@@ -464,7 +468,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         id: 'nav_hosts',
         title: 'Hosts',
         subtitle: 'Manage SSH connections',
-        icon: Icons.dns_outlined,
+        icon: FLucideIcons.server,
         type: CommandType.navSection,
         execute: () => setState(() { _nav = NavSection.hosts; _viewingTerminal = false; }),
       ),
@@ -472,7 +476,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         id: 'nav_sftp',
         title: 'SFTP',
         subtitle: 'File transfer',
-        icon: Icons.folder_open,
+        icon: FLucideIcons.folderOpen,
         type: CommandType.navSection,
         execute: () => setState(() { _nav = NavSection.sftp; _viewingTerminal = false; }),
       ),
@@ -480,7 +484,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         id: 'nav_keychain',
         title: 'Keychain',
         subtitle: 'SSH keys',
-        icon: Icons.vpn_key_outlined,
+        icon: FLucideIcons.keyRound,
         type: CommandType.navSection,
         execute: () => setState(() { _nav = NavSection.keychain; _viewingTerminal = false; }),
       ),
@@ -488,7 +492,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         id: 'nav_port_forwarding',
         title: 'Port Forwarding',
         subtitle: 'Tunnel rules',
-        icon: Icons.swap_horiz,
+        icon: FLucideIcons.arrowLeftRight,
         type: CommandType.navSection,
         execute: () => setState(() { _nav = NavSection.portForwarding; _viewingTerminal = false; }),
       ),
@@ -496,7 +500,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         id: 'nav_local_terminal',
         title: 'Local Terminal',
         subtitle: 'Local shell',
-        icon: Icons.laptop_mac,
+        icon: FLucideIcons.laptop,
         type: CommandType.navSection,
         execute: _openLocalTerminal,
       ),
@@ -504,7 +508,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         id: 'nav_recordings',
         title: 'Recordings',
         subtitle: 'Session recordings',
-        icon: Icons.video_library_outlined,
+        icon: FLucideIcons.clapperboard,
         type: CommandType.navSection,
         execute: () => setState(() { _nav = NavSection.recordings; _viewingTerminal = false; }),
       ),
@@ -512,7 +516,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         id: 'nav_known_hosts',
         title: 'Known Hosts',
         subtitle: 'Host key verification',
-        icon: Icons.fact_check_outlined,
+        icon: FLucideIcons.listChecks,
         type: CommandType.navSection,
         execute: () => setState(() { _nav = NavSection.knownHosts; _viewingTerminal = false; }),
       ),
@@ -520,7 +524,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         id: 'nav_settings',
         title: 'Settings',
         subtitle: 'App preferences',
-        icon: Icons.settings_outlined,
+        icon: FLucideIcons.settings,
         type: CommandType.navSection,
         execute: () => setState(() { _nav = NavSection.settings; _viewingTerminal = false; }),
       ),
@@ -528,7 +532,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         id: 'nav_plugins',
         title: 'Plugins',
         subtitle: 'Plugin marketplace',
-        icon: Icons.extension_outlined,
+        icon: FLucideIcons.puzzle,
         type: CommandType.navSection,
         execute: () => setState(() { _nav = NavSection.plugins; _viewingTerminal = false; }),
       ),
@@ -537,7 +541,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         id: 'host_${h.id}',
         title: h.label,
         subtitle: '${h.username}@${h.host}:${h.port}',
-        icon: Icons.dns,
+        icon: FLucideIcons.server,
         type: CommandType.host,
         execute: () async {
           setState(() => _viewingTerminal = true);
@@ -546,11 +550,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       )),
     ];
 
-    showDialog(
-      context: context,
-      barrierColor: Colors.black54,
-      builder: (_) => CommandPaletteDialog(items: items),
-    );
+    showYsDialog(context, builder: (_) => CommandPaletteDialog(items: items));
   }
 
   PluginContextImpl _pluginContext(String pluginId) {
@@ -628,8 +628,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _consentDialogShowing = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        showDialog(
-          context: context,
+        showYsDialog(
+          context,
           barrierDismissible: false,
           builder: (_) =>
               PluginConsentDialog(manifest: engineProvider.pendingConsent!),
@@ -641,7 +641,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       backgroundColor: AppColors.bg,
       body: Column(
         children: [
-          _TopTabBar(
+          SessionTabBar(
             sessions: sessions,
             active: activeSession,
             nav: _nav,
@@ -687,7 +687,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               children: [
                 if ((!_viewingTerminal || sessions.isEmpty) &&
                     !(_nav == NavSection.sftp && _sftpConnectionNotifier.value))
-                  _Sidebar(
+                  AppSidebar(
                     selected: _nav,
                     activePluginId: _activePluginId,
                     onOpenLocalTerminal: _openLocalTerminal,
@@ -722,6 +722,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 if (_nav == NavSection.hosts && !_viewingTerminal) ...[
                   if (_sidePanel == _SidePanel.host)
                     HostDetailPanel(
+                      key: hostEditorKey(_editingHost, _panelSerial),
                       existing: _editingHost,
                       initialGroup: _initialGroup,
                       onClose: _closePanel,
@@ -732,10 +733,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                         } else {
                           await hp.addHost(host, password: password);
                         }
-                      },
-                      onConnect: (host) async {
-                        setState(() => _viewingTerminal = true);
-                        await context.read<SessionProvider>().connectAny(host);
                       },
                     ),
                   if (_sidePanel == _SidePanel.newGroup)
@@ -755,22 +752,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 child: Row(
                   children: [
                     for (final item in registry.statusBarItems)
-                      Tooltip(
-                        message: item.tooltip ?? '',
-                        child: InkWell(
-                          onTap: item.onClick,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            child: Text(
-                              item.label,
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                      PluginStatusBarItem(item: item),
                   ],
                 ),
               );
@@ -830,37 +812,19 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       return Row(
         children: [
           Expanded(
-            child: Stack(
-              children: [
-                SplitTerminalView(
-                  onNavigateToSettings: () => setState(() {
-                    _nav = NavSection.settings;
-                    _viewingTerminal = false;
-                  }),
-                ),
-                Positioned(
-                  top: 8,
-                  right: showAiChat ? 348 : 8,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const NetworkStatsOverlay(),
-                      if (active is SshSession) ...[
-                        const SizedBox(width: 8),
-                        _ShareButton(session: active),
-                      ],
-                      if (aiConfigured) ...[
-                        const SizedBox(width: 8),
-                        _AiChatToggle(
-                          active: showAiChat,
-                          onToggle: () =>
-                              setState(() => _showAiChat = !_showAiChat),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
+            child: SplitTerminalView(
+              onNavigateToSettings: () => setState(() {
+                _nav = NavSection.settings;
+                _viewingTerminal = false;
+              }),
+              // In the workspace header, not floated over it: a floating row
+              // covered the header's right-aligned layout/panel buttons.
+              toolbarTrailing: TerminalHeaderActions(
+                active: active,
+                aiConfigured: aiConfigured,
+                aiOpen: showAiChat,
+                onToggleAi: () => setState(() => _showAiChat = !_showAiChat),
+              ),
             ),
           ),
           if (showAiChat)
@@ -937,9 +901,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Future<void> _retryRdp(RdpSession old) async {
     final provider = context.read<SessionProvider>();
     if (old.status == RdpSessionStatus.error) {
-      final newPassword = await showDialog<String>(
-        context: context,
-        builder: (_) => _RdpPasswordDialog(host: old.host),
+      final newPassword = await showYsDialog<String>(
+        context,
+        builder: (_) => RdpPasswordDialog(host: old.host),
       );
       if (newPassword == null) return; // cancelled
       if (!mounted) return;
@@ -955,698 +919,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 }
 
-// ── Sidebar ───────────────────────────────────────────────
-
-class _Sidebar extends StatelessWidget {
-  final NavSection selected;
-  final String? activePluginId;
-  final String? activeScriptPanel;
-  final ValueChanged<NavSection> onSelect;
-  final ValueChanged<String> onSelectPlugin;
-  final ValueChanged<String> onSelectScriptPanel;
-  final VoidCallback onOpenLocalTerminal;
-  const _Sidebar({
-    required this.selected,
-    required this.activePluginId,
-    required this.activeScriptPanel,
-    required this.onSelect,
-    required this.onSelectPlugin,
-    required this.onSelectScriptPanel,
-    required this.onOpenLocalTerminal,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 200,
-      color: AppColors.sidebar,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-            child: Row(
-              children: [
-                const Icon(Icons.terminal, color: AppColors.textSecondary, size: 16),
-                const SizedBox(width: 8),
-                const Text('YourSSH',
-                    style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.border),
-          const SizedBox(height: 8),
-
-          // Scrollable nav area so the sidebar never overflows when the
-          // window is short or many plugin/script panels are enabled.
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-          const _SectionLabel('CONNECTIONS'),
-          _navItem(Icons.dns_outlined, 'Hosts', NavSection.hosts),
-          _navItem(Icons.swap_horiz, 'Port Forwarding', NavSection.portForwarding),
-          _navItem(Icons.fact_check_outlined, 'Known Hosts', NavSection.knownHosts),
-
-          const _SectionLabel('FILES & TRANSFER'),
-          _navItem(Icons.folder_open, 'SFTP', NavSection.sftp),
-
-          const _SectionLabel('TOOLS'),
-          // Action, not a nav target: local terminal lives in the top tab bar.
-          _NavItem(
-            icon: Icons.laptop_mac,
-            label: 'Local Terminal',
-            selected: false,
-            onTap: onOpenLocalTerminal,
-          ),
-          _navItem(Icons.video_library_outlined, 'Recordings', NavSection.recordings),
-          _navItem(Icons.receipt_long_outlined, 'Audit Log', NavSection.audit),
-          ...context.watch<PluginProvider>().enabledPlugins.map(
-            (plugin) => _pluginNavItem(context, plugin),
-          ),
-          ...context.watch<PluginUiRegistry>().panels.map(
-            (panel) => _ScriptPanelNavItem(
-              panel: panel,
-              isActive: activeScriptPanel == panel.pluginId,
-              onTap: () => onSelectScriptPanel(panel.pluginId),
-            ),
-          ),
-
-          const _SectionLabel('SECURITY'),
-          _navItem(Icons.vpn_key_outlined, 'Keychain', NavSection.keychain),
-
-                ],
-              ),
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.border),
-          _navItem(Icons.extension_outlined, 'Plugins', NavSection.plugins),
-          _navItem(Icons.settings_outlined, 'Settings', NavSection.settings),
-          const SizedBox(height: 8),
-
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.asset(
-                    'assets/app_icon.png',
-                    width: 28,
-                    height: 28,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('YourSSH', style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w500)),
-                    Text('v$kAppVersion', style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-
-  Widget _navItem(IconData icon, String label, NavSection section) {
-    final isSelected = activePluginId == null && selected == section;
-    return _NavItem(icon: icon, label: label, selected: isSelected, onTap: () => onSelect(section));
-  }
-
-  Widget _pluginNavItem(BuildContext context, YourSSHPlugin plugin) {
-    return _PluginNavItem(
-      plugin: plugin,
-      isActive: activePluginId == plugin.id,
-      onTap: () => onSelectPlugin(plugin.id),
-    );
-  }
-}
-
-class _PluginNavItem extends StatefulWidget {
-  final YourSSHPlugin plugin;
-  final bool isActive;
-  final VoidCallback onTap;
-  const _PluginNavItem({required this.plugin, required this.isActive, required this.onTap});
-
-  @override
-  State<_PluginNavItem> createState() => _PluginNavItemState();
-}
-
-class _PluginNavItemState extends State<_PluginNavItem> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = widget.isActive
-        ? AppColors.accent.withValues(alpha: 0.12)
-        : _hovered
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.transparent;
-    final iconColor = widget.isActive ? AppColors.accent : AppColors.textSecondary;
-    final textColor = widget.isActive ? AppColors.accent : AppColors.textSecondary;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(6),
-            border: widget.isActive ? Border.all(color: AppColors.accent.withValues(alpha: 0.2)) : null,
-          ),
-          child: Row(
-            children: [
-              Icon(widget.plugin.icon, size: 15, color: iconColor),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  widget.plugin.name,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 13,
-                    fontWeight: widget.isActive ? FontWeight.w500 : FontWeight.normal,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ScriptPanelNavItem extends StatelessWidget {
-  final PluginPanelEntry panel;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _ScriptPanelNavItem({
-    required this.panel,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _NavItem(
-      icon: Icons.code_outlined,
-      label: panel.title,
-      selected: isActive,
-      onTap: onTap,
-    );
-  }
-}
-
-class _NavItem extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _NavItem({required this.icon, required this.label, required this.selected, required this.onTap});
-
-  @override
-  State<_NavItem> createState() => _NavItemState();
-}
-
-class _NavItemState extends State<_NavItem> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = widget.selected
-        ? AppColors.accent.withValues(alpha: 0.12)
-        : _hovered
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.transparent;
-    final iconColor = widget.selected ? AppColors.accent : AppColors.textSecondary;
-    final textColor = widget.selected ? AppColors.accent : AppColors.textSecondary;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(6),
-            border: widget.selected ? Border.all(color: AppColors.accent.withValues(alpha: 0.2)) : null,
-          ),
-          child: Row(
-            children: [
-              Icon(widget.icon, size: 15, color: iconColor),
-              const SizedBox(width: 10),
-              Text(widget.label, style: TextStyle(color: textColor, fontSize: 13, fontWeight: widget.selected ? FontWeight.w500 : FontWeight.normal)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Top Tab Bar ───────────────────────────────────────────
-
-class _TopTabBar extends StatelessWidget {
-  final List<AppSession> sessions;
-  final AppSession? active;
-  final NavSection nav;
-  final bool viewingTerminal;
-  final ValueChanged<NavSection> onNavSelect;
-  final ValueChanged<String> onSessionTap;
-  final VoidCallback onAddSession;
-  final void Function({ShellProfile? profile, bool platformDefault})
-      onAddLocalSession;
-  final VoidCallback onShowUpdateDetails;
-  final ValueChanged<String> onOpenSession;
-
-  const _TopTabBar({
-    required this.sessions,
-    required this.active,
-    required this.nav,
-    required this.viewingTerminal,
-    required this.onNavSelect,
-    required this.onSessionTap,
-    required this.onAddSession,
-    required this.onAddLocalSession,
-    required this.onShowUpdateDetails,
-    required this.onOpenSession,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final provider = context.read<SessionProvider>();
-    return Container(
-      height: 38,
-      decoration: const BoxDecoration(
-        color: Color(0xFF0D0D0D),
-        border: Border(bottom: BorderSide(color: Color(0xFF1E1E1E))),
-      ),
-      child: Row(
-        children: [
-          // Pinned nav shortcuts
-          _PinnedTab(
-            icon: Icons.home_outlined,
-            label: 'Home',
-            active: nav == NavSection.hosts && !viewingTerminal,
-            onTap: () => onNavSelect(NavSection.hosts),
-          ),
-          _PinnedTab(
-            icon: Icons.folder_outlined,
-            label: 'SFTP',
-            active: nav == NavSection.sftp && !viewingTerminal,
-            onTap: () => onNavSelect(NavSection.sftp),
-          ),
-          // Divider
-          Container(width: 1, height: 18, color: const Color(0xFF2A2A2A)),
-          const SizedBox(width: 4),
-          // Session tabs (scrollable, drag-reorderable)
-          Expanded(
-            child: ReorderableListView.builder(
-              scrollDirection: Axis.horizontal,
-              buildDefaultDragHandles: false,
-              itemCount: sessions.length,
-              onReorderItem: provider.reorderSessionItem,
-              itemBuilder: (context, index) {
-                final s = sessions[index];
-                return ReorderableDragStartListener(
-                  key: ValueKey(s.id),
-                  index: index,
-                  child: SessionTab(
-                    session: s,
-                    isActive: s.id == active?.id && viewingTerminal,
-                    provider: provider,
-                    onTap: () => onSessionTap(s.id),
-                  ),
-                );
-              },
-            ),
-          ),
-          // "+" button
-          _AddTabBtn(onNewSsh: onAddSession, onNewLocal: onAddLocalSession),
-          NotificationBellBtn(
-            onShowUpdateDetails: onShowUpdateDetails,
-            onOpenSession: onOpenSession,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PinnedTab extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  const _PinnedTab({required this.icon, required this.label, required this.active, required this.onTap});
-
-  @override
-  State<_PinnedTab> createState() => _PinnedTabState();
-}
-
-class _PinnedTabState extends State<_PinnedTab> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = widget.active
-        ? AppColors.accent
-        : _hovered
-            ? const Color(0xFFAAAAAA)
-            : const Color(0xFF666666);
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            border: widget.active
-                ? const Border(bottom: BorderSide(color: AppColors.accent, width: 2))
-                : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(widget.icon, size: 13, color: color),
-              const SizedBox(width: 6),
-              Text(
-                widget.label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 12,
-                  fontWeight: widget.active ? FontWeight.w500 : FontWeight.normal,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AddTabBtn extends StatefulWidget {
-  final VoidCallback onNewSsh;
-  final void Function({ShellProfile? profile, bool platformDefault})
-      onNewLocal;
-  const _AddTabBtn({required this.onNewSsh, required this.onNewLocal});
-
-  @override
-  State<_AddTabBtn> createState() => _AddTabBtnState();
-}
-
-class _AddTabBtnState extends State<_AddTabBtn> {
-  bool _hovered = false;
-
-  Future<void> _showAddMenu() async {
-    // Same set as the Settings dropdown: platform default + detected + custom.
-    final profiles = context.read<SettingsProvider>().allShellProfiles;
-    final box = context.findRenderObject() as RenderBox;
-    final origin = box.localToGlobal(Offset(0, box.size.height));
-    final result = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-          origin.dx, origin.dy, origin.dx + 1, origin.dy + 1),
-      color: const Color(0xFF1E1E1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-      items: [
-        const PopupMenuItem(
-          value: 'ssh',
-          child: Row(children: [
-            Icon(Icons.dns_outlined, size: 14, color: Color(0xFFAAAAAA)),
-            SizedBox(width: 8),
-            Text('New SSH session',
-                style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
-          ]),
-        ),
-        const PopupMenuItem(
-          value: 'local',
-          child: Row(children: [
-            Icon(Icons.laptop_mac, size: 14, color: Color(0xFFAAAAAA)),
-            SizedBox(width: 8),
-            Text('New local terminal',
-                style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
-          ]),
-        ),
-        if (profiles.isNotEmpty) const PopupMenuDivider(height: 4),
-        if (profiles.isNotEmpty)
-          const PopupMenuItem(
-            value: 'shell:$kPlatformDefaultShellId',
-            child: Row(children: [
-              Icon(Icons.terminal, size: 14, color: Color(0xFFAAAAAA)),
-              SizedBox(width: 8),
-              Text('Platform default shell',
-                  style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
-            ]),
-          ),
-        for (final s in profiles)
-          PopupMenuItem(
-            value: 'shell:${s.id}',
-            child: Row(children: [
-              const Icon(Icons.terminal, size: 14, color: Color(0xFFAAAAAA)),
-              const SizedBox(width: 8),
-              Text(s.name,
-                  style: const TextStyle(
-                      color: Color(0xFFCCCCCC), fontSize: 13)),
-            ]),
-          ),
-      ],
-    );
-    if (result == null) return;
-    if (result == 'ssh') {
-      widget.onNewSsh();
-    } else if (result == 'local') {
-      widget.onNewLocal();
-    } else if (result == 'shell:$kPlatformDefaultShellId') {
-      widget.onNewLocal(platformDefault: true);
-    } else if (result.startsWith('shell:')) {
-      final id = result.substring('shell:'.length);
-      widget.onNewLocal(profile: profiles.firstWhere((s) => s.id == id));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: _showAddMenu,
-        child: Container(
-          width: 36,
-          height: 38,
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.add,
-            size: 16,
-            color: _hovered ? const Color(0xFFAAAAAA) : const Color(0xFF555555),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ── AI Chat Toggle Button ─────────────────────────────────
-
-class _AiChatToggle extends StatelessWidget {
-  final bool active;
-  final VoidCallback onToggle;
-
-  const _AiChatToggle({required this.active, required this.onToggle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: active ? 'Close AI Chat' : 'Open AI Chat',
-      child: GestureDetector(
-        onTap: onToggle,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: active
-                ? AppColors.accent.withValues(alpha: 0.15)
-                : AppColors.card.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: active ? AppColors.accent : AppColors.border,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.smart_toy_outlined,
-                size: 14,
-                color: active ? AppColors.accent : AppColors.textSecondary,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                'AI',
-                style: TextStyle(
-                  color: active ? AppColors.accent : AppColors.textSecondary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Host Key Mismatch Dialog ──────────────────────────────
-
-/// Shared chrome for TOFU trust prompts (SSH host key, RDP certificate) —
-/// one dialog skeleton so the two security prompts can't visually diverge.
-class _TofuDialog extends StatelessWidget {
-  final IconData icon;
-  final Color accentColor;
-  final String title;
-  final String endpoint;
-  final List<Widget> fingerprintRows;
-  final String warning;
-  final String cancelLabel;
-  final String acceptLabel;
-
-  const _TofuDialog({
-    required this.icon,
-    required this.accentColor,
-    required this.title,
-    required this.endpoint,
-    required this.fingerprintRows,
-    required this.warning,
-    required this.cancelLabel,
-    required this.acceptLabel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.sidebar,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      title: Row(
-        children: [
-          Icon(icon, color: accentColor, size: 20),
-          const SizedBox(width: 8),
-          Text(title,
-              style: const TextStyle(
-                  color: AppColors.textPrimary, fontSize: 15)),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(endpoint,
-              style: const TextStyle(
-                  color: AppColors.textSecondary, fontSize: 13)),
-          const SizedBox(height: 12),
-          ...fingerprintRows,
-          const SizedBox(height: 12),
-          Text(warning,
-              style: const TextStyle(
-                  color: AppColors.textTertiary, fontSize: 11)),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: Text(cancelLabel),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          style: TextButton.styleFrom(foregroundColor: accentColor),
-          child: Text(acceptLabel),
-        ),
-      ],
-    );
-  }
-}
-
-class _HostKeyDialog extends StatelessWidget {
-  final HostKeyChallenge challenge;
-  const _HostKeyDialog({required this.challenge});
-
-  @override
-  Widget build(BuildContext context) {
-    final typeChanged = challenge.isKeyTypeChange;
-    return _TofuDialog(
-      icon: Icons.warning_amber_rounded,
-      accentColor: Colors.orange,
-      title: typeChanged ? 'Host key type changed' : 'Host key changed',
-      endpoint: '${challenge.host}:${challenge.port}',
-      fingerprintRows: [
-        _FpRow(
-            label: typeChanged ? 'Old (${challenge.oldKeyType})' : 'Old',
-            fp: challenge.oldFingerprint),
-        const SizedBox(height: 4),
-        _FpRow(
-            label: typeChanged ? 'New (${challenge.keyType})' : 'New',
-            fp: challenge.newFingerprint),
-      ],
-      warning: typeChanged
-          ? 'This server is trusted under a ${challenge.oldKeyType} key but now '
-              'presents a ${challenge.keyType} key. This could indicate a '
-              'man-in-the-middle attack. Only trust it if you know the server '
-              'now offers this key type.'
-          : 'This could indicate a man-in-the-middle attack. '
-              'Only trust the new key if you know the server key changed.',
-      cancelLabel: 'Cancel',
-      acceptLabel: 'Trust new key',
-    );
-  }
-}
-
-// ── RDP Certificate TOFU Dialog ───────────────────────────
-
-class _RdpCertDialog extends StatelessWidget {
-  final RdpCertChallenge challenge;
-  const _RdpCertDialog({required this.challenge});
-
-  @override
-  Widget build(BuildContext context) {
-    final mismatch = challenge.isMismatch;
-    return _TofuDialog(
-      icon: mismatch ? Icons.warning_amber_rounded : Icons.lock_open,
-      accentColor: mismatch ? AppColors.red : AppColors.accent,
-      title: mismatch ? 'RDP certificate changed' : 'Trust RDP certificate?',
-      endpoint: '${challenge.host}:${challenge.port}',
-      fingerprintRows: [
-        _FpRow(label: 'SHA-256', fp: challenge.fingerprint),
-      ],
-      warning: mismatch
-          ? 'The server certificate has changed since you last connected. '
-              'This could indicate a man-in-the-middle attack. The connection '
-              'was aborted before your credentials were sent.'
-          : 'This server\'s certificate is not yet trusted. '
-              'Verify the fingerprint above before accepting.',
-      cancelLabel: 'Reject',
-      acceptLabel: mismatch ? 'Trust new cert' : 'Accept',
-    );
-  }
-}
 
 // ── Plugin Error Boundary ─────────────────────────────────
 
@@ -1671,7 +944,7 @@ class _PluginErrorBoundaryState extends State<_PluginErrorBoundary> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 32),
+              const Icon(FLucideIcons.circleAlert, color: Colors.red, size: 32),
               const SizedBox(height: 12),
               Text(
                 'Plugin crashed: $_error',
@@ -1699,144 +972,3 @@ class _PluginErrorBoundaryState extends State<_PluginErrorBoundary> {
     if (oldWidget.plugin.id != widget.plugin.id) _error = null;
   }
 }
-
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: AppColors.textTertiary,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.8,
-        ),
-      ),
-    );
-  }
-}
-
-class _FpRow extends StatelessWidget {
-  final String label;
-  final String fp;
-  const _FpRow({required this.label, required this.fp});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          // Wide enough for 'SHA-256:' — 34px wrapped it mid-label.
-          width: 60,
-          child: Text('$label:',
-              style: const TextStyle(
-                  color: AppColors.textSecondary, fontSize: 11)),
-        ),
-        Expanded(
-          child: Text(fp,
-              style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 11,
-                  fontFamily: 'monospace')),
-        ),
-      ],
-    );
-  }
-}
-
-class _ShareButton extends StatelessWidget {
-  final SshSession session;
-  const _ShareButton({required this.session});
-
-  @override
-  Widget build(BuildContext context) {
-    final share = context.watch<ShareProvider>();
-    if (!share.canShare || session.isWatch) return const SizedBox.shrink();
-    if (session.status != SessionStatus.connected) return const SizedBox.shrink();
-
-    final isActive = share.isSharing;
-    return Tooltip(
-      message: isActive ? 'Sharing active' : 'Share this terminal',
-      child: GestureDetector(
-        onTap: () => showDialog(
-          context: context,
-          builder: (_) => ShareSessionDialog(sessionId: session.id),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: isActive
-                ? AppColors.accent.withValues(alpha: 0.2)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: isActive ? AppColors.accent : const Color(0xFF2A2A2A),
-            ),
-          ),
-          child: Icon(
-            Icons.screen_share_outlined,
-            size: 14,
-            color: isActive ? AppColors.accent : const Color(0xFF555555),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── RDP password re-prompt dialog ─────────────────────────
-
-class _RdpPasswordDialog extends StatefulWidget {
-  final Host host;
-  const _RdpPasswordDialog({required this.host});
-
-  @override
-  State<_RdpPasswordDialog> createState() => _RdpPasswordDialogState();
-}
-
-class _RdpPasswordDialogState extends State<_RdpPasswordDialog> {
-  late final TextEditingController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('Password for ${widget.host.label}'),
-      content: TextField(
-        controller: _ctrl,
-        obscureText: true,
-        autofocus: true,
-        decoration: const InputDecoration(labelText: 'Password'),
-        onSubmitted: (_) => Navigator.pop(context, _ctrl.text),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _ctrl.text),
-          child: const Text('Connect'),
-        ),
-      ],
-    );
-  }
-}
-

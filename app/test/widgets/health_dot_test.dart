@@ -12,7 +12,7 @@ void main() {
     ));
     final dot = tester.widget<Container>(find.byKey(const Key('health-dot')));
     final decoration = dot.decoration as BoxDecoration;
-    expect(decoration.color, AppColors.accent);
+    expect(decoration.color, AppColors.success);
   });
 
   testWidgets('HealthDot uses red for the red tone', (tester) async {

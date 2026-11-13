@@ -34,6 +34,12 @@ class SshSession implements TerminalSession {
   /// SessionProvider.handleAgentForwardingEvent.
   AgentForwardingState agentForwardingState = AgentForwardingState.off;
 
+  /// TERM requested for this session's shell: resolved once per connect
+  /// attempt by SessionProvider (host override, else the global setting) and
+  /// kept, so a later Settings change does not alter what an open session
+  /// reports. Null until the provider starts connecting the session.
+  String? termType;
+
   /// Human-readable trace of the connect attempt, shown by the "Show logs"
   /// panel on the connecting screen. Bounded to [kMaxConnectionLogLines].
   final List<ConnectionLogLine> connectionLog = [];

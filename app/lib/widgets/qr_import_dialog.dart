@@ -9,6 +9,7 @@ import '../services/p2p_sync_encryption.dart';
 import '../services/p2p_sync_service.dart';
 import '../services/sync_service.dart';
 import '../theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 class QrImportDialog extends StatefulWidget {
   const QrImportDialog({super.key});
@@ -65,12 +66,11 @@ class _QrImportDialogState extends State<QrImportDialog> {
 
       if (mounted) {
         setState(() => _processing = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-            'Imported ${payload.hosts.length} host${payload.hosts.length == 1 ? '' : 's'}. '
-            'All previous hosts replaced.',
-          ),
-        ));
+        AppSnack.success(
+          context,
+          'Imported ${payload.hosts.length} host${payload.hosts.length == 1 ? '' : 's'}. '
+          'All previous hosts replaced.',
+        );
         Navigator.of(context).pop();
       }
     } on FormatException {
@@ -86,10 +86,9 @@ class _QrImportDialogState extends State<QrImportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.sidebar,
-      title: const Text('Import via Transfer Code'),
-      content: SizedBox(
+    return YsDialog(
+      title: 'Import via Transfer Code',
+      body: SizedBox(
         width: 360,
         child: ListenableBuilder(
           listenable: _controller,
@@ -99,48 +98,57 @@ class _QrImportDialogState extends State<QrImportDialog> {
             children: [
               const Text(
                 'Paste the transfer code from the exporting device.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                style: TextStyle(color: YsColors.mutedForeground, fontSize: 13),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _controller,
+              const SizedBox(height: YsSpace.s3),
+              FTextField(
+                key: const Key('qr-import-code'),
+                control: FTextFieldControl.managed(controller: _controller),
                 autofocus: true,
-                style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                decoration: InputDecoration(
-                  hintText: '{"u":"http://...","k":"..."}',
-                  hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
-                  filled: true,
-                  fillColor: AppColors.card,
-                  border: const OutlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.border),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  errorText: _error,
+                autocorrect: false,
+                enableSuggestions: false,
+                hint: '{"u":"http://...","k":"..."}',
+                error: _error == null ? null : Text(_error!),
+                style: .delta(
+                  contentTextStyle: .delta([
+                    .base(
+                      const .delta(
+                        fontFamily: kYsMonoFontFamily,
+                        fontFamilyFallback: kYsMonoFontFallback,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ]),
                 ),
               ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                icon: const Icon(Icons.folder_open, size: 16),
-                label: const Text('Load from file'),
-                onPressed: _processing ? null : _loadFromFile,
+              const SizedBox(height: YsSpace.s2),
+              FButton(
+                variant: FButtonVariant.ghost,
+                mainAxisSize: MainAxisSize.min,
+                prefix: const Icon(FLucideIcons.folderOpen, size: 16),
+                onPress: _processing ? null : _loadFromFile,
+                child: const Text('Load from file'),
               ),
               if (_processing) ...[
-                const SizedBox(height: 8),
-                const LinearProgressIndicator(),
+                const SizedBox(height: YsSpace.s2),
+                const FProgress(),
               ],
             ],
           ),
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+        FButton(
+          variant: FButtonVariant.outline,
+          onPress: () => Navigator.of(context).pop(),
+          child: Text('Cancel'),
         ),
         ListenableBuilder(
           listenable: _controller,
-          builder: (context, _) => FilledButton(
-            onPressed: (_processing || _controller.text.trim().isEmpty) ? null : _import,
+          builder: (context, _) => FButton(
+            onPress: (_processing || _controller.text.trim().isEmpty)
+                ? null
+                : _import,
             child: const Text('Import'),
           ),
         ),

@@ -98,6 +98,39 @@ void main() {
     expect(s.lastMessage, contains('before authentication'));
   });
 
+  test('first-use probe: the engine\'s trailing Error does not end the wait',
+      () async {
+    final events = StreamController<frb.RdpEvent>();
+    final client = RdpClient(RdpConfig(
+        targetHost: '1.2.3.4',
+        targetPort: 3389,
+        username: 'u',
+        password: '',
+        domain: null,
+        width: 800,
+        height: 600,
+        security: 'auto',
+        expectedFingerprint: kRdpUnpinnedProbe));
+    final s = RdpSession(host: _host(), client: client, width: 800, height: 600);
+    s.onFirstUseCert = (_) {};
+    s.attach(events.stream);
+
+    events.add(const frb.RdpEvent.certMismatch(fingerprint: 'real-fp'));
+    // The Rust run loop bails right after reporting the fingerprint.
+    events.add(const frb.RdpEvent.error(
+        message: 'server certificate changed — connection aborted before '
+            'authentication'));
+    await Future<void>.delayed(Duration.zero);
+    expect(s.status, RdpSessionStatus.connecting);
+    expect(s.awaitingCertApproval, isTrue);
+    expect(s.lastMessage, contains('Verifying'));
+
+    // Rejecting ends it as a normal disconnect, not an error.
+    s.markCertRejected();
+    expect(s.status, RdpSessionStatus.disconnected);
+    expect(s.awaitingCertApproval, isFalse);
+  });
+
   test('TOFU result cannot overwrite a disconnect that landed meanwhile', () async {
     final events = StreamController<frb.RdpEvent>();
     final s = RdpSession(host: _host(), client: _client(), width: 800, height: 600);

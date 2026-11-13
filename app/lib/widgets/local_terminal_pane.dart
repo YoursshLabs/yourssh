@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:xterm/xterm.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import '../models/local_session.dart';
 import '../providers/settings_provider.dart';
 import '../theme/terminal_themes.dart';
@@ -36,12 +37,12 @@ class _LocalTerminalPaneState extends State<LocalTerminalPane> {
   Widget build(BuildContext context) {
     return switch (session.status) {
       LocalSessionStatus.error => _statusView(
-          Icons.error_outline,
+          FLucideIcons.circleAlert,
           session.errorMessage ?? 'Failed to start shell',
-          Colors.red,
+          YsColors.error,
         ),
-      LocalSessionStatus.exited =>
-        _statusView(Icons.link_off, 'Shell exited', Colors.grey),
+      LocalSessionStatus.exited => _statusView(
+          FLucideIcons.unplug, 'Shell exited', YsColors.mutedForeground),
       LocalSessionStatus.running => _terminal(context),
     };
   }
@@ -86,24 +87,37 @@ class _LocalTerminalPaneState extends State<LocalTerminalPane> {
   }
 
   Widget _statusView(IconData icon, String message, Color color) {
-    return Container(
-      color: Colors.black,
+    return ColoredBox(
+      color: YsColors.background,
       child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 40),
-            const SizedBox(height: 12),
-            Text(message,
+        child: Padding(
+          padding: const EdgeInsets.all(YsSpace.s5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color, size: 40),
+              const SizedBox(height: YsSpace.s3),
+              Text(
+                message,
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                    color: color, fontFamily: 'monospace', fontSize: 13)),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: widget.onRestart,
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Restart shell'),
-            ),
-          ],
+                  color: color,
+                  fontFamily: kYsMonoFontFamily,
+                  fontFamilyFallback: kYsMonoFontFallback,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: YsSpace.s4),
+              FButton(
+                variant: .outline,
+                size: .sm,
+                mainAxisSize: MainAxisSize.min,
+                onPress: widget.onRestart,
+                prefix: const Icon(FLucideIcons.refreshCw),
+                child: const Text('Restart shell'),
+              ),
+            ],
+          ),
         ),
       ),
     );

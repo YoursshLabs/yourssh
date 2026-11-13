@@ -1,3 +1,4 @@
+import 'package:yourssh/theme/app_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -43,7 +44,8 @@ class _FakeSessionProvider extends SessionProvider {
 
   /// Override the real connectAny so no SSH dial happens.
   @override
-  Future<AppSession?> connectAny(Host host, {String? initialCommand}) async {
+  Future<AppSession?> connectAny(Host host,
+      {String? initialCommand, String auditSource = 'app'}) async {
     connectAnyCalls++;
     // The session is already injected; return null like the SSH path does.
     return null;
@@ -58,7 +60,8 @@ class _PendingSessionProvider extends _FakeSessionProvider {
   _PendingSessionProvider(super.sessions);
 
   @override
-  Future<AppSession?> connectAny(Host host, {String? initialCommand}) {
+  Future<AppSession?> connectAny(Host host,
+      {String? initialCommand, String auditSource = 'app'}) {
     connectAnyCalls++;
     // Mirror the real provider: the session is registered synchronously…
     setSessions([..._sessions, SshSession(host: host)]);
@@ -97,6 +100,7 @@ Future<({_FakeSessionProvider sp, HostProvider hp})> _pump(
         ChangeNotifierProvider<SettingsProvider>.value(value: settings),
       ],
       child: MaterialApp(
+        builder: ysRootBuilderTouch,
         home: const MobileHostsScreen(),
       ),
     ),
@@ -186,7 +190,7 @@ void main() {
     expect(find.byType(MobileTerminalScreen), findsOneWidget);
 
     // Tap the back arrow in the terminal header.
-    await tester.tap(find.byIcon(Icons.arrow_back_ios_new).first);
+    await tester.tap(find.byTooltip('Back').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
@@ -211,7 +215,7 @@ void main() {
     // Tap the "+" tile inside MobileTerminalScreen's session tab strip.
     final addInTerminal = find.descendant(
       of: find.byType(MobileTerminalScreen),
-      matching: find.byIcon(Icons.add),
+      matching: find.byTooltip('New session'),
     );
     await tester.tap(addInTerminal);
     await tester.pump();

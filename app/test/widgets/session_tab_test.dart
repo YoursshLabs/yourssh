@@ -1,5 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:forui/forui.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -18,6 +20,9 @@ import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/services/tab_metadata_service.dart';
 import 'package:yourssh/theme/app_theme.dart';
 import 'package:yourssh/widgets/session_tab.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+
+import '../helpers/ys_test_app.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -46,7 +51,7 @@ void main() {
                 connectedHostIds: () => const <String>[],
                 pollSeconds: () => 0)),
       ],
-      child: MaterialApp(home: Scaffold(body: Row(children: [tab]))),
+      child: ysTestApp(Row(children: [tab])),
     );
   }
 
@@ -69,6 +74,57 @@ void main() {
 
   final host =
       Host(id: 'h1', label: 'prod', host: '1.2.3.4', port: 22, username: 'u');
+
+  group('inline rename (FTextField)', () {
+    Future<(SshSession, SessionProvider)> startRename(
+        WidgetTester tester) async {
+      final (sessions, hosts) = makeProviders();
+      final session = seedSession(sessions, host);
+      await tester.pumpWidget(wrap(
+        SessionTab(
+            session: session,
+            isActive: true,
+            provider: sessions,
+            onTap: () {}),
+        sessions,
+        hosts,
+      ));
+      final tab = find.byType(SessionTab);
+      await tester.tap(tab);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(tab);
+      await tester.pumpAndSettle();
+      expect(find.byType(FTextField), findsOneWidget);
+      return (session, sessions);
+    }
+
+    testWidgets('Enter commits the new label', (tester) async {
+      final (session, _) = await startRename(tester);
+      await tester.enterText(find.byType(FTextField), 'renamed');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(session.customLabel, 'renamed');
+      expect(find.byType(FTextField), findsNothing);
+    });
+
+    testWidgets('Escape cancels without renaming', (tester) async {
+      final (session, _) = await startRename(tester);
+      await tester.enterText(find.byType(FTextField), 'nope');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(session.customLabel, isNull);
+      expect(find.byType(FTextField), findsNothing);
+    });
+
+    testWidgets('tapping outside commits', (tester) async {
+      final (session, _) = await startRename(tester);
+      await tester.enterText(find.byType(FTextField), 'outside');
+      await tester.tapAt(const Offset(700, 500));
+      await tester.pumpAndSettle();
+      expect(session.customLabel, 'outside');
+      expect(find.byType(FTextField), findsNothing);
+    });
+  });
 
   testWidgets('middle-click closes an unpinned tab', (tester) async {
     final (sessions, hosts) = makeProviders();
@@ -102,6 +158,56 @@ void main() {
 
     await middleClick(tester, find.byType(SessionTab));
     expect(sessions.sessions, hasLength(1));
+  });
+
+  testWidgets('keyboard: Tab focuses the tab, Enter selects it, Tab again '
+      'reaches the hidden close button and Enter closes', (tester) async {
+    final (sessions, hosts) = makeProviders();
+    final session = seedSession(sessions, host);
+    var selected = 0;
+
+    await tester.pumpWidget(wrap(
+        SessionTab(
+            session: session,
+            isActive: false,
+            provider: sessions,
+            onTap: () => selected++),
+        sessions,
+        hosts));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(selected, 1);
+    expect(sessions.sessions, hasLength(1));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(sessions.sessions, isEmpty);
+  });
+
+  testWidgets('keyboard: a pinned tab is selectable but has no close button',
+      (tester) async {
+    final (sessions, hosts) = makeProviders();
+    final session = seedSession(sessions, host, pinned: true);
+    var selected = 0;
+
+    await tester.pumpWidget(wrap(
+        SessionTab(
+            session: session,
+            isActive: false,
+            provider: sessions,
+            onTap: () => selected++),
+        sessions,
+        hosts));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(selected, 1);
+    expect(find.byType(FButton), findsNothing);
   });
 
   testWidgets('shows distro icon when the host has a detectedOs',
@@ -161,7 +267,7 @@ void main() {
         sessions,
         hosts));
 
-    expect(find.byIcon(Icons.key), findsNothing);
+    expect(find.byIcon(FLucideIcons.keyRound), findsNothing);
   });
 
   testWidgets('key icon color and tooltip track the forwarding state',
@@ -183,7 +289,7 @@ void main() {
         sessions,
         hosts));
 
-    final icon = tester.widget<Icon>(find.byIcon(Icons.key));
+    final icon = tester.widget<Icon>(find.byIcon(FLucideIcons.keyRound));
     expect(icon.color, AppColors.red);
     expect(
       find.byTooltip(
@@ -192,7 +298,7 @@ void main() {
     );
   });
 
-  testWidgets('key icon shows accent color when active', (tester) async {
+  testWidgets('key icon shows success color when active', (tester) async {
     final fwdHost = Host(
         id: 'h10',
         label: 'fwd2',
@@ -210,7 +316,7 @@ void main() {
         sessions,
         hosts));
 
-    expect(tester.widget<Icon>(find.byIcon(Icons.key)).color, AppColors.accent);
+    expect(tester.widget<Icon>(find.byIcon(FLucideIcons.keyRound)).color, AppColors.success);
   });
 
   testWidgets('key icon colors for ready and fallback states', (tester) async {
@@ -229,7 +335,7 @@ void main() {
             session: session, isActive: true, provider: sessions, onTap: () {}),
         sessions,
         hosts));
-    expect(tester.widget<Icon>(find.byIcon(Icons.key)).color,
+    expect(tester.widget<Icon>(find.byIcon(FLucideIcons.keyRound)).color,
         AppColors.textSecondary);
 
     session.agentForwardingState = AgentForwardingState.fallback;
@@ -239,6 +345,82 @@ void main() {
         sessions,
         hosts));
     expect(
-        tester.widget<Icon>(find.byIcon(Icons.key)).color, AppColors.orange);
+        tester.widget<Icon>(find.byIcon(FLucideIcons.keyRound)).color, AppColors.orange);
+  });
+
+  group('context menu', () {
+    Future<(SessionProvider, SshSession)> openMenu(WidgetTester tester,
+        {bool pinned = false}) async {
+      final (sessions, hosts) = makeProviders();
+      final session = seedSession(sessions, host, pinned: pinned);
+      await tester.pumpWidget(wrap(
+          SessionTab(
+              session: session,
+              isActive: true,
+              provider: sessions,
+              onTap: () {}),
+          sessions,
+          hosts));
+      final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse, buttons: kSecondaryButton);
+      await gesture.down(tester.getCenter(find.byType(SessionTab)));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      return (sessions, session);
+    }
+
+    Color? textColor(WidgetTester tester, String label) =>
+        tester.widget<Text>(find.text(label)).style?.color;
+
+    testWidgets('uses card surface, token text and Lucide icons',
+        (tester) async {
+      await openMenu(tester);
+      for (final t in ['Rename', 'Pin', 'Color tag', 'Close']) {
+        expect(find.text(t), findsOneWidget, reason: t);
+      }
+      expect(textColor(tester, 'Rename'), YsColors.foreground);
+      expect(textColor(tester, 'Pin'), YsColors.foreground);
+      expect(textColor(tester, 'Color tag'), YsColors.foreground);
+      expect(textColor(tester, 'Close'), YsColors.mutedForeground);
+      expect(find.byIcon(FLucideIcons.pencil), findsOneWidget);
+      expect(find.byIcon(FLucideIcons.pin), findsWidgets);
+      expect(find.byIcon(FLucideIcons.palette), findsOneWidget);
+      expect(find.byIcon(FLucideIcons.x), findsWidgets);
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      expect(find.byIcon(Icons.push_pin_outlined), findsNothing);
+      expect(find.byIcon(Icons.close), findsNothing);
+    });
+
+    testWidgets('menu surface is the card token', (tester) async {
+      await openMenu(tester);
+      final route = ModalRoute.of(tester.element(find.text('Rename')))!;
+      expect(route, isA<PopupRoute<String>>());
+      final popup = tester.widget<Material>(find
+          .ancestor(of: find.text('Rename'), matching: find.byType(Material))
+          .last);
+      expect(popup.color, YsColors.card);
+    });
+
+    testWidgets('Pin toggles, Close closes', (tester) async {
+      final (sessions, session) = await openMenu(tester);
+      await tester.tap(find.text('Pin'));
+      await tester.pumpAndSettle();
+      expect(session.isPinned, isTrue);
+      expect(sessions.sessions, hasLength(1));
+    });
+
+    testWidgets('color submenu lists None and colours with token text',
+        (tester) async {
+      final (sessions, session) = await openMenu(tester);
+      await tester.tap(find.text('Color tag'));
+      await tester.pumpAndSettle();
+      expect(textColor(tester, 'None'), YsColors.mutedForeground);
+      expect(textColor(tester, 'Red'), YsColors.foreground);
+      await tester.tap(find.text('Red'));
+      await tester.pumpAndSettle();
+      expect(session.colorTag, '#ef4444');
+      expect(sessions.sessions, hasLength(1));
+    });
   });
 }

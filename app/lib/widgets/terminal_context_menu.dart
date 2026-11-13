@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+
+import 'ys_menu.dart';
 
 /// Actions offered by the terminal right-click menu (issue #43).
 enum TerminalMenuAction { copy, paste, selectAll, resetTerminal }
 
-/// Shows the Copy / Paste / Select All context menu for a terminal at
-/// [globalPosition] and performs the chosen action.
+/// Shows the Copy / Paste / Select All / Reset Terminal context menu for a
+/// terminal at [globalPosition] (token-styled `showMenu`, see `ys_menu.dart`)
+/// and performs the chosen action.
 ///
 /// Shared by the SSH terminal and the local terminal panes. The actual
 /// clipboard/selection work delegates to the xterm fork's clipboard ops so
@@ -24,28 +28,34 @@ Future<void> showTerminalContextMenu({
       globalPosition & Size.zero,
       overlay.size,
     ),
+    color: kYsMenuColor,
+    shape: kYsMenuShape,
     items: [
-      PopupMenuItem(
-        value: TerminalMenuAction.copy,
+      ysMenuItem(
+        TerminalMenuAction.copy,
+        FLucideIcons.copy,
+        'Copy',
         enabled: controller.selection != null,
         height: 36,
-        child: const Text('Copy'),
       ),
-      PopupMenuItem(
-        value: TerminalMenuAction.paste,
+      ysMenuItem(
+        TerminalMenuAction.paste,
+        FLucideIcons.clipboardPaste,
+        'Paste',
         height: 36,
-        child: const Text('Paste'),
       ),
-      PopupMenuItem(
-        value: TerminalMenuAction.selectAll,
+      ysMenuItem(
+        TerminalMenuAction.selectAll,
+        FLucideIcons.textSelect,
+        'Select All',
         height: 36,
-        child: const Text('Select All'),
       ),
-      const PopupMenuDivider(),
-      PopupMenuItem(
-        value: TerminalMenuAction.resetTerminal,
+      const PopupMenuDivider(height: 9),
+      ysMenuItem(
+        TerminalMenuAction.resetTerminal,
+        FLucideIcons.rotateCcw,
+        'Reset Terminal',
         height: 36,
-        child: const Text('Reset Terminal'),
       ),
     ],
   );

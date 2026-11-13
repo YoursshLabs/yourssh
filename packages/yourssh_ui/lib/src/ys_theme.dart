@@ -1,0 +1,253 @@
+// Migrating the app to material_ui is a separate later step.
+// ignore: deprecated_member_use
+import 'package:flutter/material.dart';
+import 'package:forui/forui.dart';
+
+import 'ys_colors.dart';
+import 'ys_metrics.dart';
+
+FColors _ysColors(FColors base) => base.copyWith(
+  background: YsColors.background,
+  foreground: YsColors.foreground,
+  primary: YsColors.primary,
+  primaryForeground: YsColors.primaryForeground,
+  secondary: YsColors.secondary,
+  secondaryForeground: YsColors.foreground,
+  muted: YsColors.muted,
+  mutedForeground: YsColors.mutedForeground,
+  border: YsColors.border,
+  card: YsColors.card,
+  destructive: YsColors.error,
+  destructiveForeground: YsColors.foreground,
+  error: YsColors.error,
+  errorForeground: YsColors.foreground,
+  barrier: const Color(0x99000000),
+);
+
+FThemeData _build({required bool touch}) {
+  final base = touch ? FTheme.neutral.dark.touch : FTheme.neutral.dark.desktop;
+  final colors = _ysColors(base.colors);
+  final face = FTypeface.inherit(
+    colors: colors,
+    touch: touch,
+    fontFamily: kYsFontFamily,
+  );
+  final typography = FTypography(display: face, body: face);
+  final theme = FThemeData(
+    colors: colors,
+    touch: touch,
+    typography: typography,
+    sidebarStyle: _ysSidebarStyle(
+      colors: colors,
+      typography: typography,
+      base: base,
+      touch: touch,
+    ),
+  );
+  // App-wide tap guard (ruling P16): with slideable tiles/items (forui's
+  // default) the group's FTappableGroup swallows taps on buttons nested in
+  // a tile, e.g. a text field's suffix (password reveal toggle).
+  return theme.copyWith(
+    // forui's touch FItem lays out 43 px (12.5 px vertical padding), under the
+    // 44 px minimum hit size: bump the padding centrally (ruling P29).
+    itemStyles: touch
+        ? .delta([
+            .all(
+              .delta(
+                contentStyle: .delta(
+                  suffixedPadding: .value(
+                    const EdgeInsetsDirectional.fromSTEB(10, 13, 6, 13),
+                  ),
+                  unsuffixedPadding: .value(
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
+                  ),
+                ),
+              ),
+            ),
+          ])
+        : null,
+    tileGroupStyle: theme.tileGroupStyle.copyWith(
+      slideableTiles: .delta([.all(false)]),
+    ),
+    itemGroupStyle: theme.itemGroupStyle.copyWith(
+      slideableItems: .delta([.all(false)]),
+    ),
+  );
+}
+
+/// Width of the desktop app sidebar.
+const double kYsSidebarWidth = 200;
+
+/// Sidebar style: `sidebar` background, and the selected item is amber
+/// (`primary` at 12% fill, primary icon and label). This is the one place
+/// that style delta lives.
+FSidebarStyle _ysSidebarStyle({
+  required FColors colors,
+  required FTypography typography,
+  required FThemeData base,
+  required bool touch,
+}) {
+  final inherited = FSidebarStyle.inherit(
+    colors: colors,
+    typography: typography,
+    icons: base.icons,
+    style: base.style,
+    touch: touch,
+  );
+  final item = inherited.groupStyle.itemStyle;
+  final selectedFill = YsColors.primary.withValues(alpha: 0.12);
+  final itemStyle = item.copyWith(
+    backgroundColor: .delta([
+      .base(YsColors.sidebar),
+      .match({FTappableVariant.disabled}, YsColors.sidebar),
+      .exact({FTappableVariant.selected}, selectedFill),
+    ]),
+    textStyle: .delta([
+      .exact({FTappableVariant.selected}, .delta(color: YsColors.primary)),
+    ]),
+    iconStyle: .delta([
+      .exact({FTappableVariant.selected}, .delta(color: YsColors.primary)),
+    ]),
+  );
+  return inherited.copyWith(
+    decoration: .value(
+      BoxDecoration(
+        color: YsColors.sidebar,
+        border: BorderDirectional(end: BorderSide(color: colors.border)),
+      ),
+    ),
+    constraints: const BoxConstraints.tightFor(width: kYsSidebarWidth),
+    groupStyle: .delta(itemStyle: itemStyle),
+  );
+}
+
+/// forui theme (desktop sizing) with Amber Brand tokens.
+FThemeData ysThemeData() => _desktopTheme;
+final FThemeData _desktopTheme = _build(touch: false);
+
+/// forui theme (touch sizing) with Amber Brand tokens, for mobile.
+FThemeData ysThemeDataTouch() => _touchTheme;
+final FThemeData _touchTheme = _build(touch: true);
+
+/// Material fallback theme so un-migrated widgets match the system.
+ThemeData ysMaterialTheme() => _materialTheme;
+final ThemeData _materialTheme = _buildMaterialTheme();
+
+/// Opaque equivalent of the translucent `border` token over `background`.
+final Color _opaqueBorder = Color.alphaBlend(
+  YsColors.border,
+  YsColors.background,
+);
+
+ThemeData _buildMaterialTheme() {
+  // Every slot is set from tokens so no stock Material colour (teal, purple,
+  // grey) can leak into un-migrated controls.
+  final scheme = const ColorScheme.dark().copyWith(
+    primary: YsColors.primary,
+    onPrimary: YsColors.primaryForeground,
+    primaryContainer: YsColors.primary,
+    onPrimaryContainer: YsColors.primaryForeground,
+    secondary: YsColors.primary,
+    onSecondary: YsColors.primaryForeground,
+    secondaryContainer: YsColors.primary,
+    onSecondaryContainer: YsColors.primaryForeground,
+    tertiary: YsColors.primary,
+    onTertiary: YsColors.primaryForeground,
+    tertiaryContainer: YsColors.primary,
+    onTertiaryContainer: YsColors.primaryForeground,
+    error: YsColors.error,
+    onError: YsColors.foreground,
+    errorContainer: YsColors.error,
+    onErrorContainer: YsColors.foreground,
+    surface: YsColors.background,
+    onSurface: YsColors.foreground,
+    onSurfaceVariant: YsColors.mutedForeground,
+    surfaceDim: YsColors.background,
+    surfaceBright: YsColors.secondary,
+    surfaceContainerLowest: YsColors.background,
+    surfaceContainerLow: YsColors.card,
+    surfaceContainer: YsColors.card,
+    surfaceContainerHigh: YsColors.secondary,
+    surfaceContainerHighest: YsColors.secondary,
+    surfaceTint: Colors.transparent,
+    outline: _opaqueBorder,
+    outlineVariant: _opaqueBorder,
+    inverseSurface: YsColors.foreground,
+    onInverseSurface: YsColors.background,
+    inversePrimary: YsColors.primary,
+  );
+  RoundedRectangleBorder shape(double r, {bool side = true}) =>
+      RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(r),
+        side: side ? const BorderSide(color: YsColors.border) : BorderSide.none,
+      );
+  OutlineInputBorder input(Color c) => OutlineInputBorder(
+    borderRadius: BorderRadius.circular(YsRadius.control),
+    borderSide: BorderSide(color: c),
+  );
+  return ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.dark,
+    fontFamily: kYsFontFamily,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: YsColors.background,
+    dividerColor: YsColors.border,
+    dividerTheme: const DividerThemeData(
+      color: YsColors.border,
+      thickness: 1,
+      space: 1,
+    ),
+    textTheme: const TextTheme(
+      bodyMedium: TextStyle(color: YsColors.foreground, fontSize: 13),
+      bodySmall: TextStyle(color: YsColors.mutedForeground, fontSize: 12),
+      labelMedium: TextStyle(color: YsColors.mutedForeground, fontSize: 12),
+    ),
+    tooltipTheme: TooltipThemeData(
+      decoration: BoxDecoration(
+        color: YsColors.card,
+        border: Border.all(color: YsColors.border),
+        borderRadius: BorderRadius.circular(YsRadius.control),
+      ),
+      textStyle: const TextStyle(color: YsColors.foreground, fontSize: 12),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: YsColors.card,
+      shape: shape(YsRadius.card),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: YsColors.card,
+      shape: shape(YsRadius.card, side: false),
+    ),
+    snackBarTheme: const SnackBarThemeData(
+      backgroundColor: YsColors.card,
+      behavior: SnackBarBehavior.floating,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: YsColors.secondary,
+      border: input(Colors.transparent),
+      enabledBorder: input(Colors.transparent),
+      focusedBorder: input(YsColors.primary),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: const WidgetStatePropertyAll(YsColors.foreground),
+      trackColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? YsColors.primary : null,
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(foregroundColor: YsColors.primary),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: YsColors.primary,
+        foregroundColor: YsColors.primaryForeground,
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: YsColors.border),
+      ),
+    ),
+  );
+}

@@ -40,7 +40,7 @@ class SnippetCard extends StatelessWidget {
                 ),
                 if (snippet.tag.isNotEmpty) ...[
                   const SizedBox(width: MobileTokens.space2),
-                  TagChip(label: snippet.tag),
+                  Flexible(child: TagChip(label: snippet.tag)),
                 ],
               ],
             ),

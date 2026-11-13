@@ -5,8 +5,13 @@ import 'package:provider/provider.dart';
 import 'package:yourssh/models/firewall_status.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/models/system_snapshot.dart';
+import 'package:yourssh/providers/session_provider.dart';
 import 'package:yourssh/services/ssh_service.dart';
+import 'package:yourssh/services/tab_metadata_service.dart';
 import 'package:yourssh/widgets/server_monitor_sheet.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+
+import '../helpers/ys_test_app.dart';
 
 class _FakeSsh extends Fake implements SshService {
   @override
@@ -23,7 +28,7 @@ Widget _wrap(Widget child) => MultiProvider(
       providers: [
         Provider<SshService>(create: (_) => _FakeSsh()),
       ],
-      child: MaterialApp(home: Scaffold(body: child)),
+      child: ysTestApp(child),
     );
 
 Host _host() => Host(
@@ -36,6 +41,29 @@ Host _host() => Host(
 
 void main() {
   group('ServerMonitorSheet', () {
+    testWidgets('show() opens it inside ysTestApp and renders',
+        (tester) async {
+      tester.view.physicalSize = const Size(900, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(ChangeNotifierProvider<SessionProvider>(
+        create: (_) => SessionProvider(_FakeSsh() as SshService, TabMetadataService()),
+        child: _wrap(Builder(
+          builder: (context) => Center(
+            child: TextButton(
+              onPressed: () => ServerMonitorSheet.show(context, _host()),
+              child: const Text('open'),
+            ),
+          ),
+        )),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ServerMonitorSheet), findsOneWidget);
+      expect(find.textContaining('ubuntu-prod'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('shows not-connected message when testIsConnected is false',
         (tester) async {
       await tester.pumpWidget(
@@ -49,7 +77,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(ServerMonitorSheet(host: _host(), testIsConnected: true)),
       );
-      expect(find.byType(CircularProgressIndicator), findsWidgets);
+      expect(find.byType(FCircularProgress), findsWidgets);
     });
 
     testWidgets('renders system section after debugSetSnapshot', (tester) async {

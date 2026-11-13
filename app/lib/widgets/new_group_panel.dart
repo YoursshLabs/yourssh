@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
+
 import '../providers/host_provider.dart';
-import '../theme/app_theme.dart';
 
 class NewGroupPanel extends StatefulWidget {
   final VoidCallback onClose;
@@ -46,74 +47,35 @@ class _NewGroupPanelState extends State<NewGroupPanel> {
     return Container(
       width: 340,
       decoration: const BoxDecoration(
-        color: AppColors.sidebar,
-        border: Border(left: BorderSide(color: AppColors.border)),
+        color: YsColors.sidebar,
+        border: Border(left: BorderSide(color: YsColors.border)),
       ),
       child: Column(
         children: [
           _buildHeader(),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              padding: const EdgeInsets.fromLTRB(
+                  YsSpace.s4, YsSpace.s4, YsSpace.s4, YsSpace.s5),
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: _error != null ? AppColors.red : AppColors.border,
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.folder_outlined, size: 16, color: AppColors.textTertiary),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _ctrl,
-                            autofocus: true,
-                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-                            decoration: const InputDecoration(
-                              hintText: 'Group name',
-                              hintStyle: TextStyle(color: AppColors.textTertiary, fontSize: 13),
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            onSubmitted: (_) => _save(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                FTextField(
+                  key: const Key('new-group-name'),
+                  control: FTextFieldControl.managed(controller: _ctrl),
+                  autofocus: true,
+                  hint: 'Group name',
+                  error: _error == null ? null : Text(_error!),
+                  textInputAction: TextInputAction.done,
+                  onSubmit: (_) => _save(),
+                  prefixBuilder: (context, style, variants) =>
+                      FTextField.prefixIconBuilder(context, style, variants,
+                          const Icon(FLucideIcons.folder)),
                 ),
-                if (_error != null) ...[
-                  const SizedBox(height: 6),
-                  Text(_error!, style: const TextStyle(color: AppColors.red, fontSize: 11)),
-                ],
-                const SizedBox(height: 24),
-                GestureDetector(
-                  onTap: _saving ? null : _save,
-                  child: Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: _saving ? AppColors.accentDim : AppColors.accent,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: _saving
-                        ? const SizedBox(
-                            width: 18, height: 18,
-                            child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
-                        : const Text('SAVE GROUP',
-                            style: TextStyle(
-                                color: Colors.black,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                letterSpacing: 1)),
-                  ),
+                const SizedBox(height: YsSpace.s5),
+                FButton(
+                  onPress: _saving ? null : _save,
+                  child: _saving
+                      ? const FCircularProgress(size: .sm)
+                      : const Text('Save group'),
                 ),
               ],
             ),
@@ -127,28 +89,25 @@ class _NewGroupPanelState extends State<NewGroupPanel> {
     return Container(
       height: 52,
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+        border: Border(bottom: BorderSide(color: YsColors.border)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s4),
       child: Row(
         children: [
           const Expanded(
-            child: Text('New Group',
+            child: Text('New group',
                 style: TextStyle(
-                    color: AppColors.textPrimary,
+                    color: YsColors.foreground,
                     fontSize: 14,
                     fontWeight: FontWeight.w600)),
           ),
-          GestureDetector(
-            onTap: widget.onClose,
-            child: Container(
-              width: 28, height: 28,
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Icon(Icons.close, size: 14, color: AppColors.textSecondary),
+          Tooltip(
+            message: 'Close',
+            child: FButton.icon(
+              variant: .ghost,
+              size: .sm,
+              onPress: widget.onClose,
+              child: const Icon(FLucideIcons.x),
             ),
           ),
         ],
