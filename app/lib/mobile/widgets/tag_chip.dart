@@ -51,7 +51,7 @@ class TagChip extends StatelessWidget {
         border: large ? null : Border.all(color: MobileColors.border),
       ),
       foregroundDecoration: selected && tinted
-          ? BoxDecoration(color: const Color(0x1F000000), borderRadius: radius)
+          ? BoxDecoration(color: Colors.black12, borderRadius: radius)
           : null,
       child: large
           // Centre horizontally within the min width without growing the

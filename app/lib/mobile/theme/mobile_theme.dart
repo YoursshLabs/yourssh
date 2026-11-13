@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
-/// Color palette for the mobile UI. Desktop theme ([AppColors]) is untouched.
+/// Legacy mobile colour aliases of [YsColors] (kept, see [AppColors]).
+/// `accentSoft` and `textFaint` have no YsColors token and stay as literals.
+@Deprecated('Use YsColors from package:yourssh_ui for new code.')
 abstract final class MobileColors {
   static const accent      = YsColors.primary;
   static const accentSoft  = Color(0xFF2A2010);

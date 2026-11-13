@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`yourssh://connect/<host-id-or-label>` links** — open a saved host from a browser or script; saved hosts only, repeats of the same link within 2 s are ignored, and a refused link (unknown host, unsupported form) is listed in the notification bell. The scheme is registered by the macOS app, the Windows installer (current user) and the Linux .deb; the portable zip and tarball do not register it.
 - **Audit source for CLI and URL connects** — SSH connect rows carry `meta.source` = `cli` / `url`; RDP and VNC rows keep `source: rdp|vnc` and carry `via` = `cli` / `url`.
 
+### Fixed
+- Session and DevOps result tabs can be selected and closed from the keyboard (Tab to a tab, Enter/Space to select, Tab again to its close button).
+- List items in bottom sheets on mobile are at least 44 px tall.
+- The Cloudflare tunnel panel shows "Required" / "Invalid (1–65535)" for a missing label or a bad port instead of silently adding nothing or falling back to 3000 (an empty port still means 3000).
+
 ### Changed
 - **New look:** the app moves to the Amber Brand palette (warm dark surfaces, amber accent), the Inter font and a forui-based UI foundation on desktop and mobile.
 - **New "YourSSH Amber" terminal theme**, the default for new installs. Existing installs keep their current terminal theme.
@@ -19,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **New sidebar** with grouped sections and an amber selected item.
 - **New tab bar** for sessions, with the active tab marked in amber.
 - **New toasts** for notifications, shown bottom-right on desktop.
+- **UI clean-up:** a lint gate (`tool/check_ui_lint.sh`, run in PR CI) keeps Material `IconButton`/`AlertDialog`/`SnackBar`/`Icons`/`ScaffoldMessenger` out of the app and the plugin packages, remaining colour literals moved to tokens, and `AppColors`/`MobileColors` are now `@Deprecated` aliases of the new tokens (kept rather than deleted, to avoid churn across ~460 call sites).
 - **New dialogs** across the app; security prompts (host key, RDP certificate) now focus the safe choice by default.
 
 ---

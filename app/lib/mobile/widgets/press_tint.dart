@@ -13,6 +13,6 @@ Widget mobilePressTint(Set<FTappableVariant> variants, Widget child) =>
     ColoredBox(
       color: mobileIsTinted(variants)
           ? YsColors.secondary
-          : const Color(0x00000000),
+          : Colors.transparent,
       child: child,
     );

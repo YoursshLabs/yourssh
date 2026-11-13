@@ -98,7 +98,7 @@ class HostKeyDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final typeChanged = challenge.isKeyTypeChange;
     return TofuDialog(
-      icon: Icons.warning_amber_rounded,
+      icon: FLucideIcons.triangleAlert,
       accentColor: Colors.orange,
       title: typeChanged ? 'Host key type changed' : 'Host key changed',
       endpoint: '${challenge.host}:${challenge.port}',
@@ -135,7 +135,7 @@ class RdpCertDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final mismatch = challenge.isMismatch;
     return TofuDialog(
-      icon: mismatch ? Icons.warning_amber_rounded : Icons.lock_open,
+      icon: mismatch ? FLucideIcons.triangleAlert : FLucideIcons.lockOpen,
       accentColor: mismatch ? AppColors.red : AppColors.accent,
       title: mismatch ? 'RDP certificate changed' : 'Trust RDP certificate?',
       endpoint: '${challenge.host}:${challenge.port}',

@@ -81,9 +81,9 @@ class RemoteFloatingPill extends StatelessWidget {
         color: YsColors.card.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(YsRadius.card),
         border: Border.all(color: YsColors.border),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x66000000),
+            color: Colors.black.withValues(alpha: 0.4),
             blurRadius: 8,
             offset: Offset(0, 2),
           ),

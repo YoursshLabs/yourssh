@@ -235,7 +235,7 @@ class _SessionTabState extends State<SessionTab> {
             padding: const EdgeInsets.only(right: 5),
             child: Tooltip(
               message: agentForwardingTooltip(ssh.agentForwardingState),
-              child: Icon(Icons.key,
+              child: Icon(FLucideIcons.keyRound,
                   size: 12,
                   color: agentForwardingColor(ssh.agentForwardingState)),
             ),

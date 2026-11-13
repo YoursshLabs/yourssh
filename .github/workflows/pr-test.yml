@@ -75,6 +75,13 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
+      # Pure shell, no Flutter needed: fails on new Material IconButton /
+      # AlertDialog / SnackBar / Icons. / ScaffoldMessenger outside yourssh_ui.
+      - name: UI lint gate
+        run: |
+          bash tool/check_ui_lint_selftest.sh
+          bash tool/check_ui_lint.sh
+
       - name: Install dependencies
         working-directory: packages/yourssh_ui
         run: flutter pub get

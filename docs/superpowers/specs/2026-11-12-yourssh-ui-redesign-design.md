@@ -66,7 +66,7 @@ The goal is one design system, built on [forui](https://github.com/duobaseio/for
 
 ### Tokens: `app/lib/theme/ys_theme.dart`
 
-`YsTheme` is the single source of truth. It builds the forui `FThemeData` and exposes the extra slots that forui's colour set lacks. `AppColors` and `MobileColors` become thin aliases onto it in phase 0, so unmigrated screens recolour at once. Both are deleted at the end.
+`YsTheme` is the single source of truth. It builds the forui `FThemeData` and exposes the extra slots that forui's colour set lacks. `AppColors` and `MobileColors` become thin aliases onto it in phase 0, so unmigrated screens recolour at once. Both are deleted at the end. *(Deviation, task 17: they stay as `@Deprecated` aliases of `YsColors`; deleting them would churn ~460 call sites for no visual change.)*
 
 | Token | Value | Use |
 |---|---|---|
@@ -185,7 +185,7 @@ Each phase is its own PR into `develop` with passing CI. Releases may go out bet
 | **6 · Mobile** | Restyle the existing mobile structure (`mobile_home_shell`, its tabs, the session chips and `accessory_key_bar`) with the same tokens and forui components. The tab set and navigation do **not** change; `B-5-mobile.png` shows the look, not new navigation. |
 
 After phase 6:
-- Delete `AppColors`, `MobileColors`/`MobileTokens` and the leftover Material-only widgets.
+- Delete `AppColors`, `MobileColors`/`MobileTokens` and the leftover Material-only widgets. *(Done differently: `AppColors`/`MobileColors` are kept as `@Deprecated` aliases; the Material-only widgets are gone and `tool/check_ui_lint.sh` guards against their return.)*
 - A lint check (`custom_lint` rule or a CI grep) bans new `IconButton`/`AlertDialog`/`SnackBar`/`Icons.` uses under `app/lib/` and the plugin packages. Uses inside `packages/yourssh_ui` are allowed.
 
 ### Phase 7 (decide after phase 6)

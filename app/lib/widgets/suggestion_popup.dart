@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 /// Background of the selected suggestion row (amber selection tint).
-const Color kSuggestionSelectedColor = Color(0x29F3A231); // primary @ 16%
+final Color kSuggestionSelectedColor = YsColors.primary.withValues(
+  alpha: 0x29 / 255,
+); // primary @ 16%
 
 /// Command / path completion list shown by the terminal and the input bar.
 /// At most 8 rows; tap a row to pick it. Plain token-styled rows (no

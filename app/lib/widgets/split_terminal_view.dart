@@ -300,16 +300,16 @@ class _WatchBanner extends StatelessWidget {
     String label;
 
     if (sessionEnded) {
-      bg = const Color(0xFF2A1A1A);
-      fg = const Color(0xFFCC4444);
+      bg = YsColors.error.withValues(alpha: 0.14);
+      fg = YsColors.error;
       label = 'Session ended by host';
     } else if (hasControl) {
-      bg = const Color(0xFF1A2A1A);
+      bg = YsColors.ok.withValues(alpha: 0.12);
       fg = YsColors.ok;
       label = 'You have control';
     } else {
-      bg = const Color(0xFF1A1A2A);
-      fg = const Color(0xFF6699CC);
+      bg = YsColors.secondary;
+      fg = YsColors.mutedForeground;
       label = 'Watching: ${session.watchedTitle ?? ''} · Read-only';
     }
 
@@ -319,7 +319,7 @@ class _WatchBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
       child: Row(
         children: [
-          Icon(Icons.screen_share_outlined, size: 12, color: fg),
+          Icon(FLucideIcons.screenShare, size: 12, color: fg),
           const SizedBox(width: 6),
           Text(label, style: TextStyle(color: fg, fontSize: 11)),
           const Spacer(),

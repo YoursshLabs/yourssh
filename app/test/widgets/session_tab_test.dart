@@ -216,7 +216,7 @@ void main() {
         sessions,
         hosts));
 
-    expect(find.byIcon(Icons.key), findsNothing);
+    expect(find.byIcon(FLucideIcons.keyRound), findsNothing);
   });
 
   testWidgets('key icon color and tooltip track the forwarding state',
@@ -238,7 +238,7 @@ void main() {
         sessions,
         hosts));
 
-    final icon = tester.widget<Icon>(find.byIcon(Icons.key));
+    final icon = tester.widget<Icon>(find.byIcon(FLucideIcons.keyRound));
     expect(icon.color, AppColors.red);
     expect(
       find.byTooltip(
@@ -265,7 +265,7 @@ void main() {
         sessions,
         hosts));
 
-    expect(tester.widget<Icon>(find.byIcon(Icons.key)).color, AppColors.success);
+    expect(tester.widget<Icon>(find.byIcon(FLucideIcons.keyRound)).color, AppColors.success);
   });
 
   testWidgets('key icon colors for ready and fallback states', (tester) async {
@@ -284,7 +284,7 @@ void main() {
             session: session, isActive: true, provider: sessions, onTap: () {}),
         sessions,
         hosts));
-    expect(tester.widget<Icon>(find.byIcon(Icons.key)).color,
+    expect(tester.widget<Icon>(find.byIcon(FLucideIcons.keyRound)).color,
         AppColors.textSecondary);
 
     session.agentForwardingState = AgentForwardingState.fallback;
@@ -294,7 +294,7 @@ void main() {
         sessions,
         hosts));
     expect(
-        tester.widget<Icon>(find.byIcon(Icons.key)).color, AppColors.orange);
+        tester.widget<Icon>(find.byIcon(FLucideIcons.keyRound)).color, AppColors.orange);
   });
 
   group('context menu', () {

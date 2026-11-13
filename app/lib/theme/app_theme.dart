@@ -3,6 +3,11 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../mobile/theme/toast_inset.dart';
 
+/// Legacy colour aliases, kept so ~460 call sites do not churn for no visual
+/// change (a recorded deviation from the redesign spec's "delete at the end").
+/// New code uses [YsColors]; the user palettes [hostColors] / [tabColors] and
+/// [fromHex] live here until they get a home in yourssh_ui.
+@Deprecated('Use YsColors from package:yourssh_ui for new code.')
 class AppColors {
   static const bg = YsColors.background;
   static const sidebar = YsColors.sidebar;

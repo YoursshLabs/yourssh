@@ -61,13 +61,13 @@ class KeyCard extends StatelessWidget {
               width: MobileTokens.avatar,
               height: MobileTokens.avatar,
               decoration: BoxDecoration(
-                color: const Color(0xFF1E1A2E), // muted purple tint
+                color: YsColors.secondary,
                 borderRadius:
                     BorderRadius.circular(MobileTokens.radiusAvatar),
               ),
               child: const Icon(
                 FLucideIcons.keyRound,
-                color: Color(0xFFB99EFF), // soft lavender
+                color: YsColors.primary,
                 size: 22,
               ),
             ),
