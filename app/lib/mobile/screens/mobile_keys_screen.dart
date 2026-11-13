@@ -261,7 +261,7 @@ class _GenerateSheetState extends State<_GenerateSheet> {
   final _nameCtrl = TextEditingController();
   final _passphraseCtrl = TextEditingController();
   String _algo = 'ed25519';
-  bool _sshKeygenAvailable = false;
+  bool _sshKeygenAvailable = false; // true when RSA/ECDSA are offered
   bool _loading = false;
   String? _error;
 
@@ -272,8 +272,8 @@ class _GenerateSheetState extends State<_GenerateSheet> {
   }
 
   Future<void> _probe() async {
-    final available = await context.read<KeyGenService>().probeSshKeygen();
-    if (mounted) setState(() => _sshKeygenAvailable = available);
+    final algos = await context.read<KeyGenService>().supportedAlgorithms();
+    if (mounted) setState(() => _sshKeygenAvailable = algos.contains('rsa'));
   }
 
   @override

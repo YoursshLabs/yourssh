@@ -6,6 +6,7 @@ import 'package:provider/single_child_widget.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 
 import '../platform/runtime_platform.dart';
+import '../util/native_chmod.dart';
 import '../providers/host_provider.dart';
 import '../providers/key_provider.dart';
 import '../providers/known_hosts_provider.dart';
@@ -67,7 +68,7 @@ class MobileBootstrap {
           portForwardProvider.setStatus(id, status, error: error),
       onConnections: (id, n) => portForwardProvider.setConnections(id, n),
     );
-    keyGen = KeyGenService();
+    keyGen = KeyGenService(chmod: supportsSubprocesses ? null : chmodNative);
     hostProvider.onHostDeleted =
         (id) => unawaited(portForwardService.stopForHost(id));
     unawaited(portForwardProvider.ready.then(

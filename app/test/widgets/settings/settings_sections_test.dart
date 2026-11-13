@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/models/ai_provider_config.dart';
 import 'package:yourssh/models/app_release.dart';
 import 'package:yourssh/models/audit_event.dart';
@@ -42,6 +43,9 @@ void main() {
 
   group('Connection', () {
     testWidgets('controls present; switch and selects persist', (tester) async {
+      // flutter_test reports Android, where tmux defaults on for fresh
+      // installs; this desktop section starts from an explicit "off".
+      SharedPreferences.setMockInitialValues({'tmuxEnabled': false});
       final h = SettingsHarness();
       await h.pump(tester, const ConnectionSettingsSection());
 

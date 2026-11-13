@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
+import '../../providers/settings_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../widgets/terminal_appearance_controls.dart';
 import '../security/app_lock_gate.dart';
@@ -133,6 +134,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   // ── TERMINAL group ────────────────────────────────────────────────────────
 
   Widget _terminalGroup() {
+    final settings = context.watch<SettingsProvider>();
     return ListGroup(
       label: 'Terminal',
       children: [
@@ -141,6 +143,13 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
           child: const TerminalAppearanceControls(
             layout: AppearanceControlsLayout.rows,
           ),
+        ),
+        SettingsRow(
+          leading: const Icon(FLucideIcons.layers,
+              color: MobileColors.textMuted, size: 20),
+          title: 'Keep sessions in tmux',
+          toggle: settings.tmuxEnabled,
+          onToggle: (v) => settings.save(tmuxEnabled: v),
         ),
       ],
     );
