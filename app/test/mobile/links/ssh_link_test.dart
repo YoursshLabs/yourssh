@@ -99,6 +99,16 @@ void main() {
       expect(log.single, startsWith('refused:'));
     });
 
+    test('a host merely labelled like the target does not stand in for it',
+        () async {
+      hosts = [
+        Host(id: 'x', label: 'alice@203.0.113.7:22', host: 'other.example.com', username: 'bob'),
+      ];
+      await build().handle('ssh://alice@203.0.113.7');
+      expect(log.single, startsWith('refused:'));
+      expect(log.any((l) => l.startsWith('open:')), isFalse);
+    });
+
     test('the same link (any case) within the window is ignored', () async {
       final h = build();
       await h.handle('ssh://alice@10.0.0.5:2222');

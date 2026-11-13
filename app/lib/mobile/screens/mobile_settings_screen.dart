@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
+import '../../platform/runtime_platform.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../widgets/terminal_appearance_controls.dart';
@@ -173,17 +174,18 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
             await p.setBool(kAppLockPrefKey, v);
           },
         ),
-        SettingsRow(
-          leading: const Icon(FLucideIcons.link,
-              color: MobileColors.textMuted, size: 20),
-          title: 'Open ssh:// links',
-          toggle: _sshLinks,
-          onToggle: (v) async {
-            setState(() => _sshLinks = v);
-            final p = await SharedPreferences.getInstance();
-            await p.setBool(kSshLinksPrefKey, v);
-          },
-        ),
+        if (isIOSPlatform)
+          SettingsRow(
+            leading: const Icon(FLucideIcons.link,
+                color: YsColors.mutedForeground, size: 20),
+            title: 'Open ssh:// links',
+            toggle: _sshLinks,
+            onToggle: (v) async {
+              setState(() => _sshLinks = v);
+              final p = await SharedPreferences.getInstance();
+              await p.setBool(kSshLinksPrefKey, v);
+            },
+          ),
         SettingsRow(
           leading: const Icon(FLucideIcons.timer, color: MobileColors.textMuted, size: 20),
           title: 'Auto-lock',

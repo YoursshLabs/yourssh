@@ -1,5 +1,6 @@
 import 'package:yourssh_ui/yourssh_ui.dart';
 import 'package:yourssh/theme/app_theme.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -61,6 +62,26 @@ void main() {
   testWidgets('renders TERMINAL section header', (tester) async {
     await _pump(tester);
     expect(find.text('TERMINAL'), findsOneWidget);
+  });
+
+  testWidgets('the ssh:// links switch exists only on iOS', (tester) async {
+    await _pump(tester);
+    expect(find.text('Open ssh:// links'), findsNothing);
+  });
+
+  testWidgets('on iOS the ssh:// links switch persists kSshLinksPrefKey',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    await _pump(tester);
+    final sw = find.descendant(
+      of: find.ancestor(of: find.text('Open ssh:// links'), matching: find.byType(Row)).last,
+      matching: find.byType(FSwitch),
+    );
+    expect(tester.widget<FSwitch>(sw).value, isFalse);
+    await tester.tap(sw);
+    await tester.pumpAndSettle();
+    expect((await SharedPreferences.getInstance()).getBool(kSshLinksPrefKey), isTrue);
   });
 
   testWidgets('renders SECURITY section header', (tester) async {

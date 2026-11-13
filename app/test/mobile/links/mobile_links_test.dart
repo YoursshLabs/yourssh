@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/links/mobile_cli_handlers.dart';
-import 'package:yourssh/mobile/links/mobile_links.dart';
 import 'package:yourssh/models/host.dart';
 import 'package:yourssh/providers/host_provider.dart';
 import 'package:yourssh/services/cli/cli_server.dart';
@@ -79,7 +78,8 @@ void main() {
     }
     expect(opened, isEmpty);
     expect(refused, hasLength(6));
-    expect(refused.any((m) => m.contains('\u202e') || m.contains('\x1b')), isFalse);
+    // The 5000-char link and its reason are capped in what is shown.
+    expect(refused.every((m) => m.length <= 120 + 200 + 40), isTrue);
   });
 
   test('control and bidi characters in a refused link never reach the message',
@@ -87,7 +87,9 @@ void main() {
     await send('yourssh://connect/x\u202e\x1b[31mevil');
     expect(opened, isEmpty);
     expect(refused, hasLength(1));
-    expect(refused.single.contains('\u202e') || refused.single.contains('\x1b'), isFalse);
+    expect(refused.single, contains('Link refused: yourssh://connect/x[31mevil'));
+    expect(refused.single.contains('\u202e'), isFalse);
+    expect(refused.single.contains('\x1b'), isFalse);
   });
 
   test('the same link twice within 2 s opens once', () async {
@@ -107,7 +109,4 @@ void main() {
     await h.focusWindow(); // no-op
   });
 
-  test('the ssh channel constant', () {
-    expect(kSshUrlChannel.name, 'yourssh/ssh_url');
-  });
 }

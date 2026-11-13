@@ -91,6 +91,14 @@ class SshLinkHandler {
     }
     switch (resolveHost(t.query, hosts(), allowAdHoc: true)) {
       case ResolvedHost(:final host):
+        // The resolver also matches by label: a host merely LABELLED
+        // "user@host:port" must not stand in for a different target.
+        if (host.username != t.user ||
+            host.host.toLowerCase() != t.host.toLowerCase() ||
+            host.port != t.port) {
+          refused('ssh:// link refused: no saved host for that target');
+          return;
+        }
         await openSaved(host);
       case AmbiguousHost():
         refused('ssh:// link refused: several saved hosts match');

@@ -38,7 +38,12 @@ class MobileLinks {
     required this.appVersion,
     this.urlChannel = kUrlMethodChannel,
     this.sshChannel = kSshUrlChannel,
+    this.openSession = openMobileSession,
   });
+
+  /// Opens a session; [openMobileSession] in production, replaced in tests.
+  final Future<void> Function(NavigatorState nav, Host host,
+      {String auditSource, bool resetStack}) openSession;
 
   final MobileBootstrap bootstrap;
   final GlobalKey<NavigatorState> navigator;
@@ -70,7 +75,7 @@ class MobileLinks {
       ready: _ready,
       onUrlRefused: (url, reason) {
         final n = linkRefusedNotification(url, reason);
-        _toast('${n.title} — ${n.body}');
+        _toast(n.title);
       },
     );
     UrlChannel(server: server, channel: urlChannel).attach();
@@ -108,7 +113,7 @@ class MobileLinks {
   Future<void> _openHost(Host host, String source) async {
     final nav = navigator.currentState;
     if (nav == null) return;
-    await openMobileSession(nav, host, auditSource: source, resetStack: true);
+    await openSession(nav, host, auditSource: source, resetStack: true);
   }
 
   Future<bool> _confirm(SshLinkTarget t) async {

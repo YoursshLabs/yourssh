@@ -6,10 +6,12 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 
 const String kAppLockPrefKey = 'app_lock_enabled';
 
-/// True while the lock screen covers the app. Routes pushed above the gate
+/// True while the lock screen covers the app. Starts true: the app counts as
+/// locked until the gate has decided (prefs read, device support) — never
+/// fail open before that. Routes pushed above the gate
 /// (a session opened by a link) are not covered by it, so link handlers wait
 /// for this to turn false before navigating.
-final ValueNotifier<bool> mobileAppLocked = ValueNotifier<bool>(false);
+final ValueNotifier<bool> mobileAppLocked = ValueNotifier<bool>(true);
 
 /// Wraps the mobile app in a biometric lock. Locked on launch (and on
 /// resume-from-background) when enabled; unlocks on a successful auth. The
