@@ -109,8 +109,24 @@ class _QrExportDialogState extends State<QrExportDialog> {
     return '$m:$s';
   }
 
+  /// Cancel and Escape: stop the one-shot LAN server and countdown, then close.
+  void _cancel() {
+    _countdown?.cancel();
+    _service.stop();
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
+    // The barrier is deliberately non-dismissible (see sync_section), so the
+    // route does not handle Escape; do it here, like Cancel.
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _cancel},
+      child: _buildDialog(context),
+    );
+  }
+
+  Widget _buildDialog(BuildContext context) {
     return YsDialog(
       title: 'Export via QR',
       body: SizedBox(
@@ -175,6 +191,7 @@ class _QrExportDialogState extends State<QrExportDialog> {
       actions: [
         if (_qrData != null)
           FButton(
+            key: const ValueKey('qr-export-copy'),
             variant: FButtonVariant.outline,
             prefix: const Icon(FLucideIcons.copy, size: 16),
             child: const Text('Copy transfer code'),
@@ -188,12 +205,10 @@ class _QrExportDialogState extends State<QrExportDialog> {
             },
           ),
         FButton(
+          key: const ValueKey('qr-export-cancel'),
           variant: FButtonVariant.outline,
-          onPress: () {
-            _countdown?.cancel();
-            _service.stop();
-            Navigator.of(context).pop();
-          },
+          autofocus: true,
+          onPress: _cancel,
           child: const Text('Cancel'),
         ),
       ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:yourssh/services/p2p_sync_service.dart';
@@ -37,6 +38,7 @@ void main() {
           builder: (ctx) => FButton(
             onPress: () => showYsDialog(
               ctx,
+              barrierDismissible: false,
               builder: (_) => QrExportDialog(getPayload: () async => '{}'),
             ),
             child: const Text('open'),
@@ -63,6 +65,50 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(QrExportDialog), findsNothing);
+  });
+
+  testWidgets('Escape closes the dialog like Cancel (barrier stays modal)',
+      (tester) async {
+    await pump(tester);
+    expect(find.byType(QrExportDialog), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(QrExportDialog), findsNothing);
+  });
+
+  testWidgets('Escape stops the LAN server and the countdown', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final svc = _FakeSync(const [
+      NetworkInterfaceInfo(name: 'en0', address: '192.168.1.5'),
+    ]);
+    await tester.pumpWidget(
+      ysTestApp(
+        Builder(
+          builder: (ctx) => FButton(
+            onPress: () => showYsDialog(
+              ctx,
+              barrierDismissible: false,
+              builder: (_) => QrExportDialog(
+                getPayload: () async => '{}',
+                service: svc,
+              ),
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(QrImageView), findsOneWidget);
+    final before = svc.stopped;
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(QrExportDialog), findsNothing);
+    expect(svc.stopped, greaterThan(before));
+    // No pending countdown timer left behind (the harness asserts on exit).
   });
 
   testWidgets('with interfaces loaded: select, QR and copy action present',
