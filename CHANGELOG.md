@@ -13,6 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Audit source for CLI and URL connects** — SSH connect rows carry `meta.source` = `cli` / `url`; RDP and VNC rows keep `source: rdp|vnc` and carry `via` = `cli` / `url`.
 
 ### Fixed
+- **Snippets no longer disappear after allowing the bundled "Snippets" plugin.** Earlier builds shipped a half-migrated script copy of Snippets that moved your snippets out of the built-in plugin's storage on first load and then failed, so the next launch showed only the defaults. The script copy is no longer installed, a leftover copy in `~/.yourssh/plugins/snippets` is ignored (script plugins can't reuse a built-in plugin's id), and the moved snippets are restored once at startup (merged, no duplicates).
+- Bulk "Run command" no longer reports `exit -1` for fast commands: the SSH layer kept an exit status that arrived before the session was ready. The footer counts non-zero exits separately (`N ok · M non-zero exit · K failed`) and an unknown exit status is shown as such.
+- A host whose name doesn't resolve no longer sits on "Connecting…" forever: the TCP dial times out after 15 s and the connecting screen shows the last error with the retry attempt.
+- Entering RDP/VNC fullscreen no longer raises a framework error; the first RDP connect shows a neutral "verifying certificate" state behind the trust dialog instead of an error with Retry; Retry buttons have a normal width.
+- Shell-integration gutter markers follow their prompt line and disappear on `clear` instead of floating on empty rows.
+- Field errors in the host editor and port-forward editor clear as soon as the value is fixed, and the port error fits on one line.
+- The hosts toolbar fits the 900×600 minimum window (lower-priority controls collapse into a menu); the Mail Catcher and AI chat titles no longer truncate with room to spare; multi-line Web Tools editors start at the top; the mobile Generate/Import key sheets have an opaque surface; Esc closes the LAN-sync QR dialog.
+- SFTP shows readable errors (e.g. '"releases" already exists') instead of raw `SftpStatusError` codes when creating or renaming.
+- An empty split pane explains how to fill it; remaining all-caps buttons and titles (Keychain, Port forwarding, Audit log, bulk dialogs) use sentence case.
 - **The host editor no longer leaks one host's form into another.** Opening "Edit" on a second host (or "New host" / "Duplicate") while the editor was open kept the first host's fields, and Save wrote them (including the password) into the second host.
 - The terminal header and status bar follow edits to the host (label, user, tags, jump chain) instead of showing the values from when the tab was opened.
 - Mail catcher: messages whose log starts with ESMTP options (`mail options: ['BODY=8BITMIME']`) are no longer dropped; the body is parsed separately from the headers, *Clear all* persists, and the log is written unbuffered in append mode.
