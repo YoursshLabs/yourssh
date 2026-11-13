@@ -22,6 +22,12 @@ final class YourSshNative: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegat
     let background = FlutterMethodChannel(
       name: "yourssh/background", binaryMessenger: registrar.messenger())
     registrar.addMethodCallDelegate(instance, channel: background)
+
+    // yourssh/files: excludeFromBackup(path) -> null. Marks a file or directory
+    // as not to be included in iCloud / iTunes backups.
+    let files = FlutterMethodChannel(
+      name: "yourssh/files", binaryMessenger: registrar.messenger())
+    registrar.addMethodCallDelegate(instance, channel: files)
   }
 
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -30,6 +36,7 @@ final class YourSshNative: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegat
     case "end":
       if let id = call.arguments as? Int { endBackgroundTask(id) }
       result(nil)
+    case "excludeFromBackup": excludeFromBackup(call.arguments, result)
     default: result(FlutterMethodNotImplemented)
     }
   }
@@ -54,5 +61,21 @@ final class YourSshNative: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegat
   private func endBackgroundTask(_ id: Int) {
     guard let task = backgroundTasks.removeValue(forKey: id) else { return }
     UIApplication.shared.endBackgroundTask(task)
+  }
+
+  private func excludeFromBackup(_ arguments: Any?, _ result: @escaping FlutterResult) {
+    guard let path = arguments as? String else {
+      result(FlutterError(code: "bad_args", message: "path expected", details: nil))
+      return
+    }
+    var url = URL(fileURLWithPath: path)
+    var values = URLResourceValues()
+    values.isExcludedFromBackup = true
+    do {
+      try url.setResourceValues(values)
+      result(nil)
+    } catch {
+      result(FlutterError(code: "exclude_failed", message: "\(error)", details: nil))
+    }
   }
 }
