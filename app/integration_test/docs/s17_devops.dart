@@ -72,8 +72,9 @@ Future<void> runDevops(JourneyContext c) async {
     await sleepPump(t, 900);
     await c.snap('$s/16-mail-detail', 'Mail detail: headers and body');
     await tapTooltip(t, 'Clear all', wait: 700);
-    await c.snap('$s/17-mail-clear-confirm', 'Clear all confirmation / state');
-    await tapText(t, 'Cancel', wait: 500).catchError((_) {});
+    await c.snap('$s/17-mail-clear-confirm', 'Clear all asks first: "Clear captured mail?" (Cancel focused, Clear destructive)');
+    await tapText(t, 'Clear', wait: 900).catchError((_) {});
+    await c.snap('$s/17b-mail-cleared', 'After Clear: list and catcher log on the host emptied');
     await tapTooltip(t, 'Stop', wait: 800).catchError((_) {});
   });
   await step(c.notes, 'mcp', () async {

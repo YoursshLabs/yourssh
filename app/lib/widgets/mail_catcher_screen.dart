@@ -60,6 +60,17 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
   }
 
   Future<void> _clearAll() async {
+    final count = _emails.length;
+    final ok = await showYsConfirm(
+      context,
+      title: 'Clear captured mail?',
+      message: count == 1
+          ? 'The captured message is removed here and from the catcher log on the host.'
+          : 'All $count captured messages are removed here and from the catcher log on the host.',
+      confirmLabel: 'Clear',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
     final session = context.read<SessionProvider>().activeSshSession;
     // Clear the remote log too, otherwise the next poll brings the mails back.
     if (session != null) {

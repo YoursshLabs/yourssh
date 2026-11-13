@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/widgets/mail_catcher_screen.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show FButton;
 
 import '../helpers/fake_devops_ssh.dart';
 import '../helpers/tab_to_control.dart';
@@ -134,6 +135,8 @@ void main() {
     expect(find.textContaining('second para'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Clear all'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FButton, 'Clear'));
     await tester.pump();
     await tester.pump();
     expect(find.text('No emails captured'), findsOneWidget);
@@ -170,10 +173,34 @@ void main() {
       return inner(cmd);
     };
     await tester.tap(find.byTooltip('Clear all'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FButton, 'Clear'));
     await tester.pump();
     await tester.pump();
     expect(find.textContaining("Couldn't clear the mail log:"), findsOneWidget);
     expect(find.text('Welcome'), findsOneWidget);
+    await stopAndDispose(tester);
+  });
+
+  testWidgets('Clear all asks first; Cancel keeps the mails and the log',
+      (tester) async {
+    final fake = await pump(tester);
+    await tester.tap(find.byTooltip('Start on port 1025'));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(find.text('Welcome'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Clear all'));
+    await tester.pumpAndSettle();
+    expect(find.text('Clear captured mail?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Clear captured mail?'), findsNothing);
+    expect(find.text('Welcome'), findsOneWidget);
+    expect(fake.cmds.any((c) => c.startsWith('> ')), isFalse,
+        reason: 'cancel must not truncate the remote log');
     await stopAndDispose(tester);
   });
 
