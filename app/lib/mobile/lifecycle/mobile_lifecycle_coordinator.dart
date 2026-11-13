@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../models/port_forward.dart';
 import '../../providers/port_forward_provider.dart';
 import '../../providers/session_provider.dart';
+import '../../services/p2p_sync_service.dart';
 import '../../services/port_forward_service.dart';
 import 'background_tasks.dart';
 
@@ -23,7 +24,8 @@ class MobileLifecycleCoordinator {
     required this.tasks,
     this.stagger = const Duration(milliseconds: 300),
     this.maxGrace = const Duration(seconds: 25),
-  });
+    Future<void> Function()? stopPairing,
+  }) : stopPairing = stopPairing ?? P2PSyncService.stopAll;
 
   final SessionProvider sessions;
   final PortForwardService forwards;
@@ -31,6 +33,9 @@ class MobileLifecycleCoordinator {
   final BackgroundTasks tasks;
   final Duration stagger;
   final Duration maxGrace;
+
+  /// Closes the LAN pairing server (its socket dies with the suspension).
+  final Future<void> Function() stopPairing;
 
   /// The OS keeps part of its allowance for its own expiration handling.
   static const _osMargin = Duration(seconds: 5);
@@ -95,7 +100,10 @@ class MobileLifecycleCoordinator {
       // The app came back (or left again) while the tunnels were closing:
       // this expiry belongs to an older background and must not pause
       // anything.
-      if (epoch == _epoch && !_disposed) sessions.pauseAll();
+      if (epoch == _epoch && !_disposed) {
+        sessions.pauseAll();
+        await stopPairing();
+      }
     } catch (e) {
       debugPrint('[MobileLifecycleCoordinator] pause failed: $e');
     } finally {

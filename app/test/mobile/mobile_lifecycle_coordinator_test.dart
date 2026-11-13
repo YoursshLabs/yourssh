@@ -106,10 +106,12 @@ void main() {
   late _Forwards forwards;
   late _Tasks tasks;
   late MobileLifecycleCoordinator c;
+  var pairingStops = 0;
 
   void build({Duration? remaining, Set<String> running = const {}}) {
     SharedPreferences.setMockInitialValues({});
     log = [];
+    pairingStops = 0;
     sessions = _Sessions();
     forwards = _Forwards(running);
     tasks = _Tasks(remaining);
@@ -119,8 +121,25 @@ void main() {
       forwardRules: _Rules([_fwd('a'), _fwd('b'), _fwd('c')]),
       tasks: tasks,
       stagger: Duration.zero,
+      stopPairing: () async => pairingStops++,
     );
   }
+
+  test('the LAN pairing server closes with the pause, not on a quick switch', () {
+    fakeAsync((fa) {
+      build();
+      c.onBackground();
+      fa.elapse(const Duration(seconds: 10));
+      c.onForeground();
+      fa.flushMicrotasks();
+      expect(pairingStops, 0);
+      c.onBackground();
+      fa.elapse(const Duration(seconds: 25));
+      fa.flushMicrotasks();
+      expect(pairingStops, 1);
+      c.dispose();
+    });
+  });
 
   test('a quick app switch pauses nothing and ends the task', () {
     fakeAsync((fa) {

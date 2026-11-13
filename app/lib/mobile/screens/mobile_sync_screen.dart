@@ -193,6 +193,15 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
         setState(() => _secondsLeft--);
       });
 
+      _p2p.onInterrupted = () {
+        _countdown?.cancel();
+        if (mounted) {
+          setState(() {
+            _qrData = null;
+            _qrStatus = 'Code expired — paused in the background';
+          });
+        }
+      };
       _p2p.onServerError = (e) {
         if (mounted) setState(() => _qrStatus = 'Transfer error: $e');
       };
