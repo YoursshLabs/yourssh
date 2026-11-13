@@ -110,6 +110,7 @@ class WtCodeArea extends StatelessWidget {
     minLines: null,
     maxLines: null,
     expands: true,
+    textAlignVertical: TextAlignVertical.top,
     autocorrect: false,
     enableSuggestions: false,
     style: .delta(
