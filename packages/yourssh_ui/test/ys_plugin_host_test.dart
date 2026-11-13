@@ -6,9 +6,8 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 class _Probe extends StatelessWidget {
   const _Probe();
   @override
-  Widget build(BuildContext context) => Text(
-    '${FTheme.of(context).colors.primary == YsColors.primary}',
-  );
+  Widget build(BuildContext context) =>
+      Text('${FTheme.of(context).colors.primary == YsColors.primary}');
 }
 
 void main() {
@@ -28,6 +27,36 @@ void main() {
     );
     expect(find.text('true'), findsOneWidget);
     // No extra Material was inserted by the host.
-    expect(find.descendant(of: find.byType(YsPluginHost), matching: find.byType(FToaster)), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(YsPluginHost),
+        matching: find.byType(FToaster),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('dialogs opened from a hosted plugin find the Ys FTheme', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: YsPluginHost(
+          child: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showYsDialog<void>(
+                context,
+                builder: (_) => const YsDialog(title: 'Hosted', body: _Probe()),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hosted'), findsOneWidget);
+    expect(find.text('true'), findsOneWidget);
   });
 }

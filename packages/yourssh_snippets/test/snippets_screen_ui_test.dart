@@ -158,4 +158,35 @@ void main() {
     await tester.pumpAndSettle();
     expect(ctx.sent, 'ss -tlnp\n');
   });
+
+  testWidgets('hidden row actions are inert and absent from semantics', (
+    tester,
+  ) async {
+    final p = SnippetProvider();
+    final ctx = _Ctx();
+    await tester.pumpWidget(ysTestApp(_screen(p, ctx)));
+    await tester.pumpAndSettle();
+    final handle = tester.ensureSemantics();
+    expect(find.bySemanticsLabel('Delete'), findsNothing);
+    expect(find.bySemanticsLabel('Run in terminal'), findsNothing);
+    final before = p.snippets.length;
+    await tester.tap(find.byTooltip('Delete').first, warnIfMissed: false);
+    await tester.tap(
+      find.byTooltip('Run in terminal').first,
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(p.snippets.length, before);
+    expect(ctx.sent, isNull);
+    // Focus reveals them (semantics return) and Enter still activates.
+    expect(
+      await tabTo(tester, find.byTooltip('Run in terminal')),
+      greaterThan(0),
+    );
+    expect(find.bySemanticsLabel('Run in terminal'), findsWidgets);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(ctx.sent, 'df -h\n');
+    handle.dispose();
+  });
 }

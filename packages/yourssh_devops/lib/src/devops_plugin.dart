@@ -11,19 +11,13 @@ class YourSSHDevOpsPlugin extends YourSSHPlugin {
 
   YourSSHDevOpsPlugin({required this.config});
 
-  @override
-  String get id => 'dev.yourssh.devops';
-  @override
-  String get name => 'DevOps Hub';
-  @override
-  String get description =>
+  @override String get id => 'dev.yourssh.devops';
+  @override String get name => 'DevOps Hub';
+  @override String get description =>
       'Network tools, S3 browser, LAN share, Mail catcher, MCP server, Cloudflare tunnels';
-  @override
-  IconData get icon => Icons.rocket_launch_outlined;
-  @override
-  String get version => '1.0.0';
-  @override
-  String get minApiVersion => '1.0.0';
+  @override IconData get icon => Icons.rocket_launch_outlined;
+  @override String get version => '1.0.0';
+  @override String get minApiVersion => '1.0.0';
 
   @override
   Widget buildUI(BuildContext context, YourSSHPluginContext pluginContext) {

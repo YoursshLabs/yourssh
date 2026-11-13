@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'dart:ui' show PointerDeviceKind;
+
 import 'package:flutter/services.dart';
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
@@ -119,6 +121,13 @@ Future<_FakeS3> _pump(WidgetTester tester, {bool seed = true}) async {
   return fake;
 }
 
+Future<void> _hover(WidgetTester tester, String key) async {
+  final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  await mouse.addPointer();
+  await mouse.moveTo(tester.getCenter(find.byKey(ValueKey('s3-entry-$key'))));
+  await tester.pumpAndSettle();
+}
+
 Finder _row(String key) => find.byKey(ValueKey('s3-entry-$key'));
 
 void main() {
@@ -215,6 +224,7 @@ void main() {
     tester,
   ) async {
     final fake = await _pump(tester);
+    await _hover(tester, 'a.txt');
     await tester.tap(
       find.descendant(of: _row('a.txt'), matching: find.byTooltip('Delete')),
     );
@@ -279,5 +289,31 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(find.text('Display Name'), findsOneWidget);
+  });
+
+  testWidgets('hidden row actions are inert and absent from semantics', (
+    tester,
+  ) async {
+    final fake = await _pump(tester);
+    final handle = tester.ensureSemantics();
+    expect(find.bySemanticsLabel('Delete'), findsNothing);
+    await tester.tap(
+      find.descendant(of: _row('a.txt'), matching: find.byTooltip('Delete')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Delete object'), findsNothing);
+    expect(fake.deleted, isEmpty);
+    // Focus reveals the actions; Enter on Delete opens the confirm.
+    final target = find.descendant(
+      of: _row('a.txt'),
+      matching: find.byTooltip('Delete'),
+    );
+    expect(await tabTo(tester, target), greaterThan(0));
+    expect(find.bySemanticsLabel('Delete'), findsWidgets);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Delete object'), findsOneWidget);
+    handle.dispose();
   });
 }

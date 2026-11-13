@@ -244,35 +244,43 @@ class _SnippetTileState extends State<_SnippetTile> {
                   ],
                 ),
               ),
-              // Always built (so Tab reaches them); only painted on hover/focus.
-              Opacity(
-                opacity: showActions ? 1 : 0,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _ActionBtn(
-                      icon: FLucideIcons.play,
-                      tooltip: 'Run in terminal',
-                      color: YsColors.primary,
-                      onTap: () {
-                        _runSnippet();
-                      },
+              // Always built so Tab can focus them (focus reveals them); while
+              // hidden they are not hit-testable and not in semantics.
+              IgnorePointer(
+                ignoring: !showActions,
+                child: ExcludeSemantics(
+                  excluding: !showActions,
+                  child: Opacity(
+                    opacity: showActions ? 1 : 0,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _ActionBtn(
+                          icon: FLucideIcons.play,
+                          tooltip: 'Run in terminal',
+                          color: YsColors.primary,
+                          onTap: () {
+                            _runSnippet();
+                          },
+                        ),
+                        const SizedBox(width: YsSpace.s1),
+                        _ActionBtn(
+                          icon: FLucideIcons.copy,
+                          tooltip: 'Copy',
+                          onTap: () =>
+                              Clipboard.setData(ClipboardData(text: s.command)),
+                        ),
+                        const SizedBox(width: YsSpace.s1),
+                        _ActionBtn(
+                          icon: FLucideIcons.trash2,
+                          tooltip: 'Delete',
+                          color: YsColors.error,
+                          onTap: () =>
+                              context.read<SnippetProvider>().delete(s.id),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: YsSpace.s1),
-                    _ActionBtn(
-                      icon: FLucideIcons.copy,
-                      tooltip: 'Copy',
-                      onTap: () =>
-                          Clipboard.setData(ClipboardData(text: s.command)),
-                    ),
-                    const SizedBox(width: YsSpace.s1),
-                    _ActionBtn(
-                      icon: FLucideIcons.trash2,
-                      tooltip: 'Delete',
-                      color: YsColors.error,
-                      onTap: () => context.read<SnippetProvider>().delete(s.id),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],

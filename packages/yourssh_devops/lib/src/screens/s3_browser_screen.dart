@@ -425,7 +425,7 @@ class _S3BrowserScreenState extends State<S3BrowserScreen> {
       confirmLabel: 'Delete',
       destructive: true,
     );
-    if (!confirmed) return;
+    if (!confirmed || !mounted) return;
 
     setState(() => _loading = true);
     try {
@@ -913,43 +913,51 @@ class _EntryTileState extends State<_EntryTile> {
               : null,
           onPress: widget.onNavigate,
           suffix: hasActions
-              ? Opacity(
-                  opacity: showActions ? 1 : 0,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (widget.onCopyUrl != null)
-                        _actionBtn(
-                          FLucideIcons.link,
-                          'Copy URL',
-                          widget.onCopyUrl!,
-                        ),
-                      if (widget.onOpenUrl != null)
-                        _actionBtn(
-                          FLucideIcons.externalLink,
-                          'Open',
-                          widget.onOpenUrl!,
-                        ),
-                      if (widget.onDownload != null)
-                        _actionBtn(
-                          FLucideIcons.download,
-                          'Download',
-                          widget.onDownload!,
-                        ),
-                      if (widget.onRenameMove != null)
-                        _actionBtn(
-                          FLucideIcons.pencilLine,
-                          'Rename / Move',
-                          widget.onRenameMove!,
-                        ),
-                      if (widget.onDelete != null)
-                        _actionBtn(
-                          FLucideIcons.trash2,
-                          'Delete',
-                          widget.onDelete!,
-                          color: YsColors.error,
-                        ),
-                    ],
+              // Always built so Tab can focus them (focus reveals them); while
+              // hidden they are not hit-testable and not in semantics.
+              ? IgnorePointer(
+                  ignoring: !showActions,
+                  child: ExcludeSemantics(
+                    excluding: !showActions,
+                    child: Opacity(
+                      opacity: showActions ? 1 : 0,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.onCopyUrl != null)
+                            _actionBtn(
+                              FLucideIcons.link,
+                              'Copy URL',
+                              widget.onCopyUrl!,
+                            ),
+                          if (widget.onOpenUrl != null)
+                            _actionBtn(
+                              FLucideIcons.externalLink,
+                              'Open',
+                              widget.onOpenUrl!,
+                            ),
+                          if (widget.onDownload != null)
+                            _actionBtn(
+                              FLucideIcons.download,
+                              'Download',
+                              widget.onDownload!,
+                            ),
+                          if (widget.onRenameMove != null)
+                            _actionBtn(
+                              FLucideIcons.pencilLine,
+                              'Rename / Move',
+                              widget.onRenameMove!,
+                            ),
+                          if (widget.onDelete != null)
+                            _actionBtn(
+                              FLucideIcons.trash2,
+                              'Delete',
+                              widget.onDelete!,
+                              color: YsColors.error,
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 )
               : null,
