@@ -10,7 +10,7 @@ import '../theme/app_theme.dart';
 import '../util/time_format.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 import 'confirm_dialog.dart';
-import 'settings/settings_tiles.dart';
+import 'ys_form_controls.dart';
 
 /// Audit-log viewer: newest-first event table with type/time/search
 /// filters, CSV/JSON export of the filtered view, and clear-all.

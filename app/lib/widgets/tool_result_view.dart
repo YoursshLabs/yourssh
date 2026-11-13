@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/tool_result.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
-import 'settings/settings_tiles.dart';
+import 'ys_form_controls.dart';
 
 class ToolResultView extends StatelessWidget {
   final ToolResult? result;

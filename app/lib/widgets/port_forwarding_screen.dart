@@ -7,7 +7,7 @@ import '../models/port_forward.dart';
 import '../providers/host_provider.dart';
 import '../providers/port_forward_provider.dart';
 import '../services/port_forward_service.dart';
-import 'settings/settings_tiles.dart';
+import 'ys_form_controls.dart';
 import 'ys_menu.dart';
 
 class PortForwardingScreen extends StatefulWidget {

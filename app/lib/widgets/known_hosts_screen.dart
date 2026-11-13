@@ -6,7 +6,7 @@ import '../models/known_host.dart';
 import '../providers/known_hosts_provider.dart';
 import '../theme/app_theme.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
-import 'settings/settings_tiles.dart';
+import 'ys_form_controls.dart';
 import '../util/known_hosts_importer.dart';
 
 class KnownHostsScreen extends StatefulWidget {

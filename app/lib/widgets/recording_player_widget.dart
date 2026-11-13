@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import '../theme/terminal_themes.dart';
 import '../providers/settings_provider.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
-import 'settings/settings_tiles.dart';
+import 'ys_form_controls.dart';
 
 class RecordingPlayerWidget extends StatefulWidget {
   final String filePath;

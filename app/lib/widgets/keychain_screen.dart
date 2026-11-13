@@ -12,7 +12,7 @@ import '../providers/key_provider.dart';
 import '../services/key_gen_service.dart';
 import '../theme/app_theme.dart';
 import 'deploy_key_dialog.dart';
-import 'settings/settings_tiles.dart';
+import 'ys_form_controls.dart';
 
 import 'package:yourssh_ui/yourssh_ui.dart';
 

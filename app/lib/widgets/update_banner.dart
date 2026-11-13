@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:yourssh/providers/update_provider.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
-import 'settings/settings_tiles.dart';
+import 'ys_form_controls.dart';
 
 /// Dismissible banner shown at the top of the app when a newer release is
 /// available. [onShowDetails] navigates to the Settings update section.

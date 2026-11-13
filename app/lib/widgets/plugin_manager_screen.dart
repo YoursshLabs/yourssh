@@ -5,7 +5,7 @@ import '../providers/plugin_engine_provider.dart';
 import '../providers/plugin_provider.dart';
 import 'plugin_consent_dialog.dart';
 import 'plugin_console_screen.dart';
-import 'settings/settings_tiles.dart';
+import 'ys_form_controls.dart';
 import 'switch_row_tile.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 

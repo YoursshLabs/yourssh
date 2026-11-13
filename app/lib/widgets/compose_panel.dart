@@ -8,7 +8,7 @@ import '../models/host.dart';
 import '../services/container_service.dart';
 import '../theme/app_theme.dart';
 import 'container_widgets.dart';
-import 'settings/settings_tiles.dart';
+import 'ys_form_controls.dart';
 
 class ComposePanel extends StatefulWidget {
   const ComposePanel({super.key, required this.host, required this.service});

@@ -5,7 +5,7 @@ import '../models/recording_entry.dart';
 import '../providers/recording_provider.dart';
 import '../theme/app_theme.dart';
 import 'recording_player_widget.dart';
-import 'settings/settings_tiles.dart';
+import 'ys_form_controls.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 class RecordingLibraryScreen extends StatefulWidget {

@@ -6,7 +6,7 @@ import '../models/ai_provider_config.dart';
 import '../models/chat_message.dart';
 import '../providers/ai_chat_provider.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
-import 'settings/settings_tiles.dart';
+import 'ys_form_controls.dart';
 
 class AiChatSidebar extends StatefulWidget {
   final VoidCallback onClose;
