@@ -46,6 +46,9 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
   final _anon = TextEditingController();
   final _code = TextEditingController();
   bool _editingConfig = false;
+  // Reveal state for the secret fields (obscured by default, per field).
+  bool _anonShown = false;
+  bool _codeShown = false;
   bool _pulling = false;
   String? _configError;
 
@@ -252,9 +255,13 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
   Widget _buildHeader() => FHeader.nested(
     title: const Text('Pair device'),
     prefixes: [
-      FHeaderAction.back(
-        semanticsLabel: 'Settings',
-        onPress: () => Navigator.of(context).maybePop(),
+      Tooltip(
+        message: 'Settings',
+        excludeFromSemantics: true,
+        child: FHeaderAction.back(
+          semanticsLabel: 'Settings',
+          onPress: () => Navigator.of(context).maybePop(),
+        ),
       ),
     ],
   );
@@ -336,7 +343,7 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
             Column(
               children: [
                 Icon(
-                  Icons.error_outline,
+                  FLucideIcons.circleAlert,
                   color: MobileColors.textMuted,
                   size: 40,
                 ),
@@ -466,8 +473,20 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
         ),
         const SizedBox(height: MobileTokens.space3),
         _configField(_url, 'Supabase URL', 'sync-url'),
-        _configField(_anon, 'Anon key', 'sync-anon'),
-        _configField(_code, 'Sync code (12 chars)', 'sync-code'),
+        _secretField(
+          _anon,
+          'Anon key',
+          'sync-anon',
+          shown: _anonShown,
+          onShownChanged: (v) => setState(() => _anonShown = v),
+        ),
+        _secretField(
+          _code,
+          'Sync code (12 chars)',
+          'sync-code',
+          shown: _codeShown,
+          onShownChanged: (v) => setState(() => _codeShown = v),
+        ),
         const SizedBox(height: MobileTokens.space3),
         Row(
           children: [
@@ -512,6 +531,30 @@ class _MobileSyncScreenState extends State<MobileSyncScreen> {
       key: Key(key),
       control: FTextFieldControl.managed(controller: controller),
       label: Text(label),
+      autocorrect: false,
+      enableSuggestions: false,
+    ),
+  );
+
+  /// Obscured secret field with a show/hide toggle (parity with desktop
+  /// `sync_section.dart` `_secretField`).
+  Widget _secretField(
+    TextEditingController controller,
+    String label,
+    String key, {
+    required bool shown,
+    required ValueChanged<bool> onShownChanged,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: MobileTokens.space3),
+    child: FTextField.password(
+      key: Key(key),
+      control: .managed(controller: controller),
+      obscureTextControl: .lifted(
+        value: !shown,
+        onChange: (obscured) => onShownChanged(!obscured),
+      ),
+      label: Text(label),
+      autofillHints: const [],
       autocorrect: false,
       enableSuggestions: false,
     ),

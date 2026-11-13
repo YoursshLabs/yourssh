@@ -152,7 +152,7 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
   IconData _iconFor(SftpName e) {
     final name = e.filename;
     final lower = name.toLowerCase();
-    if (e.attr.isDirectory) return Icons.folder_rounded;
+    if (e.attr.isDirectory) return FLucideIcons.folder;
     // Sensitive / dot-files get a lock glyph.
     if (name.startsWith('.') ||
         lower.contains('secret') ||
@@ -161,23 +161,23 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
         lower.endsWith('.pem') ||
         lower.endsWith('.key') ||
         lower.endsWith('.env')) {
-      return Icons.lock_outline;
+      return FLucideIcons.lock;
     }
     if (RegExp(r'\.(zip|tar|gz|tgz|bz2|xz|7z|rar)$').hasMatch(lower)) {
-      return Icons.folder_zip_outlined;
+      return FLucideIcons.fileArchive;
     }
     if (RegExp(r'\.(png|jpe?g|gif|webp|svg|bmp|ico)$').hasMatch(lower)) {
-      return Icons.image_outlined;
+      return FLucideIcons.image;
     }
     if (RegExp(r'\.(mp4|mov|avi|mkv|webm)$').hasMatch(lower)) {
-      return Icons.videocam_outlined;
+      return FLucideIcons.video;
     }
     if (RegExp(
       r'\.(sh|bash|zsh|py|js|ts|go|rs|c|cpp|dart|rb|json|ya?ml|toml|conf|ini|cfg)$',
     ).hasMatch(lower)) {
-      return Icons.description_outlined;
+      return FLucideIcons.fileCode;
     }
-    return Icons.insert_drive_file_outlined;
+    return FLucideIcons.file;
   }
 
   Color _iconColor(SftpName e) {
@@ -303,10 +303,14 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
                     itemCount: _entries.length,
                     separatorBuilder: (context, i) => Padding(
                       padding: const EdgeInsets.only(left: 47),
-                      child: Divider(
-                        height: 1,
-                        thickness: 0.5,
-                        color: MobileColors.border,
+                      child: FDivider(
+                        style: .delta(
+                          color: MobileColors.border,
+                          width: 0.5,
+                          padding: EdgeInsetsGeometryDelta.value(
+                            EdgeInsets.zero,
+                          ),
+                        ),
                       ),
                     ),
                     padding: EdgeInsets.only(
@@ -372,15 +376,23 @@ class _Header extends StatelessWidget {
       ),
       prefixes: [FHeaderAction.back(onPress: onBack)],
       suffixes: [
-        FHeaderAction(
-          icon: const Icon(FLucideIcons.fileUp),
-          semanticsLabel: 'Upload',
-          onPress: onUpload,
+        Tooltip(
+          message: 'Upload',
+          excludeFromSemantics: true,
+          child: FHeaderAction(
+            icon: const Icon(FLucideIcons.fileUp),
+            semanticsLabel: 'Upload',
+            onPress: onUpload,
+          ),
         ),
-        FHeaderAction(
-          icon: const Icon(FLucideIcons.ellipsisVertical),
-          semanticsLabel: 'More',
-          onPress: () => _showMenu(context),
+        Tooltip(
+          message: 'More',
+          excludeFromSemantics: true,
+          child: FHeaderAction(
+            icon: const Icon(FLucideIcons.ellipsisVertical),
+            semanticsLabel: 'More',
+            onPress: () => _showMenu(context),
+          ),
         ),
       ],
     );
@@ -395,9 +407,10 @@ class _Header extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.all(MobileTokens.space2),
-          child: FItem(
-            prefix: const Icon(FLucideIcons.refreshCw),
-            title: const Text('Refresh'),
+          child: _SheetAction(
+            tapKey: const ValueKey('sftp-refresh'),
+            icon: FLucideIcons.refreshCw,
+            label: 'Refresh',
             onPress: () {
               Navigator.pop(ctx);
               onRefresh();
@@ -433,14 +446,15 @@ class _BreadcrumbRow extends StatelessWidget {
         child: Row(
           children: [
             // Home icon — tappable when not at root.
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onHome,
+            FTappable.static(
+              key: const ValueKey('sftp-home'),
+              semanticsLabel: 'Home folder',
+              onPress: onHome,
               child: SizedBox(
                 width: MobileTokens.touchTarget,
                 height: MobileTokens.touchTarget,
                 child: Icon(
-                  Icons.home_outlined,
+                  FLucideIcons.house,
                   size: 16,
                   color: parts.isEmpty
                       ? MobileColors.textPrimary
@@ -452,14 +466,15 @@ class _BreadcrumbRow extends StatelessWidget {
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 2),
                 child: Icon(
-                  Icons.chevron_right,
+                  FLucideIcons.chevronRight,
                   size: 14,
                   color: MobileColors.textFaint,
                 ),
               ),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: i == parts.length - 1 ? null : () => onSegment(i),
+              FTappable.static(
+                key: ValueKey('sftp-crumb-$i'),
+                semanticsLabel: parts[i],
+                onPress: i == parts.length - 1 ? null : () => onSegment(i),
                 child: Container(
                   height: MobileTokens.touchTarget,
                   alignment: Alignment.center,
@@ -517,10 +532,10 @@ class _MetaRow extends StatelessWidget {
               style: mobileMono(size: 11, color: MobileColors.textMuted),
             ),
           ),
-          GestureDetector(
+          FTappable.static(
             key: const ValueKey('sftp-sort'),
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
+            semanticsLabel: 'Sort',
+            onPress: () {
               // Cycle: name↑ → name↓ → size↑ → size↓ → name↑
               if (sortField == _SortField.name && ascending) {
                 onSort(_SortField.name, false);
@@ -543,7 +558,7 @@ class _MetaRow extends StatelessWidget {
                   ),
                   const SizedBox(width: 2),
                   Icon(
-                    ascending ? Icons.arrow_upward : Icons.arrow_downward,
+                    ascending ? FLucideIcons.arrowUp : FLucideIcons.arrowDown,
                     size: 12,
                     color: MobileColors.textMuted,
                   ),
@@ -625,7 +640,7 @@ class _EntryRow extends StatelessWidget {
               ),
               if (isDir)
                 const Icon(
-                  Icons.chevron_right,
+                  FLucideIcons.chevronRight,
                   size: 18,
                   color: MobileColors.textFaint,
                 )
@@ -638,12 +653,58 @@ class _EntryRow extends StatelessWidget {
                     width: MobileTokens.touchTarget,
                     height: MobileTokens.touchTarget,
                     child: Icon(
-                      Icons.download_outlined,
+                      FLucideIcons.download,
                       size: 18,
                       color: MobileColors.textMuted,
                     ),
                   ),
                 ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Sheet action row: icon + label, >=44px tall (forui's FItem lays out 43px
+/// in the touch theme, below the minimum hit size).
+class _SheetAction extends StatelessWidget {
+  final Key tapKey;
+  final IconData icon;
+  final String label;
+  final VoidCallback onPress;
+
+  const _SheetAction({
+    required this.tapKey,
+    required this.icon,
+    required this.label,
+    required this.onPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const color = MobileColors.textPrimary;
+    return FTappable.static(
+      key: tapKey,
+      onPress: onPress,
+      semanticsLabel: label,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: MobileTokens.touchTarget),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: MobileTokens.space3),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: color),
+              const SizedBox(width: MobileTokens.space3),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: mobileBody(size: 16, color: color),
+                ),
+              ),
             ],
           ),
         ),

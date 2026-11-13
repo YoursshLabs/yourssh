@@ -28,11 +28,11 @@ Future<SyncProvider> _pump(
     });
   }
 
-  final sync  = SyncProvider();
+  final sync = SyncProvider();
   if (status != SyncStatus.idle) sync.setStatus(status);
 
-  final hosts    = HostProvider(StorageService());
-  final syncSvc  = SyncService(sync);
+  final hosts = HostProvider(StorageService());
+  final syncSvc = SyncService(sync);
 
   await tester.pumpWidget(
     MaterialApp(
@@ -82,12 +82,16 @@ void main() {
     expect(find.text('E2E'), findsOneWidget);
   });
 
-  testWidgets('shows connected text when Supabase is configured', (tester) async {
+  testWidgets('shows connected text when Supabase is configured', (
+    tester,
+  ) async {
     await _pump(tester, configured: true);
     expect(find.textContaining('connected'), findsWidgets);
   });
 
-  testWidgets('hides E2E badge when Supabase is not configured', (tester) async {
+  testWidgets('hides E2E badge when Supabase is not configured', (
+    tester,
+  ) async {
     await _pump(tester, configured: false);
     expect(find.text('E2E'), findsNothing);
   });
@@ -99,12 +103,13 @@ void main() {
 
   // ── Config form: unconfigured state shows URL/anon/code fields ────────────
 
-  testWidgets('shows config fields when Supabase is not configured',
-      (tester) async {
+  testWidgets('shows config fields when Supabase is not configured', (
+    tester,
+  ) async {
     await _pump(tester, configured: false);
     await tester.drag(find.byType(ListView), const Offset(0, -2000));
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.byKey(const Key('sync-url')),  findsOneWidget);
+    expect(find.byKey(const Key('sync-url')), findsOneWidget);
     expect(find.byKey(const Key('sync-anon')), findsOneWidget);
     expect(find.byKey(const Key('sync-code')), findsOneWidget);
     expect(find.text('Save'), findsOneWidget);
@@ -113,8 +118,9 @@ void main() {
 
   // ── Config form: Save round-trip calls setSupabaseConfig + setSyncCode ────
 
-  testWidgets('Save calls setSupabaseConfig and setSyncCode on SyncProvider',
-      (tester) async {
+  testWidgets('Save calls setSupabaseConfig and setSyncCode on SyncProvider', (
+    tester,
+  ) async {
     final sync = await _pump(tester, configured: false);
 
     // Scroll config section into view.
@@ -123,11 +129,11 @@ void main() {
 
     // Enter values into each field.
     await tester.enterText(
-        find.byKey(const Key('sync-url')), 'https://my.supabase.co');
-    await tester.enterText(
-        find.byKey(const Key('sync-anon')), 'my-anon-key');
-    await tester.enterText(
-        find.byKey(const Key('sync-code')), 'ABCDEFGHIJKL');
+      find.byKey(const Key('sync-url')),
+      'https://my.supabase.co',
+    );
+    await tester.enterText(find.byKey(const Key('sync-anon')), 'my-anon-key');
+    await tester.enterText(find.byKey(const Key('sync-code')), 'ABCDEFGHIJKL');
     await tester.pump();
 
     // Ensure the Save button is scrolled into view before tapping.
@@ -139,15 +145,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     // Verify SyncProvider state was updated.
-    expect(sync.supabaseUrl,     'https://my.supabase.co');
+    expect(sync.supabaseUrl, 'https://my.supabase.co');
     expect(sync.supabaseAnonKey, 'my-anon-key');
     expect(sync.isSupabaseConfigured, isTrue);
   });
 
   // ── Config form: configured state shows "Edit credentials" affordance ─────
 
-  testWidgets('shows Edit credentials button when already configured',
-      (tester) async {
+  testWidgets('shows Edit credentials button when already configured', (
+    tester,
+  ) async {
     await _pump(tester, configured: true);
     await tester.drag(find.byType(ListView), const Offset(0, -2000));
     await tester.pump(const Duration(milliseconds: 100));
@@ -158,91 +165,101 @@ void main() {
 
   // ── Validation: empty URL does NOT persist and shows error ────────────────
 
-  testWidgets('Save with empty URL does not configure SyncProvider and shows error',
-      (tester) async {
-    final sync = await _pump(tester, configured: false);
+  testWidgets(
+    'Save with empty URL does not configure SyncProvider and shows error',
+    (tester) async {
+      final sync = await _pump(tester, configured: false);
 
-    await tester.drag(find.byType(ListView), const Offset(0, -2000));
-    await tester.pump(const Duration(milliseconds: 100));
+      await tester.drag(find.byType(ListView), const Offset(0, -2000));
+      await tester.pump(const Duration(milliseconds: 100));
 
-    // Leave URL empty; fill in anon key.
-    await tester.enterText(find.byKey(const Key('sync-anon')), 'my-anon-key');
-    await tester.pump();
+      // Leave URL empty; fill in anon key.
+      await tester.enterText(find.byKey(const Key('sync-anon')), 'my-anon-key');
+      await tester.pump();
 
-    await tester.ensureVisible(find.text('Save'));
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.tap(find.text('Save'));
-    await tester.pump(const Duration(milliseconds: 200));
+      await tester.ensureVisible(find.text('Save'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('Save'));
+      await tester.pump(const Duration(milliseconds: 200));
 
-    // Provider must NOT be configured.
-    expect(sync.isSupabaseConfigured, isFalse);
-    // Error message must be visible.
-    expect(find.byKey(const Key('sync-config-error')), findsOneWidget);
-  });
+      // Provider must NOT be configured.
+      expect(sync.isSupabaseConfigured, isFalse);
+      // Error message must be visible.
+      expect(find.byKey(const Key('sync-config-error')), findsOneWidget);
+    },
+  );
 
   // ── Validation: invalid (non-http) URL does NOT persist ───────────────────
 
-  testWidgets('Save with non-http URL does not configure SyncProvider and shows error',
-      (tester) async {
-    final sync = await _pump(tester, configured: false);
+  testWidgets(
+    'Save with non-http URL does not configure SyncProvider and shows error',
+    (tester) async {
+      final sync = await _pump(tester, configured: false);
 
-    await tester.drag(find.byType(ListView), const Offset(0, -2000));
-    await tester.pump(const Duration(milliseconds: 100));
+      await tester.drag(find.byType(ListView), const Offset(0, -2000));
+      await tester.pump(const Duration(milliseconds: 100));
 
-    await tester.enterText(
-        find.byKey(const Key('sync-url')), 'not-a-valid-url');
-    await tester.enterText(
-        find.byKey(const Key('sync-anon')), 'my-anon-key');
-    await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('sync-url')),
+        'not-a-valid-url',
+      );
+      await tester.enterText(find.byKey(const Key('sync-anon')), 'my-anon-key');
+      await tester.pump();
 
-    await tester.ensureVisible(find.text('Save'));
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.tap(find.text('Save'));
-    await tester.pump(const Duration(milliseconds: 200));
+      await tester.ensureVisible(find.text('Save'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('Save'));
+      await tester.pump(const Duration(milliseconds: 200));
 
-    expect(sync.isSupabaseConfigured, isFalse);
-    expect(find.byKey(const Key('sync-config-error')), findsOneWidget);
-  });
+      expect(sync.isSupabaseConfigured, isFalse);
+      expect(find.byKey(const Key('sync-config-error')), findsOneWidget);
+    },
+  );
 
   // ── Validation: empty anon key does NOT persist ───────────────────────────
 
-  testWidgets('Save with empty anon key does not configure SyncProvider and shows error',
-      (tester) async {
-    final sync = await _pump(tester, configured: false);
+  testWidgets(
+    'Save with empty anon key does not configure SyncProvider and shows error',
+    (tester) async {
+      final sync = await _pump(tester, configured: false);
 
-    await tester.drag(find.byType(ListView), const Offset(0, -2000));
-    await tester.pump(const Duration(milliseconds: 100));
+      await tester.drag(find.byType(ListView), const Offset(0, -2000));
+      await tester.pump(const Duration(milliseconds: 100));
 
-    await tester.enterText(
-        find.byKey(const Key('sync-url')), 'https://my.supabase.co');
-    // Leave anon key empty.
-    await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('sync-url')),
+        'https://my.supabase.co',
+      );
+      // Leave anon key empty.
+      await tester.pump();
 
-    await tester.ensureVisible(find.text('Save'));
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.tap(find.text('Save'));
-    await tester.pump(const Duration(milliseconds: 200));
+      await tester.ensureVisible(find.text('Save'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('Save'));
+      await tester.pump(const Duration(milliseconds: 200));
 
-    expect(sync.isSupabaseConfigured, isFalse);
-    expect(find.byKey(const Key('sync-config-error')), findsOneWidget);
-  });
+      expect(sync.isSupabaseConfigured, isFalse);
+      expect(find.byKey(const Key('sync-config-error')), findsOneWidget);
+    },
+  );
 
   // ── Validation: valid round-trip also exercises setSyncCode ──────────────
 
-  testWidgets('Save with valid URL+anon+code calls setSyncCode',
-      (tester) async {
+  testWidgets('Save with valid URL+anon+code calls setSyncCode', (
+    tester,
+  ) async {
     final sync = await _pump(tester, configured: false);
 
     await tester.drag(find.byType(ListView), const Offset(0, -2000));
     await tester.pump(const Duration(milliseconds: 100));
 
     await tester.enterText(
-        find.byKey(const Key('sync-url')), 'https://my.supabase.co');
-    await tester.enterText(
-        find.byKey(const Key('sync-anon')), 'my-anon-key');
+      find.byKey(const Key('sync-url')),
+      'https://my.supabase.co',
+    );
+    await tester.enterText(find.byKey(const Key('sync-anon')), 'my-anon-key');
     // Use Crockford Base32 chars only (no I/L/O/U ambiguity).
-    await tester.enterText(
-        find.byKey(const Key('sync-code')), 'ABCDEFGH0JKM');
+    await tester.enterText(find.byKey(const Key('sync-code')), 'ABCDEFGH0JKM');
     await tester.pump();
 
     await tester.ensureVisible(find.text('Save'));
@@ -269,21 +286,22 @@ void main() {
     expect(size.height, greaterThanOrEqualTo(44));
   });
 
-  testWidgets('primary actions (Scan, Save, Pull, Edit) >=44px tall',
-      (tester) async {
+  testWidgets('primary actions (Scan, Save, Pull, Edit) >=44px tall', (
+    tester,
+  ) async {
     await _pump(tester, configured: false);
     await tester.drag(find.byType(ListView), const Offset(0, -2000));
     await tester.pump(const Duration(milliseconds: 100));
     for (final label in ['Scan QR code', 'Save', 'Pull from cloud']) {
       final b = find.widgetWithText(FButton, label);
       expect(b, findsOneWidget, reason: label);
-      expect(tester.getSize(b).height, greaterThanOrEqualTo(44),
-          reason: label);
+      expect(tester.getSize(b).height, greaterThanOrEqualTo(44), reason: label);
     }
   });
 
-  testWidgets('360x640 with 60-char Supabase URL does not overflow',
-      (tester) async {
+  testWidgets('360x640 with 60-char Supabase URL does not overflow', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -291,5 +309,80 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, -2000));
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Settings tooltip on back action', (tester) async {
+    await _pump(tester);
+    expect(find.byTooltip('Settings'), findsOneWidget);
+  });
+
+  testWidgets('Edit credentials button >=44px', (tester) async {
+    await _pump(tester, configured: true);
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      tester.getSize(find.widgetWithText(FButton, 'Edit credentials')).height,
+      greaterThanOrEqualTo(44),
+    );
+  });
+
+  testWidgets('anon key / sync code obscured by default; toggles independent; '
+      'URL plain; Save reads real values', (tester) async {
+    final sync = await _pump(tester, configured: false);
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    bool obscured(String key) => tester
+        .widget<EditableText>(
+          find.descendant(
+            of: find.byKey(Key(key)),
+            matching: find.byType(EditableText),
+          ),
+        )
+        .obscureText;
+
+    Future<void> toggle(String key) async {
+      final f = find.descendant(
+        of: find.byKey(Key(key)),
+        matching: find.byType(FButton),
+      );
+      await tester.ensureVisible(f);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(f);
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    expect(obscured('sync-url'), isFalse);
+    expect(obscured('sync-anon'), isTrue);
+    expect(obscured('sync-code'), isTrue);
+
+    await tester.enterText(
+      find.byKey(const Key('sync-url')),
+      'https://my.supabase.co',
+    );
+    await tester.enterText(find.byKey(const Key('sync-anon')), 'my-anon-key');
+    await tester.enterText(find.byKey(const Key('sync-code')), 'ABCDEFGH0JKM');
+    await tester.pump();
+
+    // Reveal anon only.
+    await toggle('sync-anon');
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(obscured('sync-anon'), isFalse);
+    expect(obscured('sync-code'), isTrue);
+
+    // Reveal code, re-hide anon.
+    await toggle('sync-code');
+    await tester.pump(const Duration(milliseconds: 300));
+    await toggle('sync-anon');
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(obscured('sync-anon'), isTrue);
+    expect(obscured('sync-code'), isFalse);
+
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Save'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(sync.supabaseAnonKey, 'my-anon-key');
+    expect(sync.syncCode, 'ABCDEFGH0JKM');
   });
 }
