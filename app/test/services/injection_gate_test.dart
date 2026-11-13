@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xterm/xterm.dart';
 import 'package:yourssh/services/injection_gate.dart';
 
 void main() {
@@ -96,8 +97,65 @@ void main() {
     final g = gate();
     g.feed('echo__YS_RDY__noise');
     final r = g.feed('more__YS_DONE__\ntail');
-    expect(r.emit, '\ntail');
+    expect(r.emit, '${InjectionGate.kClearPromptLine}tail');
     expect(g.isHolding, isFalse);
+  });
+
+  group('the prompt printed before the handshake is not left behind', () {
+    // The shell painted prompt 1, the bootstrap was typed after it (its echo
+    // is discarded) and the shell paints prompt 2 once DONE is out. Without
+    // clearing, the screen shows an empty prompt 1 above prompt 2.
+    test('DONE clears the line and drops the sentinel line break', () {
+      final g = gate();
+      g.feed('bootstrap echo\r\n__YS_RDY__');
+      final r = g.feed('__YS_DONE__\r\nuser@host:~\$ ');
+      expect(r.emit, '\r\x1b[2Kuser@host:~\$ ');
+    });
+
+    test('a line break arriving in the next chunk is still dropped', () {
+      final g = gate();
+      g.feed('__YS_RDY__');
+      expect(g.feed('__YS_DONE__').emit, '\r\x1b[2K');
+      expect(g.feed('\r').emit, '');
+      expect(g.feed('\nuser@host:~\$ ').emit, 'user@host:~\$ ');
+      expect(g.feed('\r\nnext').emit, '\r\nnext',
+          reason: 'only the sentinel line break is dropped');
+    });
+
+    test('a working-dir warning after DONE stays visible', () {
+      final g = gate();
+      g.feed('__YS_RDY__');
+      final r = g.feed(
+          '__YS_DONE__\r\nyourssh: working dir not found: /x\r\n\$ ');
+      expect(r.emit,
+          '\r\x1b[2Kyourssh: working dir not found: /x\r\n\$ ');
+    });
+
+    test('on a real terminal only one prompt is left', () {
+      final term = Terminal();
+      term.write('Welcome\r\n\r\nuser@host:~\$ '); // prompt 1, then bootstrap
+      final g = gate();
+      for (final chunk in [
+        '[ -n "\$BASH_VERSION" ] && { ... }\r\n', // echo of the bootstrap
+        '__YS_RDY__',
+        '__YS_DONE__\r\n',
+        'user@host:~\$ ', // prompt 2
+      ]) {
+        final out = g.feed(chunk).emit;
+        if (out != null) term.write(out);
+      }
+      String line(int i) => term.buffer.lines[i].toString().trimRight();
+      expect([for (var i = 0; i < 4; i++) line(i)],
+          ['Welcome', '', r'user@host:~$', '']);
+      expect(term.buffer.cursorY, 2);
+    });
+
+    test('oversized head (real output was held) is not cleared', () {
+      final g = gate(maxHold: 10);
+      g.feed('A' * 11);
+      final r = g.feed('__YS_RDY____YS_DONE__\r\ntail');
+      expect(r.emit, '${'A' * 11}\r\ntail');
+    });
   });
 
   test('oversized head means real output got held — emit it, stripped', () {
@@ -113,7 +171,7 @@ void main() {
   test('DONE without RDY (non-bash/zsh) discards echo without payload', () {
     final g = gate();
     final r = g.feed('echo__YS_DONE__');
-    expect(r.emit, '');
+    expect(r.emit, InjectionGate.kClearPromptLine);
     expect(r.sendPayload, isFalse);
     expect(g.isHolding, isFalse);
   });
@@ -122,14 +180,14 @@ void main() {
     final g = gate();
     final r = g.feed('__YS_RDY____YS_DONE__tail');
     expect(r.sendPayload, isTrue);
-    expect(r.emit, 'tail');
+    expect(r.emit, '${InjectionGate.kClearPromptLine}tail');
   });
 
   test('DONE split across chunks still completes', () {
     final g = gate();
     g.feed('__YS_RDY__x__YS_DO');
     final r = g.feed('NE__after');
-    expect(r.emit, 'after');
+    expect(r.emit, '${InjectionGate.kClearPromptLine}after');
     expect(g.isHolding, isFalse);
   });
 
