@@ -7,6 +7,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  _keyRemovalTests();
 
   group('KeyProvider certificate methods', () {
     test('setCertificate persists certificatePath on the key entry', () async {
@@ -57,4 +58,73 @@ String _tmpKeyFile() {
       'test_key_${DateTime.now().millisecondsSinceEpoch}');
   f.writeAsStringSync('placeholder');
   return f.path;
+}
+
+void _keyRemovalTests() {
+  group('KeyProvider removal', () {
+    late Directory sshDir;
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      sshDir = Directory.systemTemp.createTempSync('ssh_dir_');
+      File('${sshDir.path}/id_ed25519').writeAsStringSync('k');
+      File('${sshDir.path}/id_ed25519.pub').writeAsStringSync('pub');
+    });
+    tearDown(() => sshDir.deleteSync(recursive: true));
+
+    test('deleteKey deletes the stored passphrase', () async {
+      final provider = KeyProvider(discoverSshKeys: false);
+      await provider.ready;
+      final deleted = <String>[];
+      provider.deletePassphrase = (id) async => deleted.add(id);
+      final entry = await provider.addKeyFromFile(_tmpKeyFile(), 'k');
+
+      await provider.deleteKey(entry.id);
+
+      expect(deleted, [entry.id]);
+    });
+
+    test('a failing passphrase delete does not break removal', () async {
+      final provider = KeyProvider(discoverSshKeys: false);
+      await provider.ready;
+      provider.deletePassphrase = (id) async => throw Exception('boom');
+      final entry = await provider.addKeyFromFile(_tmpKeyFile(), 'k');
+
+      await provider.deleteKey(entry.id);
+
+      expect(provider.keys, isEmpty);
+    });
+
+    test('removed auto-discovered key is not re-added on next launch', () async {
+      final first = KeyProvider(sshDirPath: sshDir.path);
+      await first.ready;
+      expect(first.keys, hasLength(1));
+      await first.deleteKey(first.keys.first.id);
+
+      final second = KeyProvider(sshDirPath: sshDir.path);
+      await second.ready;
+
+      expect(second.keys, isEmpty);
+    });
+
+    test('explicit re-import clears the dismissal', () async {
+      final first = KeyProvider(sshDirPath: sshDir.path);
+      await first.ready;
+      await first.deleteKey(first.keys.first.id);
+
+      final second = KeyProvider(sshDirPath: sshDir.path);
+      await second.ready;
+      await second.addKeyFromFile('${sshDir.path}/id_ed25519', 'again');
+      expect(second.keys, hasLength(1));
+      await second.deleteKey(second.keys.first.id);
+
+      // Re-import then (no) removal: dismissal was cleared, so re-importing
+      // and relaunching keeps the key.
+      final third = KeyProvider(sshDirPath: sshDir.path);
+      await third.ready;
+      await third.addKeyFromFile('${sshDir.path}/id_ed25519', 'again');
+      final fourth = KeyProvider(sshDirPath: sshDir.path);
+      await fourth.ready;
+      expect(fourth.keys, hasLength(1));
+    });
+  });
 }

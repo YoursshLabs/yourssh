@@ -43,7 +43,9 @@ class MobileBootstrap {
     storage = StorageService();
     ssh = SshService(storage);
     hostProvider = HostProvider(storage);
-    keyProvider = KeyProvider()..savePassphrase = storage.savePassphrase;
+    keyProvider = KeyProvider()
+      ..savePassphrase = storage.savePassphrase
+      ..deletePassphrase = storage.deletePassphrase;
     settings = SettingsProvider();
     knownHosts = KnownHostsProvider(storage)..load();
     sessions = SessionProvider(ssh, TabMetadataService());
