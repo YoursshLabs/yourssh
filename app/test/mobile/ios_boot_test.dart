@@ -5,6 +5,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/mobile_app.dart';
 import 'package:yourssh/mobile/screens/mobile_home_shell.dart';
+import 'package:yourssh/mobile/screens/mobile_hosts_screen.dart';
+import 'package:yourssh/mobile/screens/mobile_keys_screen.dart';
+import 'package:yourssh/mobile/screens/mobile_settings_screen.dart';
+import 'package:yourssh/mobile/screens/mobile_snippets_screen.dart';
 import 'package:yourssh/mobile/security/app_lock_gate.dart';
 import 'package:yourssh/mobile/widgets/mobile_tab_bar.dart';
 
@@ -32,7 +36,7 @@ void main() {
         .setMockMethodCallHandler(secureChannel, null);
   });
 
-  testWidgets('the mobile shell boots under iOS without desktop services',
+  testWidgets('the mobile shell boots under iOS',
       (t) async {
     await t.pumpWidget(const YourSSHMobileApp());
     await t.pumpAndSettle();
@@ -44,11 +48,19 @@ void main() {
   testWidgets('every tab renders under iOS', (t) async {
     await t.pumpWidget(const YourSSHMobileApp());
     await t.pumpAndSettle();
-    for (final label in ['Snippets', 'Keys', 'Settings', 'Hosts']) {
+    final screens = <String, Type>{
+      'Snippets': MobileSnippetsScreen,
+      'Keys': MobileKeysScreen,
+      'Settings': MobileSettingsScreen,
+      'Hosts': MobileHostsScreen,
+    };
+    for (final e in screens.entries) {
       await t.tap(find.descendant(
-          of: find.byType(MobileTabBar), matching: find.text(label)));
+          of: find.byType(MobileTabBar), matching: find.text(e.key)));
       await t.pumpAndSettle();
-      expect(t.takeException(), isNull, reason: label);
+      expect(t.takeException(), isNull, reason: e.key);
+      // IndexedStack: only the selected tab is onstage.
+      expect(find.byType(e.value), findsOneWidget, reason: e.key);
     }
   }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 }
