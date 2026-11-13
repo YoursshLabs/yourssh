@@ -696,6 +696,7 @@ class SessionProvider extends ChangeNotifier {
   /// True while any session is paused for the background (until
   /// [resumePaused] reconnects it). Anything that would re-dial a host on its
   /// own should wait.
+  // Deliberately global: pauseAll pauses every session together.
   bool get hasPausedSessions => sshSessions.any((s) => s.paused);
 
   void _pauseSessions(Iterable<SshSession> candidates) {

@@ -125,7 +125,7 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
       _dropClient();
       // Paused for the background: the host is closed on purpose, and a
       // re-dial now would race the resume. Fail cleanly instead.
-      if (_sessionsPaused()) rethrow;
+      if (!mounted || _sessionsPaused()) rethrow;
       return await op(await _client());
     }
   }
