@@ -21,6 +21,11 @@ void main() {
     expect(ios, contains('ASC_KEY_ID'));
     expect(ios, contains('if: always()'));
     expect(job(y, 'release'), isNot(contains('build-ios')));
+    expect(ios, contains('::add-mask::\$KEYCHAIN_PASSWORD'));
+    expect(ios.indexOf('SIGN_KEYCHAIN='),
+        lessThan(ios.indexOf('security import')));
+    expect(ios.indexOf('Name the IPA'), lessThan(ios.indexOf('altool')));
+    expect(ios, contains("if: always() && env.IOS_SIGNING == 'true'"));
     final opts = File('ios/ExportOptions.plist').readAsStringSync();
     expect(opts, allOf(contains('84T567KMYD'), contains('app-store-connect')));
   });

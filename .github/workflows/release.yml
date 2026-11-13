@@ -645,9 +645,13 @@ jobs:
         run: |
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
           KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
           echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           chmod 600 "$RUNNER_TEMP/cert.p12"
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # Exported right away so the always() cleanup deletes the keychain
+          # even when the import below fails (e.g. wrong .p12 password).
+          echo "SIGN_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
@@ -657,8 +661,6 @@ jobs:
           # the existing list is intended; runner keychain paths have no spaces).
           # shellcheck disable=SC2046
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
-          # Exported before the identity check so the cleanup step still runs.
-          echo "SIGN_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
           IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | awk '/Apple Distribution/ {print $2; exit}')
           if [ -z "$IDENTITY" ]; then
             echo "::error::The .p12 holds no Apple Distribution identity"
@@ -726,6 +728,14 @@ jobs:
         if: env.IOS_SIGNING == 'true'
         run: bash tool/check_ios_bundle.sh app/build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
 
+      - name: Name the IPA and zip debug symbols
+        if: env.IOS_SIGNING == 'true'
+        run: |
+          IPA=$(find app/build/ios/ipa -name '*.ipa' -maxdepth 1 | head -1)
+          mv "$IPA" "YourSSH-${{ steps.version.outputs.version }}-iOS.ipa"
+          cd app/build/symbols
+          zip -r "$GITHUB_WORKSPACE/YourSSH-${{ steps.version.outputs.version }}-iOS-symbols.zip" .
+
       - name: Upload to TestFlight
         if: env.IOS_SIGNING == 'true'
         env:
@@ -737,21 +747,13 @@ jobs:
           mkdir -p "$KEY_DIR"
           echo "$ASC_API_KEY_P8_BASE64" | base64 --decode > "$KEY_DIR/AuthKey_$ASC_KEY_ID.p8"
           chmod 600 "$KEY_DIR/AuthKey_$ASC_KEY_ID.p8"
-          IPA=$(find app/build/ios/ipa -name '*.ipa' -maxdepth 1 | head -1)
-          if [ -z "$IPA" ]; then
-            echo "::error::flutter build ipa produced no .ipa"
+          IPA="YourSSH-${{ steps.version.outputs.version }}-iOS.ipa"
+          if [ ! -f "$IPA" ]; then
+            echo "::error::$IPA is missing"
             exit 1
           fi
           API_PRIVATE_KEYS_DIR="$KEY_DIR" xcrun altool --upload-app -f "$IPA" -t ios \
             --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
-
-      - name: Name the IPA and zip debug symbols
-        if: env.IOS_SIGNING == 'true'
-        run: |
-          IPA=$(find app/build/ios/ipa -name '*.ipa' -maxdepth 1 | head -1)
-          mv "$IPA" "YourSSH-${{ steps.version.outputs.version }}-iOS.ipa"
-          cd app/build/symbols
-          zip -r "$GITHUB_WORKSPACE/YourSSH-${{ steps.version.outputs.version }}-iOS-symbols.zip" .
 
       - name: Remove signing material
         if: always()
@@ -762,13 +764,21 @@ jobs:
           rm -rf "$RUNNER_TEMP/private_keys"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: env.IOS_SIGNING != 'true'
         with:
           name: ios
           if-no-files-found: error
+          path: YourSSH-${{ steps.version.outputs.version }}-iOS-unsigned.zip
+
+      # always(): a failed TestFlight upload still leaves the IPA to debug.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always() && env.IOS_SIGNING == 'true'
+        with:
+          name: ios
+          if-no-files-found: ignore
           path: |
             YourSSH-${{ steps.version.outputs.version }}-iOS.ipa
             YourSSH-${{ steps.version.outputs.version }}-iOS-symbols.zip
-            YourSSH-${{ steps.version.outputs.version }}-iOS-unsigned.zip
 
   release:
     runs-on: ubuntu-latest
