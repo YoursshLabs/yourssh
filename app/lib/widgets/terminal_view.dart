@@ -225,11 +225,11 @@ class _TerminalWidgetState extends State<_TerminalWidget> {
     final st = context
         .read<ShellIntegrationProvider>()
         .maybeStateFor(widget.session.id);
-    if (st == null || st.commands.isEmpty || !_scrollController.hasClients) {
+    if (st == null || st.liveCommands.isEmpty || !_scrollController.hasClients) {
       return false;
     }
     final currentLine = _scrollController.offset / _lineHeightPx;
-    final lines = st.commands.map((c) => c.promptLine).toList()..sort();
+    final lines = st.liveCommands.map((c) => c.promptLine).toList()..sort();
     int? target;
     if (direction < 0) {
       for (final l in lines) {

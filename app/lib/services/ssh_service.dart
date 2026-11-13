@@ -11,6 +11,7 @@ import '../models/agent_forwarding_state.dart';
 import '../models/host.dart';
 import '../models/proxy_settings.dart';
 import '../models/ssh_key.dart';
+import 'package:xterm/xterm.dart' show CellAnchor;
 import '../models/ssh_session.dart';
 import 'certificate_key_pair.dart';
 import 'connection_proxy.dart';
@@ -145,6 +146,7 @@ class SshService {
     required bool siOn,
     required String sessionId,
     required int absoluteCursorY,
+    CellAnchor Function()? anchorFactory,
   }) {
     if (code == '52' && osc52On) {
       final r = Osc52Clipboard.parse(args);
@@ -152,7 +154,8 @@ class SshService {
       return;
     }
     if (siOn) {
-      shellIntegration?.handleOsc(sessionId, code, args, absoluteCursorY);
+      shellIntegration?.handleOsc(sessionId, code, args, absoluteCursorY,
+          anchorFactory: anchorFactory);
     }
   }
 
@@ -777,6 +780,7 @@ class SshService {
             siOn: siOn,
             sessionId: session.id,
             absoluteCursorY: session.terminal.buffer.absoluteCursorY,
+            anchorFactory: session.terminal.buffer.createAnchorFromCursor,
           );
     }
 
