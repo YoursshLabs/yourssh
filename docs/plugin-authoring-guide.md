@@ -35,8 +35,7 @@ App (Dart)          Plugin (JavaScript)
     │
     │──session opens──►  plugin.on("session.connect", handler)
     │                       │
-    │──ssh.exec()────►   ssh.exec(sessionId, "whoami")
-    │◄──result────────       Promise<{stdout, stderr, exitCode}>
+    │◄──ssh.inject()──   ssh.inject(sessionId, "whoami\n")
 ```
 
 ---
@@ -275,25 +274,7 @@ ssh.inject(sessionId, "ls -la\n");  // \n submits the command
 
 ### `sftp` — File operations
 
-> **Permission:** `sftp.read` (for list/read) or `sftp.write` (for write/delete/mkdir)
-
-```js
-// List remote directory
-const entries = await sftp.list(sessionId, "/var/log");
-// entries: [{ name, isDir, size, modified }]
-
-// Read remote file content
-const content = await sftp.read(sessionId, "/etc/hostname");
-
-// Write to remote file
-await sftp.write(sessionId, "/tmp/test.txt", "hello world");
-
-// Delete remote file
-await sftp.delete(sessionId, "/tmp/test.txt");
-
-// Create remote directory
-await sftp.mkdir(sessionId, "/tmp/newdir");
-```
+> **Not available from plugin JavaScript.** The `sftp` global does not exist. Plugins with the `sftp.read` permission can list and read remote files from **panel HTML** through the [native panel messages](#6-api-native-panel-messages) `sftp-list` and `sftp-read`. Writing, deleting and creating remote files is not supported.
 
 ---
 
@@ -302,15 +283,15 @@ await sftp.mkdir(sessionId, "/tmp/newdir");
 > **Permission:** None — always available. Auto-namespaced by plugin id.
 
 ```js
-// Save
-await storage.set("mykey", "myvalue");
+// Save (values are stored as strings)
+storage.set("mykey", "myvalue");
 
-// Load
-const val = await storage.get("mykey");
+// Load: returns { value } or null when the key is missing
+const val = storage.get("mykey");
 if (val !== null) console.log(val.value);
 
 // Delete
-await storage.delete("mykey");
+storage.delete("mykey");
 ```
 
 Keys are automatically namespaced as `plugin::<id>::storage::<key>` — no collision risk with other plugins.
@@ -319,13 +300,14 @@ Keys are automatically namespaced as `plugin::<id>::storage::<key>` — no colli
 
 ### `ui` — User interface
 
-#### `ui.notify(message, options)` — Desktop notification
+#### `ui.notify(message, options)` — Notification
 
 > **Permission:** `ui.notify`
 
 ```js
 ui.notify("Upload complete!", { type: "info" });
 // type: "info" | "warning" | "error"
+// The app currently writes notifications to the plugin's Console.
 ```
 
 #### `ui.statusbar.*` — Status bar items
@@ -506,12 +488,12 @@ The app shows a consent dialog listing all requested permissions. The user appro
 | `terminal.intercept` | Cancel or modify user keystrokes before they reach SSH |
 | `session.observe` | Receive `session.connect` / `session.disconnect` events |
 | `session.control` | `session.connect.before` — can cancel a connection |
-| `ssh.exec` | Call `ssh.exec()` to run commands on remote |
+| `ssh.exec` | Run commands through the `ssh-exec` panel message; also allows `ssh.sessions()` |
 | `terminal.inject` | Send text directly into an active shell via `ssh.inject()` |
-| `sftp.read` | `sftp.list()`, `sftp.read()` |
-| `sftp.write` | `sftp.write()`, `sftp.delete()`, `sftp.mkdir()` |
+| `sftp.read` | `sftp-list` / `sftp-read` panel messages |
+| `sftp.write` | Reserved (no JS or panel API uses it yet) |
 | `command.intercept` | `command.before` / `command.after` hooks for SSH exec commands |
-| `ui.notify` | Show desktop notifications |
+| `ui.notify` | `ui.notify()` (shown in the plugin Console) |
 | `ui.statusbar` | Add items to the status bar |
 | `ui.clipboard` | Write to the system clipboard |
 | `ui.panel` | Register a sidebar panel with WebView UI |
@@ -732,7 +714,7 @@ To re-enable: go to Plugin Manager and save the file (hot-reload resets the erro
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `Plugin "x" does not have permission: ssh.exec` | Missing permission in manifest | Add it to the `permissions` array |
+| `Error: Permission denied: ui.panel not granted` | Missing permission in manifest | Add it to the `permissions` array |
 | `ManifestException: plugin.json missing required field: name` | Missing required field | Add the field to plugin.json |
 | `QuickJsException: SyntaxError` | JS syntax error | Fix index.js |
 | Plugin does not load | plugin.json cannot be parsed | Validate JSON at jsonlint.com |
@@ -773,10 +755,11 @@ EOF
 
 | Limitation | Workaround |
 |-----------|------------|
-| `ssh.exec()` does not work inside JS hook handlers (`session.connect`, `terminal.output`, etc.) — the JS runtime is synchronous | Use the **native panel message** `ssh-exec` from panel HTML instead |
+| JS hook handlers (`session.connect`, `terminal.output`, etc.) are synchronous, so they cannot run SSH commands or await results | Use the **native panel message** `ssh-exec` from panel HTML instead |
 | `setInterval` / `setTimeout` are not available in the JS plugin context | Use `session.connect` hook to trigger logic; timer-based polling must run from panel HTML (the browser has native timers) |
 | `ui.addCommand` click handler is not invoked — commands appear in the palette but clicking them is a no-op | Known limitation — will be fixed in a future release |
-| `sftp.write`, `sftp.delete`, `sftp.mkdir` in JS are not yet implemented | Use `ssh.inject(sessionId, "rm file\n")` to perform operations via the SSH shell |
+| There is no `ssh.exec` or `sftp` global in plugin JS | Use the native panel messages `ssh-exec`, `sftp-list`, `sftp-read` from panel HTML, or `ssh.inject(sessionId, "rm file\n")` to run a command in the user's shell |
+| `ui.notify` messages go to the plugin Console, not an on-screen toast | Use `ui.statusbar` for visible status |
 | Plugin panel WebView loads from `file://` — some browser security policies may block `fetch()` | Use native panel messages (`ssh-exec`, `sftp-read`) instead of `fetch()` in panel HTML |
 | Plugins cannot share state with each other | Use `storage.set/get` with a shared key prefix (there is no read-isolation between plugins) |
 

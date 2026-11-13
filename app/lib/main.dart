@@ -387,6 +387,9 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
       onLog: (pluginId, level, message) {
         _pluginEngineProvider.addLog(pluginId, '[$level] $message');
       },
+      onNotify: (pluginId, message, type) {
+        _pluginEngineProvider.addLog(pluginId, '[notify:$type] $message');
+      },
     );
     // PluginEngineProvider must be created before PluginLoader because the
     // loader's onConsentRequired callback closes over _pluginEngineProvider.

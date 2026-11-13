@@ -226,10 +226,10 @@ Loaded at runtime from a plugins directory via `packages/yourssh_script_engine`.
 - `PluginUiRegistry` — plugins can register Flutter widgets by calling the `ui.register(id, widgetSpec)` JS API; the app renders these in the plugin manager
 
 **Bridges (Dart APIs exposed to JS):**
-- `SshBridge` — `ssh.exec(sessionId, cmd)`, `ssh.write(sessionId, data)`
-- `SftpBridge` — `sftp.list(sessionId, path)`, `sftp.readFile`, `sftp.writeFile`
-- `StorageBridge` — `storage.get/set/delete(key)` (namespaced per plugin)
-- `UiBridge` — `ui.showNotification(msg)`, `ui.register(id, spec)`; panel `postMessage` types handled natively in Dart (`ssh-exec`, `ssh-sessions`, `sftp-list`, `sftp-read`) enforce the same permissions as the bridges (`ssh.exec`, `session.observe`|`ssh.exec`, `sftp.read`) — a panel is plugin-controlled HTML
+- Plugin globals come from a JS prelude (`_kPrelude` in `script_engine_service.dart`) that wraps the raw `_x` host functions (JSON in/out); a wrapper throws `Permission denied` when the bridge did not register the function, so `PermissionGuard` stays the only gate. Raw `_x.*` functions keep working. Documented in `docs/plugin-authoring-guide.md` section 5.
+- `SshBridge` — `ssh.sessions()` (`session.observe`|`ssh.exec`); `TerminalInjectBridge` — `ssh.inject(sessionId, text)` (`terminal.inject`). No JS `ssh.exec`/`sftp` (the raw `_ssh.exec` and `_sftp.*` are stubs; use the panel messages below)
+- `StorageBridge` — `storage.get/set/delete(key)` (sync, string values, namespaced per plugin, no permission)
+- `UiBridge` — `ui.notify(msg, {type})` (host `onNotify`), `ui.statusbar.add/update/remove`, `ui.panel.register({title, icon, webviewEntry, onMessage})`, `ui.clipboard.copy`, `ui.addCommand` (handler not invoked yet); panel `postMessage` types handled natively in Dart (`ssh-exec`, `ssh-sessions`, `sftp-list`, `sftp-read`) enforce the same permissions as the bridges (`ssh.exec`, `session.observe`|`ssh.exec`, `sftp.read`) — a panel is plugin-controlled HTML
 
 **UI screens:**
 - `plugin_consent_dialog.dart` — shown on first load; user must accept declared permissions
