@@ -19,7 +19,7 @@ A professional, open-source SSH client for **macOS**, **Windows**, and **Linux**
 
 ## Download
 
-Get the latest release from the [Releases page](https://github.com/YoursshLabs/yourssh/releases). User documentation: [YoursshLabs/docs](https://github.com/YoursshLabs/docs).
+Get the latest release from the [Releases page](https://github.com/YoursshLabs/yourssh/releases). Documentation: **https://your-ssh.mintlify.site** (source: [YoursshLabs/docs](https://github.com/YoursshLabs/docs)).
 
 YourSSH also checks for new releases on launch and from **Settings → Updates**; when a newer version is available it shows a banner and can download the right build for your OS and open the installer for you. Because the installers are not silently swapped in, this is an assisted flow (it never silently replaces itself); if no matching build exists for your platform it opens the Releases page instead.
 
