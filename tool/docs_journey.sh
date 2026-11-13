@@ -1,22 +1,84 @@
 #!/usr/bin/env bash
 # Builds and runs the docs screenshot journey with FULL isolation.
-#   tool/docs_journey.sh [build|run|all]    (default: all)
+#   tool/docs_journey.sh [setup|build|run|all|teardown]    (default: all)
+#     setup     generate a client key, build the demo image, create the network and 5 demo containers (idempotent)
+#     build     build the integration-test macOS app
+#     run       launch the app against the demo containers, capture PNGs
+#     all       build + run (containers must already exist: run `setup` first)
+#     teardown  stop + remove only the containers/network/image created by `setup`
 # The integration-test app is built once with the real HOME (flutter tool needs
 # it), then the built binary is launched directly with HOME=<temp demo home>.
-# Env: SECTIONS="01,02,..." limits the sections; DOCS_OUT overrides the output dir.
+# Env: SECTIONS="01,02,..." limits sections; MODES="desktop mobile" picks launches;
+#      DOCS_OUT overrides the output dir; DOCS_KEY_DIR holds the generated client key
+#      (default ~/.local/state/yourssh-docs-journey, never inside the repo).
+#      DOCS_PREFIX (default yourssh-docs) names containers/network/image;
+#      SSH_PORT/BASTION_PORT/RDP_PORT/VNC_PORT override host ports. The app harness
+#      expects the defaults 2222/2223/3389/5900, so override them only to test setup.
 set -euo pipefail
-export PATH="$HOME/development/flutter/bin:$PATH"
+command -v flutter >/dev/null 2>&1 || export PATH="$HOME/development/flutter/bin:$PATH"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODE="${1:-all}"
 OUT="${DOCS_OUT:-$ROOT/screenshots/docs}"
+PREFIX="${DOCS_PREFIX:-yourssh-docs}"
+SSH_PORT="${SSH_PORT:-2222}"; BASTION_PORT="${BASTION_PORT:-2223}"
+RDP_PORT="${RDP_PORT:-3389}"; VNC_PORT="${VNC_PORT:-5900}"
+KEY_DIR="${DOCS_KEY_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/yourssh-docs-journey}"
+KEY="$KEY_DIR/client_ed25519"
+NET="$PREFIX-net"; IMAGE="$PREFIX-ssh:latest"
+CONTAINERS=("$PREFIX-ssh" "$PREFIX-bastion" "$PREFIX-db" "$PREFIX-rdp" "$PREFIX-vnc")
+
+is_running() { [[ "$(docker container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" == true ]]; }
+exists() { docker container inspect "$1" >/dev/null 2>&1; }
+ensure() { # name, then `docker run` args: reuse a running one, start a stopped one, else create
+  local n="$1"; shift
+  if is_running "$n"; then echo "reuse running $n"
+  elif exists "$n"; then echo "start $n"; docker start "$n" >/dev/null
+  else echo "create $n"; docker run -d --name "$n" "$@" >/dev/null; fi
+}
+
+setup() {
+  mkdir -p "$KEY_DIR"; chmod 700 "$KEY_DIR"
+  [[ -f "$KEY" ]] || ssh-keygen -q -t ed25519 -N '' -C yourssh-docs-demo -f "$KEY"
+  docker build -q -t "$IMAGE" "$ROOT/tool/docs_journey" >/dev/null
+  docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
+  ensure "$PREFIX-ssh" --network "$NET" --network-alias yourssh-demo --hostname yourssh-demo -p "127.0.0.1:$SSH_PORT:22" "$IMAGE"
+  ensure "$PREFIX-bastion" --network "$NET" --network-alias bastion --hostname bastion -p "127.0.0.1:$BASTION_PORT:22" "$IMAGE"
+  ensure "$PREFIX-db" --network "$NET" --network-alias db-internal --hostname db-internal "$IMAGE"
+  local c
+  for c in ssh bastion db; do # install the client public key (idempotent overwrite)
+    docker exec -i "$PREFIX-$c" sh -c 'cat > /home/demo/.ssh/authorized_keys && chown demo:demo /home/demo/.ssh/authorized_keys && chmod 600 /home/demo/.ssh/authorized_keys' < "$KEY.pub"
+  done
+  ensure "$PREFIX-rdp" --hostname win-demo -p "127.0.0.1:$RDP_PORT:3389" scottyhardy/docker-remote-desktop:latest
+  ensure "$PREFIX-vnc" -e VNC_PW=demo12345 -p "127.0.0.1:$VNC_PORT:5900" dorowu/ubuntu-desktop-lxde-vnc:latest
+  # RDP login demo / demo12345 (idempotent)
+  for _ in $(seq 1 20); do docker exec "$PREFIX-rdp" true 2>/dev/null && break; sleep 1; done
+  docker exec "$PREFIX-rdp" bash -c "id demo >/dev/null 2>&1 || useradd -m -s /bin/bash demo; echo 'demo:demo12345' | chpasswd"
+  echo "setup done. client key: $KEY (host ports ssh=$SSH_PORT bastion=$BASTION_PORT rdp=$RDP_PORT vnc=$VNC_PORT)"
+}
+
+teardown() {
+  local c
+  for c in "${CONTAINERS[@]}"; do exists "$c" && { docker rm -f "$c" >/dev/null; echo "removed $c"; }; done
+  docker network inspect "$NET" >/dev/null 2>&1 && { docker network rm "$NET" >/dev/null; echo "removed network $NET"; }
+  docker image inspect "$IMAGE" >/dev/null 2>&1 && { docker rmi "$IMAGE" >/dev/null; echo "removed image $IMAGE"; }
+  echo "teardown done (client key in $KEY_DIR kept; delete it manually if unwanted)"
+}
+
+case "$MODE" in
+  setup) setup; exit 0 ;;
+  teardown) teardown; exit 0 ;;
+  build|run|all) ;;
+  *) echo "usage: $0 [setup|build|run|all|teardown]" >&2; exit 2 ;;
+esac
 RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/yourssh-docs-run.XXXXXX")"
 DEMO_HOME="$RUN_ROOT/yourssh-docs-home"
-KEY="${DEMO_KEY:-/private/tmp/claude-501/-Users-thangnm-Documents-Personal/249a95bd-233f-499c-b54b-eb14f3c0d9dd/scratchpad/journey/sshd/client_ed25519}"
 
 if [[ "$MODE" == build || "$MODE" == all ]]; then
   (cd "$ROOT/app" && flutter build macos --debug -t integration_test/docs_journey_test.dart)
 fi
 [[ "$MODE" == build ]] && exit 0
+[[ -f "$KEY" ]] || { echo "no client key at $KEY: run '$0 setup' first" >&2; exit 1; }
+for c in "${CONTAINERS[@]}"; do is_running "$c" || { echo "$c is not running: run '$0 setup' first" >&2; exit 1; }; done
 
 APP="$ROOT/app/build/macos/Build/Products/Debug/yourssh.app/Contents/MacOS/yourssh"
 [[ -x "$APP" ]] || APP="$(ls "$ROOT"/app/build/macos/Build/Products/Debug/*.app/Contents/MacOS/* | head -1)"
