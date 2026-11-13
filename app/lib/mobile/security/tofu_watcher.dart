@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../models/known_host.dart';
 import '../../providers/known_hosts_provider.dart';
-import '../../theme/app_theme.dart';
 
 import 'package:yourssh_ui/yourssh_ui.dart';
 
@@ -64,7 +63,7 @@ class _TofuWatcherState extends State<TofuWatcher> {
               Text(
                 'Old: ${c.oldFingerprint}',
                 style: const TextStyle(
-                  color: AppColors.textSecondary,
+                  color: YsColors.mutedForeground,
                   fontSize: 11,
                   fontFamily: 'monospace',
                 ),
@@ -72,7 +71,7 @@ class _TofuWatcherState extends State<TofuWatcher> {
               Text(
                 'New: ${c.newFingerprint}',
                 style: const TextStyle(
-                  color: AppColors.textPrimary,
+                  color: YsColors.foreground,
                   fontSize: 11,
                   fontFamily: 'monospace',
                 ),

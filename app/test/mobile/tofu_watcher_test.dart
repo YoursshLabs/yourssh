@@ -97,4 +97,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(await future, isFalse);
   });
+
+  testWidgets('fingerprints use YsColors tokens', (tester) async {
+    final kh = KnownHostsProvider(StorageService());
+    await tester.pumpWidget(MaterialApp(
+      builder: ysRootBuilder,
+      home: ChangeNotifierProvider.value(
+        value: kh,
+        child: const TofuWatcher(child: Scaffold(body: SizedBox())),
+      ),
+    ));
+    final fp1 = Uint8List.fromList(List.filled(16, 1));
+    final fp2 = Uint8List.fromList(List.filled(16, 2));
+    await kh.verifyHostKey('h', 22, 'ssh-ed25519', fp1);
+    final future = kh.verifyHostKey('h', 22, 'ssh-ed25519', fp2);
+    await tester.pumpAndSettle();
+    expect(
+        tester.widget<Text>(find.textContaining('Old:')).style!.color,
+        YsColors.mutedForeground);
+    expect(tester.widget<Text>(find.textContaining('New:')).style!.color,
+        YsColors.foreground);
+    await tester.tap(find.text('Reject'));
+    await tester.pumpAndSettle();
+    expect(await future, isFalse);
+  });
 }

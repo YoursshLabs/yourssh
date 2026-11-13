@@ -190,7 +190,7 @@ void main() {
     expect(find.byType(MobileTerminalScreen), findsOneWidget);
 
     // Tap the back arrow in the terminal header.
-    await tester.tap(find.byIcon(Icons.arrow_back_ios_new).first);
+    await tester.tap(find.byTooltip('Back').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
@@ -215,7 +215,7 @@ void main() {
     // Tap the "+" tile inside MobileTerminalScreen's session tab strip.
     final addInTerminal = find.descendant(
       of: find.byType(MobileTerminalScreen),
-      matching: find.byIcon(Icons.add),
+      matching: find.byTooltip('New session'),
     );
     await tester.tap(addInTerminal);
     await tester.pump();
