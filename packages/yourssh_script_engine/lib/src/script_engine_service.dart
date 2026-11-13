@@ -72,6 +72,79 @@ var console = {
 };
 ''';
 
+// JS prelude evaluated after the host bridges are registered and before the
+// plugin entry. Defines the documented friendly globals (`ui`, `ssh`,
+// `storage`) as thin wrappers over the raw `_x` host functions. A wrapper only
+// forwards to a host function the PermissionGuard-gated bridge registered; when
+// it is missing the call throws "Permission denied: <perm>", so no wrapper can
+// reach a capability the plugin was not granted. Raw `_x` stays available.
+const _kPrelude = r'''
+(function(g) {
+  function host(obj, fn, perm) {
+    return function(arg) {
+      if (typeof obj === 'undefined' || typeof obj[fn] !== 'function') {
+        throw new Error('Permission denied: ' + perm + ' not granted');
+      }
+      var r = obj[fn](JSON.stringify(arg === undefined ? null : arg));
+      return typeof r === 'string' ? JSON.parse(r) : null;
+    };
+  }
+  var _u = typeof _ui === 'undefined' ? undefined : _ui;
+  var _us = typeof _ui_statusbar === 'undefined' ? undefined : _ui_statusbar;
+  var _s = typeof _ssh === 'undefined' ? undefined : _ssh;
+  var _st = typeof _storage === 'undefined' ? undefined : _storage;
+  var notify = host(_u, 'notify', 'ui.notify');
+  var register = host(_u, 'registerPanel', 'ui.panel');
+  var copy = host(_u, 'copyToClipboard', 'ui.clipboard');
+  var addCommand = host(_u, 'addCommand', 'ui.statusbar or ui.panel');
+  var sbAdd = host(_us, 'add', 'ui.statusbar');
+  var sbUpdate = host(_us, 'update', 'ui.statusbar');
+  var sbRemove = host(_us, 'remove', 'ui.statusbar');
+  var sessions = host(_s, 'sessions', 'session.observe');
+  var inject = host(_s, 'inject', 'terminal.inject');
+  var sGet = host(_st, 'get', 'storage');
+  var sSet = host(_st, 'set', 'storage');
+  var sDel = host(_st, 'delete', 'storage');
+  g.ui = {
+    notify: function(message, options) {
+      notify({message: String(message), type: (options && options.type) || 'info'});
+    },
+    statusbar: {
+      add: function(id, o) {
+        o = o || {};
+        sbAdd({id: id, label: o.label, tooltip: o.tooltip});
+      },
+      update: function(id, o) {
+        o = o || {};
+        sbUpdate({id: id, label: o.label, tooltip: o.tooltip});
+      },
+      remove: function(id) { sbRemove({id: id}); }
+    },
+    panel: {
+      register: function(c) {
+        register({title: c.title, icon: c.icon, webviewEntry: c.webviewEntry});
+        if (typeof c.onMessage === 'function') plugin._setPanelMessage(c.onMessage);
+      }
+    },
+    clipboard: { copy: function(text) { copy({text: String(text)}); } },
+    addCommand: function(c) {
+      addCommand({id: c.id, label: c.label, keybinding: c.keybinding});
+    }
+  };
+  g.ssh = {
+    sessions: function() { return sessions(null) || []; },
+    inject: function(sessionId, text) {
+      inject({sessionId: sessionId, text: String(text)});
+    }
+  };
+  g.storage = {
+    get: function(key) { return sGet({key: key}); },
+    set: function(key, value) { sSet({key: key, value: String(value)}); },
+    delete: function(key) { sDel({key: key}); }
+  };
+})(this);
+''';
+
 class _LoadedPlugin {
   final String id;
   final PluginManifest manifest;
@@ -93,6 +166,10 @@ class ScriptEngineService {
   final SftpBridgeDelegate? sftpDelegate;
   final void Function(String pluginId, String level, String message)? onLog;
 
+  /// Receives `ui.notify(message, {type})` calls from plugins holding the
+  /// `ui.notify` permission. `type` is `info`, `warning` or `error`.
+  final void Function(String pluginId, String message, String type)? onNotify;
+
   VoidCallback? onChange;
 
   List<PluginManifest> get loadedManifests =>
@@ -112,6 +189,7 @@ class ScriptEngineService {
     required this.sshDelegate,
     required this.sftpDelegate,
     this.onLog,
+    this.onNotify,
   });
 
   Future<void> loadPlugin(
@@ -148,7 +226,9 @@ class ScriptEngineService {
       }
       if (sftpDelegate != null) SftpBridge(guard, sftpDelegate!).register(rt);
       if (uiRegistry != null) {
-        UiBridge(manifest.id, guard, uiRegistry!, null, (msg) async {
+        UiBridge(manifest.id, guard, uiRegistry!,
+            onNotify == null ? null : (m, t) => onNotify!(manifest.id, m, t),
+            (msg) async {
           final type = msg['type'] as String? ?? '';
 
           // Native operations bypass the JS bridges, so they must enforce the
@@ -231,6 +311,9 @@ class ScriptEngineService {
           }
         }).register(rt);
       }
+
+      // Documented friendly globals (ui / ssh / storage) over the raw bridges.
+      rt.eval(_kPrelude, filename: '<prelude>', timeout: kLoadTimeout);
 
       // Execute plugin entry point
       final src = await entryFile.readAsString();
