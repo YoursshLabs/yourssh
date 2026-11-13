@@ -164,9 +164,6 @@ flutter:
     - assets/monaco_editor.html
     - assets/app_icon.png
     - assets/os/
-    - assets/bundled_plugins/snippets/plugin.json
-    - assets/bundled_plugins/snippets/index.js
-    - assets/bundled_plugins/snippets/panel/index.html
   fonts:
     - family: Inter
       fonts:

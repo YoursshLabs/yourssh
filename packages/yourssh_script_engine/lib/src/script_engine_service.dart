@@ -14,7 +14,6 @@ import 'bridge/ssh_bridge.dart';
 import 'bridge/sftp_bridge.dart';
 import 'bridge/ui_bridge.dart';
 import 'bridge/terminal_inject_bridge.dart';
-import 'bridge/migration_bridge.dart';
 
 // JS bootstrap injected at runtime load time.
 // Provides `plugin.on(event, handler)`, `plugin._dispatch(event, ctxJson)`,
@@ -72,9 +71,6 @@ var console = {
   }
 };
 ''';
-
-/// The only plugin allowed to read/clear the legacy snippets preferences.
-const kSnippetsPluginId = 'dev.yourssh.snippets';
 
 class _LoadedPlugin {
   final String id;
@@ -146,7 +142,6 @@ class ScriptEngineService {
 
       // Register bridges based on permissions
       StorageBridge(manifest.id).register(rt);
-      if (manifest.id == kSnippetsPluginId) MigrationBridge().register(rt);
       if (sshDelegate != null) {
         SshBridge(guard, sshDelegate!).register(rt);
         TerminalInjectBridge(guard, _TerminalInjectAdapter(sshDelegate!)).register(rt);

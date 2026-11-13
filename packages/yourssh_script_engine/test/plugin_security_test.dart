@@ -123,38 +123,6 @@ plugin.on("terminal.output", function(ctx) {
     });
   });
 
-  group('migration bridge', () {
-    const probe = '''
-plugin.on("terminal.output", function(ctx) { return typeof _migration; });
-''';
-    test('is not exposed to arbitrary plugins', () async {
-      final dir = writePlugin('other', js: probe);
-      final bus = HookBus();
-      final svc = newEngine(bus);
-      await svc.loadPlugin(dir.path,
-          grantedPermissions: {'terminal.transform'});
-      expect(
-          bus.fireTransform(
-              'terminal.output', TransformEvent(sessionId: 's', data: 'x')),
-          'undefined');
-      svc.dispose();
-    });
-
-    test('is exposed to the bundled snippets plugin', () async {
-      final dir =
-          writePlugin('snip', id: 'dev.yourssh.snippets', js: probe);
-      final bus = HookBus();
-      final svc = newEngine(bus);
-      await svc.loadPlugin(dir.path,
-          grantedPermissions: {'terminal.transform'});
-      expect(
-          bus.fireTransform(
-              'terminal.output', TransformEvent(sessionId: 's', data: 'x')),
-          'object');
-      svc.dispose();
-    });
-  });
-
   group('path containment', () {
     test('entry with ../ is rejected', () async {
       File('${tmpDir.path}/evil.js').writeAsStringSync('var pwned = 1;');

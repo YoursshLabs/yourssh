@@ -15,7 +15,6 @@ import 'services/cli/single_instance.dart';
 import 'services/cli/url_channel.dart';
 import 'platform/runtime_platform.dart';
 import 'mobile/mobile_app.dart';
-import 'utils/bundled_plugin_installer.dart';
 import 'providers/ai_chat_provider.dart';
 import 'providers/command_history_provider.dart';
 import 'providers/host_provider.dart';
@@ -408,11 +407,9 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
       hookBus: _hookBus,
       uiRegistry: _uiRegistry,
     );
-    // Install bundled plugins, warm up migration cache, then scan for plugins.
+    // Scan for plugins.
     // Runs async so initState() stays synchronous.
     Future(() async {
-      await BundledPluginInstaller.ensureInstalled('snippets');
-      await MigrationBridge.warmup();
       loader.scanAndLoad();
     });
 
