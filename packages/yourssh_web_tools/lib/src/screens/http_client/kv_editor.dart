@@ -96,12 +96,12 @@ class _KvRowState extends State<KvRow> {
       if (!_keyFocus.hasFocus &&
           old.pair.key != widget.pair.key &&
           _keyCtrl.text != widget.pair.key) {
-        _keyCtrl.text = widget.pair.key;
+        wtSetText(_keyCtrl, widget.pair.key);
       }
       if (!_valFocus.hasFocus &&
           old.pair.value != widget.pair.value &&
           _valCtrl.text != widget.pair.value) {
-        _valCtrl.text = widget.pair.value;
+        wtSetText(_valCtrl, widget.pair.value);
       }
     } finally {
       _syncing = false;

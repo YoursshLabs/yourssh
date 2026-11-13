@@ -5,6 +5,7 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 import 'history_panel.dart';
 import 'models.dart';
 import 'request_bar.dart';
+import '../../widgets/wt_widgets.dart';
 import 'request_panel.dart';
 import 'response_panel.dart';
 
@@ -103,7 +104,7 @@ class _HttpClientToolState extends State<HttpClientTool> {
           .join('&');
       final newUrl = query.isEmpty ? base : '$base?$query';
       if (newUrl != _urlCtrl.text) {
-        _urlCtrl.value = _urlCtrl.value.copyWith(text: newUrl);
+        wtSetText(_urlCtrl, newUrl);
       }
     } finally {
       _syncingUrl = false;
@@ -247,7 +248,7 @@ class _HttpClientToolState extends State<HttpClientTool> {
   void _loadFromHistory(HistoryItem item) {
     setState(() {
       _method = item.method;
-      _urlCtrl.text = item.url;
+      wtSetText(_urlCtrl, item.url);
       _showHistory = false;
     });
   }

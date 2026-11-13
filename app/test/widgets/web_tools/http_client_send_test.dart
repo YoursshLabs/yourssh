@@ -105,10 +105,6 @@ void main() {
     await setUrl(tester, '${base()}/path?x=1&y=2');
     // Disable the y param: it must drop out of the URL and the request.
     await openTab(tester, 'Params');
-    // Existing quirk: the params->URL sync keeps the old selection, which is
-    // past the end of the shortened text; park the caret at the start first.
-    tester.widget<EditableText>(inKey('http-url')).controller.selection =
-        const TextSelection.collapsed(offset: 0);
     await tester.tap(find.byType(FCheckbox).at(1));
     await tester.pumpAndSettle();
     expect(inKey('http-url').evaluate().isNotEmpty, isTrue);
@@ -129,6 +125,44 @@ void main() {
     expect(find.text('{\n  "a": 1\n}'), findsOneWidget);
     // History badge shows one entry.
     expect(find.text('1'), findsWidgets);
+  });
+
+  testWidgets('unticking a param keeps the URL caret in range',
+      (tester) async {
+    await pumpTool(tester);
+    final long = 'https://example.test/path?x=1&y=${'v' * 40}';
+    await setUrl(tester, long);
+    final ctrl = tester.widget<EditableText>(inKey('http-url')).controller;
+    ctrl.selection = TextSelection.collapsed(offset: long.length);
+    await openTab(tester, 'Params');
+    await tester.tap(find.byType(FCheckbox).at(1));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(ctrl.text, 'https://example.test/path?x=1');
+    expect(ctrl.selection.isValid, isTrue);
+    expect(ctrl.selection.extentOffset, lessThanOrEqualTo(ctrl.text.length));
+    expect(ctrl.selection.baseOffset, greaterThanOrEqualTo(0));
+  });
+
+  testWidgets('history reload of a shorter URL keeps the caret in range',
+      (tester) async {
+    await startServer(tester);
+    await pumpTool(tester);
+    final short = '${base()}/s';
+    await setUrl(tester, short);
+    await sendOk(tester);
+    final long = '${base()}/${'p' * 60}';
+    await setUrl(tester, long);
+    final ctrl = tester.widget<EditableText>(inKey('http-url')).controller;
+    ctrl.selection = TextSelection.collapsed(offset: long.length);
+    await tester.tap(find.byTooltip('Request history'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(short));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(ctrl.text, short);
+    expect(ctrl.selection.isValid, isTrue);
+    expect(ctrl.selection.extentOffset, short.length);
   });
 
   testWidgets('custom header is sent', (tester) async {

@@ -202,3 +202,17 @@ class WtSelectableText extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SelectableText(text, style: style);
 }
+
+/// Sets [controller]'s text from code with a selection that is valid for the
+/// new text: the caret stays where it was when still within the new length,
+/// otherwise it collapses to the end.
+void wtSetText(TextEditingController controller, String text) {
+  final old = controller.selection;
+  final caret = old.isValid && old.extentOffset <= text.length
+      ? old.extentOffset
+      : text.length;
+  controller.value = TextEditingValue(
+    text: text,
+    selection: TextSelection.collapsed(offset: caret),
+  );
+}
