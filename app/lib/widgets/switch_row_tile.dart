@@ -12,6 +12,10 @@ final Map<Key, FocusNode> _tileFocusNodes = {};
 /// [FTile.raw]. A press anywhere on the row toggles the switch (the tile's
 /// `onPress`); a press on the switch itself toggles it once, because the
 /// switch's own recognizer wins over the tile's.
+///
+/// The `key` must be unique among simultaneously mounted tiles: it keys the
+/// tile's shared [FocusNode], so two live tiles with the same key would share
+/// one focus node.
 FTile switchRowTile({
   required Key key,
   required Widget label,
