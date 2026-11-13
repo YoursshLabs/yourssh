@@ -90,22 +90,30 @@ class BroadcastToolbar extends StatelessWidget {
         border: Border(bottom: BorderSide(color: YsColors.border)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: YsSpace.s3),
-      child: Row(
-        children: [
-          Expanded(child: leading ?? const SizedBox.shrink()),
-          const SizedBox(width: YsSpace.s2),
-          Flexible(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              reverse: true,
-              child: actions,
-            ),
-          ),
-          if (trailing != null) ...[
+      // Chips take the left, the actions hug the right edge (before
+      // [trailing]). The actions keep their natural width up to 60% of the
+      // bar and scroll beyond that, so a narrow window never overflows.
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            Expanded(child: leading ?? const SizedBox.shrink()),
             const SizedBox(width: YsSpace.s2),
-            trailing!,
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: constraints.maxWidth * 0.6,
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                child: actions,
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: YsSpace.s2),
+              trailing!,
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

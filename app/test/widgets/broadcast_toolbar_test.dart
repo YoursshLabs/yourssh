@@ -117,4 +117,63 @@ void main() {
     await tester.pumpAndSettle();
     expect(layout.configPanelVisible, true);
   });
+
+  Widget wide(TerminalLayoutProvider layout, PluginProvider plugins,
+          {Widget? trailing}) =>
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: layout),
+          ChangeNotifierProvider.value(value: plugins),
+        ],
+        child: ysTestApp(BroadcastToolbar(
+          leading: const Text('Demo Server', key: Key('toolbar-leading')),
+          trailing: trailing,
+        )),
+      );
+
+  testWidgets('chips sit on the left, actions hug the right edge',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final layout = TerminalLayoutProvider();
+    final plugins = await pluginProvider(snippetsEnabled: true);
+    await tester.pumpWidget(wide(layout, plugins));
+
+    final bar = tester.getRect(find.byType(BroadcastToolbar));
+    final leading = tester.getRect(find.byKey(const Key('toolbar-leading')));
+    final settings = tester.getRect(find.byTooltip('Toggle Terminal Settings'));
+    expect(leading.left - bar.left, lessThan(20));
+    // Only the toolbar's own horizontal padding separates the last action
+    // from the right edge.
+    expect(bar.right - settings.right, lessThan(20));
+  });
+
+  testWidgets('with trailing controls the actions sit right before them',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final layout = TerminalLayoutProvider();
+    final plugins = await pluginProvider(snippetsEnabled: true);
+    await tester.pumpWidget(wide(layout, plugins,
+        trailing: const SizedBox(
+            key: Key('toolbar-trailing'), width: 120, height: 20)));
+
+    final bar = tester.getRect(find.byType(BroadcastToolbar));
+    final trailing = tester.getRect(find.byKey(const Key('toolbar-trailing')));
+    final settings = tester.getRect(find.byTooltip('Toggle Terminal Settings'));
+    expect(bar.right - trailing.right, lessThan(20));
+    expect(trailing.left - settings.right, lessThan(20));
+  });
+
+  testWidgets('narrow: actions scroll instead of overflowing', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final layout = TerminalLayoutProvider();
+    final plugins = await pluginProvider(snippetsEnabled: true);
+    layout.setLayout(SplitLayout.horizontal); // shows Broadcast too
+    await tester.pumpWidget(wide(layout, plugins,
+        trailing: const SizedBox(width: 60, height: 20)));
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('toolbar-leading')), findsOneWidget);
+  });
 }
