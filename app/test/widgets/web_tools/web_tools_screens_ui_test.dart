@@ -211,7 +211,7 @@ void main() {
       expect(find.text('No history yet'), findsNothing);
     });
 
-    testWidgets('auth: bearer token and basic password fields are obscured',
+    testWidgets('auth: the basic-auth password field is obscured (the bearer token is not)',
         (tester) async {
       await tester.pumpWidget(ysTestApp(const HttpClientTool()));
       await tester.pumpAndSettle();
@@ -342,8 +342,7 @@ void main() {
       expect(picked?.url, 'https://a.test/');
     });
 
-    testWidgets('Tab reaches Send; Enter in the URL field does not throw',
-        (tester) async {
+    testWidgets('Tab reaches Send', (tester) async {
       await tester.pumpWidget(ysTestApp(const HttpClientTool()));
       await tester.pumpAndSettle();
       final n =

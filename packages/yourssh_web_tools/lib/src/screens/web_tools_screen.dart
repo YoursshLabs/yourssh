@@ -77,7 +77,7 @@ class _SubNav extends StatelessWidget {
           FSidebarGroup(
             children: [
               _item(FLucideIcons.globe, 'Browser', _WebTool.browser),
-              _item(FLucideIcons.globe, 'HTTP Client', _WebTool.http),
+              _item(FLucideIcons.send, 'HTTP Client', _WebTool.http),
               _item(FLucideIcons.wrench, 'Utilities', _WebTool.utilities),
               _item(FLucideIcons.router, 'Port Tunnels', _WebTool.portForward),
             ],

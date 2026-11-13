@@ -45,6 +45,9 @@ class WtField extends StatelessWidget {
   final FocusNode? focusNode;
   final IconData? prefixIcon;
 
+  /// Custom prefix (e.g. a progress indicator); wins over [prefixIcon].
+  final Widget? prefix;
+
   const WtField({
     super.key,
     required this.controller,
@@ -55,6 +58,7 @@ class WtField extends StatelessWidget {
     this.onSubmit,
     this.focusNode,
     this.prefixIcon,
+    this.prefix,
   });
 
   @override
@@ -70,11 +74,12 @@ class WtField extends StatelessWidget {
     autocorrect: false,
     enableSuggestions: false,
     onSubmit: onSubmit,
-    prefixBuilder: prefixIcon == null
+    prefixBuilder: prefixIcon == null && prefix == null
         ? null
         : (context, style, variants) => Padding(
             padding: const EdgeInsets.only(left: YsSpace.s3),
-            child: Icon(prefixIcon, size: 16, color: YsColors.mutedForeground),
+            child: prefix ??
+                Icon(prefixIcon, size: 16, color: YsColors.mutedForeground),
           ),
     style: mono
         ? .delta(

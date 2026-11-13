@@ -161,7 +161,14 @@ class _AddressBar extends StatelessWidget {
               controller: controller,
               focusNode: focusNode,
               mono: false,
-              prefixIcon: loading ? FLucideIcons.loader : FLucideIcons.lock,
+              prefixIcon: loading ? null : FLucideIcons.lock,
+              prefix: loading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: FCircularProgress(size: .xs),
+                    )
+                  : null,
               onSubmit: onNavigate,
             ),
           ),
