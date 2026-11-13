@@ -102,13 +102,16 @@ class MailCatcherService {
   static final _startMarker = RegExp(r'^-{5,}\s*MESSAGE FOLLOWS\s*-{5,}$');
   static final _endMarker = RegExp(r'^-{5,}\s*END MESSAGE\s*-{5,}$');
   // Python 3 smtpd DebuggingServer prints bytes lines as their repr: b'...'.
+  // aiosmtpd / smtpd print the ESMTP parameters before the headers.
+  static final _optionsLine = RegExp(r'^(mail|rcpt) options:');
   static final _bytesRepr = RegExp(r'''^b(['"])(.*)\1$''');
 
   /// Parses the output of `python3 -m smtpd -n -c DebuggingServer` (Python
   /// 3 prints each line as a bytes repr such as `b'From: a@b'`, the blank
   /// header/body separator as `b''`) and of `python3 -m aiosmtpd -n` (plain
-  /// text). The first blank line ends the headers; everything up to the END
-  /// MESSAGE marker is the body.
+  /// text). `mail options:` / `rcpt options:` lines and blank lines before
+  /// the first header are ignored; the first blank line after a header ends
+  /// the headers and everything up to the END MESSAGE marker is the body.
   static List<CaughtEmail> parseLog(String rawLog) {
     // A truncate-while-open can leave NUL padding before the next write.
     final log = rawLog.replaceAll('\u0000', '');
@@ -116,6 +119,7 @@ class MailCatcherService {
     String from = '', to = '', subject = '';
     var inMessage = false;
     var inBody = false;
+    var sawHeader = false;
     var bodyLines = <String>[];
 
     void finish() {
@@ -134,6 +138,7 @@ class MailCatcherService {
       from = to = subject = '';
       inMessage = false;
       inBody = false;
+      sawHeader = false;
       bodyLines = <String>[];
     }
 
@@ -152,14 +157,19 @@ class MailCatcherService {
       final line = _unwrap(trimmedRight);
       if (inBody) {
         bodyLines.add(line);
+      } else if (_optionsLine.hasMatch(line)) {
+        continue;
       } else if (line.isEmpty) {
-        inBody = true;
-      } else if (line.startsWith('From: ')) {
-        from = line.substring(6);
-      } else if (line.startsWith('To: ')) {
-        to = line.substring(4);
-      } else if (line.startsWith('Subject: ')) {
-        subject = line.substring(9);
+        if (sawHeader) inBody = true;
+      } else {
+        sawHeader = true;
+        if (line.startsWith('From: ')) {
+          from = line.substring(6);
+        } else if (line.startsWith('To: ')) {
+          to = line.substring(4);
+        } else if (line.startsWith('Subject: ')) {
+          subject = line.substring(9);
+        }
       }
     }
     if (inMessage) finish();

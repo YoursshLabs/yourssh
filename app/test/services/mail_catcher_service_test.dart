@@ -92,6 +92,53 @@ From: nobody
     expect(e.single.body, 'Subject: fake\nFrom: nobody');
   });
 
+  test('aiosmtpd mail options preamble before the headers is skipped', () {
+    final e = MailCatcherService.parseLog('''
+---------- MESSAGE FOLLOWS ----------
+mail options: ['BODY=8BITMIME', 'SMTPUTF8']
+
+From: alice@example.com
+To: bob@example.com
+Subject: Options
+X-Peer: ('127.0.0.1', 51234)
+
+hello body
+------------ END MESSAGE ------------
+''');
+    expect(e, hasLength(1));
+    expect(e.single.from, 'alice@example.com');
+    expect(e.single.to, 'bob@example.com');
+    expect(e.single.subject, 'Options');
+    expect(e.single.body, 'hello body');
+  });
+
+  test('smtpd rcpt options preamble (plain and bytes-repr) is skipped', () {
+    final e = MailCatcherService.parseLog('''
+---------- MESSAGE FOLLOWS ----------
+mail options: ['SIZE=120']
+rcpt options: ['NOTIFY=NEVER']
+b''
+b'Subject: Rcpt'
+b'From: a@example.com'
+b'To: b@example.com'
+X-Peer: 127.0.0.1
+b''
+b'the body'
+------------ END MESSAGE ------------
+---------- MESSAGE FOLLOWS ----------
+b'rcpt options: []'
+b'Subject: Two'
+b'From: c@example.com'
+b'To: d@example.com'
+b''
+b'second'
+------------ END MESSAGE ------------
+''');
+    expect(e.map((m) => m.subject), ['Rcpt', 'Two']);
+    expect(e.first.body, 'the body');
+    expect(e.last.body, 'second');
+  });
+
   test('empty log and unrelated text yield nothing', () {
     expect(MailCatcherService.parseLog(''), isEmpty);
     expect(MailCatcherService.parseLog('Server started\n'), isEmpty);
