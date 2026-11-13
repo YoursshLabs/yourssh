@@ -187,7 +187,11 @@ class SshService {
     // Socket.connect's own timeout does not cover every OS resolver stall (a
     // single-label name can sit in DNS/mDNS lookup for 30 s+), so the whole
     // dial is bounded here and surfaces a readable error.
-    return _dial(host, limit).timeout(limit, onTimeout: () {
+    final dial = _dial(host, limit);
+    return dial.timeout(limit, onTimeout: () {
+      // The abandoned dial may still finish: close its socket instead of
+      // leaking an open connection, and swallow its late error.
+      unawaited(dial.then<void>((s) => s.close(), onError: (_) {}));
       throw TimeoutException(
           'Timed out connecting to ${host.host}:${host.port} '
           'after ${limit.inSeconds}s',
