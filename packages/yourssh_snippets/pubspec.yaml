@@ -10,6 +10,9 @@ dependencies:
   flutter:
     sdk: flutter
 
+  yourssh_ui:
+    path: ../yourssh_ui
+
   yourssh_plugin_api:
     path: ../yourssh_plugin_api
 

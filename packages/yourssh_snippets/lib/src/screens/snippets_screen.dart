@@ -1,10 +1,12 @@
+// Migrating the app to material_ui is a separate later step.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh_plugin_api/yourssh_plugin_api.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import '../models/snippet.dart';
 import '../providers/snippet_provider.dart';
-import '../theme.dart';
 
 class SnippetsScreen extends StatefulWidget {
   final YourSSHPluginContext pluginContext;
@@ -24,27 +26,28 @@ class _SnippetsScreenState extends State<SnippetsScreen> {
     final snippets = context.watch<SnippetProvider>().snippets;
     final filtered = filterSnippets(snippets, _search);
 
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            color: SnippetsColors.bg,
+    return ColoredBox(
+      color: YsColors.background,
+      child: Row(
+        children: [
+          Expanded(
             child: Column(
               children: [
                 _TopBar(
-                  search: _search,
                   onSearch: (v) => setState(() => _search = v),
                   onAdd: () => setState(() => _showPanel = true),
                 ),
                 Expanded(
                   child: filtered.isEmpty
-                      ? const Center(
-                          child: Text('No snippets',
-                              style: TextStyle(color: SnippetsColors.textTertiary)))
+                      ? const YsEmptyState(
+                          icon: FLucideIcons.squareTerminal,
+                          title: 'No snippets',
+                        )
                       : ListView.builder(
-                          padding: const EdgeInsets.all(24),
+                          padding: const EdgeInsets.all(YsSpace.s5),
                           itemCount: filtered.length,
                           itemBuilder: (_, i) => _SnippetTile(
+                            key: ValueKey('snippet-${filtered[i].id}'),
                             snippet: filtered[i],
                             pluginContext: widget.pluginContext,
                           ),
@@ -53,85 +56,58 @@ class _SnippetsScreenState extends State<SnippetsScreen> {
               ],
             ),
           ),
-        ),
-        if (_showPanel)
-          _SnippetPanel(
-            onClose: () => setState(() => _showPanel = false),
-            onSave: (snippet) async {
-              await context.read<SnippetProvider>().add(snippet);
-              if (mounted) setState(() => _showPanel = false);
-            },
-          ),
-      ],
+          if (_showPanel)
+            _SnippetPanel(
+              onClose: () => setState(() => _showPanel = false),
+              onSave: (snippet) async {
+                await context.read<SnippetProvider>().add(snippet);
+                if (mounted) setState(() => _showPanel = false);
+              },
+            ),
+        ],
+      ),
     );
   }
 }
 
 class _TopBar extends StatelessWidget {
-  final String search;
   final ValueChanged<String> onSearch;
   final VoidCallback onAdd;
-  const _TopBar(
-      {required this.search, required this.onSearch, required this.onAdd});
+  const _TopBar({required this.onSearch, required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: 52,
       decoration: const BoxDecoration(
-        color: SnippetsColors.sidebar,
-        border: Border(bottom: BorderSide(color: SnippetsColors.border)),
+        color: YsColors.sidebar,
+        border: Border(bottom: BorderSide(color: YsColors.border)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s5),
       child: Row(
         children: [
           Expanded(
-            child: Container(
-              height: 34,
-              decoration: BoxDecoration(
-                color: SnippetsColors.card,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: SnippetsColors.border),
-              ),
-              child: TextField(
-                onChanged: onSearch,
-                style: const TextStyle(
-                    color: SnippetsColors.textPrimary, fontSize: 13),
-                decoration: const InputDecoration(
-                  hintText: 'Search snippets…',
-                  hintStyle:
-                      TextStyle(color: SnippetsColors.textTertiary, fontSize: 13),
-                  prefixIcon: Icon(Icons.search,
-                      color: SnippetsColors.textTertiary, size: 16),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 8),
-                  isDense: true,
-                ),
+            child: FTextField(
+              key: const ValueKey('snippet-search'),
+              control: .managed(onChange: (v) => onSearch(v.text)),
+              size: .sm,
+              hint: 'Search snippets…',
+              autocorrect: false,
+              enableSuggestions: false,
+              prefixBuilder: (context, style, variants) => const Padding(
+                padding: EdgeInsets.only(left: YsSpace.s3),
+                child: Icon(FLucideIcons.search, size: 16),
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          GestureDetector(
-            onTap: onAdd,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                  color: SnippetsColors.accent,
-                  borderRadius: BorderRadius.circular(6)),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add, size: 14, color: Colors.black),
-                  SizedBox(width: 6),
-                  Text('NEW SNIPPET',
-                      style: TextStyle(
-                          color: Colors.black,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.3)),
-                ],
-              ),
+          const SizedBox(width: YsSpace.s3),
+          IntrinsicWidth(
+            child: FButton(
+              size: .sm,
+              mainAxisSize: .min,
+              prefix: const Icon(FLucideIcons.plus),
+              onPress: onAdd,
+              child: const Text('NEW SNIPPET'),
             ),
           ),
         ],
@@ -145,6 +121,7 @@ class _SnippetTile extends StatefulWidget {
   final YourSSHPluginContext pluginContext;
 
   const _SnippetTile({
+    super.key,
     required this.snippet,
     required this.pluginContext,
   });
@@ -155,14 +132,13 @@ class _SnippetTile extends StatefulWidget {
 
 class _SnippetTileState extends State<_SnippetTile> {
   bool _hovered = false;
+  bool _focused = false;
 
   Future<void> _runSnippet() async {
     final session = widget.pluginContext.activeSession;
     if (session == null || !session.isConnected) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No active SSH session to run this snippet')),
-      );
+      showYsToast(context, 'No active SSH session to run this snippet');
       return;
     }
 
@@ -172,13 +148,13 @@ class _SnippetTileState extends State<_SnippetTile> {
         '${widget.snippet.command}\n',
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sent "${widget.snippet.label}" to terminal')),
-      );
+      showYsToast(context, 'Sent "${widget.snippet.label}" to terminal');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to run snippet: $e')),
+      showYsToast(
+        context,
+        'Failed to run snippet: $e',
+        kind: YsToastKind.error,
       );
     }
   }
@@ -186,87 +162,121 @@ class _SnippetTileState extends State<_SnippetTile> {
   @override
   Widget build(BuildContext context) {
     final s = widget.snippet;
+    // Row actions show on hover and while any of them holds keyboard focus,
+    // so they stay reachable without a mouse.
+    final showActions = _hovered || _focused;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: _hovered ? SnippetsColors.cardHover : SnippetsColors.card,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: SnippetsColors.border),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(s.label,
-                          style: const TextStyle(
-                              color: SnippetsColors.textPrimary,
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (f) => setState(() => _focused = f),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: YsSpace.s2),
+          padding: const EdgeInsets.symmetric(
+            horizontal: YsSpace.s4,
+            vertical: YsSpace.s3,
+          ),
+          decoration: BoxDecoration(
+            color: showActions ? YsColors.secondary : YsColors.card,
+            borderRadius: BorderRadius.circular(YsRadius.card),
+            border: Border.all(color: YsColors.border),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            s.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: YsColors.foreground,
                               fontSize: 13,
-                              fontWeight: FontWeight.w500)),
-                      if (s.tag.isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        _Badge(s.tag),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        if (s.tag.isNotEmpty) ...[
+                          const SizedBox(width: YsSpace.s2),
+                          Flexible(child: YsTag(s.tag)),
+                        ],
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: SnippetsColors.bg,
-                      borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Text(
-                      s.command,
-                      style: const TextStyle(
-                          color: SnippetsColors.accent,
-                          fontSize: 12,
-                          fontFamily: 'monospace'),
-                    ),
-                  ),
-                  if (s.description.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(s.description,
+                    const SizedBox(height: YsSpace.s1),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: YsSpace.s2,
+                        vertical: YsSpace.s1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: YsColors.background,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        s.command,
                         style: const TextStyle(
-                            color: SnippetsColors.textSecondary, fontSize: 11)),
+                          color: YsColors.accentText,
+                          fontSize: 12,
+                          fontFamily: kYsMonoFontFamily,
+                          fontFamilyFallback: kYsMonoFontFallback,
+                        ),
+                      ),
+                    ),
+                    if (s.description.isNotEmpty) ...[
+                      const SizedBox(height: YsSpace.s1),
+                      Text(
+                        s.description,
+                        style: const TextStyle(
+                          color: YsColors.mutedForeground,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            if (_hovered) ...[
-              _ActionBtn(
-                icon: Icons.play_arrow,
-                tooltip: 'Run in terminal',
-                color: SnippetsColors.accent,
-                onTap: () {
-                  _runSnippet();
-                },
-              ),
-              const SizedBox(width: 4),
-              _ActionBtn(
-                icon: Icons.copy,
-                tooltip: 'Copy',
-                onTap: () =>
-                    Clipboard.setData(ClipboardData(text: s.command)),
-              ),
-              const SizedBox(width: 4),
-              _ActionBtn(
-                icon: Icons.delete_outlined,
-                tooltip: 'Delete',
-                color: SnippetsColors.red,
-                onTap: () => context.read<SnippetProvider>().delete(s.id),
+              // Always built (so Tab reaches them); only painted on hover/focus.
+              Opacity(
+                opacity: showActions ? 1 : 0,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _ActionBtn(
+                      icon: FLucideIcons.play,
+                      tooltip: 'Run in terminal',
+                      color: YsColors.primary,
+                      onTap: () {
+                        _runSnippet();
+                      },
+                    ),
+                    const SizedBox(width: YsSpace.s1),
+                    _ActionBtn(
+                      icon: FLucideIcons.copy,
+                      tooltip: 'Copy',
+                      onTap: () =>
+                          Clipboard.setData(ClipboardData(text: s.command)),
+                    ),
+                    const SizedBox(width: YsSpace.s1),
+                    _ActionBtn(
+                      icon: FLucideIcons.trash2,
+                      tooltip: 'Delete',
+                      color: YsColors.error,
+                      onTap: () => context.read<SnippetProvider>().delete(s.id),
+                    ),
+                  ],
+                ),
               ),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -278,49 +288,25 @@ class _ActionBtn extends StatelessWidget {
   final String tooltip;
   final Color? color;
   final VoidCallback onTap;
-  const _ActionBtn(
-      {required this.icon,
-      required this.tooltip,
-      this.color,
-      required this.onTap});
+  const _ActionBtn({
+    required this.icon,
+    required this.tooltip,
+    this.color,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: SnippetsColors.bg,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: SnippetsColors.border),
-          ),
-          child:
-              Icon(icon, size: 14, color: color ?? SnippetsColors.textSecondary),
-        ),
+      excludeFromSemantics: true,
+      child: FButton.icon(
+        variant: .outline,
+        size: .xs,
+        semanticsLabel: tooltip,
+        onPress: onTap,
+        child: Icon(icon, color: color),
       ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  final String label;
-  const _Badge(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-          color: SnippetsColors.border, borderRadius: BorderRadius.circular(4)),
-      child: Text(label,
-          style: const TextStyle(
-              color: SnippetsColors.textSecondary,
-              fontSize: 10,
-              fontWeight: FontWeight.w500)),
     );
   }
 }
@@ -337,12 +323,13 @@ class _SnippetPanel extends StatefulWidget {
 }
 
 class _SnippetPanelState extends State<_SnippetPanel> {
-  final _formKey = GlobalKey<FormState>();
   final _label = TextEditingController();
   final _command = TextEditingController();
   final _description = TextEditingController();
   final _tag = TextEditingController();
   bool _saving = false;
+  bool _labelMissing = false;
+  bool _commandMissing = false;
 
   @override
   void dispose() {
@@ -353,15 +340,24 @@ class _SnippetPanelState extends State<_SnippetPanel> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    // Same rule as before: the raw (untrimmed) value must not be empty.
+    final labelMissing = _label.text.isEmpty;
+    final commandMissing = _command.text.isEmpty;
+    setState(() {
+      _labelMissing = labelMissing;
+      _commandMissing = commandMissing;
+    });
+    if (labelMissing || commandMissing) return;
     setState(() => _saving = true);
     try {
-      await widget.onSave(Snippet(
-        label: _label.text.trim(),
-        command: _command.text.trim(),
-        description: _description.text.trim(),
-        tag: _tag.text.trim(),
-      ));
+      await widget.onSave(
+        Snippet(
+          label: _label.text.trim(),
+          command: _command.text.trim(),
+          description: _description.text.trim(),
+          tag: _tag.text.trim(),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -372,52 +368,70 @@ class _SnippetPanelState extends State<_SnippetPanel> {
     return Container(
       width: 340,
       decoration: const BoxDecoration(
-        color: SnippetsColors.sidebar,
-        border: Border(left: BorderSide(color: SnippetsColors.border)),
+        color: YsColors.sidebar,
+        border: Border(left: BorderSide(color: YsColors.border)),
       ),
       child: Column(
         children: [
           _buildHeader(),
           Expanded(
-            child: Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                children: [
-                  _field(_label, 'Label',
-                      autofocus: true,
-                      validator: (v) =>
-                          v?.isEmpty == true ? 'Required' : null),
-                  const SizedBox(height: 12),
-                  _field(_command, 'Command',
-                      maxLines: 3,
-                      validator: (v) =>
-                          v?.isEmpty == true ? 'Required' : null),
-                  const SizedBox(height: 12),
-                  _field(_description, 'Description (optional)'),
-                  const SizedBox(height: 12),
-                  _field(_tag, 'Tag (optional)'),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _saving ? null : _submit,
-                      style: FilledButton.styleFrom(
-                          backgroundColor: SnippetsColors.accent,
-                          foregroundColor: Colors.black),
-                      child: _saving
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.black))
-                          : const Text('Add Snippet',
-                              style:
-                                  TextStyle(fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-                ],
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                YsSpace.s4,
+                YsSpace.s4,
+                YsSpace.s4,
+                YsSpace.s5,
               ),
+              children: [
+                FTextField(
+                  key: const ValueKey('snippet-label'),
+                  control: .managed(
+                    controller: _label,
+                    onChange: (_) {
+                      if (_labelMissing) setState(() => _labelMissing = false);
+                    },
+                  ),
+                  label: const Text('Label'),
+                  autofocus: true,
+                  error: _labelMissing ? const Text('Required') : null,
+                ),
+                const SizedBox(height: YsSpace.s3),
+                FTextField.multiline(
+                  key: const ValueKey('snippet-command'),
+                  control: .managed(
+                    controller: _command,
+                    onChange: (_) {
+                      if (_commandMissing) {
+                        setState(() => _commandMissing = false);
+                      }
+                    },
+                  ),
+                  label: const Text('Command'),
+                  minLines: 3,
+                  maxLines: 3,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  error: _commandMissing ? const Text('Required') : null,
+                ),
+                const SizedBox(height: YsSpace.s3),
+                FTextField(
+                  key: const ValueKey('snippet-description'),
+                  control: .managed(controller: _description),
+                  label: const Text('Description (optional)'),
+                ),
+                const SizedBox(height: YsSpace.s3),
+                FTextField(
+                  key: const ValueKey('snippet-tag'),
+                  control: .managed(controller: _tag),
+                  label: const Text('Tag (optional)'),
+                ),
+                const SizedBox(height: YsSpace.s5),
+                FButton(
+                  onPress: _saving ? null : _submit,
+                  prefix: _saving ? const FCircularProgress(size: .sm) : null,
+                  child: const Text('Add Snippet'),
+                ),
+              ],
             ),
           ),
         ],
@@ -429,69 +443,36 @@ class _SnippetPanelState extends State<_SnippetPanel> {
     return Container(
       height: 52,
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: SnippetsColors.border)),
+        border: Border(bottom: BorderSide(color: YsColors.border)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: YsSpace.s4),
       child: Row(
         children: [
           const Expanded(
-            child: Text('New Snippet',
-                style: TextStyle(
-                    color: SnippetsColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600)),
-          ),
-          GestureDetector(
-            onTap: widget.onClose,
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: SnippetsColors.card,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: SnippetsColors.border),
+            child: Text(
+              'New Snippet',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: YsColors.foreground,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
-              child: const Icon(Icons.close,
-                  size: 14, color: SnippetsColors.textSecondary),
+            ),
+          ),
+          Tooltip(
+            message: 'Close',
+            excludeFromSemantics: true,
+            child: FButton.icon(
+              variant: .outline,
+              size: .xs,
+              semanticsLabel: 'Close',
+              onPress: widget.onClose,
+              child: const Icon(FLucideIcons.x),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _field(
-    TextEditingController ctrl,
-    String label, {
-    bool autofocus = false,
-    int? maxLines = 1,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: ctrl,
-      autofocus: autofocus,
-      maxLines: maxLines,
-      style: const TextStyle(color: SnippetsColors.textPrimary, fontSize: 13),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle:
-            const TextStyle(color: SnippetsColors.textSecondary, fontSize: 13),
-        filled: true,
-        fillColor: SnippetsColors.card,
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: SnippetsColors.border)),
-        enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: SnippetsColors.border)),
-        focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: SnippetsColors.accent)),
-        isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      ),
-      validator: validator,
     );
   }
 }

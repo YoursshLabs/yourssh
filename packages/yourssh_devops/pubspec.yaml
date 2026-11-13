@@ -10,6 +10,9 @@ dependencies:
   flutter:
     sdk: flutter
 
+  yourssh_ui:
+    path: ../yourssh_ui
+
   yourssh_plugin_api:
     path: ../yourssh_plugin_api
 
@@ -27,3 +30,7 @@ dependencies:
   file_picker: ^8.1.2
   flutter_secure_storage: ^9.2.2
   url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

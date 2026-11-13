@@ -87,6 +87,33 @@ jobs:
         working-directory: packages/yourssh_ui
         run: flutter test
 
+  # Plugin packages built on yourssh_ui; pure Dart/Flutter, no native bridge.
+  plugins:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [yourssh_snippets, yourssh_devops]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Install dependencies
+        working-directory: packages/${{ matrix.package }}
+        run: flutter pub get
+
+      - name: Analyze (${{ matrix.package }})
+        working-directory: packages/${{ matrix.package }}
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test (${{ matrix.package }})
+        working-directory: packages/${{ matrix.package }}
+        run: flutter test
+
   # One job per Rust crate. The cargo tests, build.sh and the Dart bridge tests
   # stay together on purpose: both cargo invocations use --release, so the
   # library build reuses the test build's compilation. Splitting them across jobs

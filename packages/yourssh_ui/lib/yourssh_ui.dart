@@ -13,3 +13,4 @@ export 'src/ys_empty_state.dart';
 export 'src/ys_badge.dart';
 export 'src/ys_status_bar.dart';
 export 'src/ys_file_table.dart';
+export 'src/ys_plugin_host.dart';

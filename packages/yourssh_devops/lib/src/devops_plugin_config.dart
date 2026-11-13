@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 /// Widget slots for DevOps sub-screens that depend on app-level providers
 /// (SessionProvider, SshService, TunnelProvider). Passed from the app so
