@@ -9,10 +9,10 @@ lint() { UI_LINT_ALLOWLIST="$tmp/tool/allow.txt" bash "$here/check_ui_lint.sh" "
 fail() { echo "SELFTEST FAIL: $1"; exit 1; }
 
 : > "$tmp/tool/allow.txt"
-printf 'final a = FLucideIcons.x; WtIconButton(a); SettingsIconButton(a);\n// IconButton( in a comment\n' > "$tmp/app/lib/ok.dart"
+printf 'final a = FLucideIcons.x; WtIconButton(a); SettingsIconButton(a); showYsDialog(c); showFDialog(c); FTextField(a); DevopsTextField(a); showFSheet(c);\n// IconButton( in a comment\n' > "$tmp/app/lib/ok.dart"
 lint || fail "clean tree must pass (word boundaries / comments)"
 
-for bad in 'IconButton(' 'AlertDialog(' 'SnackBar(' 'Icons.add' 'ScaffoldMessenger.of(c)'; do
+for bad in 'IconButton(' 'AlertDialog(' 'SnackBar(' 'Icons.add' 'ScaffoldMessenger.of(c)' 'showDialog(c)' 'showModalBottomSheet(c)' 'TextField(a)'; do
   printf 'final w = %s;\n' "$bad" > "$tmp/app/lib/bad.dart"
   if lint; then fail "'$bad' must fail"; fi
 done

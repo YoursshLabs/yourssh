@@ -74,7 +74,7 @@ Future<void> _open(
     ),
   );
   await tester.tap(find.text('go'));
-  await _pumpUntilFound(tester, find.byType(TextField));
+  await _pumpUntilFound(tester, find.byType(FTextField));
 }
 
 void main() {
@@ -108,7 +108,7 @@ void main() {
     tester,
   ) async {
     await _open(tester, 'config.txt');
-    await tester.enterText(find.byType(TextField), 'edited');
+    await tester.enterText(find.byType(FTextField), 'edited');
     await tester.pump();
 
     await tester.tap(find.byTooltip('Back'));

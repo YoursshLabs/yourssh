@@ -75,6 +75,57 @@ void main() {
   final host =
       Host(id: 'h1', label: 'prod', host: '1.2.3.4', port: 22, username: 'u');
 
+  group('inline rename (FTextField)', () {
+    Future<(SshSession, SessionProvider)> startRename(
+        WidgetTester tester) async {
+      final (sessions, hosts) = makeProviders();
+      final session = seedSession(sessions, host);
+      await tester.pumpWidget(wrap(
+        SessionTab(
+            session: session,
+            isActive: true,
+            provider: sessions,
+            onTap: () {}),
+        sessions,
+        hosts,
+      ));
+      final tab = find.byType(SessionTab);
+      await tester.tap(tab);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(tab);
+      await tester.pumpAndSettle();
+      expect(find.byType(FTextField), findsOneWidget);
+      return (session, sessions);
+    }
+
+    testWidgets('Enter commits the new label', (tester) async {
+      final (session, _) = await startRename(tester);
+      await tester.enterText(find.byType(FTextField), 'renamed');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(session.customLabel, 'renamed');
+      expect(find.byType(FTextField), findsNothing);
+    });
+
+    testWidgets('Escape cancels without renaming', (tester) async {
+      final (session, _) = await startRename(tester);
+      await tester.enterText(find.byType(FTextField), 'nope');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(session.customLabel, isNull);
+      expect(find.byType(FTextField), findsNothing);
+    });
+
+    testWidgets('tapping outside commits', (tester) async {
+      final (session, _) = await startRename(tester);
+      await tester.enterText(find.byType(FTextField), 'outside');
+      await tester.tapAt(const Offset(700, 500));
+      await tester.pumpAndSettle();
+      expect(session.customLabel, 'outside');
+      expect(find.byType(FTextField), findsNothing);
+    });
+  });
+
   testWidgets('middle-click closes an unpinned tab', (tester) async {
     final (sessions, hosts) = makeProviders();
     final session = seedSession(sessions, host);

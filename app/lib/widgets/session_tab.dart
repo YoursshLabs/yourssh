@@ -257,20 +257,25 @@ class _SessionTabState extends State<SessionTab> {
                 }
                 return KeyEventResult.ignored;
               },
-              child: TextField(
-                controller: _renameController,
+              child: FTextField(
+                control: FTextFieldControl.managed(
+                    controller: _renameController),
                 autofocus: true,
-                style: const TextStyle(
-                    color: YsColors.foreground, fontSize: 12),
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
+                // Borderless, padding-free: the field sits inside the tab.
+                style: .delta(
+                  border: .delta([.all(.none)]),
+                  constraints: const BoxConstraints(),
+                  contentPadding: .value(EdgeInsets.zero),
+                  contentTextStyle: .delta([
+                    .base(
+                      const .delta(color: YsColors.foreground, fontSize: 12),
+                    ),
+                  ]),
                 ),
-                onSubmitted: (_) => _commitRename(),
+                onSubmit: (_) => _commitRename(),
                 onTapOutside: (_) => _commitRename(),
                 // Suppress default focus-traversal on Enter; commit is
-                // handled by onSubmitted/onTapOutside.
+                // handled by onSubmit/onTapOutside.
                 onEditingComplete: () {},
               ),
             ),

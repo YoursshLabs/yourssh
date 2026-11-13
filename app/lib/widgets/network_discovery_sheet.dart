@@ -33,10 +33,10 @@ class NetworkDiscoverySheet extends StatefulWidget {
     void Function(DiscoveredHost)? onSelected,
     @visibleForTesting NetworkDiscoveryService? service,
   }) {
-    showModalBottomSheet(
+    showFSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      side: FLayout.btt,
+      mainAxisMaxRatio: 0.9,
       builder: (_) => NetworkDiscoverySheet(
         selectionMode: selectionMode,
         onSelected: onSelected,
@@ -182,10 +182,10 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
   void _onAdd(BuildContext context, DiscoveredHost h) {
     // fix #6: use the modal's own context (panelCtx) for close navigation
     // so that if HostDetailPanel opens a sub-dialog, close still targets the panel
-    showModalBottomSheet(
+    showFSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      side: FLayout.btt,
+      mainAxisMaxRatio: 0.9,
       builder: (panelCtx) => HostDetailPanel(
         existing: null,
         initialHost: h.ip,
@@ -230,27 +230,20 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      builder: (ctx, scroll) => Container(
-        decoration: const BoxDecoration(
-          color: YsColors.background,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-          border: Border(top: BorderSide(color: YsColors.border)),
-        ),
-        child: Column(
-          children: [
-            _buildHandle(),
-            _buildHeader(context),
-            _buildSubnetBar(),
-            if (_scanning) _buildProgress(),
-            _buildCounterRow(),
-            const FDivider(style: .delta(padding: .value(EdgeInsets.zero))),
-            Expanded(child: _buildResultList(context, scroll)),
-          ],
-        ),
+    // FSheet draws the surface (fill, border, rounded top); the column only
+    // needs a bounded height for the scrolling result list.
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.7,
+      child: Column(
+        children: [
+          _buildHandle(),
+          _buildHeader(context),
+          _buildSubnetBar(),
+          if (_scanning) _buildProgress(),
+          _buildCounterRow(),
+          const FDivider(style: .delta(padding: .value(EdgeInsets.zero))),
+          Expanded(child: _buildResultList(context)),
+        ],
       ),
     );
   }
@@ -418,7 +411,7 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
         ),
       );
 
-  Widget _buildResultList(BuildContext context, ScrollController scroll) {
+  Widget _buildResultList(BuildContext context) {
     final items = _results.values.toList()
       ..sort((a, b) => a.ip.compareTo(b.ip));
     if (items.isEmpty && _scanError != null && !_scanning) {
@@ -442,7 +435,6 @@ class NetworkDiscoverySheetState extends State<NetworkDiscoverySheet> {
       );
     }
     return ListView.builder(
-      controller: scroll,
       itemCount: items.length,
       itemBuilder: (ctx, i) => _DiscoveredRow(
         host: items[i],

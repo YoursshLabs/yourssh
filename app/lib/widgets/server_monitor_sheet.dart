@@ -18,10 +18,10 @@ class ServerMonitorSheet extends StatefulWidget {
   const ServerMonitorSheet({super.key, required this.host, this.testIsConnected});
 
   static void show(BuildContext context, Host host) {
-    showModalBottomSheet(
+    showFSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      side: FLayout.btt,
+      mainAxisMaxRatio: 0.9,
       builder: (_) => ServerMonitorSheet(host: host),
     );
   }
@@ -97,25 +97,14 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
   @override
   Widget build(BuildContext context) {
     final isConnected = _isConnected(context);
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      builder: (_, ctrl) => Container(
-        decoration: const BoxDecoration(
-          color: YsColors.card,
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(YsRadius.card)),
-          border: Border(top: BorderSide(color: YsColors.border)),
-        ),
-        child: Column(children: [
-          _handle(),
-          _header(),
-          Expanded(
-            child: isConnected ? _body(ctrl) : _notConnected(),
-          ),
-        ]),
-      ),
+    // FSheet draws the surface; the column needs a bounded height.
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.6,
+      child: Column(children: [
+        _handle(),
+        _header(),
+        Expanded(child: isConnected ? _body() : _notConnected()),
+      ]),
     );
   }
 
@@ -172,8 +161,7 @@ class ServerMonitorSheetState extends State<ServerMonitorSheet> {
         ),
       );
 
-  Widget _body(ScrollController ctrl) => ListView(
-        controller: ctrl,
+  Widget _body() => ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
           _sectionTitle('SYSTEM'),

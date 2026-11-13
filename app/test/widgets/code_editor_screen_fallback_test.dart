@@ -19,7 +19,7 @@ import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/widgets/code_editor_screen.dart';
 import 'package:yourssh/theme/app_theme.dart';
-import 'package:yourssh_ui/yourssh_ui.dart' show FLucideIcons;
+import 'package:yourssh_ui/yourssh_ui.dart' show FLucideIcons, FTextField;
 
 class FakeTransferService extends SftpTransferService {
   FakeTransferService(this.bytes) : super(SshService(StorageService()));
@@ -93,20 +93,20 @@ void main() {
       (tester) async {
     final service = FakeTransferService(utf8.encode('hello from server'));
     await tester.pumpWidget(_wrap(service));
-    await _pumpUntilFound(tester, find.byType(TextField));
+    await _pumpUntilFound(tester, find.byType(FTextField));
 
-    final field = find.byType(TextField);
+    final field = find.byType(FTextField);
     expect(field, findsOneWidget);
-    expect(tester.widget<TextField>(field).controller!.text,
+    expect(tester.widget<EditableText>(find.descendant(of: field, matching: find.byType(EditableText))).controller.text,
         'hello from server');
   });
 
   testWidgets('save button uploads edited content', (tester) async {
     final service = FakeTransferService(utf8.encode('v1'));
     await tester.pumpWidget(_wrap(service));
-    await _pumpUntilFound(tester, find.byType(TextField));
+    await _pumpUntilFound(tester, find.byType(FTextField));
 
-    await tester.enterText(find.byType(TextField), 'v2 edited');
+    await tester.enterText(find.byType(FTextField), 'v2 edited');
     await tester.tap(find.byIcon(FLucideIcons.save));
     await _pumpUntilFound(tester, find.text('Saved'));
 
@@ -118,9 +118,9 @@ void main() {
   testWidgets('Ctrl+S saves from the fallback editor', (tester) async {
     final service = FakeTransferService(utf8.encode('v1'));
     await tester.pumpWidget(_wrap(service));
-    await _pumpUntilFound(tester, find.byType(TextField));
+    await _pumpUntilFound(tester, find.byType(FTextField));
 
-    await tester.enterText(find.byType(TextField), 'keyboard save');
+    await tester.enterText(find.byType(FTextField), 'keyboard save');
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
@@ -185,14 +185,14 @@ void main() {
         ),
       ),
     ));
-    await _pumpUntilFound(tester, find.byType(TextField));
+    await _pumpUntilFound(tester, find.byType(FTextField));
 
     // No save button
     expect(find.byIcon(FLucideIcons.save), findsNothing);
     // Lock icon present
     expect(find.byIcon(FLucideIcons.lock), findsOneWidget);
-    // TextField is read-only
-    final tf = tester.widget<TextField>(find.byType(TextField));
+    // FTextField is read-only
+    final tf = tester.widget<FTextField>(find.byType(FTextField));
     expect(tf.readOnly, isTrue);
   });
 }

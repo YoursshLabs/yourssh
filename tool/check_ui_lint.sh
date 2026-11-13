@@ -3,7 +3,7 @@
 #
 # Scans app/lib and the plugin packages (NOT packages/yourssh_ui, which wraps
 # Material where it must) for IconButton(, AlertDialog(, SnackBar(, Icons.,
-# ScaffoldMessenger. Justified remaining sites live in
+# ScaffoldMessenger, showDialog(, showModalBottomSheet, TextField(. Justified remaining sites live in
 # tool/ui_lint_allowlist.txt, one `path:pattern  # reason` per line (the path
 # is relative to the repo root; the pattern is one of the literal tokens
 # above, or `*` for every token in that file).
@@ -19,7 +19,10 @@ patterns='IconButton(
 AlertDialog(
 SnackBar(
 Icons.
-ScaffoldMessenger'
+ScaffoldMessenger
+showDialog(
+showModalBottomSheet
+TextField('
 
 dirs=""
 for d in app/lib packages/yourssh_snippets/lib packages/yourssh_devops/lib packages/yourssh_web_tools/lib; do
@@ -46,7 +49,7 @@ for f in $files; do
   echo "$patterns" | while IFS= read -r p; do
     [ -n "$p" ] || continue
     # Left word boundary, so FLucideIcons. / WtIconButton( / SettingsIconButton(
-    # do not match. Comment-only lines are skipped.
+    # / showYsDialog( / FTextField( / DevopsTextField( do not match. Comment-only lines are skipped.
     re="(^|[^A-Za-z0-9_])$(printf '%s' "$p" | sed 's/[.(]/\\&/g')"
     hits=$(grep -nE -- "$re" "$f" | grep -vE '^[0-9]+:[[:space:]]*//' || true)
     [ -n "$hits" ] || continue

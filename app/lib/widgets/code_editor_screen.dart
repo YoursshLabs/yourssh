@@ -369,29 +369,35 @@ class _CodeEditorScreenState extends State<CodeEditorScreen> {
 
   /// Plain-Flutter editor for platforms without a webview implementation.
   Widget _buildFallbackEditor() {
-    final field = TextField(
-      controller: _textController,
+    final field = FTextField(
+      control: FTextFieldControl.managed(
+        controller: _textController,
+        onChange: widget.readOnly
+            ? null
+            : (_) {
+                if (!_isDirty) setState(() => _isDirty = true);
+              },
+      ),
       maxLines: null,
       expands: true,
       textAlignVertical: TextAlignVertical.top,
       autofocus: !widget.readOnly,
       readOnly: widget.readOnly,
-      style: const TextStyle(
-        fontFamily: kYsMonoFontFamily,
-        fontFamilyFallback: kYsMonoFontFallback,
-        fontSize: 13,
-        color: YsColors.foreground,
-        height: 1.5,
+      style: .delta(
+        border: .delta([.all(.none)]),
+        contentPadding: .value(const EdgeInsets.all(12)),
+        contentTextStyle: .delta([
+          .base(
+            const .delta(
+              fontFamily: kYsMonoFontFamily,
+              fontFamilyFallback: kYsMonoFontFallback,
+              fontSize: 13,
+              color: YsColors.foreground,
+              height: 1.5,
+            ),
+          ),
+        ]),
       ),
-      decoration: const InputDecoration(
-        border: InputBorder.none,
-        contentPadding: EdgeInsets.all(12),
-      ),
-      onChanged: widget.readOnly
-          ? null
-          : (_) {
-              if (!_isDirty) setState(() => _isDirty = true);
-            },
     );
     if (widget.readOnly) return field;
     return CallbackShortcuts(
