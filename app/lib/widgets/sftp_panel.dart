@@ -11,6 +11,7 @@ import '../services/sftp_transfer_service.dart';
 import '../services/sftp_file_ops_service.dart';
 import '../util/app_launcher.dart';
 import '../util/file_mode.dart';
+import '../util/sftp_error.dart';
 import 'code_editor_screen.dart';
 import '../util/entry_sort.dart';
 import 'entry_context_menu.dart';
@@ -472,13 +473,18 @@ class _SftpPanelState extends State<SftpPanel>
             title: 'New Folder', hint: 'Folder name', confirmLabel: 'Create'))
         ?.trim();
     if (name == null || name.isEmpty || !mounted) return;
+    final exists = existsMessage(prov.entries.map((e) => e.name), name);
+    if (exists != null) {
+      AppSnack.error(context, 'Create folder failed: $exists');
+      return;
+    }
     try {
       final newPath = prov.currentPath == '/' ? '/$name' : '${prov.currentPath}/$name';
       await context.read<SftpFileOpsService>().mkdir(widget.host!, newPath);
       if (mounted) _loadDirectory(prov.currentPath);
     } catch (e) {
       if (mounted) {
-        AppSnack.error(context, 'Create folder failed: $e');
+        AppSnack.error(context, 'Create folder failed: ${describeSftpError(e, name: name)}');
       }
     }
   }
@@ -488,6 +494,11 @@ class _SftpPanelState extends State<SftpPanel>
             title: 'New File', hint: 'File name', confirmLabel: 'Create'))
         ?.trim();
     if (name == null || name.isEmpty || !mounted) return;
+    final exists = existsMessage(prov.entries.map((e) => e.name), name);
+    if (exists != null) {
+      AppSnack.error(context, 'Create file failed: $exists');
+      return;
+    }
     try {
       final remotePath = prov.currentPath == '/' ? '/$name' : '${prov.currentPath}/$name';
       await context.read<SftpFileOpsService>().createFile(widget.host!, remotePath);
@@ -503,7 +514,7 @@ class _SftpPanelState extends State<SftpPanel>
       if (mounted) _loadDirectory(prov.currentPath);
     } catch (e) {
       if (mounted) {
-        AppSnack.error(context, 'Create file failed: $e');
+        AppSnack.error(context, 'Create file failed: ${describeSftpError(e, name: name)}');
       }
     }
   }
@@ -513,6 +524,11 @@ class _SftpPanelState extends State<SftpPanel>
             title: 'Rename', initial: entry.name, confirmLabel: 'Rename'))
         ?.trim();
     if (newName == null || newName.isEmpty || newName == entry.name || !mounted) return;
+    final exists = existsMessage(prov.entries.map((e) => e.name), newName);
+    if (exists != null) {
+      AppSnack.error(context, 'Rename failed: $exists');
+      return;
+    }
     final slash = entry.path.lastIndexOf('/');
     final parent = slash <= 0 ? '/' : entry.path.substring(0, slash);
     try {
@@ -521,7 +537,7 @@ class _SftpPanelState extends State<SftpPanel>
       if (mounted) _loadDirectory(prov.currentPath);
     } catch (e) {
       if (mounted) {
-        AppSnack.error(context, 'Rename failed: $e');
+        AppSnack.error(context, 'Rename failed: ${describeSftpError(e, name: newName)}');
       }
     }
   }

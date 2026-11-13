@@ -9,6 +9,7 @@ import '../util/app_launcher.dart';
 import '../util/entry_sort.dart';
 import '../util/file_mode.dart';
 import '../util/fs_error.dart';
+import '../util/sftp_error.dart';
 import 'entry_context_menu.dart';
 import 'file_panel_chrome.dart';
 import 'path_breadcrumb.dart';
@@ -76,6 +77,12 @@ class _LocalFilePanelState extends State<LocalFilePanel>
       confirmLabel: 'OK',
     );
     if (name == null || name.trim().isEmpty) return;
+    final exists = existsMessage(
+        widget.provider.entries.map((e) => e.name), name.trim());
+    if (exists != null) {
+      _showError('Failed to create folder: $exists');
+      return;
+    }
     final newPath = p.join(widget.provider.currentPath, name.trim());
     try {
       await Directory(newPath).create();
@@ -105,6 +112,12 @@ class _LocalFilePanelState extends State<LocalFilePanel>
     if (newName == null ||
         newName.trim().isEmpty ||
         newName.trim() == entry.name) {
+      return;
+    }
+    final exists = existsMessage(
+        widget.provider.entries.map((e) => e.name), newName.trim());
+    if (exists != null) {
+      _showError('Rename failed: $exists');
       return;
     }
     final newPath = p.join(p.dirname(entry.path), newName.trim());
