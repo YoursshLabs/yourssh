@@ -149,7 +149,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
         ),
         SettingsRow(
           leading: const Icon(FLucideIcons.layers,
-              color: MobileColors.textMuted, size: 20),
+              color: YsColors.mutedForeground, size: 20),
           title: 'Keep sessions in tmux',
           toggle: settings.tmuxEnabled,
           onToggle: (v) => settings.save(tmuxEnabled: v),
