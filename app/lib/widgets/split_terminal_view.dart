@@ -308,8 +308,10 @@ class _WatchBanner extends StatelessWidget {
       fg = YsColors.ok;
       label = 'You have control';
     } else {
-      bg = YsColors.secondary;
-      fg = YsColors.mutedForeground;
+      // Informational: primary tint + amber text, distinct from the green
+      // in-control and red ended states.
+      bg = YsColors.primary.withValues(alpha: 0.12);
+      fg = YsColors.accentText;
       label = 'Watching: ${session.watchedTitle ?? ''} · Read-only';
     }
 
