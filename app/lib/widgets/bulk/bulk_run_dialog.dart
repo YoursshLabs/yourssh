@@ -96,10 +96,13 @@ class _BulkRunDialogState extends State<BulkRunDialog> {
   }
 
   String get _summary {
-    final ok = _controller.countOf(BulkHostStatus.success);
+    final ok = _controller.cleanCount;
+    final nonZero = _controller.nonZeroCount;
     final failed = _controller.countOf(BulkHostStatus.failed);
     final cancelled = _controller.countOf(BulkHostStatus.cancelled);
-    var s = '$ok ok · $failed failed';
+    var s = '$ok ok';
+    if (nonZero > 0) s += ' · $nonZero non-zero exit';
+    s += ' · $failed failed';
     if (cancelled > 0) s += ' · $cancelled cancelled';
     return s;
   }

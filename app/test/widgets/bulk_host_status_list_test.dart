@@ -43,4 +43,14 @@ void main() {
     expect(find.text('auth failed'), findsOneWidget); // error shown inline
     expect(find.text('exit 2'), findsOneWidget);
   });
+
+  testWidgets('unknown exit status reads "exit unknown", not "exit -1"',
+      (tester) async {
+    await tester.pumpWidget(_wrap(BulkHostStatusList(results: [
+      BulkHostResult(
+          host: host, status: BulkHostStatus.success, exitCode: -1, stdout: 'x'),
+    ])));
+    expect(find.text('exit unknown'), findsOneWidget);
+    expect(find.text('exit -1'), findsNothing);
+  });
 }

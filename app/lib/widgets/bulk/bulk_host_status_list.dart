@@ -56,7 +56,7 @@ class _ResultRowState extends State<_ResultRow> {
       case BulkHostStatus.running:
         return const FCircularProgress(size: .xs);
       case BulkHostStatus.success:
-        final clean = (r.exitCode ?? 0) == 0;
+        final clean = !r.exitedNonZero;
         return Icon(
           clean ? FLucideIcons.circleCheck : FLucideIcons.circleAlert,
           size: 14,
@@ -132,10 +132,12 @@ class _ResultRowState extends State<_ResultRow> {
                       ),
                     ),
                   ),
-                if (r.status == BulkHostStatus.success &&
-                    (r.exitCode ?? 0) != 0) ...[
+                if (r.exitedNonZero) ...[
                   const SizedBox(width: YsSpace.s2),
-                  YsStatusBadge('exit ${r.exitCode}', status: YsStatus.warn),
+                  YsStatusBadge(
+                    r.exitUnknown ? 'exit unknown' : 'exit ${r.exitCode}',
+                    status: YsStatus.warn,
+                  ),
                 ],
                 if (transferring) ...[
                   const SizedBox(width: YsSpace.s2),

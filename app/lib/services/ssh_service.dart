@@ -1199,7 +1199,8 @@ class SshService {
         type: AuditEventType.exec,
         host: host,
         command: originalCommand,
-        exitCode: execResult.exitCode,
+        // null (not -1) when the server sent no exit status
+        exitCode: result.exitCode,
         meta: {'source': auditSource},
       ));
     }

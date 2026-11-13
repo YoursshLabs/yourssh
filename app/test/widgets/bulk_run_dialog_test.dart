@@ -22,6 +22,27 @@ void main() {
         child: ysTestApp(child),
       );
 
+  testWidgets('footer does not count an unknown/non-zero exit as ok',
+      (tester) async {
+    final hosts = [
+      Host(label: 'a', host: 'a.x', username: 'u'),
+      Host(label: 'b', host: 'b.x', username: 'u'),
+    ];
+    final service = BulkActionService(
+        exec: (h, c) async =>
+            (stdout: 'x', stderr: '', exitCode: h.label == 'a' ? 0 : -1));
+
+    await tester.pumpWidget(
+        wrap(BulkRunDialog(hosts: hosts, serviceOverride: service)));
+    await tester.enterText(
+        find.byKey(const Key('bulk-command-field')), 'uptime');
+    await tester.tap(find.text('RUN'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('1 ok · 1 non-zero exit · 0 failed'),
+        findsOneWidget);
+  });
+
   testWidgets('runs a command and shows per-host results', (tester) async {
     final hosts = [
       Host(label: 'a', host: 'a.x', username: 'u'),

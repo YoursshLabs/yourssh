@@ -32,6 +32,9 @@ class BulkRunController extends ChangeNotifier {
   int countOf(BulkHostStatus status) =>
       results.where((r) => r.status == status).length;
 
+  int get cleanCount => results.where((r) => r.ranClean).length;
+  int get nonZeroCount => results.where((r) => r.exitedNonZero).length;
+
   Future<void> runCommand(String command) =>
       _start((token) => _service.runCommand(hosts, command,
           onUpdate: _onUpdate, token: token));
