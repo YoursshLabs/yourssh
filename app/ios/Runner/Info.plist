@@ -53,8 +53,14 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Scan the QR code YourSSH shows on your computer to import hosts.</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>YourSSH only reads your media library if you pick an audio file to upload to a server.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>YourSSH uses Face ID to unlock the app and protect your saved hosts and keys.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>YourSSH only accesses your photos and videos when you pick one to upload to a server.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>YourSSH does not track your location. iOS may ask for this when the app reads Wi-Fi network details to share a file over your local network.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>YourSSH connects to SSH servers and to your computer on the local network to import or share hosts.</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

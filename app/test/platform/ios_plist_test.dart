@@ -9,6 +9,9 @@ void main() {
       'NSCameraUsageDescription',
       'NSLocalNetworkUsageDescription',
       'NSFaceIDUsageDescription',
+      'NSPhotoLibraryUsageDescription',
+      'NSAppleMusicUsageDescription',
+      'NSLocationWhenInUseUsageDescription',
       'UIFileSharingEnabled',
       'LSSupportsOpeningDocumentsInPlace',
     ]) {
@@ -23,6 +26,9 @@ void main() {
       'NSCameraUsageDescription',
       'NSLocalNetworkUsageDescription',
       'NSFaceIDUsageDescription',
+      'NSPhotoLibraryUsageDescription',
+      'NSAppleMusicUsageDescription',
+      'NSLocationWhenInUseUsageDescription',
     ]) {
       expect(
         plist,
