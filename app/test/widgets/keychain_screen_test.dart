@@ -97,8 +97,8 @@ void main() {
       (tester) async {
     await pump(tester);
     expect(find.text('SSH Keys'), findsOneWidget);
-    expect(find.text('IMPORT'), findsOneWidget);
-    expect(find.text('GENERATE'), findsOneWidget);
+    expect(find.text('Import'), findsOneWidget);
+    expect(find.text('Generate'), findsOneWidget);
     expect(find.byTooltip('Copy public key'), findsOneWidget);
     expect(find.byTooltip('Deploy to host…'), findsOneWidget);
     expect(find.byTooltip('Remove key'), findsOneWidget);
@@ -116,7 +116,7 @@ void main() {
   testWidgets('60-char label and path at 900x600 do not overflow',
       (tester) async {
     await pump(tester);
-    await tester.tap(find.text('GENERATE'));
+    await tester.tap(find.text('Generate'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text(longLabel), findsOneWidget);
@@ -124,7 +124,7 @@ void main() {
 
   testWidgets('generate panel focuses the key name field', (tester) async {
     await pump(tester);
-    await tester.tap(find.text('GENERATE'));
+    await tester.tap(find.text('Generate'));
     await tester.pumpAndSettle();
     final focus = FocusManager.instance.primaryFocus!;
     expect(
@@ -181,7 +181,7 @@ void main() {
   group('generate form', () {
     Future<void> openForm(WidgetTester tester) async {
       await pump(tester);
-      await tester.tap(find.text('GENERATE'));
+      await tester.tap(find.text('Generate'));
       await tester.pumpAndSettle();
     }
 

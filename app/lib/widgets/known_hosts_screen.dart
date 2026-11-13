@@ -107,7 +107,7 @@ class _TopBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           prefix: const Icon(FLucideIcons.download),
           onPress: onImport,
-          child: const Text('IMPORT'),
+          child: const Text('Import'),
         ),
       ],
     ),

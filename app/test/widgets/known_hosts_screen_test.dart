@@ -31,7 +31,7 @@ void main() {
     expect(find.text('No known hosts yet'), findsOneWidget);
     expect(find.text('Connect to a server to add one.'), findsOneWidget);
     expect(find.text('Known Hosts'), findsOneWidget);
-    expect(find.text('IMPORT'), findsOneWidget);
+    expect(find.text('Import'), findsOneWidget);
   });
 
   testWidgets('lists host:port, key type and a short fingerprint in mono',

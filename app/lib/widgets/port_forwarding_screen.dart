@@ -137,7 +137,7 @@ class _TopBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           prefix: const Icon(FLucideIcons.plus),
           onPress: onAdd,
-          child: const Text('NEW RULE'),
+          child: const Text('New rule'),
         ),
       ],
     ),

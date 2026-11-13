@@ -63,7 +63,7 @@ void main() {
     await tester.pumpWidget(wrap(provider));
     await tester.pumpAndSettle();
 
-    expect(find.text('AUDIT LOG'), findsOneWidget);
+    expect(find.text('Audit log'), findsOneWidget);
     expect(find.text('CSV'), findsOneWidget);
     expect(find.text('JSON'), findsOneWidget);
     expect(find.text('Clear'), findsOneWidget);

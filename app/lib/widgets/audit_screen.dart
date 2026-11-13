@@ -92,7 +92,7 @@ class _AuditScreenState extends State<AuditScreen> {
           padding: const EdgeInsets.all(YsSpace.s4),
           child: Row(children: [
             const Expanded(
-              child: Text('AUDIT LOG',
+              child: Text('Audit log',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

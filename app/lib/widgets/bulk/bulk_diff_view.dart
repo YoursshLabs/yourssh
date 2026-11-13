@@ -113,7 +113,7 @@ class _BulkDiffViewState extends State<BulkDiffView> {
                   onPress: () => setState(() => _compare = !_compare),
                   child: Flexible(
                     child: Text(
-                        _compare ? 'BACK TO GROUPS' : 'COMPARE TWO HOSTS',
+                        _compare ? 'Back to groups' : 'Compare two hosts',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                   ),

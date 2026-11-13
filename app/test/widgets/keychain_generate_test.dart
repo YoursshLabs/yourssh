@@ -34,8 +34,8 @@ void main() {
   testWidgets('rsa/ecdsa options disabled when ssh-keygen is missing',
       (tester) async {
     await pump(tester, _FakeKeyGen(sshKeygenAvailable: false));
-    // 'GENERATE' renders in both the top bar and the empty state.
-    await tester.tap(find.text('GENERATE').first);
+    // 'Generate' renders in both the top bar and the empty state.
+    await tester.tap(find.text('Generate').first);
     await tester.pumpAndSettle();
 
     expect(find.textContaining('require OpenSSH client'), findsOneWidget);
@@ -52,7 +52,7 @@ void main() {
 
   testWidgets('rsa/ecdsa enabled when ssh-keygen exists', (tester) async {
     await pump(tester, _FakeKeyGen(sshKeygenAvailable: true));
-    await tester.tap(find.text('GENERATE').first);
+    await tester.tap(find.text('Generate').first);
     await tester.pumpAndSettle();
     expect(find.textContaining('require OpenSSH client'), findsNothing);
   });

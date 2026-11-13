@@ -31,11 +31,11 @@ void main() {
         ],
         serviceOverride: service)));
     expect(find.text('Push files to 2 hosts'), findsOneWidget);
-    expect(find.text('ADD FILES'), findsOneWidget);
-    expect(find.text('ADD FOLDER'), findsOneWidget);
+    expect(find.text('Add files'), findsOneWidget);
+    expect(find.text('Add folder'), findsOneWidget);
     expect(find.text('Destination'), findsOneWidget);
-    expect(find.text('PUSH'), findsOneWidget);
-    expect(find.text('CLOSE'), findsOneWidget);
+    expect(find.text('Push'), findsOneWidget);
+    expect(find.text('Close'), findsOneWidget);
     expect(find.byTooltip('Close'), findsOneWidget);
     expect(find.text('Existing remote files will be overwritten.'),
         findsOneWidget);
@@ -72,7 +72,7 @@ void main() {
             serviceOverride: service));
     await tester.pumpAndSettle();
     expect(find.byType(BulkPushDialog), findsOneWidget);
-    await tester.tap(find.text('CLOSE'));
+    await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
     expect(find.byType(BulkPushDialog), findsNothing);
   });
@@ -127,10 +127,10 @@ void main() {
         reason: 'the long source chip is shown');
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('PUSH'));
+    await tester.tap(find.text('Push'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('CANCEL'), findsOneWidget, reason: 'push is running');
+    expect(find.text('Cancel'), findsOneWidget, reason: 'push is running');
     expect(tester.takeException(), isNull);
     final box = tester.getRect(find.byType(YsDialogFrame));
     expect(box.height, lessThanOrEqualTo(600));

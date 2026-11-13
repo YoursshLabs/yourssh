@@ -165,7 +165,7 @@ class _BulkRunDialogState extends State<BulkRunDialog> {
                       variant: running ? .destructive : .primary,
                       mainAxisSize: MainAxisSize.min,
                       onPress: running ? _controller.cancel : _run,
-                      child: Text(running ? 'CANCEL' : 'RUN'),
+                      child: Text(running ? 'Cancel' : 'Run'),
                     ),
                   ],
                 ),
@@ -182,10 +182,10 @@ class _BulkRunDialogState extends State<BulkRunDialog> {
                 ),
                 children: [
                   FTabEntry(
-                      label: const Text('RESULTS'),
+                      label: const Text('Results'),
                       child: const SizedBox.shrink()),
                   FTabEntry(
-                      label: Text('DIFF',
+                      label: Text('Diff',
                           style: diffReady
                               ? null
                               : const TextStyle(color: YsColors.off)),

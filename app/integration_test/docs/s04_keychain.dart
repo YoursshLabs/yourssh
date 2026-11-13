@@ -12,7 +12,7 @@ Future<void> runKeychain(JourneyContext c) async {
   await navTo(t, 'Keychain');
   await c.snap('$s/01-keychain-empty', 'Keychain with no keys: Import Key / Generate Key');
   await step(c.notes, 'generate', () async {
-    await tapText(t, 'GENERATE', wait: 700);
+    await tapText(t, 'Generate', wait: 700);
     await c.snap('$s/02-generate-panel', 'Generate key panel: name, algorithm (Ed25519 default), passphrase');
     await typeKey(t, 'keygen-name', 'docs-ed25519');
     await c.snap('$s/03-generate-filled', 'Generate panel with a key name entered');
@@ -23,7 +23,7 @@ Future<void> runKeychain(JourneyContext c) async {
   });
   await step(c.notes, 'import', () async {
     DocsFilePicker.next = [Platform.environment['DOCS_KEY_SRC']!];
-    await tapText(t, 'IMPORT', wait: 900);
+    await tapText(t, 'Import', wait: 900);
     await sleepPump(t, 600);
     await c.snap('$s/05-key-list', 'Key list after generating and importing a key');
   });

@@ -65,7 +65,7 @@ void main() {
       _ok('same-label', 'out-1'),
       _ok('same-label', 'out-2'),
     ])));
-    await tester.tap(find.text('COMPARE TWO HOSTS'));
+    await tester.tap(find.text('Compare two hosts'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('bulk-compare-a')), findsOneWidget);
     expect(find.byKey(const ValueKey('bulk-compare-b')), findsOneWidget);
@@ -78,7 +78,7 @@ void main() {
       _ok('alpha', 'out-from-alpha'),
       _ok('beta', 'out-from-beta'),
     ])));
-    await tester.tap(find.text('COMPARE TWO HOSTS'));
+    await tester.tap(find.text('Compare two hosts'));
     await tester.pumpAndSettle();
     expect(find.text('Pick two hosts to compare.'), findsOneWidget);
 

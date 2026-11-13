@@ -194,7 +194,7 @@ class _BulkPushDialogState extends State<BulkPushDialog> {
                           mainAxisSize: MainAxisSize.min,
                           onPress: running ? null : _addFiles,
                           prefix: const Icon(FLucideIcons.file),
-                          child: const Text('ADD FILES'),
+                          child: const Text('Add files'),
                         ),
                         FButton(
                           variant: .outline,
@@ -202,7 +202,7 @@ class _BulkPushDialogState extends State<BulkPushDialog> {
                           mainAxisSize: MainAxisSize.min,
                           onPress: running ? null : _addFolder,
                           prefix: const Icon(FLucideIcons.folder),
-                          child: const Text('ADD FOLDER'),
+                          child: const Text('Add folder'),
                         ),
                       ],
                     ),
@@ -270,7 +270,7 @@ class _BulkPushDialogState extends State<BulkPushDialog> {
                           onPress: running
                               ? _controller.cancel
                               : (_canPush ? _push : null),
-                          child: Text(running ? 'CANCEL' : 'PUSH'),
+                          child: Text(running ? 'Cancel' : 'Push'),
                         ),
                       ],
                     ),

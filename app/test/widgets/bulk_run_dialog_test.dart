@@ -36,7 +36,7 @@ void main() {
         wrap(BulkRunDialog(hosts: hosts, serviceOverride: service)));
     await tester.enterText(
         find.byKey(const Key('bulk-command-field')), 'uptime');
-    await tester.tap(find.text('RUN'));
+    await tester.tap(find.text('Run'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('1 ok · 1 non-zero exit · 0 failed'),
@@ -57,7 +57,7 @@ void main() {
 
     await tester.enterText(
         find.byKey(const Key('bulk-command-field')), 'uptime');
-    await tester.tap(find.text('RUN'));
+    await tester.tap(find.text('Run'));
     await tester.pumpAndSettle();
 
     expect(find.text('a'), findsOneWidget);
@@ -74,7 +74,7 @@ void main() {
     await tester.pumpWidget(wrap(BulkRunDialog(
         hosts: [Host(label: 'a', host: 'a.x', username: 'u')],
         serviceOverride: service)));
-    await tester.tap(find.text('RUN'));
+    await tester.tap(find.text('Run'));
     await tester.pumpAndSettle();
     expect(execCount, 0);
   });
@@ -104,14 +104,14 @@ dialogCtx, barrierDismissible: false, builder: (_) => BulkRunDialog(
 
     await tester.enterText(
         find.byKey(const Key('bulk-command-field')), 'sleep 100');
-    await tester.tap(find.text('RUN'));
+    await tester.tap(find.text('Run'));
     // Pump once to start the run (futures fire, setState called).
     await tester.pump();
     // One more pump to let the state rebuild with isRunning=true.
     await tester.pump();
 
     // Confirm the CANCEL button is visible — proves isRunning is true.
-    expect(find.text('CANCEL'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
 
     // Verify route-level pop disposition is doNotPop (PopScope registered).
     final dialogEl = tester.element(find.byType(BulkRunDialog));
@@ -172,10 +172,10 @@ dialogCtx, barrierDismissible: false, builder: (_) => BulkRunDialog(
     expect(tester.takeException(), isNull);
     await tester.enterText(
         find.byKey(const Key('bulk-command-field')), 'uptime');
-    await tester.tap(find.text('RUN'));
+    await tester.tap(find.text('Run'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.tap(find.text('DIFF'));
+    await tester.tap(find.text('Diff'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });

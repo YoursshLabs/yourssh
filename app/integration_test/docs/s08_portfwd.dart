@@ -30,7 +30,7 @@ Future<void> runPortForward(JourneyContext c) async {
   await tapText(t, 'Add Rule', wait: 800);
   await c.snap('$s/05-rule-list', 'Rule list with the new local rule');
   await step(c.notes, 'dynamic', () async {
-    await tapText(t, 'NEW RULE', wait: 700);
+    await tapText(t, 'New rule', wait: 700);
     await typeKey(t, 'pf-label', 'SOCKS proxy');
     await tapKey(t, 'pf-type', wait: 600);
     await c.snap('$s/06-type-menu', 'Rule type dropdown: Local / Remote / Dynamic SOCKS5');

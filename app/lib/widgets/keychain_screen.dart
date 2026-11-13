@@ -122,7 +122,7 @@ class _TopBar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             prefix: const Icon(FLucideIcons.upload),
             onPress: onAdd,
-            child: const Text('IMPORT'),
+            child: const Text('Import'),
           ),
           const SizedBox(width: YsSpace.s2),
           FButton(
@@ -131,7 +131,7 @@ class _TopBar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             prefix: const Icon(FLucideIcons.plus),
             onPress: onGenerate,
-            child: const Text('GENERATE'),
+            child: const Text('Generate'),
           ),
         ],
       ),

@@ -91,7 +91,7 @@ class BulkDialogFooter extends StatelessWidget {
           size: .xs,
           mainAxisSize: MainAxisSize.min,
           onPress: onClose,
-          child: const Text('CLOSE'),
+          child: const Text('Close'),
         ),
       ],
     ),
