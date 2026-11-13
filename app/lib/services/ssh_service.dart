@@ -727,6 +727,21 @@ class SshService {
     }
   }
 
+  /// Whether [hostId]'s client is open and answers a keepalive ping within
+  /// [timeout]. False without a client, with a closed one, or when the ping
+  /// does not complete in time (a half-open link after the OS suspended us).
+  Future<bool> isAlive(String hostId,
+      {Duration timeout = const Duration(seconds: 3)}) async {
+    final client = _clients[hostId];
+    if (client == null || client.isClosed) return false;
+    try {
+      await client.ping().timeout(timeout);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ── Shell session (feeds into xterm Terminal) ──────────
 
   Future<void> openShell(

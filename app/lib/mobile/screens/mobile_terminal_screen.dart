@@ -9,6 +9,7 @@ import '../../models/ssh_session.dart';
 import '../../providers/host_provider.dart';
 import '../../providers/session_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../theme/app_theme.dart' show AppSnack;
 import '../../theme/terminal_themes.dart';
 import '../../util/terminal_appearance.dart';
 import '../navigation/open_session.dart';
@@ -114,9 +115,20 @@ class _MobileTerminalScreenState extends State<MobileTerminalScreen> {
     showTerminalSidePanel(
       context,
       sessionId: active.id,
-      onInsert: (cmd) => active.terminal.textInput(cmd),
-      onKey: (k, {ctrl = false, alt = false}) =>
-          active.terminal.keyInput(k, ctrl: ctrl, alt: alt),
+      onInsert: (cmd) {
+        if (!active.acceptsInput) {
+          AppSnack.info(context, 'Session is not connected');
+          return;
+        }
+        active.terminal.textInput(cmd);
+      },
+      onKey: (k, {ctrl = false, alt = false}) {
+        if (!active.acceptsInput) {
+          AppSnack.info(context, 'Session is not connected');
+          return;
+        }
+        active.terminal.keyInput(k, ctrl: ctrl, alt: alt);
+      },
       initialTab: initialTab,
     );
   }
@@ -565,7 +577,7 @@ class _SessionBodyState extends State<_SessionBody> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.session.status == SessionStatus.connected) {
+    if (widget.session.acceptsInput) {
       return Column(
         children: [
           Expanded(
@@ -624,7 +636,9 @@ class _SessionBodyState extends State<_SessionBody> {
               child: FCircularProgress(),
             ),
           Text(
-            widget.session.statusLabel,
+            widget.session.paused
+                ? 'Session paused — reconnecting'
+                : widget.session.statusLabel,
             style: const TextStyle(color: MobileColors.textMuted),
           ),
           if (widget.session.errorMessage != null) ...[
