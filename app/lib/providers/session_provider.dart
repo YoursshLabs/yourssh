@@ -747,9 +747,14 @@ class SessionProvider extends ChangeNotifier {
       if (s.isWatch || s.status != SessionStatus.connected) continue;
       byHost.putIfAbsent(s.host.id, () => []).add(s);
     }
+    // Probe all hosts at once: sequentially, N stuck hosts cost N x timeout.
+    final alive = await Future.wait([
+      for (final e in byHost.entries) _ssh.isAlive(e.key, timeout: timeout),
+    ]);
     final dead = <SshSession>[];
+    var i = 0;
     for (final e in byHost.entries) {
-      if (!await _ssh.isAlive(e.key, timeout: timeout)) dead.addAll(e.value);
+      if (!alive[i++]) dead.addAll(e.value);
     }
     if (dead.isEmpty || _disposed) return;
     // Sessions may have changed while probing; _pauseSessions re-checks status.

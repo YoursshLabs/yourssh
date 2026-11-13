@@ -326,6 +326,26 @@ void main() {
     expect(dead.paused, isFalse);
   });
 
+  test('verifyLive probes hosts concurrently: N slow hosts cost ~one timeout',
+      () {
+    fakeAsync((fa) {
+      ssh.connectCompletes = false;
+      for (final id in ['A', 'B', 'C', 'D']) {
+        p.addSessionForTest(_session(id, SessionStatus.connected));
+        ssh.debugSetClient(
+            id, _FakeClient(pingFuture: Completer<void>().future));
+      }
+      var done = false;
+      unawaited(p
+          .verifyLive(timeout: const Duration(seconds: 3))
+          .then((_) => done = true));
+      fa.elapse(const Duration(seconds: 3, milliseconds: 100));
+      fa.flushMicrotasks();
+      expect(done, isTrue, reason: '4 hosts x 3 s sequentially would be 12 s');
+      expect(ssh.disconnects.toSet(), {'A', 'B', 'C', 'D'});
+    });
+  });
+
   group('SshService.isAlive', () {
     test('false without a client, when closed, or when ping hangs', () async {
       final s = _Ssh();
