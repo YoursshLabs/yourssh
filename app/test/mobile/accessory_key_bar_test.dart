@@ -175,4 +175,46 @@ void main() {
       expect(find.byTooltip(m), findsOneWidget, reason: m);
     }
   });
+
+  testWidgets('keys never steal focus from the TerminalView (IME stays open)',
+      (t) async {
+    t.view.physicalSize = const Size(1400, 600);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final node = FocusNode(debugLabel: 'terminal');
+    addTearDown(node.dispose);
+    final term = Terminal();
+    final c = AccessoryBarController();
+    final keys = <TerminalKey>[];
+    await t.pumpWidget(ysTestApp(
+      Column(children: [
+        Expanded(child: TerminalView(term, focusNode: node, autofocus: true)),
+        AccessoryKeyBar(
+          controller: c,
+          onKey: (k, {ctrl = false, alt = false}) => keys.add(k),
+          onText: (_) {},
+          onOpenPanel: () {},
+        ),
+      ]),
+      touch: true,
+    ));
+    await t.pump();
+    node.requestFocus();
+    await t.pump();
+    expect(node.hasPrimaryFocus, isTrue);
+
+    Future<void> tapAndCheck(Finder f) async {
+      await t.tap(f);
+      await t.pump(const Duration(milliseconds: 150));
+      expect(node.hasPrimaryFocus, isTrue, reason: 'after tapping $f');
+    }
+
+    await tapAndCheck(find.text('Esc'));
+    await tapAndCheck(find.text('^C'));
+    await tapAndCheck(find.byTooltip('Up'));
+    await tapAndCheck(find.text('Ctrl'));
+    await tapAndCheck(find.text('/'));
+    await tapAndCheck(find.byTooltip('Keyboard panel'));
+    expect(keys, [TerminalKey.escape, TerminalKey.keyC, TerminalKey.arrowUp]);
+  });
 }

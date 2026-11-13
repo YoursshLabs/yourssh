@@ -196,4 +196,23 @@ void main() {
     await tester.pump();
     expect(sp.closed, ['s2']);
   });
+
+  testWidgets('accessory keys keep the TerminalView focused in the screen',
+      (tester) async {
+    await _pumpMulti(tester);
+    bool termFocused() {
+      final ctx = FocusManager.instance.primaryFocus?.context;
+      return ctx?.findAncestorWidgetOfExactType<TerminalView>() != null;
+    }
+
+    // Focus the terminal by tapping into it.
+    await tester.tapAt(const Offset(180, 250));
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(termFocused(), isTrue, reason: 'terminal should take focus first');
+    for (final f in [find.text('Esc'), find.text('Tab'), find.text('Ctrl')]) {
+      await tester.tap(f);
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(termFocused(), isTrue, reason: 'after $f');
+    }
+  });
 }

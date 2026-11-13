@@ -90,4 +90,47 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('No command history yet'), findsOneWidget);
   });
+
+  testWidgets('side-panel key does not move focus off the previous focus',
+      (t) async {
+    final node = FocusNode(debugLabel: 'prior');
+    addTearDown(node.dispose);
+    final got = <TerminalKey>[];
+    t.view.physicalSize = const Size(360, 640);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => CommandHistoryProvider()),
+          ChangeNotifierProvider(create: (_) => SnippetProvider()),
+          ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ],
+        child: ysTestApp(
+          Builder(
+            builder: (ctx) => Column(children: [
+              Focus(focusNode: node, child: const SizedBox(height: 40)),
+              ElevatedButton(
+                onPressed: () => showTerminalSidePanel(ctx,
+                    sessionId: 's1',
+                    onInsert: (_) {},
+                    onKey: (k, {ctrl = false, alt = false}) => got.add(k)),
+                child: const Text('open'),
+              ),
+            ]),
+          ),
+          touch: true,
+        ),
+      ),
+    );
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    final before = FocusManager.instance.primaryFocus;
+    await t.tap(find.text('PgUp'));
+    await t.pump(const Duration(milliseconds: 150));
+    expect(got, [TerminalKey.pageUp]);
+    // Recorded: where focus sits after the tap (must not be a key button).
+    final after = FocusManager.instance.primaryFocus;
+    expect(after, before, reason: 'PgUp tap moved focus');
+  });
 }
