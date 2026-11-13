@@ -88,9 +88,17 @@ class RdpSession extends ChangeNotifier
   bool get isFirstUseProbe =>
       client.config.expectedFingerprint == kRdpUnpinnedProbe;
 
+  /// True while the first-use probe waits for the user's trust decision. The
+  /// engine aborts the probe after reporting the fingerprint and then emits a
+  /// trailing Error ("server certificate changed…"); that is the probe ending
+  /// as designed, not a failure, so it is ignored while this is set.
+  bool awaitingCertApproval = false;
+
   /// The user declined (or could not complete) the first-use verification.
+  /// A normal end of the session, not an error.
   void markCertRejected() {
-    status = RdpSessionStatus.error;
+    awaitingCertApproval = false;
+    status = RdpSessionStatus.disconnected;
     lastMessage = 'Server certificate not trusted — connection aborted '
         'before authentication';
     notifyState();
@@ -159,6 +167,8 @@ class RdpSession extends ChangeNotifier
           // Stay in `connecting`: this is verification, not a failure (no
           // audit/notification noise). The handler resolves it.
           lastMessage = 'Verifying server certificate…';
+          awaitingCertApproval = true;
+          notifyState(); // repaint the neutral waiting overlay
           onFirstUseCert?.call(fingerprint);
           if (onFirstUseCert == null) markCertRejected();
           return;
@@ -180,6 +190,10 @@ class RdpSession extends ChangeNotifier
       case frb.RdpEvent_ClipboardText(:final text):
         _deliverClipboard(text);
         return; // no repaint needed
+      case frb.RdpEvent_Disconnected() || frb.RdpEvent_Error()
+          when awaitingCertApproval:
+        // Trailing end-of-probe event; the trust dialog decides what's next.
+        return;
       case frb.RdpEvent_Disconnected(:final reason):
         status = RdpSessionStatus.disconnected;
         lastMessage = _tunnelClosed ? 'SSH tunnel closed' : reason;

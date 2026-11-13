@@ -99,7 +99,7 @@ void main() {
     await pump();
 
     expect(p.sessions.whereType<RdpSession>().single, same(s));
-    expect(s.status, RdpSessionStatus.error);
+    expect(s.status, RdpSessionStatus.disconnected);
     expect(s.lastMessage, contains('not trusted'));
   });
 
@@ -111,7 +111,7 @@ void main() {
     ev.add(const frb.RdpEvent.certMismatch(fingerprint: 'real-fp'));
     await pump();
     expect(p.sessions.whereType<RdpSession>().single, same(s));
-    expect(s.status, RdpSessionStatus.error);
+    expect(s.status, RdpSessionStatus.disconnected);
   });
 
   test('real mismatch (pin existed) keeps the mismatch handler path', () async {

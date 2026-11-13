@@ -44,6 +44,7 @@ class _RdpWorkspaceState extends State<RdpWorkspace> {
   (int, int)? _lastMousePos;
   String? _lastPushedClipboard;
   RdpSessionStatus? _builtStatus;
+  bool _builtAwaitingCert = false;
   bool _hoverBarVisible = false;
   Timer? _hoverBarTimer;
 
@@ -82,7 +83,10 @@ class _RdpWorkspaceState extends State<RdpWorkspace> {
         session.status != _builtStatus) {
       widget.onFullscreenChanged?.call(false);
     }
-    if (session.status != _builtStatus) setState(() {});
+    if (session.status != _builtStatus ||
+        session.awaitingCertApproval != _builtAwaitingCert) {
+      setState(() {});
+    }
   }
 
   void _flashHoverBar() {
@@ -116,6 +120,7 @@ class _RdpWorkspaceState extends State<RdpWorkspace> {
   @override
   Widget build(BuildContext context) {
     _builtStatus = session.status;
+    _builtAwaitingCert = session.awaitingCertApproval;
     if (widget.isFullscreen) {
       return Stack(children: [
         Positioned.fill(child: _buildBody()),
@@ -173,7 +178,11 @@ class _RdpWorkspaceState extends State<RdpWorkspace> {
   Widget _buildBody() {
     switch (session.status) {
       case RdpSessionStatus.connecting:
-        return const RemoteStatusOverlay(message: 'Connecting…');
+        return RemoteStatusOverlay(
+          message: session.awaitingCertApproval
+              ? 'Waiting for certificate approval…'
+              : 'Connecting…',
+        );
       case RdpSessionStatus.error:
       case RdpSessionStatus.disconnected:
         return RemoteStatusOverlay(

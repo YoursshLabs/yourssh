@@ -68,6 +68,49 @@ void main() {
     expect(find.text('Retry'), findsOneWidget);
   });
 
+  testWidgets('first-use cert probe shows a neutral waiting state, no Retry',
+      (tester) async {
+    final events = StreamController<frb.RdpEvent>();
+    final session = RdpSession(
+      host: Host(
+        id: 'h',
+        label: 'w',
+        host: 'x',
+        port: 3389,
+        username: 'u',
+        authType: AuthType.password,
+        protocol: HostProtocol.rdp,
+      ),
+      client: RdpClient(
+        RdpConfig(
+          targetHost: 'x',
+          targetPort: 3389,
+          username: 'u',
+          password: '',
+          domain: null,
+          width: 800,
+          height: 600,
+          security: 'auto',
+          expectedFingerprint: kRdpUnpinnedProbe,
+        ),
+      ),
+      width: 800,
+      height: 600,
+    );
+    session.onFirstUseCert = (_) {};
+    session.attach(events.stream);
+    await tester.pumpWidget(ysTestApp(RdpWorkspace(session: session)));
+
+    events.add(const frb.RdpEvent.certMismatch(fingerprint: 'fp'));
+    events.add(const frb.RdpEvent.error(message: 'server certificate changed'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('Waiting for certificate approval'),
+        findsOneWidget);
+    expect(find.text('Retry'), findsNothing);
+    expect(find.text('Error'), findsNothing, reason: 'status bar is not Error');
+  });
+
   testWidgets('toolbar fullscreen button fires onFullscreenChanged(true) '
       'and is only enabled while connected', (tester) async {
     final events = StreamController<frb.RdpEvent>();
