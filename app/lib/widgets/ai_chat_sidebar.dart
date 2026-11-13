@@ -78,44 +78,51 @@ class _AiChatSidebarState extends State<AiChatSidebar> {
         children: [
           const Icon(FLucideIcons.bot, size: 16, color: YsColors.primary),
           const SizedBox(width: YsSpace.s2),
-          const Flexible(
-            child: Text(
-              'AI Assistant',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: YsColors.foreground,
-                fontWeight: FontWeight.w600,
-              ),
+          // One Expanded group: a bare Flexible title next to a Spacer would
+          // split the free width 50/50 and ellipsize the title needlessly.
+          Expanded(
+            child: Row(
+              children: [
+                const Flexible(
+                  child: Text(
+                    'AI Assistant',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: YsColors.foreground,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (active != null) ...[
+                  const SizedBox(width: YsSpace.s2),
+                  SizedBox(
+                    width: 112,
+                    child: FSelect<AiProvider>.rich(
+                      key: const ValueKey('ai-chat-provider'),
+                      size: .sm,
+                      control: .lifted(
+                        value: active,
+                        onChange: (p) {
+                          if (p != null) {
+                            context.read<AiChatProvider>().setActiveProvider(p);
+                          }
+                        },
+                      ),
+                      format: _providerLabel,
+                      children: [
+                        for (final p in configured)
+                          FSelectItem<AiProvider>(
+                            title: Text(_providerLabel(p)),
+                            value: p,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          if (active != null) ...[
-            const SizedBox(width: YsSpace.s2),
-            SizedBox(
-              width: 112,
-              child: FSelect<AiProvider>.rich(
-                key: const ValueKey('ai-chat-provider'),
-                size: .sm,
-                control: .lifted(
-                  value: active,
-                  onChange: (p) {
-                    if (p != null) {
-                      context.read<AiChatProvider>().setActiveProvider(p);
-                    }
-                  },
-                ),
-                format: _providerLabel,
-                children: [
-                  for (final p in configured)
-                    FSelectItem<AiProvider>(
-                      title: Text(_providerLabel(p)),
-                      value: p,
-                    ),
-                ],
-              ),
-            ),
-          ],
-          const Spacer(),
           if (provider.messages.isNotEmpty)
             SettingsIconButton(
               icon: FLucideIcons.brushCleaning,

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -105,6 +106,27 @@ void main() {
     await pump(tester);
     expect(find.byKey(const ValueKey('ai-chat-provider')), findsOneWidget);
     expect(find.text('Anthropic'), findsOneWidget);
+  });
+
+  testWidgets('header title is not ellipsized when the panel has room',
+      (tester) async {
+    final provider = AiChatProvider(client: reply);
+    await tester.runAsync(() => provider.setProviderConfig(
+        AiProvider.anthropic,
+        apiKey: 'sk-test'));
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: provider,
+        child: ysTestApp(Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(width: 400, child: AiChatSidebar(onClose: () {})),
+        )),
+      ),
+    );
+    await tester.pump();
+    final para = tester.renderObject<RenderParagraph>(find.text('AI Assistant'));
+    expect(para.didExceedMaxLines, isFalse);
+    expect(para.size.width, greaterThan(70));
   });
 
   testWidgets('Close button calls onClose', (tester) async {
