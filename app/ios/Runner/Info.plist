@@ -24,6 +24,14 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan the QR code YourSSH shows on your computer to import hosts.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>YourSSH uses Face ID to unlock the app and protect your saved hosts and keys.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>YourSSH connects to SSH servers and to your computer on the local network to import or share hosts.</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>LSRequiresIPhoneOS</key>
