@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,6 +31,7 @@ void main() {
     String subject = 'Welcome',
     String from = 'alice@example.com',
     bool startOk = true,
+    double textScale = 1,
   }) async {
     final fake = FakeDevopsSsh();
     var cleared = false;
@@ -55,7 +57,19 @@ void main() {
       return (stdout: '', stderr: '', exitCode: 0);
     };
     await tester.pumpWidget(
-        devopsHarness(const MailCatcherScreen(), fake, withSession: withSession));
+      devopsHarness(
+        Builder(
+          builder: (ctx) => MediaQuery(
+            data: MediaQuery.of(ctx).copyWith(
+              textScaler: TextScaler.linear(textScale),
+            ),
+            child: const MailCatcherScreen(),
+          ),
+        ),
+        fake,
+        withSession: withSession,
+      ),
+    );
     await tester.pump();
     return fake;
   }
@@ -77,6 +91,24 @@ void main() {
     expect(find.text('No emails captured'), findsOneWidget);
     expect(find.text('Select an email'), findsOneWidget);
     expect(find.byTooltip('Clear all'), findsNothing);
+  });
+
+  testWidgets('list header shows the full title while there is room',
+      (tester) async {
+    // The test font is much wider than Inter: scale it so the title fits in
+    // the 260 px column next to the badge and icons (as it does in the app).
+    await pump(tester, textScale: 0.6);
+    await tester.tap(find.byTooltip('Start on port 1025'));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    // Count badge + clear + stop icons are all showing.
+    expect(find.text('1'), findsOneWidget);
+    expect(find.byTooltip('Clear all'), findsOneWidget);
+    final title = tester.renderObject<RenderParagraph>(find.text('Mail Catcher'));
+    expect(title.didExceedMaxLines, isFalse, reason: 'title was ellipsized');
+    await stopAndDispose(tester);
   });
 
   testWidgets('start, poll, select, clear, stop', (tester) async {

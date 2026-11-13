@@ -113,22 +113,33 @@ class _MailCatcherScreenState extends State<MailCatcherScreen> {
                 color: YsColors.sidebar,
                 child: Row(
                   children: [
-                    const Flexible(
-                      child: Text(
-                        'Mail Catcher',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: YsColors.foreground,
-                          fontWeight: FontWeight.w600,
+                    // Title + count badge share the free space; the title
+                    // ellipsizes only when the column is truly too narrow.
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Flexible(
+                              child: Text(
+                                'Mail Catcher',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: YsColors.foreground,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            if (_emails.isNotEmpty) ...[
+                              const SizedBox(width: YsSpace.s2),
+                              YsTag('${_emails.length}'),
+                            ],
+                          ],
                         ),
                       ),
                     ),
-                    if (_emails.isNotEmpty) ...[
-                      const SizedBox(width: YsSpace.s2),
-                      YsTag('${_emails.length}'),
-                    ],
-                    const Spacer(),
                     if (_emails.isNotEmpty)
                       ContainerIconAction(
                         icon: FLucideIcons.listX,
