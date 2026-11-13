@@ -18,6 +18,7 @@ late List<String> log;
 
 class _Sessions extends SessionProvider {
   _Sessions() : super(SshService(StorageService()), TabMetadataService());
+  Completer<void>? verifyGate;
   List<String> get calls => log;
 
   @override
@@ -33,6 +34,7 @@ class _Sessions extends SessionProvider {
   Future<void> verifyLive(
       {Duration timeout = const Duration(seconds: 3)}) async {
     log.add('sessions.verifyLive');
+    await verifyGate?.future;
   }
 }
 
@@ -46,6 +48,7 @@ class _Forwards extends PortForwardService {
         );
   Set<String> running;
   Completer<void>? stopGate;
+  Completer<void>? startGate;
 
   @override
   bool isRunning(String id) => running.contains(id);
@@ -58,7 +61,10 @@ class _Forwards extends PortForwardService {
   }
 
   @override
-  Future<void> start(PortForward fwd) async => log.add('forwards.start:${fwd.id}');
+  Future<void> start(PortForward fwd) async {
+    log.add('forwards.start:${fwd.id}');
+    await startGate?.future;
+  }
 }
 
 class _Rules extends PortForwardProvider {
@@ -224,6 +230,59 @@ void main() {
       c.onForeground();
       fa.flushMicrotasks();
       expect(log.where((e) => e.startsWith('forwards.start')), isEmpty);
+      c.dispose();
+    });
+  });
+
+  test('backgrounding again while verifyLive is pending restarts no forwards',
+      () {
+    fakeAsync((fa) {
+      build(running: {'a', 'b'});
+      c.onBackground();
+      fa.elapse(const Duration(seconds: 25));
+      fa.flushMicrotasks();
+      log.clear();
+      sessions.verifyGate = Completer<void>();
+      c.onForeground();
+      fa.flushMicrotasks();
+      expect(log, ['sessions.resumePaused', 'sessions.verifyLive']);
+      c.onBackground();
+      fa.flushMicrotasks();
+      sessions.verifyGate!.complete();
+      fa.flushMicrotasks();
+      expect(log.where((e) => e.startsWith('forwards.start')), isEmpty);
+      // The forwards survive for the next foreground.
+      log.clear();
+      fa.elapse(const Duration(seconds: 25));
+      fa.flushMicrotasks();
+      log.clear();
+      c.onForeground();
+      fa.flushMicrotasks();
+      expect(log.where((e) => e.startsWith('forwards.start')),
+          ['forwards.start:a', 'forwards.start:b']);
+      c.dispose();
+    });
+  });
+
+  test('backgrounding again mid-loop stops restarting the remaining forwards',
+      () {
+    fakeAsync((fa) {
+      build(running: {'a', 'b'});
+      c.onBackground();
+      fa.elapse(const Duration(seconds: 25));
+      fa.flushMicrotasks();
+      log.clear();
+      forwards.startGate = Completer<void>();
+      c.onForeground();
+      fa.flushMicrotasks();
+      expect(log.where((e) => e.startsWith('forwards.start')),
+          ['forwards.start:a']);
+      c.onBackground();
+      fa.flushMicrotasks();
+      forwards.startGate!.complete();
+      fa.flushMicrotasks();
+      expect(log.where((e) => e.startsWith('forwards.start')),
+          ['forwards.start:a']);
       c.dispose();
     });
   });

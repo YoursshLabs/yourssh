@@ -133,13 +133,25 @@ class MobileLifecycleCoordinator {
     final lease = _lease;
     _lease = null;
     if (lease != null) await _endLease(lease);
+    // Each step below can take seconds; a background that began meanwhile
+    // owns the recorded forwards and the paused sessions.
+    bool stale() => epoch != _epoch || _disposed;
+    if (stale()) return;
     final restart = _stoppedForwards;
     _stoppedForwards = const [];
     await sessions.resumePaused(stagger: stagger);
+    if (stale()) {
+      _stoppedForwards = [..._stoppedForwards, ...restart];
+      return;
+    }
     await sessions.verifyLive();
-    for (final f in restart) {
-      if (_disposed) return;
-      await forwards.start(f);
+    for (var i = 0; i < restart.length; i++) {
+      if (stale()) {
+        // Keep what was not restarted for the next foreground.
+        _stoppedForwards = [..._stoppedForwards, ...restart.skip(i)];
+        return;
+      }
+      await forwards.start(restart[i]);
     }
   }
 
