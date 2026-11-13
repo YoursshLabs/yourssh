@@ -142,7 +142,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.text('Shared over TLS via your Supabase project.'),
+        find.text('End-to-end encrypted with the share code.'),
         findsOneWidget,
       );
 
