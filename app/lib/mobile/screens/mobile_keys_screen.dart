@@ -173,11 +173,11 @@ class MobileKeysScreen extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.all(MobileTokens.space2),
-          child: _SheetAction(
-            tapKey: const ValueKey('key-remove-item'),
-            destructive: true,
-            icon: FLucideIcons.trash2,
-            label: 'Remove key',
+          child: FItem(
+            key: const ValueKey('key-remove-item'),
+            variant: .destructive,
+            prefix: const Icon(FLucideIcons.trash2),
+            title: const Text('Remove key'),
             onPress: () {
               Navigator.pop(ctx);
               _confirmDelete(context, entry);
@@ -590,54 +590,6 @@ class _ImportPassphraseSheetState extends State<_ImportPassphraseSheet> {
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Sheet action row: icon + label, >=44px tall (forui's FItem lays out 43px
-/// in the touch theme, below the minimum hit size).
-class _SheetAction extends StatelessWidget {
-  final Key tapKey;
-  final IconData icon;
-  final String label;
-  final bool destructive;
-  final VoidCallback onPress;
-
-  const _SheetAction({
-    required this.tapKey,
-    required this.icon,
-    required this.label,
-    required this.onPress,
-    this.destructive = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = destructive ? MobileColors.red : MobileColors.textPrimary;
-    return FTappable.static(
-      key: tapKey,
-      onPress: onPress,
-      semanticsLabel: label,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: MobileTokens.touchTarget),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: MobileTokens.space3),
-          child: Row(
-            children: [
-              Icon(icon, size: 20, color: color),
-              const SizedBox(width: MobileTokens.space3),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: mobileBody(size: 16, color: color),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

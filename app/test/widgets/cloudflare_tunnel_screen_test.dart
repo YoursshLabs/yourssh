@@ -120,6 +120,69 @@ void main() {
     expect(find.text('No tunnels yet'), findsOneWidget);
   });
 
+  group('panel validation', () {
+    Future<void> open(WidgetTester tester) async {
+      seed([]);
+      await pump(tester);
+      await tester.tap(find.text('New Tunnel'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('empty label shows Required and adds nothing (button)',
+        (tester) async {
+      await open(tester);
+      await tester.enterText(find.byKey(const ValueKey('tunnel-label')), ' ');
+      await tester.tap(find.text('Add Tunnel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Required'), findsOneWidget);
+      expect(find.text('New Cloudflare Tunnel'), findsOneWidget);
+      expect(find.text('No tunnels yet'), findsOneWidget);
+    });
+
+    testWidgets('empty label shows Required via Enter in the port field',
+        (tester) async {
+      await open(tester);
+      await tester.enterText(find.byKey(const ValueKey('tunnel-label')), '');
+      await tester.enterText(find.byKey(const ValueKey('tunnel-port')), '4040');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.text('Required'), findsOneWidget);
+      expect(find.text('No tunnels yet'), findsOneWidget);
+    });
+
+    for (final bad in ['0', '65536', '99999']) {
+      testWidgets('port "$bad" shows Invalid (1–65535)', (tester) async {
+        await open(tester);
+        await tester.enterText(find.byKey(const ValueKey('tunnel-port')), bad);
+        await tester.tap(find.text('Add Tunnel'));
+        await tester.pumpAndSettle();
+        expect(find.text('Invalid (1–65535)'), findsOneWidget);
+        expect(find.text('No tunnels yet'), findsOneWidget);
+      });
+    }
+
+    testWidgets('empty port keeps the 3000 default', (tester) async {
+      await open(tester);
+      await tester.enterText(find.byKey(const ValueKey('tunnel-port')), '');
+      await tester.tap(find.text('Add Tunnel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Port: 3000'), findsOneWidget);
+    });
+
+    testWidgets('fixing the field and resubmitting clears the error',
+        (tester) async {
+      await open(tester);
+      await tester.enterText(find.byKey(const ValueKey('tunnel-port')), '0');
+      await tester.tap(find.text('Add Tunnel'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('tunnel-port')), '8080');
+      await tester.tap(find.text('Add Tunnel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Invalid (1–65535)'), findsNothing);
+      expect(find.text('Port: 8080'), findsOneWidget);
+    });
+  });
+
   testWidgets('Tab reaches New Tunnel (1) and Add Tunnel (2 from label); Enter',
       (tester) async {
     seed([]);

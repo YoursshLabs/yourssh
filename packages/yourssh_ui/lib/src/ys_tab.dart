@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 
 import 'ys_colors.dart';
@@ -9,7 +10,9 @@ import 'ys_colors.dart';
 /// Active: `card` background, 2 px `primary` bottom indicator
 /// (`Key('ys-tab-indicator')`), foreground text. Inactive: `chrome`
 /// background, muted text, `secondary` on hover. The close button shows on
-/// hover or when active.
+/// hover, keyboard focus (on the tab or its close button) or when active; while
+/// hidden it is inert (no pointer, no semantics) but still reachable by Tab once
+/// the tab has focus. The tab is focusable: Enter / Space selects it.
 class YsTab extends StatefulWidget {
   final Widget label;
   final Widget? leading;
@@ -48,6 +51,40 @@ class YsTab extends StatefulWidget {
 
 class _YsTabState extends State<YsTab> {
   bool _hovered = false;
+  bool _focusWithin = false;
+  bool _focusSelf = false;
+  late final FocusNode _focusNode = FocusNode(debugLabel: 'YsTab');
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(() {
+      final self = _focusNode.hasPrimaryFocus;
+      if (_focusSelf != self && mounted) setState(() => _focusSelf = self);
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    // Only act while the tab itself is focused, not its close button.
+    if (!node.hasPrimaryFocus || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    final k = event.logicalKey;
+    if ((k == LogicalKeyboardKey.enter ||
+            k == LogicalKeyboardKey.numpadEnter ||
+            k == LogicalKeyboardKey.space) &&
+        widget.onTap != null) {
+      widget.onTap!();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,83 +95,111 @@ class _YsTabState extends State<YsTab> {
         ? YsColors.secondary
         : YsColors.chrome;
     final fg = active ? YsColors.foreground : YsColors.mutedForeground;
-    final showClose = _hovered || active;
+    final showClose = _hovered || _focusWithin || active;
+    final showRing =
+        _focusSelf &&
+        FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        onDoubleTap: widget.onDoubleTap,
-        onSecondaryTapUp: widget.onSecondaryTap == null
-            ? null
-            : (d) => widget.onSecondaryTap!(d.globalPosition),
-        onTertiaryTapUp: widget.onMiddleClick == null
-            ? null
-            : (_) => widget.onMiddleClick!(),
-        child: Container(
-          height: YsTab.height,
-          color: bg,
-          child: Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: DefaultTextStyle.merge(
-                  style: TextStyle(
-                    color: fg,
-                    fontSize: 12,
-                    fontWeight: active ? FontWeight.w500 : FontWeight.normal,
-                  ),
-                  child: IconTheme.merge(
-                    data: IconThemeData(color: fg, size: 13),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (widget.leading != null) widget.leading!,
-                        if (widget.colorTag != null)
-                          Container(
-                            width: 7,
-                            height: 7,
-                            margin: const EdgeInsets.only(right: 5),
-                            decoration: BoxDecoration(
-                              color: widget.colorTag,
-                              shape: BoxShape.circle,
+      child: Focus(
+        focusNode: _focusNode,
+        onKeyEvent: _onKey,
+        onFocusChange: (f) {
+          if (_focusWithin != f) setState(() => _focusWithin = f);
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          onDoubleTap: widget.onDoubleTap,
+          onSecondaryTapUp: widget.onSecondaryTap == null
+              ? null
+              : (d) => widget.onSecondaryTap!(d.globalPosition),
+          onTertiaryTapUp: widget.onMiddleClick == null
+              ? null
+              : (_) => widget.onMiddleClick!(),
+          child: Container(
+            height: YsTab.height,
+            color: bg,
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: DefaultTextStyle.merge(
+                    style: TextStyle(
+                      color: fg,
+                      fontSize: 12,
+                      fontWeight: active ? FontWeight.w500 : FontWeight.normal,
+                    ),
+                    child: IconTheme.merge(
+                      data: IconThemeData(color: fg, size: 13),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.leading != null) widget.leading!,
+                          if (widget.colorTag != null)
+                            Container(
+                              width: 7,
+                              height: 7,
+                              margin: const EdgeInsets.only(right: 5),
+                              decoration: BoxDecoration(
+                                color: widget.colorTag,
+                                shape: BoxShape.circle,
+                              ),
                             ),
-                          ),
-                        widget.label,
-                        for (final t in widget.trailing) t,
-                        // Space is always reserved so hover never resizes the tab.
-                        if (widget.onClose != null) ...[
-                          const SizedBox(width: 4),
-                          Visibility(
-                            visible: showClose,
-                            maintainSize: true,
-                            maintainAnimation: true,
-                            maintainState: true,
-                            child: _CloseButton(
-                              onClose: widget.onClose!,
-                              tooltip: widget.closeTooltip,
+                          widget.label,
+                          for (final t in widget.trailing) t,
+                          // Space is always reserved so hover never resizes the tab.
+                          if (widget.onClose != null) ...[
+                            const SizedBox(width: 4),
+                            // Hidden != removed: the button stays in the focus
+                            // order so Tab reaches it from the tab.
+                            Opacity(
+                              opacity: showClose ? 1 : 0,
+                              child: IgnorePointer(
+                                ignoring: !showClose,
+                                child: ExcludeSemantics(
+                                  excluding: !showClose,
+                                  child: _CloseButton(
+                                    onClose: widget.onClose!,
+                                    tooltip: widget.closeTooltip,
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              if (active)
-                const Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: 2,
-                  child: ColoredBox(
-                    key: Key('ys-tab-indicator'),
-                    color: YsColors.primary,
+                if (showRing)
+                  const Positioned.fill(
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        key: Key('ys-tab-focus-ring'),
+                        decoration: BoxDecoration(
+                          border: Border.fromBorderSide(
+                            BorderSide(color: YsColors.primary),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-            ],
+                if (active)
+                  const Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: 2,
+                    child: ColoredBox(
+                      key: Key('ys-tab-indicator'),
+                      color: YsColors.primary,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

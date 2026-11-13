@@ -17,6 +17,7 @@ class DevopsTextField extends StatelessWidget {
     this.focusNode,
     this.textInputAction = TextInputAction.done,
     this.onSubmit,
+    this.errorText,
   });
 
   final TextEditingController controller;
@@ -30,11 +31,15 @@ class DevopsTextField extends StatelessWidget {
   final TextInputAction textInputAction;
   final VoidCallback? onSubmit;
 
+  /// Inline field error, shown under the field while non-null.
+  final String? errorText;
+
   @override
   Widget build(BuildContext context) => FTextField(
     control: .managed(controller: controller),
     label: label == null ? null : Text(label!),
     hint: hint,
+    error: errorText == null ? null : Text(errorText!),
     autofocus: autofocus,
     focusNode: focusNode,
     autocorrect: false,

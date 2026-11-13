@@ -1,5 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:forui/forui.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -105,6 +107,56 @@ void main() {
 
     await middleClick(tester, find.byType(SessionTab));
     expect(sessions.sessions, hasLength(1));
+  });
+
+  testWidgets('keyboard: Tab focuses the tab, Enter selects it, Tab again '
+      'reaches the hidden close button and Enter closes', (tester) async {
+    final (sessions, hosts) = makeProviders();
+    final session = seedSession(sessions, host);
+    var selected = 0;
+
+    await tester.pumpWidget(wrap(
+        SessionTab(
+            session: session,
+            isActive: false,
+            provider: sessions,
+            onTap: () => selected++),
+        sessions,
+        hosts));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(selected, 1);
+    expect(sessions.sessions, hasLength(1));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(sessions.sessions, isEmpty);
+  });
+
+  testWidgets('keyboard: a pinned tab is selectable but has no close button',
+      (tester) async {
+    final (sessions, hosts) = makeProviders();
+    final session = seedSession(sessions, host, pinned: true);
+    var selected = 0;
+
+    await tester.pumpWidget(wrap(
+        SessionTab(
+            session: session,
+            isActive: false,
+            provider: sessions,
+            onTap: () => selected++),
+        sessions,
+        hosts));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(selected, 1);
+    expect(find.byType(FButton), findsNothing);
   });
 
   testWidgets('shows distro icon when the host has a detectedOs',

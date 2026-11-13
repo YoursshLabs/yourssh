@@ -48,6 +48,24 @@ FThemeData _build({required bool touch}) {
   // default) the group's FTappableGroup swallows taps on buttons nested in
   // a tile, e.g. a text field's suffix (password reveal toggle).
   return theme.copyWith(
+    // forui's touch FItem lays out 43 px (12.5 px vertical padding), under the
+    // 44 px minimum hit size: bump the padding centrally (ruling P29).
+    itemStyles: touch
+        ? .delta([
+            .all(
+              .delta(
+                contentStyle: .delta(
+                  suffixedPadding: .value(
+                    const EdgeInsetsDirectional.fromSTEB(10, 13, 6, 13),
+                  ),
+                  unsuffixedPadding: .value(
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
+                  ),
+                ),
+              ),
+            ),
+          ])
+        : null,
     tileGroupStyle: theme.tileGroupStyle.copyWith(
       slideableTiles: .delta([.all(false)]),
     ),

@@ -186,4 +186,32 @@ void main() {
     expect(tester.takeException(), isNull);
     svc.dispose();
   });
+
+  testWidgets('time-range chips expose selected semantics', (tester) async {
+    final svc = AuditService()..initInMemory();
+    final provider = AuditProvider(svc)..refresh();
+    final sem = tester.ensureSemantics();
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(wrap(provider));
+    await tester.pumpAndSettle();
+
+    bool selected(int days) {
+      final node = tester.getSemantics(find.byKey(ValueKey('audit-range-$days')));
+      return containsSemantics(isSelected: true).matches(node, {});
+    }
+
+    final current = provider.rangeDays;
+    final other = current == 7 ? 30 : 7;
+    expect(selected(current), isTrue);
+    expect(selected(other), isFalse);
+
+    provider.setRange(other);
+    await tester.pumpAndSettle();
+    expect(selected(other), isTrue);
+    expect(selected(current), isFalse);
+
+    sem.dispose();
+    svc.dispose();
+  });
 }

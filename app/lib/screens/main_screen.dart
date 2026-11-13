@@ -15,6 +15,7 @@ import '../providers/recording_provider.dart';
 import '../theme/app_theme.dart';
 import 'shell/app_sidebar.dart';
 import 'shell/session_tab_bar.dart';
+import '../widgets/plugin_status_bar_item.dart';
 import '../widgets/host_detail_panel.dart';
 import '../widgets/hosts_dashboard.dart';
 import '../widgets/keychain_screen.dart';
@@ -747,7 +748,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 child: Row(
                   children: [
                     for (final item in registry.statusBarItems)
-                      _statusBarItem(item),
+                      PluginStatusBarItem(item: item),
                   ],
                 ),
               );
@@ -756,28 +757,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         ],
       ),
     );
-  }
-
-  Widget _statusBarItem(StatusBarItem item) {
-    final tip = item.tooltip;
-    final tappable = FTappable(
-      onPress: item.onClick,
-      semanticsLabel: item.label,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Center(
-          child: Text(
-            item.label,
-            style: const TextStyle(
-              color: YsColors.mutedForeground,
-              fontSize: 11,
-            ),
-          ),
-        ),
-      ),
-    );
-    if (tip == null || tip.isEmpty) return tappable;
-    return Tooltip(message: tip, child: tappable);
   }
 
   Widget _buildContent(AppSession? active) {

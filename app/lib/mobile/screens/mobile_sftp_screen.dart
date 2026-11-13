@@ -407,10 +407,10 @@ class _Header extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.all(MobileTokens.space2),
-          child: _SheetAction(
-            tapKey: const ValueKey('sftp-refresh'),
-            icon: FLucideIcons.refreshCw,
-            label: 'Refresh',
+          child: FItem(
+            key: const ValueKey('sftp-refresh'),
+            prefix: const Icon(FLucideIcons.refreshCw),
+            title: const Text('Refresh'),
             onPress: () {
               Navigator.pop(ctx);
               onRefresh();
@@ -659,52 +659,6 @@ class _EntryRow extends StatelessWidget {
                     ),
                   ),
                 ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Sheet action row: icon + label, >=44px tall (forui's FItem lays out 43px
-/// in the touch theme, below the minimum hit size).
-class _SheetAction extends StatelessWidget {
-  final Key tapKey;
-  final IconData icon;
-  final String label;
-  final VoidCallback onPress;
-
-  const _SheetAction({
-    required this.tapKey,
-    required this.icon,
-    required this.label,
-    required this.onPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const color = MobileColors.textPrimary;
-    return FTappable.static(
-      key: tapKey,
-      onPress: onPress,
-      semanticsLabel: label,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: MobileTokens.touchTarget),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: MobileTokens.space3),
-          child: Row(
-            children: [
-              Icon(icon, size: 20, color: color),
-              const SizedBox(width: MobileTokens.space3),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: mobileBody(size: 16, color: color),
-                ),
-              ),
             ],
           ),
         ),

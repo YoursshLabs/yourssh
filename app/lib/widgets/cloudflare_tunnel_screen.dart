@@ -289,14 +289,30 @@ class _TunnelPanelState extends State<_TunnelPanel> {
     super.dispose();
   }
 
+  String? _labelError;
+  String? _portError;
+
   void _submit() {
     final label = _labelCtrl.text.trim();
-    final port = int.tryParse(_portCtrl.text) ?? 3000;
-    if (label.isEmpty) return;
+    final portText = _portCtrl.text.trim();
+    // An empty port keeps the documented 3000 default; anything else must be
+    // a valid port.
+    final port = portText.isEmpty ? 3000 : int.tryParse(portText);
+    final labelError = label.isEmpty ? 'Required' : null;
+    final portError = (port == null || port < 1 || port > 65535)
+        ? 'Invalid (1–65535)'
+        : null;
+    if (labelError != null || portError != null) {
+      setState(() {
+        _labelError = labelError;
+        _portError = portError;
+      });
+      return;
+    }
     widget.onSave(TunnelConfig(
       label: label,
       type: TunnelType.cloudflare,
-      localPort: port,
+      localPort: port!,
     ));
   }
 
@@ -352,6 +368,7 @@ class _TunnelPanelState extends State<_TunnelPanel> {
                   controller: _labelCtrl,
                   label: 'Label',
                   autofocus: true,
+                  errorText: _labelError,
                   textInputAction: TextInputAction.next,
                   onSubmit: _portFocus.requestFocus,
                 ),
@@ -362,6 +379,7 @@ class _TunnelPanelState extends State<_TunnelPanel> {
                   label: 'Local Port',
                   number: true,
                   focusNode: _portFocus,
+                  errorText: _portError,
                   onSubmit: _submit,
                 ),
                 const SizedBox(height: YsSpace.s5),

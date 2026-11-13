@@ -1,12 +1,13 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:forui/forui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 Widget _wrap(Widget child) => MaterialApp(
   theme: ysMaterialTheme(),
-  builder: (context, child) =>
-      FTheme(data: ysThemeData(), child: child!),
+  builder: (context, child) => FTheme(data: ysThemeData(), child: child!),
   home: Scaffold(body: Row(children: [child])),
 );
 
@@ -35,7 +36,11 @@ void main() {
     var fired = 0;
     await tester.pumpWidget(
       _wrap(
-        YsTab(label: const Text('prod'), active: false, onMiddleClick: () => fired++),
+        YsTab(
+          label: const Text('prod'),
+          active: false,
+          onMiddleClick: () => fired++,
+        ),
       ),
     );
     final g = await tester.createGesture(
@@ -116,5 +121,53 @@ void main() {
     expect(tester.getSize(find.byType(YsTab)), before);
     await mouse.moveTo(const Offset(900, 700));
     await tester.pump(const Duration(seconds: 1));
+  });
+
+  group('keyboard', () {
+    testWidgets('Tab reaches the tab; Enter and Space select it', (t) async {
+      var taps = 0;
+      await t.pumpWidget(
+        _wrap(
+          YsTab(label: const Text('prod'), active: false, onTap: () => taps++),
+        ),
+      );
+      await t.sendKeyEvent(LogicalKeyboardKey.tab);
+      await t.pump();
+      expect(find.byKey(const Key('ys-tab-focus-ring')), findsOneWidget);
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.sendKeyEvent(LogicalKeyboardKey.space);
+      expect(taps, 2);
+    });
+
+    testWidgets('inactive close button is inert until the tab has focus, '
+        'then Tab reaches it and Enter closes', (t) async {
+      var closed = 0;
+      var taps = 0;
+      final sem = t.ensureSemantics();
+      await t.pumpWidget(
+        _wrap(
+          YsTab(
+            label: const Text('prod'),
+            active: false,
+            onTap: () => taps++,
+            onClose: () => closed++,
+            closeTooltip: 'Close tab',
+          ),
+        ),
+      );
+      expect(find.byType(FButton).hitTestable(), findsNothing);
+      expect(find.bySemanticsLabel('Close tab'), findsNothing);
+
+      await t.sendKeyEvent(LogicalKeyboardKey.tab); // tab itself
+      await t.pump();
+      expect(find.byType(FButton).hitTestable(), findsOneWidget);
+      await t.sendKeyEvent(LogicalKeyboardKey.tab); // close button
+      await t.pump();
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.pump();
+      expect(closed, 1);
+      expect(taps, 0, reason: 'Enter on the close button must not select');
+      sem.dispose();
+    });
   });
 }
