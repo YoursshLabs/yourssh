@@ -672,6 +672,64 @@ void main() {
     });
   });
 
+  group('toolbar fits at the 900x600 minimum', () {
+    // Every control that is on screen must lie fully inside the toolbar, with
+    // the host panel closed (900 - sidebar) and open (360 px panel).
+    final controls = <String, Finder>{
+      'search': find.byKey(const Key('hosts-search')),
+      'sort': find.byKey(const Key('hosts-sort')),
+      'view toggle': find.byKey(const Key('hosts-view-toggle')),
+      'discover': find.byKey(const Key('hosts-discover')),
+      'select': find.byKey(const Key('hosts-select')),
+      'local terminal': find.byKey(const Key('hosts-local-terminal')),
+      'new host split': find.byKey(const Key('hosts-new-split')),
+      'more': find.byKey(const Key('hosts-more')),
+    };
+
+    void expectInside(WidgetTester t) {
+      final bar = t.getRect(find.byKey(const Key('hosts-toolbar')));
+      var shown = 0;
+      controls.forEach((name, f) {
+        if (f.evaluate().isEmpty) return;
+        shown++;
+        final r = t.getRect(f);
+        expect(r.left >= bar.left - 0.5 && r.right <= bar.right + 0.5, isTrue,
+            reason: '$name $r is outside the toolbar $bar');
+      });
+      expect(shown, greaterThanOrEqualTo(3));
+      // The primary action is always reachable.
+      expect(find.byKey(const Key('hosts-new-split')), findsOneWidget);
+      expect(find.byTooltip('Show menu').hitTestable(), findsOneWidget);
+    }
+
+    testWidgets('panel closed', (t) async {
+      await _pump(t, hosts: [web], size: const Size(900, 600));
+      expect(t.takeException(), isNull);
+      expectInside(t);
+    });
+
+    testWidgets('panel open (340 px)', (t) async {
+      await _pump(t, hosts: [web], size: const Size(900, 600), panel: 340);
+      expect(t.takeException(), isNull);
+      expectInside(t);
+    });
+
+    testWidgets('narrow bar keeps sort and view reachable in the More menu',
+        (t) async {
+      await _pump(t, hosts: [web], size: const Size(900, 600), panel: 340);
+      await t.tap(find.byKey(const Key('hosts-more')));
+      await t.pumpAndSettle();
+      expect(find.text('Discover'), findsOneWidget);
+      expect(find.text('Select'), findsOneWidget);
+      expect(find.text('Local terminal'), findsOneWidget);
+      expect(find.text('Grid'), findsOneWidget);
+      expect(find.text('List'), findsOneWidget);
+      await t.tap(find.text('Newest first'));
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+    });
+  });
+
   group('900x600 overflow', () {
     final long = Host(
       label: _long60,

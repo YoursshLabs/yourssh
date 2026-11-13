@@ -37,18 +37,21 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(
           YsSpace.s5, YsSpace.s4, YsSpace.s5, YsSpace.s2),
       child: LayoutBuilder(builder: (context, constraints) {
-        // The action cluster keeps its natural width and the search field
-        // absorbs the rest; once the window narrows past a minimum search
-        // width (e.g. host panel open) the cluster scrolls instead of
-        // overflowing — same pattern as BulkActionBar.
-        const minSearchWidth = 180.0;
-        final clusterMax = (constraints.maxWidth - minSearchWidth - YsSpace.s3)
-            .clamp(0.0, double.infinity);
-        // Below this width Discover / Select / Local terminal drop their
-        // labels (the tooltip keeps them) so New host stays in view at the
-        // 900 px window minimum.
-        final compact = constraints.maxWidth < 900;
+        // Controls drop out by priority as the bar narrows, so nothing is
+        // ever clipped (the search field absorbs whatever is left):
+        //   >= 900  labelled buttons, labelled sort
+        //   >= 760  icon-only Discover / Select / Local terminal
+        //   >= 560  ... and an icon-only sort
+        //   <  560  sort, view, Discover, Select and Local terminal move into
+        //           one "More" menu
+        // New host stays visible always; below 440 it is icon-only too.
+        final w = constraints.maxWidth;
+        final labels = w >= 900;
+        final sortLabel = w >= 760;
+        final inline = w >= 560;
+        final newLabel = w >= 440;
         return Row(
+          key: const Key('hosts-toolbar'),
           children: [
             Expanded(
               child: FTextField(
@@ -65,53 +68,150 @@ class _TopBar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: YsSpace.s3),
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: clusterMax),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _SortBtn(mode: sortMode, onChanged: onSortChanged),
-                    const SizedBox(width: YsSpace.s2),
-                    _ViewToggle(viewMode: viewMode, onChanged: onViewChanged),
-                    const SizedBox(width: YsSpace.s2),
-                    _ToolbarBtn(
-                      key: const Key('hosts-discover'),
-                      icon: FLucideIcons.radar,
-                      label: 'Discover',
-                      compact: compact,
-                      onPress: onDiscover ?? () {},
-                    ),
-                    const SizedBox(width: YsSpace.s2),
-                    _ToolbarBtn(
-                      key: const Key('hosts-select'),
-                      icon: FLucideIcons.squareCheck,
-                      label: 'Select',
-                      compact: compact,
-                      onPress: onSelect ?? () {},
-                    ),
-                    const SizedBox(width: YsSpace.s2),
-                    _ToolbarBtn(
-                      key: const Key('hosts-local-terminal'),
-                      icon: FLucideIcons.squareTerminal,
-                      label: 'Local terminal',
-                      compact: compact,
-                      onPress: onLocalTerminal ?? () {},
-                    ),
-                    const SizedBox(width: YsSpace.s2),
-                    _SplitNewBtn(
-                      onNewHost: onAddHost ?? () {},
-                      onNewGroup: onNewGroup,
-                      onImport: onImport,
-                    ),
-                  ],
-                ),
+            if (inline) ...[
+              _SortBtn(
+                key: const Key('hosts-sort'),
+                mode: sortMode,
+                onChanged: onSortChanged,
+                compact: !sortLabel,
               ),
+              const SizedBox(width: YsSpace.s2),
+              _ViewToggle(
+                key: const Key('hosts-view-toggle'),
+                viewMode: viewMode,
+                onChanged: onViewChanged,
+              ),
+              const SizedBox(width: YsSpace.s2),
+              _ToolbarBtn(
+                key: const Key('hosts-discover'),
+                icon: FLucideIcons.radar,
+                label: 'Discover',
+                compact: !labels,
+                onPress: onDiscover ?? () {},
+              ),
+              const SizedBox(width: YsSpace.s2),
+              _ToolbarBtn(
+                key: const Key('hosts-select'),
+                icon: FLucideIcons.squareCheck,
+                label: 'Select',
+                compact: !labels,
+                onPress: onSelect ?? () {},
+              ),
+              const SizedBox(width: YsSpace.s2),
+              _ToolbarBtn(
+                key: const Key('hosts-local-terminal'),
+                icon: FLucideIcons.squareTerminal,
+                label: 'Local terminal',
+                compact: !labels,
+                onPress: onLocalTerminal ?? () {},
+              ),
+            ] else ...[
+              _MoreMenu(
+                key: const Key('hosts-more'),
+                sortMode: sortMode,
+                onSortChanged: onSortChanged,
+                viewMode: viewMode,
+                onViewChanged: onViewChanged,
+                onDiscover: onDiscover,
+                onSelect: onSelect,
+                onLocalTerminal: onLocalTerminal,
+              ),
+            ],
+            const SizedBox(width: YsSpace.s2),
+            _SplitNewBtn(
+              key: const Key('hosts-new-split'),
+              compact: !newLabel,
+              onNewHost: onAddHost ?? () {},
+              onNewGroup: onNewGroup,
+              onImport: onImport,
             ),
           ],
         );
       }),
+    );
+  }
+}
+
+/// Everything that does not fit inline on a narrow bar: the secondary actions,
+/// the grid/list switch and the sort modes.
+class _MoreMenu extends StatelessWidget {
+  final HostSortMode sortMode;
+  final ValueChanged<HostSortMode> onSortChanged;
+  final String viewMode;
+  final ValueChanged<String> onViewChanged;
+  final VoidCallback? onDiscover;
+  final VoidCallback? onSelect;
+  final VoidCallback? onLocalTerminal;
+  const _MoreMenu({
+    super.key,
+    required this.sortMode,
+    required this.onSortChanged,
+    required this.viewMode,
+    required this.onViewChanged,
+    this.onDiscover,
+    this.onSelect,
+    this.onLocalTerminal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FPopoverMenu(
+      menuAnchor: Alignment.topRight,
+      childAnchor: Alignment.bottomRight,
+      menuBuilder: (context, controller, _) {
+        FItem action(IconData icon, String title, VoidCallback? run) => FItem(
+              prefix: Icon(icon),
+              title: Text(title),
+              onPress: () {
+                controller.hide();
+                run?.call();
+              },
+            );
+        FItem choice(String title, bool on, VoidCallback run) => FItem(
+              prefix: Icon(
+                FLucideIcons.check,
+                color: on ? YsColors.primary : Colors.transparent,
+              ),
+              title: Text(title),
+              selected: on,
+              onPress: () {
+                controller.hide();
+                run();
+              },
+            );
+        return [
+          FItemGroup(
+            children: [
+              action(FLucideIcons.radar, 'Discover', onDiscover),
+              action(FLucideIcons.squareCheck, 'Select', onSelect),
+              action(FLucideIcons.squareTerminal, 'Local terminal',
+                  onLocalTerminal),
+            ],
+          ),
+          FItemGroup(
+            children: [
+              choice('Grid', viewMode == 'grid', () => onViewChanged('grid')),
+              choice('List', viewMode == 'list', () => onViewChanged('list')),
+            ],
+          ),
+          FItemGroup(
+            children: [
+              for (final m in HostSortMode.values)
+                choice(m.label, m == sortMode, () => onSortChanged(m)),
+            ],
+          ),
+        ];
+      },
+      builder: (context, controller, _) => Tooltip(
+        message: 'More actions',
+        child: FButton.icon(
+          variant: .outline,
+          size: .sm,
+          semanticsLabel: 'More actions',
+          onPress: controller.toggle,
+          child: const Icon(FLucideIcons.ellipsis),
+        ),
+      ),
     );
   }
 }
@@ -160,7 +260,13 @@ class _ToolbarBtn extends StatelessWidget {
 class _SortBtn extends StatelessWidget {
   final HostSortMode mode;
   final ValueChanged<HostSortMode> onChanged;
-  const _SortBtn({required this.mode, required this.onChanged});
+  final bool compact;
+  const _SortBtn({
+    super.key,
+    required this.mode,
+    required this.onChanged,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -186,15 +292,27 @@ class _SortBtn extends StatelessWidget {
           ],
         ),
       ],
-      builder: (context, controller, _) => FButton(
-        variant: .outline,
-        size: .sm,
-        mainAxisSize: MainAxisSize.min,
-        onPress: controller.toggle,
-        prefix: const Icon(FLucideIcons.arrowDownUp),
-        suffix: const Icon(FLucideIcons.chevronDown),
-        child: Text(mode.label),
-      ),
+      builder: (context, controller, _) => compact
+          ? Tooltip(
+              message: 'Sort: ${mode.label}',
+              excludeFromSemantics: true,
+              child: FButton.icon(
+                variant: .outline,
+                size: .sm,
+                semanticsLabel: 'Sort: ${mode.label}',
+                onPress: controller.toggle,
+                child: const Icon(FLucideIcons.arrowDownUp),
+              ),
+            )
+          : FButton(
+              variant: .outline,
+              size: .sm,
+              mainAxisSize: MainAxisSize.min,
+              onPress: controller.toggle,
+              prefix: const Icon(FLucideIcons.arrowDownUp),
+              suffix: const Icon(FLucideIcons.chevronDown),
+              child: Text(mode.label),
+            ),
     );
   }
 }
@@ -203,7 +321,7 @@ class _SortBtn extends StatelessWidget {
 class _ViewToggle extends StatelessWidget {
   final String viewMode; // 'grid' | 'list'
   final ValueChanged<String> onChanged;
-  const _ViewToggle({required this.viewMode, required this.onChanged});
+  const _ViewToggle({super.key, required this.viewMode, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -240,7 +358,10 @@ class _SplitNewBtn extends StatelessWidget {
   final VoidCallback onNewHost;
   final VoidCallback? onNewGroup;
   final VoidCallback? onImport;
+  final bool compact;
   const _SplitNewBtn({
+    super.key,
+    this.compact = false,
     required this.onNewHost,
     this.onNewGroup,
     this.onImport,
@@ -251,13 +372,25 @@ class _SplitNewBtn extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        FButton(
-          size: .sm,
-          mainAxisSize: MainAxisSize.min,
-          onPress: onNewHost,
-          prefix: const Icon(FLucideIcons.plus),
-          child: const Text('New host'),
-        ),
+        if (compact)
+          Tooltip(
+            message: 'New host',
+            excludeFromSemantics: true,
+            child: FButton.icon(
+              size: .sm,
+              semanticsLabel: 'New host',
+              onPress: onNewHost,
+              child: const Icon(FLucideIcons.plus),
+            ),
+          )
+        else
+          FButton(
+            size: .sm,
+            mainAxisSize: MainAxisSize.min,
+            onPress: onNewHost,
+            prefix: const Icon(FLucideIcons.plus),
+            child: const Text('New host'),
+          ),
         const SizedBox(width: 1),
         FPopoverMenu(
           menuAnchor: Alignment.topRight,
