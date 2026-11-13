@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] — 2026-11-13
+
+A new look (forui "Amber Brand" design system on desktop and mobile), a `yourssh` command-line client with `yourssh://` links, and a round of fixes found by driving the finished app end to end.
 
 ### Added
 - **`yourssh` command-line client (phase 1, macOS, Linux and Windows, run from source)** — `yourssh connect <host>`, `ls [--json] [--tag T] [--filter Q]`, `version`, `open <url>` and `help` talk to the running app (NDJSON protocol v1) and start the app if it is not running. Hosts resolve by id, label or `user@host[:port]`; ad-hoc `user@host[:port]` works from the CLI only and signs in with the SSH agent's keys (a password-only server needs a saved host). `yourssh version` never starts the app. A debug build of the app uses its own endpoint (`YourSSH-dev`, `\\.\pipe\yourssh-cli-dev-<SID>`); the CLI reaches it with `YOURSSH_DEV=1`. macOS/Linux: a per-user Unix socket, 0600 in a 0700 run dir, that checks the peer uid. Windows: the named pipe `\\.\pipe\yourssh-cli-<SID>` with a current-user-only DACL and remote clients rejected; the app drops clients running as another user, and the CLI checks the pipe's server the same way before sending anything (a pipe owned by another user exits 4). Every request carries a token rotated at every launch, and the app is single-instance on all three (a second launch, including a clicked link, is handed to the running app before it starts anything else). Exit codes: 0 ok, 1 error, 2 usage, 3 app unreachable, 4 denied. Not yet: packaging the CLI binary in releases (today `yourssh` in a release is the GUI app) and an install button, `sftp`/`tunnel`/`import`/`export`, MCP.
@@ -13,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Audit source for CLI and URL connects** — SSH connect rows carry `meta.source` = `cli` / `url`; RDP and VNC rows keep `source: rdp|vnc` and carry `via` = `cli` / `url`.
 
 ### Fixed
+- A new SSH session shows a single prompt; the prompt printed before the invisible shell-integration setup no longer stays behind as an empty line.
 - **Snippets no longer disappear after allowing the bundled "Snippets" plugin.** Earlier builds shipped a half-migrated script copy of Snippets that moved your snippets out of the built-in plugin's storage on first load and then failed, so the next launch showed only the defaults. The script copy is no longer installed, a leftover copy in `~/.yourssh/plugins/snippets` is ignored (script plugins can't reuse a built-in plugin's id), and the moved snippets are restored once at startup (merged, no duplicates).
 - Bulk "Run command" no longer reports `exit -1` for fast commands: the SSH layer kept an exit status that arrived before the session was ready. The footer counts non-zero exits separately (`N ok · M non-zero exit · K failed`) and an unknown exit status is shown as such.
 - A host whose name doesn't resolve no longer sits on "Connecting…" forever: the TCP dial times out after 15 s and the connecting screen shows the last error with the retry attempt.
@@ -36,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Cloudflare tunnel panel shows "Required" / "Invalid (1–65535)" for a missing label or a bad port instead of silently adding nothing or falling back to 3000 (an empty port still means 3000).
 
 ### Changed
-- **New confirmations:** deleting a host from the dashboard card menu, removing a Known Hosts entry (its pinned key), Sync *Disconnect*, Docker Compose *Down* and opening an executable file externally now ask first; the safe choice has default focus.
+- **New confirmations:** clearing captured mail in the Mail Catcher, deleting a host from the dashboard card menu, removing a Known Hosts entry (its pinned key), Sync *Disconnect*, Docker Compose *Down* and opening an executable file externally now ask first; the safe choice has default focus.
 - **SFTP click model:** on both panels a single click selects, and double-click or Enter opens.
 - **Host editor:** a *Delete* button was added to the footer and the *CONNECT* button was removed.
 - **AI chat:** Enter sends, Shift+Enter inserts a new line.
