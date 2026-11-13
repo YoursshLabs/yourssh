@@ -25,6 +25,33 @@ void main() {
     expect(box.color, YsColors.primary);
   });
 
+  testWidgets('tab content is vertically centred in the tab', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        YsTab(
+          leading: const Icon(FLucideIcons.house),
+          label: const Text('Demo Server'),
+          active: true,
+          onClose: () {},
+        ),
+      ),
+    );
+    final tab = tester.getRect(find.byType(YsTab));
+    expect(tab.height, YsTab.height);
+    for (final f in [
+      find.text('Demo Server'),
+      find.byIcon(FLucideIcons.house),
+      find.byIcon(FLucideIcons.x),
+    ]) {
+      final r = tester.getRect(f);
+      expect(
+        (r.center.dy - tab.center.dy).abs(),
+        lessThanOrEqualTo(1.0),
+        reason: '$f should sit on the tab\'s vertical centre',
+      );
+    }
+  });
+
   testWidgets('inactive tab has no indicator', (tester) async {
     await tester.pumpWidget(
       _wrap(const YsTab(label: Text('prod'), active: false)),

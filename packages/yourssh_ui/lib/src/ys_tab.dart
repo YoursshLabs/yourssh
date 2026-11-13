@@ -123,6 +123,9 @@ class _YsTabState extends State<YsTab> {
             height: YsTab.height,
             color: bg,
             child: Stack(
+              // A Stack lays its non-positioned children out top-start; the
+              // tab content must sit on the vertical centre of the tab.
+              alignment: AlignmentDirectional.centerStart,
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
