@@ -27,13 +27,20 @@ Future<void> _defaultExcludeFromBackup(String path) async {
 class AppPaths {
   AppPaths._();
 
+  /// Directory name of the private keys dir inside Application Support.
+  static const keysDirName = 'keys';
+
+  /// Path of [privateKeysDir] without creating it or touching its mode.
+  static Future<String> privateKeysDirPath() async =>
+      p.join((await getApplicationSupportDirectory()).path, keysDirName);
+
   /// `<ApplicationSupport>/keys`: created, 0700, excluded from backups.
   static Future<Directory> privateKeysDir({
     ChmodFn? chmod,
     Future<void> Function(String path)? excludeFromBackup,
   }) async {
     final support = await getApplicationSupportDirectory();
-    final dir = Directory(p.join(support.path, 'keys'));
+    final dir = Directory(p.join(support.path, keysDirName));
     await dir.create(recursive: true);
     await (chmod ?? (supportsSubprocesses ? chmodLocal : chmodNative))(
         dir.path, 0x1C0);
