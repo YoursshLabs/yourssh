@@ -29,7 +29,12 @@ class MobileAddHostScreen extends StatefulWidget {
   /// The host to edit, or null to create a new one.
   final Host? existing;
 
-  const MobileAddHostScreen({super.key, this.existing});
+  /// Seeds a NEW host form (label/host/port/username) from [prefill], e.g. an
+  /// `ssh://` link. Ignored when [existing] is set; nothing is saved until the
+  /// user taps Save.
+  final Host? prefill;
+
+  const MobileAddHostScreen({super.key, this.existing, this.prefill});
 
   @override
   State<MobileAddHostScreen> createState() => _MobileAddHostScreenState();
@@ -90,6 +95,11 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
       // Group = first tag (round-trip: save writes it back as the first tag).
       _group.text = h.tags.isNotEmpty ? h.tags.first : '';
       _snippet.text = h.startupSnippet ?? '';
+    } else if (widget.prefill case final p?) {
+      _label.text = p.label;
+      _address.text = p.host;
+      _port.text = '${p.port}';
+      _username.text = p.username;
     }
   }
 

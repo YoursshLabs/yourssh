@@ -6,6 +6,11 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 
 const String kAppLockPrefKey = 'app_lock_enabled';
 
+/// True while the lock screen covers the app. Routes pushed above the gate
+/// (a session opened by a link) are not covered by it, so link handlers wait
+/// for this to turn false before navigating.
+final ValueNotifier<bool> mobileAppLocked = ValueNotifier<bool>(false);
+
 /// Wraps the mobile app in a biometric lock. Locked on launch (and on
 /// resume-from-background) when enabled; unlocks on a successful auth. The
 /// [authenticator] and [enabledOverride] seams keep the state machine testable
@@ -41,6 +46,7 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    mobileAppLocked.value = false;
     super.dispose();
   }
 
@@ -57,6 +63,7 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
       _enabled = enabled;
       _locked = enabled;
     });
+    mobileAppLocked.value = enabled;
     if (enabled) _authenticate();
   }
 
@@ -81,7 +88,10 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
         // Cover the app-switcher snapshot: lock before the OS captures it.
-        if (!_locked && mounted) setState(() => _locked = true);
+        if (!_locked && mounted) {
+          setState(() => _locked = true);
+          mobileAppLocked.value = true;
+        }
       case AppLifecycleState.resumed:
         if (_locked) _authenticate();
       case AppLifecycleState.detached:
@@ -105,7 +115,10 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
     if (_authInFlight) return;
     _authInFlight = true;
     final ok = await (widget.authenticator ?? _defaultAuth)();
-    if (mounted && ok) setState(() => _locked = false);
+    if (mounted && ok) {
+      setState(() => _locked = false);
+      mobileAppLocked.value = false;
+    }
     // Clear the guard one frame later, so the inactive→resumed transition that
     // accompanies dismissing the system biometric sheet is still ignored above
     // (otherwise it re-locks immediately after unlocking).

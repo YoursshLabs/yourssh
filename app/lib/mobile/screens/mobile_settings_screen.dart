@@ -29,6 +29,7 @@ class MobileSettingsScreen extends StatefulWidget {
 class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   // ── Security ──────────────────────────────────────────────────────────────
   bool _appLock = true;
+  bool _sshLinks = false;
 
   // ── Keyboard ──────────────────────────────────────────────────────────────
   bool _accessoryBar = true;
@@ -43,6 +44,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
       if (mounted) {
         setState(() {
           _appLock      = p.getBool(kAppLockPrefKey)      ?? true;
+          _sshLinks     = p.getBool(kSshLinksPrefKey)     ?? false;
           _accessoryBar = p.getBool(kAccessoryBarPrefKey) ?? true;
         });
       }
@@ -169,6 +171,17 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
             setState(() => _appLock = v);
             final p = await SharedPreferences.getInstance();
             await p.setBool(kAppLockPrefKey, v);
+          },
+        ),
+        SettingsRow(
+          leading: const Icon(FLucideIcons.link,
+              color: MobileColors.textMuted, size: 20),
+          title: 'Open ssh:// links',
+          toggle: _sshLinks,
+          onToggle: (v) async {
+            setState(() => _sshLinks = v);
+            final p = await SharedPreferences.getInstance();
+            await p.setBool(kSshLinksPrefKey, v);
           },
         ),
         SettingsRow(

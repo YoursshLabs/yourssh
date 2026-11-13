@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../platform/runtime_platform.dart';
 import 'lifecycle/background_tasks.dart';
 import 'lifecycle/mobile_lifecycle_coordinator.dart';
+import 'links/mobile_links.dart';
 import 'mobile_bootstrap.dart';
 import 'screens/mobile_home_shell.dart';
 import 'security/app_lock_gate.dart';
@@ -43,6 +45,20 @@ class _YourSSHMobileAppState extends State<YourSSHMobileApp> {
         onPause: c.onBackground,
         onResume: c.onForeground,
       );
+      // yourssh:// and ssh:// links: attach after the first frame, when the
+      // navigator exists; the native side holds earlier URLs until then.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        String version = '';
+        try {
+          version = (await PackageInfo.fromPlatform()).version;
+        } catch (_) {}
+        if (!mounted) return;
+        MobileLinks(
+          bootstrap: _bootstrap,
+          navigator: _bootstrap.navigatorKey,
+          appVersion: version,
+        ).attach();
+      });
     }
   }
 
