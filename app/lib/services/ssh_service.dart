@@ -182,7 +182,23 @@ class SshService {
   /// the host's configured proxy when set. Used for a direct connect, the first
   /// bastion hop, and test-connection.
   @visibleForTesting
-  Future<SSHSocket> localDial(Host host, {Duration? timeout}) async {
+  Future<SSHSocket> localDial(Host host, {Duration? timeout}) {
+    final limit = timeout ?? connectTimeout;
+    // Socket.connect's own timeout does not cover every OS resolver stall (a
+    // single-label name can sit in DNS/mDNS lookup for 30 s+), so the whole
+    // dial is bounded here and surfaces a readable error.
+    return _dial(host, limit).timeout(limit, onTimeout: () {
+      throw TimeoutException(
+          'Timed out connecting to ${host.host}:${host.port} '
+          'after ${limit.inSeconds}s',
+          limit);
+    });
+  }
+
+  /// Upper bound for opening the first TCP transport of a connect.
+  Duration connectTimeout = const Duration(seconds: 15);
+
+  Future<SSHSocket> _dial(Host host, Duration timeout) async {
     if (host.proxyType == ProxyType.none) {
       return directDialer(host.host, host.port, timeout: timeout);
     }

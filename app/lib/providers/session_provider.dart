@@ -598,6 +598,8 @@ class SessionProvider extends ChangeNotifier {
           (autoReconnectEnabled?.call() ?? false) &&
           (isUnlimited || attempt < maxAttempts);
       if (shouldRetry) {
+        // Keep the reason visible on the connecting screen between retries.
+        session.errorMessage = e.toString();
         _scheduleReconnect(session, host, attempt: attempt + 1);
       } else {
         session.status = SessionStatus.error;

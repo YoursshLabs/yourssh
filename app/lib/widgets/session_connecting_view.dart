@@ -84,6 +84,10 @@ class _SessionConnectingViewState extends State<SessionConnectingView>
     final message = switch (status) {
       SessionStatus.error => session.errorMessage ?? 'Connection error',
       SessionStatus.disconnected => 'Disconnected',
+      // Between auto-retries the status stays `connecting`; show why the last
+      // attempt failed so a bad host name isn't an endless bare "Connecting…".
+      _ when session.errorMessage != null =>
+        '${session.errorMessage} — retrying (attempt ${session.reconnectCount + 1})',
       _ => 'Connecting…',
     };
     final messageColor = switch (status) {

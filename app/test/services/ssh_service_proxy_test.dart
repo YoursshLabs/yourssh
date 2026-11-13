@@ -82,4 +82,18 @@ void main() {
     expect(gotTarget, 'target');
     expect(gotPort, 2222);
   });
+
+  test('localDial gives up on a dial that never completes (stalled DNS)',
+      () async {
+    final svc = SshService(StorageService())
+      ;
+    svc.directDialer = (h, p, {timeout}) => Completer<SSHSocket>().future;
+    final host = Host(label: 'a', host: 'db-internal', port: 22, username: 'u');
+
+    await expectLater(
+      svc.localDial(host),
+      throwsA(isA<TimeoutException>().having(
+          (e) => e.message, 'message', contains('db-internal:22'))),
+    );
+  });
 }

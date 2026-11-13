@@ -48,6 +48,17 @@ void main() {
     expect(find.text('Retry'), findsNothing);
   });
 
+  testWidgets('connecting between auto-retries shows the last failure reason',
+      (tester) async {
+    final s = _session(
+        status: SessionStatus.connecting,
+        error: 'Failed host lookup: db-internal')
+      ..reconnectCount = 2;
+    await _pump(tester, s);
+    expect(find.textContaining('Failed host lookup: db-internal'), findsOneWidget);
+    expect(find.textContaining('attempt 3'), findsOneWidget);
+  });
+
   testWidgets('error state shows the error message and a Retry button', (tester) async {
     await _pump(tester, _session(status: SessionStatus.error, error: 'Auth failed'));
     expect(find.text('Auth failed'), findsOneWidget);
