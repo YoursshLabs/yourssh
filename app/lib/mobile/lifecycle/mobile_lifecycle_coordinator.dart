@@ -137,21 +137,23 @@ class MobileLifecycleCoordinator {
     // owns the recorded forwards and the paused sessions.
     bool stale() => epoch != _epoch || _disposed;
     if (stale()) return;
-    final restart = _stoppedForwards;
-    _stoppedForwards = const [];
     await sessions.resumePaused(stagger: stagger);
-    if (stale()) {
-      _stoppedForwards = [..._stoppedForwards, ...restart];
-      return;
-    }
-    await sessions.verifyLive();
-    for (var i = 0; i < restart.length; i++) {
-      if (stale()) {
-        // Keep what was not restarted for the next foreground.
-        _stoppedForwards = [..._stoppedForwards, ...restart.skip(i)];
-        return;
-      }
-      await forwards.start(restart[i]);
+    if (!stale()) await sessions.verifyLive();
+    // The recorded forwards stay in `_stoppedForwards` until each one is
+    // started, so a foreground that goes stale keeps them for the next one.
+    await _restartStopped();
+  }
+
+  /// Starts the recorded forwards one by one while the app is in the
+  /// foreground. Safe to run from several foregrounds at once: each forward
+  /// is removed before it starts, so it starts once. A stale foreground also
+  /// calls this, so forwards are never left stopped when a newer foreground
+  /// already finished.
+  Future<void> _restartStopped() async {
+    while (!_background && !_disposed && _stoppedForwards.isNotEmpty) {
+      final f = _stoppedForwards.first;
+      _stoppedForwards = _stoppedForwards.skip(1).toList();
+      await forwards.start(f);
     }
   }
 

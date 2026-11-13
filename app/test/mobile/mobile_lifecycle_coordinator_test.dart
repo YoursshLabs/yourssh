@@ -264,6 +264,29 @@ void main() {
     });
   });
 
+  test('a stale foreground that loses the race leaves no forward stopped', () {
+    fakeAsync((fa) {
+      build(running: {'a', 'b'});
+      c.onBackground();
+      fa.elapse(const Duration(seconds: 25));
+      fa.flushMicrotasks();
+      log.clear();
+      final gate = sessions.verifyGate = Completer<void>();
+      c.onForeground(); // fg1: stuck in verifyLive
+      fa.flushMicrotasks();
+      c.onBackground(); // quick switch: no grace expiry yet
+      fa.flushMicrotasks();
+      sessions.verifyGate = null;
+      c.onForeground(); // fg2 runs to completion
+      fa.flushMicrotasks();
+      gate.complete(); // fg1 wakes up stale
+      fa.flushMicrotasks();
+      expect(log.where((e) => e.startsWith('forwards.start')),
+          unorderedEquals(['forwards.start:a', 'forwards.start:b']));
+      c.dispose();
+    });
+  });
+
   test('backgrounding again mid-loop stops restarting the remaining forwards',
       () {
     fakeAsync((fa) {
