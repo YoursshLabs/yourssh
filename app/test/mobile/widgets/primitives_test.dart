@@ -164,7 +164,7 @@ void main() {
           const Text('row2'),
         ]),
       ));
-      expect(find.byType(Divider), findsOneWidget);
+      expect(find.byType(FDivider), findsOneWidget);
     });
 
     testWidgets('3 rows renders exactly 2 dividers', (tester) async {
@@ -175,7 +175,7 @@ void main() {
           const Text('row3'),
         ]),
       ));
-      expect(find.byType(Divider), findsNWidgets(2));
+      expect(find.byType(FDivider), findsNWidgets(2));
     });
 
     testWidgets('renders optional label', (tester) async {

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/mobile/theme/mobile_tokens.dart';
+import 'package:yourssh/mobile/theme/toast_inset.dart';
+import 'package:yourssh/mobile/widgets/mobile_card.dart';
+import 'package:yourssh/mobile/widgets/tag_chip.dart';
 import 'package:yourssh/theme/app_theme.dart';
 import 'package:yourssh/mobile/widgets/forward_rule_row.dart';
 import 'package:yourssh/mobile/widgets/host_card.dart';
@@ -26,6 +30,9 @@ Future<void> _smallPhone(WidgetTester t) async {
 }
 
 void main() {
+  setUp(() => mobileToastInset.value = 0);
+  tearDown(() => mobileToastInset.value = 0);
+
   group('MobileTokens aliases', () {
     test('spacing/radius alias the Ys tokens', () {
       expect(MobileTokens.space1, YsSpace.s1);
@@ -37,16 +44,19 @@ void main() {
   });
 
   group('MobileTabBar', () {
-    testWidgets('built on FBottomNavigationBar, 4 tabs in order, taps select',
-        (t) async {
+    testWidgets('built on FBottomNavigationBar, 4 tabs in order, taps select', (
+      t,
+    ) async {
       final picked = <MobileTab>[];
-      await t.pumpWidget(ysTestApp(
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: MobileTabBar(current: MobileTab.hosts, onSelect: picked.add),
+      await t.pumpWidget(
+        ysTestApp(
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: MobileTabBar(current: MobileTab.hosts, onSelect: picked.add),
+          ),
+          touch: true,
         ),
-        touch: true,
-      ));
+      );
       expect(find.byType(FBottomNavigationBar), findsOneWidget);
       expect(find.byType(FBottomNavigationBarItem), findsNWidgets(4));
       final labels = ['Hosts', 'Snippets', 'Keys', 'Settings'];
@@ -63,64 +73,135 @@ void main() {
 
     testWidgets('each tab item has a >=44 px hit area', (t) async {
       await _smallPhone(t);
-      await t.pumpWidget(ysTestApp(
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: MobileTabBar(current: MobileTab.hosts, onSelect: (_) {}),
+      await t.pumpWidget(
+        ysTestApp(
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: MobileTabBar(current: MobileTab.hosts, onSelect: (_) {}),
+          ),
+          touch: true,
         ),
-        touch: true,
-      ));
-      expect(t.getSize(find.byType(FBottomNavigationBar)).height,
-          MobileTokens.tabBarHeight);
-      final items = find.byType(FBottomNavigationBarItem);
+      );
+      expect(
+        t.getSize(find.byType(FBottomNavigationBar)).height,
+        MobileTokens.tabBarHeight,
+      );
+      final items = find.bySubtype<FTappable>();
       expect(items, findsNWidgets(4));
       for (var i = 0; i < 4; i++) {
         final s = t.getSize(items.at(i));
         expect(s.height, greaterThanOrEqualTo(44), reason: 'tab $i height');
         expect(s.width, greaterThanOrEqualTo(44), reason: 'tab $i width');
+        // Real hit area: the centre and the +-22 px edges all hit the tappable.
+        final c = t.getCenter(items.at(i));
+        for (final d in [
+          Offset.zero,
+          const Offset(0, 22),
+          const Offset(0, -22),
+          const Offset(22, 0),
+          const Offset(-22, 0),
+        ]) {
+          expect(
+            _hits(t, c + d, items.at(i)),
+            isTrue,
+            reason: 'tab $i hit at $d',
+          );
+        }
       }
     });
 
-    testWidgets('toast inset only while the tab bar is the visible route',
-        (t) async {
+    group('toast inset', () {
       final nav = GlobalKey<NavigatorState>();
-      await t.pumpWidget(MaterialApp(
-        navigatorKey: nav,
-        builder: ysRootBuilderTouch,
-        home: Scaffold(
-          bottomNavigationBar:
-              MobileTabBar(current: MobileTab.hosts, onSelect: (_) {}),
-        ),
-      ));
-      await t.pump();
-      expect(MobileTabBar.toastInset.value, MobileTokens.tabBarHeight);
 
-      nav.currentState!.push(MaterialPageRoute<void>(
-          builder: (_) => const Scaffold(body: Text('pushed'))));
-      await t.pumpAndSettle();
-      expect(MobileTabBar.toastInset.value, 0,
-          reason: 'covered by a pushed route');
+      Future<void> pumpShell(WidgetTester t) async {
+        await t.pumpWidget(
+          MaterialApp(
+            navigatorKey: nav,
+            navigatorObservers: [mobileRouteObserver],
+            builder: ysRootBuilderTouch,
+            home: Scaffold(
+              body: const SizedBox.expand(),
+              bottomNavigationBar: MobileTabBar(
+                current: MobileTab.hosts,
+                onSelect: (_) {},
+              ),
+            ),
+          ),
+        );
+        await t.pump();
+        expect(mobileToastInset.value, MobileTokens.tabBarHeight);
+      }
 
-      nav.currentState!.pop();
-      await t.pumpAndSettle();
-      expect(MobileTabBar.toastInset.value, MobileTokens.tabBarHeight);
+      testWidgets('kept while a dialog is open', (t) async {
+        await pumpShell(t);
+        showDialog<void>(
+          context: nav.currentContext!,
+          builder: (_) => const AlertDialog(),
+        );
+        await t.pumpAndSettle();
+        expect(mobileToastInset.value, MobileTokens.tabBarHeight);
+        nav.currentState!.pop();
+        await t.pumpAndSettle();
+        expect(mobileToastInset.value, MobileTokens.tabBarHeight);
+      });
 
-      await t.pumpWidget(MaterialApp(
-        builder: ysRootBuilderTouch,
-        home: const Scaffold(body: Text('no tab bar')),
-      ));
-      await t.pump();
-      expect(MobileTabBar.toastInset.value, 0);
+      testWidgets('kept while a modal bottom sheet is open', (t) async {
+        await pumpShell(t);
+        showModalBottomSheet<void>(
+          context: nav.currentContext!,
+          builder: (_) => const SizedBox(height: 100),
+        );
+        await t.pumpAndSettle();
+        expect(mobileToastInset.value, MobileTokens.tabBarHeight);
+        nav.currentState!.pop();
+        await t.pumpAndSettle();
+        expect(mobileToastInset.value, MobileTokens.tabBarHeight);
+      });
+
+      testWidgets('dropped under a full-screen page, back on pop', (t) async {
+        await pumpShell(t);
+        nav.currentState!.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: Text('pushed')),
+          ),
+        );
+        await t.pumpAndSettle();
+        expect(mobileToastInset.value, 0);
+        // A dialog over the full-screen page does not bring it back.
+        showDialog<void>(
+          context: nav.currentContext!,
+          builder: (_) => const AlertDialog(),
+        );
+        await t.pumpAndSettle();
+        expect(mobileToastInset.value, 0);
+        nav.currentState!.pop();
+        await t.pumpAndSettle();
+        expect(mobileToastInset.value, 0);
+        nav.currentState!.pop();
+        await t.pumpAndSettle();
+        expect(mobileToastInset.value, MobileTokens.tabBarHeight);
+      });
+
+      testWidgets('zero once the tab bar is unmounted', (t) async {
+        await pumpShell(t);
+        await t.pumpWidget(
+          MaterialApp(
+            builder: ysRootBuilderTouch,
+            home: const Scaffold(body: Text('no tab bar')),
+          ),
+        );
+        await t.pump();
+        expect(mobileToastInset.value, 0);
+      });
     });
   });
 
   group('MobileFab', () {
     testWidgets('>=44 px hit size and fires onTap', (t) async {
       var taps = 0;
-      await t.pumpWidget(ysTestApp(
-        Center(child: MobileFab(onTap: () => taps++)),
-        touch: true,
-      ));
+      await t.pumpWidget(
+        ysTestApp(Center(child: MobileFab(onTap: () => taps++)), touch: true),
+      );
       final s = t.getSize(find.byType(FButton));
       expect(s.width, greaterThanOrEqualTo(44));
       expect(s.height, greaterThanOrEqualTo(44));
@@ -133,14 +214,16 @@ void main() {
   group('HostCard on YsHostCard', () {
     testWidgets('composes YsHostCard, keeps tap + long-press', (t) async {
       var tap = 0, lp = 0;
-      await t.pumpWidget(ysTestApp(
-        HostCard(
-          host: Host(label: 'web-01', host: '10.0.0.1', username: 'root'),
-          onTap: () => tap++,
-          onLongPress: () => lp++,
+      await t.pumpWidget(
+        ysTestApp(
+          HostCard(
+            host: Host(label: 'web-01', host: '10.0.0.1', username: 'root'),
+            onTap: () => tap++,
+            onLongPress: () => lp++,
+          ),
+          touch: true,
         ),
-        touch: true,
-      ));
+      );
       expect(find.byType(YsHostCard), findsOneWidget);
       await t.tap(find.text('web-01'));
       expect(tap, 1);
@@ -151,41 +234,49 @@ void main() {
 
   group('KeyCard', () {
     SshKeyEntry key(String label) => SshKeyEntry(
-          label: label,
-          algorithm: KeyAlgorithm.ed25519,
-          publicKey: '',
-          privateKeyPath: 'embedded',
-        );
+      label: label,
+      algorithm: KeyAlgorithm.ed25519,
+      publicKey: '',
+      privateKeyPath: 'embedded',
+    );
 
     testWidgets('smoke: label, subtitle, tap, long-press', (t) async {
       var tap = 0, lp = 0;
-      await t.pumpWidget(ysTestApp(
-        KeyCard(
-          entry: key('deploy-key'),
-          hostCount: 2,
-          onTap: () => tap++,
-          onLongPress: () => lp++,
+      await t.pumpWidget(
+        ysTestApp(
+          KeyCard(
+            entry: key('deploy-key'),
+            hostCount: 2,
+            onTap: () => tap++,
+            onLongPress: () => lp++,
+          ),
+          touch: true,
         ),
-        touch: true,
-      ));
+      );
       expect(find.text('deploy-key'), findsOneWidget);
       expect(find.text('Ed25519 · 2 hosts'), findsOneWidget);
       await t.tap(find.text('deploy-key'));
+      await t.pumpAndSettle();
       await t.longPress(find.text('deploy-key'));
+      await t.pumpAndSettle();
       expect([tap, lp], [1, 1]);
     });
 
     testWidgets('unused key subtitle', (t) async {
       await t.pumpWidget(
-          ysTestApp(KeyCard(entry: key('k'), hostCount: 0), touch: true));
+        ysTestApp(KeyCard(entry: key('k'), hostCount: 0), touch: true),
+      );
       expect(find.text('Ed25519 · unused'), findsOneWidget);
     });
 
     testWidgets('360x640, 60-char label: no overflow', (t) async {
       await _smallPhone(t);
-      await t.pumpWidget(ysTestApp(
+      await t.pumpWidget(
+        ysTestApp(
           KeyCard(entry: key(_long), hostCount: 1, onTap: () {}),
-          touch: true));
+          touch: true,
+        ),
+      );
       expect(t.takeException(), isNull);
     });
   });
@@ -193,52 +284,59 @@ void main() {
   group('SnippetCard', () {
     testWidgets('smoke: label, tag, command, tap', (t) async {
       var tap = 0;
-      await t.pumpWidget(ysTestApp(
-        SnippetCard(
-          snippet: Snippet(label: 'Disk', command: 'df -h', tag: 'ops'),
-          onTap: () => tap++,
+      await t.pumpWidget(
+        ysTestApp(
+          SnippetCard(
+            snippet: Snippet(label: 'Disk', command: 'df -h', tag: 'ops'),
+            onTap: () => tap++,
+          ),
+          touch: true,
         ),
-        touch: true,
-      ));
+      );
       expect(find.text('Disk'), findsOneWidget);
       expect(find.text('ops'), findsOneWidget);
       expect(find.text('df -h'), findsOneWidget);
       await t.tap(find.text('Disk'));
+      await t.pumpAndSettle();
       expect(tap, 1);
     });
 
     testWidgets('360x640, 60-char label: no overflow', (t) async {
       await _smallPhone(t);
-      await t.pumpWidget(ysTestApp(
-        SnippetCard(
-          snippet: Snippet(label: _long, command: _long * 3, tag: 'ops'),
-          onTap: () {},
+      await t.pumpWidget(
+        ysTestApp(
+          SnippetCard(
+            snippet: Snippet(label: _long, command: _long * 3, tag: 'ops'),
+            onTap: () {},
+          ),
+          touch: true,
         ),
-        touch: true,
-      ));
+      );
       expect(t.takeException(), isNull);
     });
   });
 
   group('ForwardRuleRow', () {
     PortForward rule(ForwardType type) => PortForward(
-          label: 'r',
-          type: type,
-          localPort: 8080,
-          remoteHost: 'db.internal',
-          remotePort: 5432,
-        );
+      label: 'r',
+      type: type,
+      localPort: 8080,
+      remoteHost: 'db.internal',
+      remotePort: 5432,
+    );
 
-    testWidgets('smoke: type chip, summary, Start tooltip toggles',
-        (t) async {
+    testWidgets('smoke: type chip, summary, Start tooltip toggles', (t) async {
       var toggles = 0;
-      await t.pumpWidget(ysTestApp(
-        ForwardRuleRow(
+      await t.pumpWidget(
+        ysTestApp(
+          ForwardRuleRow(
             rule: rule(ForwardType.local),
             isRunning: false,
-            onToggle: () => toggles++),
-        touch: true,
-      ));
+            onToggle: () => toggles++,
+          ),
+          touch: true,
+        ),
+      );
       expect(find.text('LOCAL'), findsOneWidget);
       expect(find.text(':8080 → db.internal:5432'), findsOneWidget);
       expect(find.byTooltip('Start'), findsOneWidget);
@@ -248,11 +346,16 @@ void main() {
     });
 
     testWidgets('running shows Stop tooltip; toggle >=44 px', (t) async {
-      await t.pumpWidget(ysTestApp(
-        ForwardRuleRow(
-            rule: rule(ForwardType.dynamic), isRunning: true, onToggle: () {}),
-        touch: true,
-      ));
+      await t.pumpWidget(
+        ysTestApp(
+          ForwardRuleRow(
+            rule: rule(ForwardType.dynamic),
+            isRunning: true,
+            onToggle: () {},
+          ),
+          touch: true,
+        ),
+      );
       expect(find.text('DYNAMIC'), findsOneWidget);
       expect(find.text('SOCKS5 :8080'), findsOneWidget);
       final s = t.getSize(find.byTooltip('Stop'));
@@ -262,19 +365,22 @@ void main() {
 
     testWidgets('360x640, 60-char host: no overflow', (t) async {
       await _smallPhone(t);
-      await t.pumpWidget(ysTestApp(
-        ForwardRuleRow(
-          rule: PortForward(
+      await t.pumpWidget(
+        ysTestApp(
+          ForwardRuleRow(
+            rule: PortForward(
               label: 'r',
               type: ForwardType.local,
               localPort: 1,
               remoteHost: _long,
-              remotePort: 2),
-          isRunning: true,
-          onToggle: () {},
+              remotePort: 2,
+            ),
+            isRunning: true,
+            onToggle: () {},
+          ),
+          touch: true,
         ),
-        touch: true,
-      ));
+      );
       expect(t.takeException(), isNull);
     });
   });
@@ -282,10 +388,12 @@ void main() {
   group('SettingsRow', () {
     testWidgets('toggle uses FSwitch and reports changes', (t) async {
       bool? got;
-      await t.pumpWidget(ysTestApp(
-        SettingsRow(title: 'Opt', toggle: false, onToggle: (v) => got = v),
-        touch: true,
-      ));
+      await t.pumpWidget(
+        ysTestApp(
+          SettingsRow(title: 'Opt', toggle: false, onToggle: (v) => got = v),
+          touch: true,
+        ),
+      );
       expect(find.byType(FSwitch), findsOneWidget);
       await t.tap(find.byType(FSwitch));
       await t.pumpAndSettle();
@@ -294,11 +402,17 @@ void main() {
 
     testWidgets('360x640, 60-char title and value: no overflow', (t) async {
       await _smallPhone(t);
-      await t.pumpWidget(ysTestApp(
-        SettingsRow(
-            title: _long, value: _long, onTap: () {}, leading: const Icon(Icons.add)),
-        touch: true,
-      ));
+      await t.pumpWidget(
+        ysTestApp(
+          SettingsRow(
+            title: _long,
+            value: _long,
+            onTap: () {},
+            leading: const Icon(FLucideIcons.plus),
+          ),
+          touch: true,
+        ),
+      );
       expect(t.takeException(), isNull);
     });
   });
@@ -306,16 +420,132 @@ void main() {
   group('HostCard overflow', () {
     testWidgets('360x640, 60-char label', (t) async {
       await _smallPhone(t);
-      await t.pumpWidget(ysTestApp(
-        HostCard(
-          host: Host(label: _long, host: _long, username: 'root', tags: ['a', 'b']),
-          online: true,
-          latencyMs: 12,
-          onTap: () {},
+      await t.pumpWidget(
+        ysTestApp(
+          HostCard(
+            host: Host(
+              label: _long,
+              host: _long,
+              username: 'root',
+              tags: ['a', 'b'],
+            ),
+            online: true,
+            latencyMs: 12,
+            onTap: () {},
+          ),
+          touch: true,
         ),
-        touch: true,
-      ));
+      );
       expect(t.takeException(), isNull);
     });
   });
+
+  group('Migrated primitives', () {
+    testWidgets('SettingsRow row is >=44 px tall and tappable', (t) async {
+      var taps = 0;
+      await t.pumpWidget(
+        ysTestApp(SettingsRow(title: 'A', onTap: () => taps++), touch: true),
+      );
+      expect(
+        t.getSize(find.byType(SettingsRow)).height,
+        greaterThanOrEqualTo(44),
+      );
+      await t.tap(find.byType(SettingsRow));
+      await t.pumpAndSettle();
+      expect(taps, 1);
+    });
+
+    testWidgets('KeyCard main tap area is >=44 px', (t) async {
+      await t.pumpWidget(
+        ysTestApp(
+          KeyCard(
+            entry: SshKeyEntry(
+              label: 'k',
+              algorithm: KeyAlgorithm.ed25519,
+              publicKey: '',
+              privateKeyPath: 'embedded',
+            ),
+            hostCount: 1,
+            onTap: () {},
+          ),
+          touch: true,
+        ),
+      );
+      final area = find.descendant(
+        of: find.byType(MobileCard),
+        matching: find.bySubtype<FTappable>(),
+      );
+      expect(t.getSize(area).height, greaterThanOrEqualTo(44));
+      expect(t.getSize(area).width, greaterThanOrEqualTo(44));
+    });
+
+    testWidgets('MobileCard fires tap and long-press', (t) async {
+      var tap = 0, lp = 0;
+      await t.pumpWidget(
+        ysTestApp(
+          MobileCard(
+            onTap: () => tap++,
+            onLongPress: () => lp++,
+            child: const Text('c'),
+          ),
+          touch: true,
+        ),
+      );
+      await t.tap(find.text('c'));
+      await t.pumpAndSettle();
+      await t.longPress(find.text('c'));
+      await t.pumpAndSettle();
+      expect([tap, lp], [1, 1]);
+    });
+
+    testWidgets('tappable TagChip taps and exposes selected semantics', (
+      t,
+    ) async {
+      var taps = 0;
+      final h = t.ensureSemantics();
+      await t.pumpWidget(
+        ysTestApp(
+          TagChip(label: 'prod', selected: true, onTap: () => taps++),
+          touch: true,
+        ),
+      );
+      await t.tap(find.text('prod'));
+      await t.pumpAndSettle();
+      expect(taps, 1);
+      expect(
+        t.getSemantics(find.bySubtype<FTappable>()),
+        matchesSemantics(
+          isButton: true,
+          isSelected: true,
+          hasSelectedState: true,
+          hasEnabledState: true,
+          isEnabled: true,
+          isFocusable: true,
+          hasTapAction: true,
+          hasFocusAction: true,
+          label: 'prod',
+        ),
+      );
+      h.dispose();
+    });
+  });
+}
+
+bool _hits(WidgetTester t, Offset p, Finder target) {
+  final result = t.hitTestOnBinding(p);
+  final ro = t.renderObject(target);
+  return result.path.any((e) => e.target == ro) ||
+      result.path.any((e) {
+        final tg = e.target;
+        return tg is RenderObject && _isDescendant(tg, ro);
+      });
+}
+
+bool _isDescendant(RenderObject node, RenderObject ancestor) {
+  RenderObject? n = node;
+  while (n != null) {
+    if (n == ancestor) return true;
+    n = n.parent;
+  }
+  return false;
 }

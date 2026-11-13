@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
@@ -31,14 +32,30 @@ class MobileCard extends StatelessWidget {
         border: Border.all(color: MobileColors.border),
       ),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: Padding(
+      child: _wrapTappable(
+        Padding(
           padding: padding ?? const EdgeInsets.all(MobileTokens.space3),
           child: child,
         ),
       ),
+    );
+  }
+
+  /// Taps/long-presses via [FTappable] with a subtle hover/press tint; plain
+  /// (non-interactive) when no callback is set.
+  Widget _wrapTappable(Widget content) {
+    if (onTap == null && onLongPress == null) return content;
+    return FTappable.static(
+      onPress: onTap,
+      onLongPress: onLongPress,
+      builder: (context, variants, child) => ColoredBox(
+        color: variants.contains(FTappableVariant.pressed) ||
+                variants.contains(FTappableVariant.hovered)
+            ? YsColors.secondary
+            : const Color(0x00000000),
+        child: child,
+      ),
+      child: content,
     );
   }
 }

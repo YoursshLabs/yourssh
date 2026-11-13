@@ -6,6 +6,7 @@ import 'screens/mobile_home_shell.dart';
 import 'security/app_lock_gate.dart';
 import '../theme/app_theme.dart' show ysRootBuilderTouch;
 import 'theme/mobile_theme.dart';
+import 'theme/toast_inset.dart';
 
 /// Root widget for the Android build. Dark-only; uses [buildMobileTheme]
 /// for the mobile-specific design language. Holds the [MobileBootstrap]
@@ -36,6 +37,7 @@ class _YourSSHMobileAppState extends State<YourSSHMobileApp> {
         themeMode: ThemeMode.dark,
         theme: buildMobileTheme(),
         builder: ysRootBuilderTouch,
+        navigatorObservers: [mobileRouteObserver],
         home: const AppLockGate(child: MobileHomeShell()),
       ),
     );

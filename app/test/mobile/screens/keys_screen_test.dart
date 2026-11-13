@@ -1,3 +1,4 @@
+import 'package:yourssh/theme/app_theme.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -125,6 +126,7 @@ Future<void> _pump(
       ],
       child: MaterialApp(
         theme: buildMobileTheme(),
+        builder: ysRootBuilderTouch,
         home: const MobileKeysScreen(),
       ),
     ),

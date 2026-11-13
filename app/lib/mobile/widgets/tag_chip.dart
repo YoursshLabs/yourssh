@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
@@ -57,9 +58,9 @@ class TagChip extends StatelessWidget {
           : Text(label, style: TextStyle(color: fg, fontSize: 11)),
     );
     if (onTap == null) return chip;
-    return InkWell(
-      borderRadius: BorderRadius.circular(MobileTokens.radiusPill),
-      onTap: onTap,
+    return FTappable.static(
+      selected: selected,
+      onPress: onTap,
       child: chip,
     );
   }
