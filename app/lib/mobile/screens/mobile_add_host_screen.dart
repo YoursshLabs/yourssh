@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../../models/host.dart';
@@ -9,7 +8,6 @@ import '../../models/ssh_key.dart';
 import '../../providers/host_provider.dart';
 import '../../providers/key_provider.dart';
 import '../../providers/session_provider.dart';
-import '../security/app_lock_gate.dart';
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 import '../widgets/button_label.dart';
@@ -348,7 +346,6 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
           hint: _isEdit ? 'Leave blank to keep current' : null,
           textInputAction: TextInputAction.done,
         ),
-      const ListGroup(children: [_BiometricRow()]),
     ]);
   }
 
@@ -557,48 +554,6 @@ class _CertAgentNoteRow extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Toggle row for Face ID / biometric app-lock (reads/writes
-/// [kAppLockPrefKey] in SharedPreferences — same key as AppLockGate).
-class _BiometricRow extends StatefulWidget {
-  const _BiometricRow();
-
-  @override
-  State<_BiometricRow> createState() => _BiometricRowState();
-}
-
-class _BiometricRowState extends State<_BiometricRow> {
-  bool _enabled = true;
-  bool _loaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    SharedPreferences.getInstance().then((p) {
-      if (!mounted) return;
-      setState(() {
-        _enabled = p.getBool(kAppLockPrefKey) ?? true;
-        _loaded = true;
-      });
-    });
-  }
-
-  Future<void> _toggle(bool v) async {
-    setState(() => _enabled = v);
-    final p = await SharedPreferences.getInstance();
-    await p.setBool(kAppLockPrefKey, v);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_loaded) return const SizedBox.shrink();
-    return SettingsRow(
-      title: 'Unlock with biometrics',
-      toggle: _enabled,
-      onToggle: _toggle,
     );
   }
 }
