@@ -22,6 +22,9 @@ Security and polish fixes found while writing the documentation (now at https://
 ### Documentation
 - New documentation site: https://your-ssh.mintlify.site. The README's macOS section reflects that releases are signed and notarized.
 
+### Added
+- **Homebrew:** `brew install --cask yoursshlabs/tap/yourssh` (tap [YoursshLabs/homebrew-tap](https://github.com/YoursshLabs/homebrew-tap); the cask follows new releases automatically).
+
 ---
 
 ## [0.4.0] — 2026-11-13
