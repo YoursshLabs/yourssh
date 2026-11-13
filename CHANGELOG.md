@@ -13,18 +13,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Audit source for CLI and URL connects** — SSH connect rows carry `meta.source` = `cli` / `url`; RDP and VNC rows keep `source: rdp|vnc` and carry `via` = `cli` / `url`.
 
 ### Fixed
+- **The host editor no longer leaks one host's form into another.** Opening "Edit" on a second host (or "New host" / "Duplicate") while the editor was open kept the first host's fields, and Save wrote them (including the password) into the second host.
+- The terminal header and status bar follow edits to the host (label, user, tags, jump chain) instead of showing the values from when the tab was opened.
+- Mail catcher: messages whose log starts with ESMTP options (`mail options: ['BODY=8BITMIME']`) are no longer dropped; the body is parsed separately from the headers, *Clear all* persists, and the log is written unbuffered in append mode.
+- Port validation ("Invalid (1–65535)") in both host editors (SSH/RDP/VNC port and proxy port), port forwarding and the Cloudflare tunnel panel; an empty port keeps its default.
+- Deleting a host also removes its stored proxy password.
+- The mobile sync code and anonymous key are hidden behind a reveal toggle.
+- The status bar also shows in RDP and VNC sessions.
+- Terminal search and input bars keep or return focus correctly (Esc, Enter, clicking away).
+- The read-only "Watching" banner has its own informational colour again.
 - Session and DevOps result tabs can be selected and closed from the keyboard (Tab to a tab, Enter/Space to select, Tab again to its close button).
 - List items in bottom sheets on mobile are at least 44 px tall.
 - The Cloudflare tunnel panel shows "Required" / "Invalid (1–65535)" for a missing label or a bad port instead of silently adding nothing or falling back to 3000 (an empty port still means 3000).
 
 ### Changed
+- **New confirmations:** deleting a host from the dashboard card menu, removing a Known Hosts entry (its pinned key), Sync *Disconnect*, Docker Compose *Down* and opening an executable file externally now ask first; the safe choice has default focus.
+- **SFTP click model:** on both panels a single click selects, and double-click or Enter opens.
+- **Host editor:** a *Delete* button was added to the footer and the *CONNECT* button was removed.
+- **AI chat:** Enter sends, Shift+Enter inserts a new line.
 - **New look:** the app moves to the Amber Brand palette (warm dark surfaces, amber accent), the Inter font and a forui-based UI foundation on desktop and mobile.
 - **New "YourSSH Amber" terminal theme**, the default for new installs. Existing installs keep their current terminal theme.
 - Built with Flutter 3.50.
 - **New sidebar** with grouped sections and an amber selected item.
 - **New tab bar** for sessions, with the active tab marked in amber.
 - **New toasts** for notifications, shown bottom-right on desktop.
-- **UI clean-up:** a lint gate (`tool/check_ui_lint.sh`, run in PR CI) keeps Material `IconButton`/`AlertDialog`/`SnackBar`/`Icons`/`ScaffoldMessenger` out of the app and the plugin packages, remaining colour literals moved to tokens, and `AppColors`/`MobileColors` are now `@Deprecated` aliases of the new tokens (kept rather than deleted, to avoid churn across ~460 call sites).
+- **UI clean-up:** a lint gate (`tool/check_ui_lint.sh`, run in PR CI) keeps Material `IconButton`/`AlertDialog`/`SnackBar`/`Icons`/`ScaffoldMessenger` out of the app and the plugin packages, remaining colour literals moved to tokens, the discovery and server-monitor sheets and the inline tab rename / fallback code editor fields moved to forui, the gate also rejecting `showDialog(`, `showModalBottomSheet` and `TextField(`, and `AppColors`/`MobileColors` are now `@Deprecated` aliases of the new tokens (kept rather than deleted, to avoid churn across ~460 call sites).
 - **New dialogs** across the app; security prompts (host key, RDP certificate) now focus the safe choice by default.
 
 ---
