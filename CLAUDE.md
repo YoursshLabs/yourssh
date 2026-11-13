@@ -32,6 +32,13 @@ cd app && flutter test --name "pattern"                       # filter by test n
 - `flutter analyze` runs with `--no-fatal-infos` in CI: on 3.50 about 214 infos are `package:flutter/material.dart` deprecations (the material_ui migration is a separate task). Warnings and errors still fail.
 - Flutter (3.47 and later) migrates project files on its own, and those changes are committed so builds leave the tree clean. `pub get` adds `build/**` and the platform folders to `analyzer.exclude` in `app/analysis_options.yaml`. `flutter build macos` raises the macOS deployment target to 12.0 (`Podfile`, `project.pbxproj`) and moves the plugins that support Swift Package Manager out of `Podfile.lock`.
 
+## Releases
+
+`develop` → branch `release/X.Y.Z` (bump `app/pubspec.yaml` `version`, date the CHANGELOG section) → PR to `master` → merge runs `.github/workflows/release.yml` (signed + notarized macOS DMG/zip, Windows x64/arm64, Linux x86_64/arm64, Android, GitHub release `vX.Y.Z`) → replace the auto-generated release notes with the CHANGELOG section → PR `master` → `develop` to sync the version. Checklist:
+- **Docs first:** run the `yourssh-docs-sync` skill and merge its YoursshLabs/docs PR before merging the release PR. Site: https://yoursshlabs.com (Mintlify, repo YoursshLabs/docs; `main` takes PRs with a green "Build and check").
+- **Release notes on the site are automatic:** the docs repo's `release-notes.yml` regenerates `release-notes.mdx` from this CHANGELOG at the latest tag (every 6 h; `gh workflow run release-notes.yml -R YoursshLabs/docs` to run it now). Write the CHANGELOG for users — it is the published release note.
+- **Homebrew:** `YoursshLabs/homebrew-tap` (`brew install --cask yoursshlabs/tap/yourssh`) bumps its cask from the latest release every 6 h (`gh workflow run update-cask.yml -R YoursshLabs/homebrew-tap` to run it now).
+
 ## App icon
 
 Every platform icon is generated from the vector masters in `assets/branding/` —
