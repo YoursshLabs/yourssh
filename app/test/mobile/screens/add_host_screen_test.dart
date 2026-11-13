@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:yourssh/mobile/screens/mobile_add_host_screen.dart';
-import 'package:yourssh/mobile/security/app_lock_gate.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
 import 'package:yourssh/models/app_session.dart';
 import 'package:yourssh/theme/app_theme.dart';
@@ -222,32 +221,16 @@ void main() {
     expect(_editable(tester, snippetField).controller.text, 'tmux attach');
   });
 
-  // ── Fix 1: biometric toggle uses the shared kAppLockPrefKey ─────────────
+  // The app lock lives in Settings -> Security, not in the per-host form.
 
-  testWidgets('biometric toggle persists under shared kAppLockPrefKey',
-      (tester) async {
+  testWidgets('host form has no app-lock / biometric switch', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final hosts = HostProvider(StorageService());
     await tester.pumpWidget(_wrap(hosts, const MobileAddHostScreen()));
     await tester.pumpAndSettle();
 
-    // The switch should be present and enabled by default (kAppLockPrefKey
-    // absent → defaults to true).
-    final switchFinder = find.byType(FSwitch);
-    expect(switchFinder, findsOneWidget);
-    expect(tester.widget<FSwitch>(switchFinder).value, isTrue);
-
-    // Toggle it off.
-    await tester.ensureVisible(switchFinder);
-    await tester.pumpAndSettle();
-    await tester.tap(switchFinder);
-    await tester.pumpAndSettle();
-
-    final prefs = await SharedPreferences.getInstance();
-    // Must write under the SHARED key, not a local orphan key.
-    expect(prefs.getBool(kAppLockPrefKey), isFalse);
-    // The old orphan key must not exist.
-    expect(prefs.getBool('yourssh.app_lock_enabled'), isNull);
+    expect(find.byType(FSwitch), findsNothing);
+    expect(find.text('Unlock with biometrics'), findsNothing);
   });
 
   // ── Fix 2: "Save & connect" wires connectAny; plain "Save" does not ─────

@@ -64,9 +64,11 @@ Future<SyncProvider> _pump(
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('renders heading "Sync with Supabase"', (tester) async {
+  testWidgets('renders heading "Sync between devices"', (tester) async {
     await _pump(tester);
-    expect(find.text('Sync with Supabase'), findsOneWidget);
+    expect(find.text('Sync between devices'), findsOneWidget);
+    expect(find.textContaining('Keys and snippets are not synced'), findsOneWidget);
+    expect(find.textContaining('end-to-end'), findsNothing);
   });
 
   testWidgets('renders "Scan QR code" button', (tester) async {

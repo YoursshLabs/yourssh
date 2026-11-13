@@ -174,6 +174,14 @@ class _ForwardTileState extends State<_ForwardTile> {
   }
 
   Future<void> _delete() async {
+    final ok = await showYsConfirm(
+      context,
+      title: 'Delete rule?',
+      message: '${widget.forward.label} (${widget.forward.summary})',
+      confirmLabel: 'Delete',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
     final service = context.read<PortForwardService>();
     final provider = context.read<PortForwardProvider>();
     await service.stop(widget.forward.id);

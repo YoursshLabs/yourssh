@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] — 2026-11-13
+
+Security and polish fixes found while writing the documentation (now at https://yoursshlabs.com).
+
+### Security
+- **Android: the app lock now covers every screen.** The lock used to sit under any open screen, so a terminal, SFTP browser or dialog stayed visible above **YourSSH is locked** (and in the app switcher) after the app locked. The lock now covers the whole app; open screens and sessions survive the unlock.
+
+### Fixed
+- Deleting a port-forwarding rule asks **Delete rule?** first, like every other destructive action.
+- Removing a key from the Keychain also deletes the passphrase YourSSH saved for it, and a removed `~/.ssh` key no longer reappears at the next launch (import it again to bring it back).
+- Script plugins: the documented `ui.*`, `ssh.*` and `storage.*` globals now exist (they used to fail with `'ui' is not defined`); `ui.notify` writes to the plugin console.
+- Android: the pair-device screen says what actually syncs (hosts and their passwords — not keys or snippets), the Auto-lock row describes the real behaviour (**Immediately when you leave the app**), and the misleading per-host **Unlock with biometrics** switch is gone from the host form (the app lock lives in Settings → Security).
+- The terminal-sharing dialog says sessions are end-to-end encrypted with the share code (it said "Shared over TLS").
+
+### Documentation
+- New documentation site: https://yoursshlabs.com. The README's macOS section reflects that releases are signed and notarized.
+
+### Added
+- **Homebrew:** `brew install --cask yoursshlabs/tap/yourssh` (tap [YoursshLabs/homebrew-tap](https://github.com/YoursshLabs/homebrew-tap); the cask follows new releases automatically).
+
+---
+
 ## [0.4.0] — 2026-11-13
 
 A new look (forui "Amber Brand" design system on desktop and mobile), a `yourssh` command-line client with `yourssh://` links, and a round of fixes found by driving the finished app end to end.

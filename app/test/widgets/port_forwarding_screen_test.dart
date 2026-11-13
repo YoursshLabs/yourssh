@@ -210,6 +210,19 @@ void main() {
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
 
+    // Confirmation first: nothing is removed until Delete is confirmed.
+    expect(find.text('Delete rule?'), findsOneWidget);
+    expect(provider.forwards, hasLength(1));
+    await tester.tap(find.widgetWithText(FButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(provider.forwards, hasLength(1));
+    expect(lastService.stopped, isEmpty);
+
+    await rightClick(tester, find.text('delete via menu'));
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FButton, 'Delete'));
+    await tester.pumpAndSettle();
     expect(provider.forwards, isEmpty);
   });
 
@@ -245,6 +258,9 @@ void main() {
 
     await hover(tester, find.text('tile buttons'));
     await tester.tap(find.byTooltip('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete rule?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FButton, 'Delete'));
     await tester.pumpAndSettle();
     expect(provider.forwards, isEmpty);
     expect(lastService.stopped, hasLength(2));
@@ -477,6 +493,9 @@ void main() {
     await tester.pump();
     expect(focusedTooltip(), 'Delete');
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Delete rule?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FButton, 'Delete'));
     await tester.pumpAndSettle();
     expect(provider.forwards, isEmpty);
   });

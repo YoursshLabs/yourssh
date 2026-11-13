@@ -241,6 +241,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     _hostProvider = HostProvider(_storage);
     _keyProvider = KeyProvider();
     _keyProvider.savePassphrase = _storage.savePassphrase;
+    _keyProvider.deletePassphrase = _storage.deletePassphrase;
     _settingsProvider = SettingsProvider();
     _ssh.isShellIntegrationEnabled =
         () => _settingsProvider.shellIntegrationEnabled;
@@ -386,6 +387,9 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
       sftpDelegate: null,
       onLog: (pluginId, level, message) {
         _pluginEngineProvider.addLog(pluginId, '[$level] $message');
+      },
+      onNotify: (pluginId, message, type) {
+        _pluginEngineProvider.addLog(pluginId, '[notify:$type] $message');
       },
     );
     // PluginEngineProvider must be created before PluginLoader because the

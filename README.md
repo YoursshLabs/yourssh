@@ -19,32 +19,34 @@ A professional, open-source SSH client for **macOS**, **Windows**, and **Linux**
 
 ## Download
 
-Get the latest release from the [Releases page](https://github.com/YoursshLabs/yourssh/releases).
+Get the latest release from the [Releases page](https://github.com/YoursshLabs/yourssh/releases). Documentation: **https://yoursshlabs.com** (source: [YoursshLabs/docs](https://github.com/YoursshLabs/docs)).
 
-YourSSH also checks for new releases on launch and from **Settings → Updates**; when a newer version is available it shows a banner and can download the right build for your OS and open the installer for you. Because the app is not code-signed, this is an assisted flow (it never silently replaces itself); if no matching build exists for your platform it opens the Releases page instead.
+YourSSH also checks for new releases on launch and from **Settings → Updates**; when a newer version is available it shows a banner and can download the right build for your OS and open the installer for you. Because the installers are not silently swapped in, this is an assisted flow (it never silently replaces itself); if no matching build exists for your platform it opens the Releases page instead.
 
 | Platform | File |
 |---|---|
-| macOS (Apple Silicon & Intel) | `YourSSH-x.x.x-macOS-universal.dmg` |
+| macOS (Apple Silicon & Intel) | `YourSSH-x.x.x-macOS-universal.dmg` — or `brew install --cask yoursshlabs/tap/yourssh` |
 | Windows (x64) | `YourSSH.Setup.x.x.x-Windows-x64.exe` |
 | Windows (ARM64 — Surface, Snapdragon) | `YourSSH.Setup.x.x.x-Windows-arm64.exe` |
 | Linux (Debian/Ubuntu — x86_64) | `yourssh_x.x.x_amd64.deb` |
 | Linux (Debian/Ubuntu — ARM64) | `yourssh_x.x.x_arm64.deb` |
 | Android (development preview) | `YourSSH-x.x.x-Android.apk` |
 
-### macOS — First Launch
+### macOS — Homebrew
 
-macOS may block the app on first open because it is not yet notarized with Apple. To open it:
-
-1. **Right-click** (or Control-click) the app → **Open**
-2. Click **Open** in the dialog that appears
-
-You only need to do this once. After that, the app opens normally.
-
-Alternatively, run this in Terminal:
 ```bash
-xattr -dr com.apple.quarantine /Applications/YourSSH.app
+brew tap yoursshlabs/tap
+brew trust yoursshlabs/tap        # Homebrew asks you to trust third-party taps once
+brew install --cask yoursshlabs/tap/yourssh
 ```
+
+The cask ([YoursshLabs/homebrew-tap](https://github.com/YoursshLabs/homebrew-tap)) installs the same signed, notarized universal DMG from the Releases page and follows new releases automatically. YourSSH also updates itself from inside the app; `brew upgrade --cask yourssh` works too.
+
+### macOS — Signed and notarized
+
+The DMG and zip are signed with an Apple Developer ID (**SENPRINTS LLC, team 84T567KMYD**) and notarized + stapled by Apple, so YourSSH opens normally: drag it to **Applications** and launch it. You can check a download with `spctl -a -t open --context context:primary-signature -vv YourSSH-x.x.x-macOS-universal.dmg` (expect `source=Notarized Developer ID`). The in-app updater only opens a macOS installer that carries this team's Developer ID signature.
+
+> Building from source, or using an unsigned fork? macOS may block the app on first open. Right-click the app → **Open**, or run `xattr -dr com.apple.quarantine /Applications/YourSSH.app`.
 
 ### Windows — Installation
 
@@ -81,7 +83,7 @@ sudo dpkg -r yourssh
 - **In-app RDP client** — connect to Windows, xrdp, and any RDP-compatible server directly from a tab alongside your SSH sessions; supports NLA, TLS, and auto security modes; optional SSH tunnel via a saved jump host; server-certificate TOFU with pre-auth pin enforcement (a changed certificate aborts before your credentials are sent); **fullscreen mode** with an mstsc-style hover bar at the top edge; full keyboard and mouse support (including Ctrl+Alt+Del); bidirectional clipboard; RDP tabs excluded from terminal-only features (recording, split view, input bar, snippets)
 - **In-app VNC client** — connect to Linux VNC servers (TigerVNC, x11vnc, TightVNC) as first-class tabs too; RFB with None / VNC-password auth, framebuffer rendering, full mouse + keyboard, bidirectional clipboard, server-driven auto-resize, optional SSH tunnel through a saved jump host, and the same fullscreen hover-bar UX as RDP
 - **Multi-tab SSH sessions** with named tabs, per-tab connection state, distro icons (detected via `/etc/os-release`), and middle-click to close
-- **Terminal sharing (multiplayer)** — share a live SSH session with a session code; guests join via the Command Palette and watch or interact in real time; built on Supabase Realtime
+- **Terminal sharing (multiplayer)** — share a live SSH session with a session code; guests join via the Command Palette and watch or interact in real time; built on Supabase Realtime; every message is end-to-end encrypted (AES-256-GCM) with a key derived from the share code
 - **Split terminal view** — horizontal/vertical pane splitting within a session
 - **Search-in-scrollback (Cmd/Ctrl+F)** — regex-powered search across the full terminal buffer; highlights all matches, navigate with Enter / Shift+Enter
 - **Copy & paste that just works** — `Ctrl+C` copies when text is selected and stays SIGINT otherwise (Windows Terminal behavior); `Cmd+C/V` on macOS, `Ctrl(+Shift)+V` to paste, right-click Copy/Paste/Select All menu, and middle-click paste

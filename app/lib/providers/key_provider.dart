@@ -7,6 +7,7 @@ import '../models/ssh_key.dart';
 
 class KeyProvider extends ChangeNotifier {
   static const _prefsKey = 'yourssh.keys';
+  static const _dismissedKey = 'yourssh.keys.dismissed';
   List<SshKeyEntry> _keys = [];
 
   List<SshKeyEntry> get keys => _keys;
@@ -18,7 +19,11 @@ class KeyProvider extends ChangeNotifier {
   /// read the real home directory.
   final bool discoverSshKeys;
 
-  KeyProvider({this.discoverSshKeys = true}) {
+  /// Directory scanned by auto-discovery; defaults to `~/.ssh`. Tests inject a
+  /// temp dir.
+  final String? sshDirPath;
+
+  KeyProvider({this.discoverSshKeys = true, this.sshDirPath}) {
     ready = _load();
   }
 
@@ -40,8 +45,10 @@ class KeyProvider extends ChangeNotifier {
   }
 
   Future<void> _discoverSshKeys() async {
-    final sshDir = Directory(p.join(Platform.environment['HOME'] ?? '', '.ssh'));
+    final sshDir = Directory(
+        sshDirPath ?? p.join(Platform.environment['HOME'] ?? '', '.ssh'));
     if (!sshDir.existsSync()) return;
+    final dismissed = await _loadDismissed();
 
     final knownPrivate = {'id_ed25519', 'id_rsa', 'id_ecdsa', 'id_dsa'};
     for (final name in knownPrivate) {
@@ -50,6 +57,8 @@ class KeyProvider extends ChangeNotifier {
       if (!keyFile.existsSync()) continue;
       // Skip already registered keys
       if (_keys.any((k) => k.privateKeyPath == keyFile.path)) continue;
+      // Skip keys the user removed earlier
+      if (dismissed.contains(keyFile.path)) continue;
 
       final algo = _algorithmFrom(name);
       final pubKey = pubFile.existsSync() ? pubFile.readAsStringSync().trim() : '';
@@ -78,6 +87,24 @@ class KeyProvider extends ChangeNotifier {
   /// main.dart — StorageService is not in the provider tree).
   Future<void> Function(String keyId, String passphrase)? savePassphrase;
 
+  /// Deletes a key's stored passphrase (wired to
+  /// StorageService.deletePassphrase in main.dart / mobile bootstrap).
+  Future<void> Function(String keyId)? deletePassphrase;
+
+  Future<Set<String>> _loadDismissed() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_dismissedKey) ?? const []).toSet();
+  }
+
+  Future<void> _saveDismissed(Set<String> paths) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (paths.isEmpty) {
+      await prefs.remove(_dismissedKey);
+    } else {
+      await prefs.setStringList(_dismissedKey, paths.toList());
+    }
+  }
+
   Future<SshKeyEntry> addKeyFromFile(String path, String label) async {
     final file = File(path);
     if (!file.existsSync()) throw Exception('Key file not found: $path');
@@ -93,6 +120,9 @@ class KeyProvider extends ChangeNotifier {
       privateKeyPath: path,
     );
     _keys.add(entry);
+    // Explicit re-import clears an earlier dismissal of this path.
+    final dismissed = await _loadDismissed();
+    if (dismissed.remove(path)) await _saveDismissed(dismissed);
     final certFile = File('$path-cert.pub');
     if (certFile.existsSync()) {
       _keys.last.certificatePath = certFile.path;
@@ -103,8 +133,20 @@ class KeyProvider extends ChangeNotifier {
   }
 
   Future<void> deleteKey(String id) async {
+    final removed = findById(id);
     _keys.removeWhere((k) => k.id == id);
     await _save();
+    // Remember the path so auto-discovery doesn't re-add it next launch.
+    final path = removed?.privateKeyPath;
+    if (path != null && path.isNotEmpty) {
+      final dismissed = await _loadDismissed();
+      if (dismissed.add(path)) await _saveDismissed(dismissed);
+    }
+    try {
+      await deletePassphrase?.call(id);
+    } catch (e) {
+      debugPrint('[KeyProvider] failed to delete passphrase for $id: $e');
+    }
     notifyListeners();
   }
 

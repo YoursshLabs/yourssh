@@ -68,7 +68,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     // MobileSyncScreen heading must be visible.
-    expect(find.text('Sync with Supabase'), findsOneWidget);
+    expect(find.text('Sync between devices'), findsOneWidget);
     expect(find.byType(MobileSyncScreen), findsOneWidget);
   });
 
@@ -79,6 +79,6 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byType(MobileSyncScreen), findsOneWidget);
-    expect(find.text('Sync with Supabase'), findsOneWidget);
+    expect(find.text('Sync between devices'), findsOneWidget);
   });
 }
