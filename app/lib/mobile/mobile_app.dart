@@ -36,9 +36,14 @@ class _YourSSHMobileAppState extends State<YourSSHMobileApp> {
         debugShowCheckedModeBanner: false,
         themeMode: ThemeMode.dark,
         theme: buildMobileTheme(),
-        builder: ysRootBuilderTouch,
+        // The lock wraps the whole navigator, so pushed routes and dialogs are
+        // covered too. It sits outside ysRootBuilderTouch's FToaster so toasts
+        // stay under the lock as well.
+        builder: (c, child) => AppLockGate(
+          child: ysRootBuilderTouch(c, child),
+        ),
         navigatorObservers: [mobileRouteObserver],
-        home: const AppLockGate(child: MobileHomeShell()),
+        home: const MobileHomeShell(),
       ),
     );
   }
