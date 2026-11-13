@@ -13,7 +13,6 @@ import '../theme/mobile_tokens.dart';
 import '../widgets/button_label.dart';
 import '../widgets/list_group.dart';
 import '../widgets/section_header.dart';
-import '../widgets/settings_row.dart';
 
 /// Grouped add/edit host form for mobile (Design 02).
 ///

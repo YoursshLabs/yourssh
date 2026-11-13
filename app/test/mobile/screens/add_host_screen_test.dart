@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:yourssh/mobile/screens/mobile_add_host_screen.dart';
-import 'package:yourssh/mobile/security/app_lock_gate.dart';
 import 'package:yourssh/mobile/theme/mobile_theme.dart';
 import 'package:yourssh/models/app_session.dart';
 import 'package:yourssh/theme/app_theme.dart';
