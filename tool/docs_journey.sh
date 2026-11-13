@@ -48,8 +48,13 @@ MODES="${MODES:-desktop mobile}"
 for m in $MODES; do
   launch "$m"
   # A hung/aborted mobile launch (observed once) is retried a single time.
-  if [[ "$m" == mobile && "$(ls "$OUT"/M1-mobile/*.png 2>/dev/null | wc -l | tr -d ' ')" -lt 14 ]]; then
-    echo "mobile run produced too few shots; retrying once"; launch mobile
+  # ...and so is one whose shots are not phone-sized (390x844 @2x = 780 px wide).
+  if [[ "$m" == mobile ]]; then
+    W="$(sips -g pixelWidth "$OUT/M1-mobile/02-hosts.png" 2>/dev/null | awk '/pixelWidth/{print $2}')"
+    N="$(ls "$OUT"/M1-mobile/*.png 2>/dev/null | wc -l | tr -d ' ')"
+    if [[ "$N" -lt 14 || "$W" != 780 ]]; then
+      echo "mobile run produced $N shots at width ${W:-none}; retrying once"; launch mobile
+    fi
   fi
 done
 cat "$OUT"/INDEX.*.part.md > "$OUT/INDEX.md" 2>/dev/null || true

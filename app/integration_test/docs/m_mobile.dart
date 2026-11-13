@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:yourssh/mobile/mobile_app.dart';
 import 'package:yourssh/mobile/screens/mobile_terminal_screen.dart';
 import 'package:yourssh/mobile/widgets/host_card.dart';
@@ -32,8 +33,22 @@ Future<void> mtap(WidgetTester t, String label, {int wait = 600}) async {
   await tapText(t, label, wait: wait);
 }
 
+/// The window can come up desktop-sized (observed after a desktop launch):
+/// force the phone size and wait until the Flutter view really is 390 wide.
+Future<void> ensurePhoneWindow(WidgetTester t) async {
+  for (var i = 0; i < 8; i++) {
+    final w = t.view.physicalSize.width / t.view.devicePixelRatio;
+    if (w > 380 && w < 420) return;
+    await windowManager.setMinimumSize(const Size(300, 400));
+    await windowManager.setSize(const Size(390, 876));
+    await sleepPump(t, 700);
+  }
+  throw StateError('mobile window is not phone-sized: ${t.view.physicalSize}');
+}
+
 Future<void> runMobile(JourneyContext c) async {
   final t = c.t;
+  await ensurePhoneWindow(t);
   // Lock gate (fake authenticator is still pending).
   await sleepPump(t, 1500);
   if (find.text('YourSSH is locked').evaluate().isNotEmpty) {
@@ -49,6 +64,7 @@ Future<void> runMobile(JourneyContext c) async {
     await sleepPump(t, 500);
     runApp(const YourSSHMobileApp());
     await sleepPump(t, 2500);
+    await ensurePhoneWindow(t);
   } else {
     c.notes.add('M1: app-lock screen not shown');
   }
