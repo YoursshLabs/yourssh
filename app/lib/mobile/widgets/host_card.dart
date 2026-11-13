@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../../models/host.dart';
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 import 'host_avatar.dart';
 import 'latency_badge.dart';
-import 'mobile_card.dart';
 import 'status_dot.dart';
 import 'tag_chip.dart';
 
-/// Termius-style host row: seeded avatar (with status dot overlay) + label
-/// + user@ip (mono, faint) + latency badge + chevron.
+/// Host row on [YsHostCard]: seeded avatar (with status dot overlay) + label
+/// + user@ip (mono) + tags + latency badge + chevron. Tap and long-press are
+/// forwarded; the card is also keyboard-activatable.
 class HostCard extends StatelessWidget {
   final Host host;
   final bool online;
@@ -49,65 +50,34 @@ class HostCard extends StatelessWidget {
         horizontal: MobileTokens.space3,
         vertical: MobileTokens.space1 + 2,
       ),
-      child: MobileCard(
+      child: YsHostCard(
+        leading: HostAvatar(
+          label: host.label,
+          seed: host.host,
+          statusState: _connState,
+        ),
+        title: host.label,
+        subtitle: _subtitle,
+        tags: [for (final tag in host.tags) TagChip(label: tag)],
         onTap: onTap,
         onLongPress: onLongPress,
-        child: Row(
-          children: [
-            HostAvatar(
-              label: host.label,
-              seed: host.host,
-              statusState: _connState,
-            ),
-            const SizedBox(width: MobileTokens.space3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    host.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: mobileBody(
-                      size: 15.5,
-                      weight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: mobileMono(
-                      size: 12.5,
-                      color: MobileColors.textFaint,
-                    ),
-                  ),
-                  if (host.tags.isNotEmpty) ...[
-                    const SizedBox(height: MobileTokens.space2),
-                    Wrap(
-                      spacing: MobileTokens.space1 + 2,
-                      runSpacing: MobileTokens.space1,
-                      children: [for (final tag in host.tags) TagChip(label: tag)],
-                    ),
-                  ],
-                ],
+        trailingAction: SizedBox(
+          height: MobileTokens.avatar,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!online && !connecting)
+                const LatencyBadge(offline: true)
+              else if (latencyMs != null)
+                LatencyBadge(ms: latencyMs),
+              const SizedBox(width: MobileTokens.space1),
+              const Icon(
+                FLucideIcons.chevronRight,
+                color: MobileColors.textFaint,
+                size: 20,
               ),
-            ),
-            const SizedBox(width: MobileTokens.space2),
-            if (!online && !connecting)
-              const LatencyBadge(offline: true)
-            else if (latencyMs != null)
-              LatencyBadge(ms: latencyMs)
-            else
-              const SizedBox.shrink(),
-            const SizedBox(width: MobileTokens.space1),
-            const Icon(
-              Icons.chevron_right,
-              color: MobileColors.textFaint,
-              size: 20,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

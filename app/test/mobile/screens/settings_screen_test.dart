@@ -1,3 +1,4 @@
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'package:yourssh/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -87,11 +88,11 @@ void main() {
     ).last; // innermost Row wrapping the row content
     final biometricSwitch = find.descendant(
       of: biometricRow,
-      matching: find.byType(Switch),
+      matching: find.byType(FSwitch),
     );
     expect(biometricSwitch, findsOneWidget);
 
-    final initialValue = tester.widget<Switch>(biometricSwitch).value;
+    final initialValue = tester.widget<FSwitch>(biometricSwitch).value;
     await tester.tap(biometricSwitch);
     await tester.pumpAndSettle();
 
@@ -110,11 +111,11 @@ void main() {
     ).last;
     final shortcutSwitch = find.descendant(
       of: shortcutRow,
-      matching: find.byType(Switch),
+      matching: find.byType(FSwitch),
     );
     expect(shortcutSwitch, findsOneWidget);
 
-    final initialValue = tester.widget<Switch>(shortcutSwitch).value;
+    final initialValue = tester.widget<FSwitch>(shortcutSwitch).value;
     await tester.tap(shortcutSwitch);
     await tester.pumpAndSettle();
 

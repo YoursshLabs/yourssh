@@ -1,3 +1,4 @@
+import 'package:yourssh/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +17,7 @@ Future<void> _pump(WidgetTester tester, HostProvider hosts) async {
   final sessions = SessionProvider(SshService(StorageService()), TabMetadataService());
   final probe = HostReachabilityProbe(connector: (h, p, to) async {});
   await tester.pumpWidget(MaterialApp(
+    builder: ysRootBuilderTouch,
     home: MultiProvider(
       providers: [
         ChangeNotifierProvider<HostProvider>.value(value: hosts),

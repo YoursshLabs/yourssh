@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 
 import '../../models/ssh_key.dart';
 import '../theme/mobile_theme.dart';
@@ -65,7 +66,7 @@ class KeyCard extends StatelessWidget {
                     BorderRadius.circular(MobileTokens.radiusAvatar),
               ),
               child: const Icon(
-                Icons.vpn_key_rounded,
+                FLucideIcons.keyRound,
                 color: Color(0xFFB99EFF), // soft lavender
                 size: 22,
               ),
@@ -110,7 +111,7 @@ class KeyCard extends StatelessWidget {
 
             // ── Chevron ───────────────────────────────────────────────────────
             const Icon(
-              Icons.chevron_right,
+              FLucideIcons.chevronRight,
               color: MobileColors.textFaint,
               size: 20,
             ),

@@ -1,3 +1,5 @@
+import 'package:yourssh/theme/app_theme.dart';
+import 'package:yourssh_ui/yourssh_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -105,6 +107,7 @@ Future<_FakePortForwardService> _pump(WidgetTester tester) async {
 
   await tester.pumpWidget(MaterialApp(
     theme: buildMobileTheme(),
+    builder: ysRootBuilderTouch,
     home: MultiProvider(
       providers: [
         ChangeNotifierProvider<PortForwardProvider>.value(value: provider),
@@ -125,6 +128,7 @@ Future<({_FakePortForwardProvider provider, _FakePortForwardService service})>
 
   await tester.pumpWidget(MaterialApp(
     theme: buildMobileTheme(),
+    builder: ysRootBuilderTouch,
     home: MultiProvider(
       providers: [
         ChangeNotifierProvider<PortForwardProvider>.value(value: provider),
@@ -172,16 +176,16 @@ void main() {
   testWidgets('tapping play icon on stopped rule calls service.start',
       (tester) async {
     final svc = await _pump(tester);
-    await tester.tap(find.byIcon(Icons.play_circle_outline));
-    await tester.pump();
+    await tester.tap(find.byIcon(FLucideIcons.circlePlay));
+    await tester.pumpAndSettle();
     expect(svc.startedIds, contains(_stoppedRule.id));
   });
 
   testWidgets('tapping stop icon on active rule calls service.stop',
       (tester) async {
     final svc = await _pump(tester);
-    await tester.tap(find.byIcon(Icons.stop_circle_outlined));
-    await tester.pump();
+    await tester.tap(find.byIcon(FLucideIcons.circleStop));
+    await tester.pumpAndSettle();
     expect(svc.stoppedIds, contains(_activeRule.id));
   });
 

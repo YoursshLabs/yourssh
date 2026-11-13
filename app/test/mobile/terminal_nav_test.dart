@@ -1,3 +1,4 @@
+import 'package:yourssh/theme/app_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -99,6 +100,7 @@ Future<({_FakeSessionProvider sp, HostProvider hp})> _pump(
         ChangeNotifierProvider<SettingsProvider>.value(value: settings),
       ],
       child: MaterialApp(
+        builder: ysRootBuilderTouch,
         home: const MobileHostsScreen(),
       ),
     ),
