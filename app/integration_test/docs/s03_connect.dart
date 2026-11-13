@@ -123,7 +123,6 @@ Future<void> runFirstConnect(JourneyContext c) async {
   });
   await step(c.notes, 'recording', () async {
     await tapTooltip(t, 'Start recording', wait: 900);
-    await typeCmd(c, '');
     await typeCmd(c, 'echo recorded session; date');
     await c.snap('$s/20-recording-active', 'Recording started: REC indicator active in the header and status bar');
   });
