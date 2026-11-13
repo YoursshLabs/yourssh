@@ -41,6 +41,8 @@ class _ProxySection extends StatelessWidget {
             icon: FLucideIcons.hash,
             keyboardType: TextInputType.number,
             onSubmit: form._submit,
+            // Empty stays allowed (saves no proxy port).
+            validator: _HostDetailPanelState._validatePort,
           ),
           _fieldGap,
           _Field(

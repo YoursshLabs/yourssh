@@ -89,4 +89,49 @@ void main() {
     expect(saved!.proxyHost, 'proxy.local');
     expect(saved!.proxyPort, 8080);
   });
+
+  Future<void> openHttpProxy(WidgetTester tester) async {
+    await pumpPanel(tester, existing: Host(label: 's', host: 'h', username: 'u'));
+    final dropdown = find.byKey(const ValueKey('proxy-type-dropdown'));
+    await tester.ensureVisible(dropdown);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('HTTP CONNECT').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const ValueKey('proxy-host-field')), 'proxy.local');
+  }
+
+  Future<void> trySave(WidgetTester tester) async {
+    final save = find.byKey(const ValueKey('host-save-button'));
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+  }
+
+  for (final bad in ['0', '65536', '70000']) {
+    testWidgets('proxy port "$bad" shows the error and blocks Save',
+        (tester) async {
+      await openHttpProxy(tester);
+      await tester.enterText(
+          find.byKey(const ValueKey('proxy-port-field')), bad);
+      await trySave(tester);
+      expect(find.text('Invalid (1–65535)'), findsOneWidget);
+      expect(saved, isNull);
+    });
+  }
+
+  testWidgets('proxy port 65535 saves; empty keeps saving no port',
+      (tester) async {
+    await openHttpProxy(tester);
+    await tester.enterText(
+        find.byKey(const ValueKey('proxy-port-field')), '65535');
+    await trySave(tester);
+    expect(saved?.proxyPort, 65535);
+
+    await openHttpProxy(tester);
+    await tester.enterText(find.byKey(const ValueKey('proxy-port-field')), '');
+    await trySave(tester);
+    expect(saved?.proxyPort, isNull);
+  });
 }
