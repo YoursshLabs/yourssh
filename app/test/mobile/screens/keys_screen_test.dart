@@ -270,6 +270,32 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Generate sheet sits on a solid card surface covering its content',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(tester, keys: const []);
+    await tester.tap(find.byTooltip('Generate key'));
+    await tester.pumpAndSettle();
+    final surface = find.byKey(const ValueKey('sheet-surface'));
+    expect(surface, findsOneWidget);
+    final deco = tester.widget<DecoratedBox>(surface).decoration as BoxDecoration;
+    expect(deco.color, YsColors.card);
+    expect(deco.color!.a, 1.0);
+    final rect = tester.getRect(surface);
+    for (final f in [
+      find.byKey(const ValueKey('keygen-passphrase')),
+      find.descendant(
+          of: surface, matching: find.widgetWithText(FButton, 'Generate')),
+    ]) {
+      final r = tester.getRect(f);
+      expect(rect.contains(r.topLeft) && rect.contains(r.bottomRight), isTrue,
+          reason: '$r not inside $rect');
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('remove key: sheet -> destructive confirm, Cancel focused', (
     tester,
   ) async {

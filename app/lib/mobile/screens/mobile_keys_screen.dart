@@ -15,6 +15,28 @@ import '../widgets/key_card.dart';
 
 import 'package:yourssh_ui/yourssh_ui.dart';
 
+/// Opaque card surface for bottom sheets. `FSheet` paints no background of its
+/// own, so without this the screen beneath shows through the sheet.
+class _SheetSurface extends StatelessWidget {
+  final Widget child;
+  const _SheetSurface({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      key: const ValueKey('sheet-surface'),
+      decoration: const BoxDecoration(
+        color: YsColors.card,
+        border: Border(top: BorderSide(color: YsColors.border)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(YsRadius.mobileCard),
+        ),
+      ),
+      child: SizedBox(width: double.infinity, child: child),
+    );
+  }
+}
+
 /// Keys tab — list of SSH keys with Generate / Import actions.
 class MobileKeysScreen extends StatelessWidget {
   const MobileKeysScreen({super.key});
@@ -145,7 +167,8 @@ class MobileKeysScreen extends StatelessWidget {
       context: context,
       side: FLayout.btt,
       mainAxisMaxRatio: null,
-      builder: (ctx) => _ImportPassphraseSheet(filename: filename),
+      builder: (ctx) =>
+          _SheetSurface(child: _ImportPassphraseSheet(filename: filename)),
     );
   }
 
@@ -153,12 +176,12 @@ class MobileKeysScreen extends StatelessWidget {
     showFSheet<void>(
       context: context,
       side: FLayout.btt,
-      mainAxisMaxRatio: null,
+      mainAxisMaxRatio: 0.9,
       builder: (_) => ChangeNotifierProvider.value(
         value: context.read<KeyProvider>(),
         child: Provider.value(
           value: context.read<KeyGenService>(),
-          child: const _GenerateSheet(),
+          child: const _SheetSurface(child: _GenerateSheet()),
         ),
       ),
     );
@@ -169,19 +192,21 @@ class MobileKeysScreen extends StatelessWidget {
       context: context,
       side: FLayout.btt,
       mainAxisMaxRatio: null,
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.all(MobileTokens.space2),
-          child: FItem(
-            key: const ValueKey('key-remove-item'),
-            variant: .destructive,
-            prefix: const Icon(FLucideIcons.trash2),
-            title: const Text('Remove key'),
-            onPress: () {
-              Navigator.pop(ctx);
-              _confirmDelete(context, entry);
-            },
+      builder: (ctx) => _SheetSurface(
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(MobileTokens.space2),
+            child: FItem(
+              key: const ValueKey('key-remove-item'),
+              variant: .destructive,
+              prefix: const Icon(FLucideIcons.trash2),
+              title: const Text('Remove key'),
+              onPress: () {
+                Navigator.pop(ctx);
+                _confirmDelete(context, entry);
+              },
+            ),
           ),
         ),
       ),
