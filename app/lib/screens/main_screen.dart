@@ -79,6 +79,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   _SidePanel _sidePanel = _SidePanel.none;
   final Map<String, PluginContextImpl> _pluginContexts = {};
   Host? _editingHost;
+  int _panelSerial = 0;
   String? _initialGroup;
   bool _viewingTerminal = false;
   bool _showAiChat = false;
@@ -342,6 +343,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   void _openHostPanel({Host? existing, String? initialGroup}) {
     setState(() {
       _sidePanel = _SidePanel.host;
+      _panelSerial++;
       _editingHost = existing;
       _initialGroup = initialGroup;
     });
@@ -719,6 +721,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 if (_nav == NavSection.hosts && !_viewingTerminal) ...[
                   if (_sidePanel == _SidePanel.host)
                     HostDetailPanel(
+                      key: hostEditorKey(_editingHost, _panelSerial),
                       existing: _editingHost,
                       initialGroup: _initialGroup,
                       onClose: _closePanel,

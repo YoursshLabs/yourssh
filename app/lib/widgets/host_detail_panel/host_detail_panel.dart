@@ -36,6 +36,13 @@ part 'remote_desktop_section.dart';
 part 'sftp_section.dart';
 part 'template_section.dart';
 
+/// Key for the mounted [HostDetailPanel]. The panel reads `existing` only in
+/// `initState`, so the host shell must remount it whenever the edit target
+/// changes: a different host id, or a fresh "new host" editor ([serial] is
+/// bumped on every open of a new editor so New -> New resets the form too).
+Key hostEditorKey(Host? editing, int serial) =>
+    ValueKey(editing?.id ?? 'new-$serial');
+
 class HostDetailPanel extends StatefulWidget {
   final Host? existing;
   final String? initialGroup;
