@@ -16,6 +16,7 @@ import '../providers/host_provider.dart';
 import '../providers/recording_provider.dart';
 import '../providers/session_provider.dart';
 import '../services/local_shell_service.dart';
+import 'live_host.dart';
 import 'session_tab.dart' show agentForwardingTooltip;
 
 /// Bottom status line of a session workspace, on [YsStatusBar]. Shows only
@@ -130,7 +131,8 @@ class SessionStatusBar extends StatelessWidget {
       );
     }
 
-    final hops = s.host.jumpHostIds;
+    final host = selectLiveHost(context, s.host);
+    final hops = host.jumpHostIds;
     final via = hops.isEmpty
         ? null
         : _selectOr<HostProvider, String>(
@@ -147,7 +149,7 @@ class SessionStatusBar extends StatelessWidget {
         _sshStatus(status, error),
         YsStatusItem(
           key: const ValueKey('status-user-host'),
-          label: '${s.host.username}@${s.host.host}',
+          label: '${host.username}@${host.host}',
           color: YsColors.foreground,
         ),
         _agent(agent),

@@ -6,6 +6,7 @@ import '../models/local_session.dart';
 import '../models/ssh_session.dart';
 import '../models/terminal_session.dart';
 import '../providers/shell_integration_provider.dart';
+import 'live_host.dart';
 
 /// Workspace header identity for the active terminal: host label, `user@host`,
 /// host tags and the shell-integration working directory. Only data that is
@@ -13,7 +14,7 @@ import '../providers/shell_integration_provider.dart';
 /// session).
 ///
 /// Listens to nothing but the active session's cwd (a `select` on
-/// [ShellIntegrationProvider]); it never watches the terminal buffer, so
+/// [ShellIntegrationProvider]) and its host's stored version ([selectLiveHost]); it never watches the terminal buffer, so
 /// output does not rebuild it. [debugBuildCount] lets a test assert that.
 class TerminalHeaderChips extends StatelessWidget {
   @visibleForTesting
@@ -36,9 +37,10 @@ class TerminalHeaderChips extends StatelessWidget {
     var tags = const <String>[];
     switch (s) {
       case SshSession():
-        title = s.host.label.isNotEmpty ? s.host.label : s.tabLabel;
-        subtitle = '${s.host.username}@${s.host.host}';
-        tags = s.host.tags.take(2).toList();
+        final host = selectLiveHost(context, s.host);
+        title = host.label.isNotEmpty ? host.label : s.tabLabel;
+        subtitle = '${host.username}@${host.host}';
+        tags = host.tags.take(2).toList();
       case LocalSession():
         title = s.tabLabel;
       default:

@@ -226,6 +226,39 @@ void main() {
       expect(find.byTooltip('Auth failed: permission denied'), findsOneWidget);
     });
 
+    testWidgets('user@host follows an edit of the stored host; terminal '
+        'output does not rebuild the bar', (tester) async {
+      final s = sshSession()..termType = 'xterm-256color';
+      await tester.runAsync(() => hosts.addHost(s.host));
+      await tester.pumpWidget(harness(s));
+      expect(fieldText(tester, 'status-user-host'), 'deploy@prod.example.com');
+
+      await tester.runAsync(
+        () => hosts.updateHost(
+          s.host.copyWith(username: 'ops', host: 'new.example.com'),
+        ),
+      );
+      await tester.pump();
+      expect(fieldText(tester, 'status-user-host'), 'ops@new.example.com');
+
+      final builds = SessionStatusBar.debugBuildCount;
+      for (var i = 0; i < 20; i++) {
+        s.terminal.write('output $i\r\n');
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(SessionStatusBar.debugBuildCount, builds);
+    });
+
+    testWidgets('a deleted host falls back to the session snapshot',
+        (tester) async {
+      final s = sshSession()..termType = 'xterm-256color';
+      await tester.runAsync(() => hosts.addHost(s.host));
+      await tester.pumpWidget(harness(s));
+      await tester.runAsync(() => hosts.deleteHost(s.host.id));
+      await tester.pump();
+      expect(fieldText(tester, 'status-user-host'), 'deploy@prod.example.com');
+    });
+
     testWidgets('agent-forwarding events update the field', (tester) async {
       final s = sshSession(agentForwarding: true);
       await tester.pumpWidget(harness(s));
