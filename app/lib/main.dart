@@ -394,6 +394,7 @@ class _YourSSHAppState extends State<YourSSHApp> with WindowListener {
     late final PluginLoader loader;
     loader = PluginLoader(
       engine: engine,
+      reservedIds: {for (final p in kRegisteredPlugins) p.id},
       onConsentRequired: (id, manifest, dir) {
         _pluginEngineProvider.setPendingConsent(id, manifest, dir);
       },
