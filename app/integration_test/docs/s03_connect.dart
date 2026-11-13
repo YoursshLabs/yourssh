@@ -95,7 +95,7 @@ Future<void> runFirstConnect(JourneyContext c) async {
     await c.snap('$s/14-tab-context-menu', 'Right-click on the session tab: Rename, Pin, Color tag, Close');
     await tapText(t, 'Color tag', wait: 500);
     await c.snap('$s/15-tab-color-submenu', 'Tab colour submenu');
-    await pressEscape(t, times: 2);
+    await pressEscape(t); // choosing "Color tag" already closed the parent menu; a second Esc would reach the shell
   });
   await step(c.notes, 'tab pin', () async {
     await rightClick(t, find.textContaining('Demo Server · demo').first);
