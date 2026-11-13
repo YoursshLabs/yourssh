@@ -54,13 +54,31 @@ Future<void> runMoreHosts(JourneyContext c) async {
   await tapKey(t, 'host-save-button', wait: 900);
   await sleepPump(t, 600);
   await c.snap('$s/07-dashboard-four-hosts', 'Dashboard with four hosts');
-  // Connect through the chain
+  // Connect through the chain. The Bastion endpoint was pre-pinned (seeded in
+  // the mock prefs) under a different key type, so its first hop raises the
+  // blocking "Host key type changed" dialog.
   await step(c.notes, 'connect chain', () async {
     await doubleTap(t, find.text('DB Internal').first);
+    final dlg = await waitText(t, 'Host key type changed', seconds: 40, throwOnTimeout: false);
+    if (dlg) {
+      await c.snap('$s/08-host-key-type-changed', 'Security prompt "Host key type changed": the bastion was previously trusted under a different key type (the demo pin is a seeded fake). Old and new fingerprints are shown and Cancel is focused');
+      await tapText(t, 'Trust', exact: false, wait: 900);
+    } else {
+      c.notes.add('05: the "Host key type changed" dialog did not appear for the Bastion hop.');
+    }
     await waitFor(t, () => c.sessions.sshSessions.any((x) => x.host.label == 'DB Internal' && x.status == SessionStatus.connected),
         seconds: 40, what: 'db connected');
     await sleepPump(t, 2500);
     await typeCmd(c, 'hostname');
-    await c.snap('$s/08-chain-terminal', 'Connected through the bastion: `hostname` prints db-internal; status bar shows the jump chain');
+    await c.snap('$s/09-chain-terminal', 'Connected through the bastion: `hostname` prints db-internal; status bar shows the jump chain');
+  });
+  await step(c.notes, 'split two sessions', () async {
+    await t.tap(find.textContaining('Demo Server · demo').first, warnIfMissed: false);
+    await sleepPump(t, 800);
+    await tapTooltip(t, 'Split Horizontal', wait: 1500);
+    await c.snap('$s/10-split-two-sessions', 'Split horizontal with two live sessions: Demo Server on the left, DB Internal on the right');
+    await tapTooltip(t, 'Split Vertical', wait: 1500);
+    await c.snap('$s/11-split-two-sessions-vertical', 'Split vertical with the same two sessions');
+    await tapTooltip(t, 'Single', wait: 800);
   });
 }

@@ -22,7 +22,7 @@ Future<void> back(WidgetTester t) async {
 
 Future<void> unlock(WidgetTester t) async {
   if (find.text('YourSSH is locked').evaluate().isNotEmpty) {
-    await mtap(t, 'Unlock', wait: 1200);
+    await tapText(t, 'Unlock', wait: 1200);
   }
 }
 

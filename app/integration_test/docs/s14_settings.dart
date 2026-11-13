@@ -1,6 +1,9 @@
 // 14 settings: every section, hotkeys screen, sync dialogs.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/providers/sync_provider.dart';
+import 'package:yourssh/services/p2p_sync_service.dart';
+import 'package:yourssh/widgets/qr_export_dialog.dart';
+import 'package:yourssh_ui/yourssh_ui.dart' show showYsDialog;
 import 'nav.dart';
 import 'sections.dart';
 
@@ -50,10 +53,24 @@ Future<void> runSettings(JourneyContext c) async {
     await step(c.notes, 'p2p', () async {
       await tapText(t, 'P2P Transfer', wait: 800);
       await c.snap('$s/16-sync-p2p', 'Sync > P2P Transfer tab (LAN sync without a server)');
-      if (byKeyStr('sync-show-qr').evaluate().isNotEmpty) {
-        await tapKey(t, 'sync-show-qr', wait: 1800);
-        await c.snap('$s/17-sync-qr-dialog', 'Show QR Code: LAN sync dialog (network interface choice, QR; this dialog is not dismissed by Esc, use Cancel)');
+      // The real dialog would list this machine's LAN IP: open it with a fake
+      // service reporting a documentation address (RFC 5737) and a fake URL.
+      showYsDialog<void>(
+        c.appContext,
+        barrierDismissible: false,
+        builder: (_) => QrExportDialog(
+          getPayload: () async => 'docs-demo-payload',
+          service: _FakeP2P(),
+        ),
+      );
+      await sleepPump(t, 1800);
+      await c.snap('$s/17-sync-qr-dialog', 'Show QR Code: LAN sync dialog (network interface choice, QR, countdown). The interface address is a documentation address supplied by the harness, not the real LAN IP');
+      await pressEscape(t);
+      if (find.text('Cancel').evaluate().isNotEmpty) {
+        c.notes.add('14: Esc did not close the QR export dialog; used Cancel.');
         await tapText(t, 'Cancel', wait: 700);
+      } else {
+        c.notes.add('14: Esc closes the QR export dialog.');
       }
       if (byKeyStr('sync-import-code').evaluate().isNotEmpty) {
         await tapKey(t, 'sync-import-code', wait: 900);
@@ -70,4 +87,20 @@ Future<void> runSettings(JourneyContext c) async {
     await sp.clearSupabaseConfig();
     await sleepPump(t, 500);
   });
+}
+
+class _FakeP2P extends P2PSyncService {
+  @override
+  Future<List<NetworkInterfaceInfo>> getLocalInterfaces() async =>
+      const [NetworkInterfaceInfo(name: 'en0', address: '192.0.2.10')];
+
+  @override
+  Future<String> startServer({
+    required String encryptedPayload,
+    required String hostAddress,
+  }) async =>
+      'http://192.0.2.10:49321/sync';
+
+  @override
+  Future<void> stop() async {}
 }

@@ -47,8 +47,12 @@ Future<void> runWebTools(JourneyContext c) async {
       await tapText(t, 'POST', wait: 600);
       await typeIntoCurrent(t, 'http', '$base/api/items');
       await tapText(t, 'Body', wait: 500);
-      final eds = find.byType(EditableText);
-      await t.enterText(eds.last, '{"name": "demo", "enabled": true}');
+      // The JSON body area: the multi-line (or placeholder-only) editable.
+      final body = find.byWidgetPredicate((w) =>
+          w is EditableText && w.controller.text.isEmpty && (w.maxLines == null || (w.maxLines ?? 1) > 1));
+      final target = body.evaluate().isNotEmpty ? body.first : find.byType(EditableText).last;
+      await t.tap(target, warnIfMissed: false);
+      await t.enterText(target, '{"name": "demo", "enabled": true}');
       await sleepPump(t, 400);
       await c.snap('$s/06-post-body', 'POST with a JSON body');
       await tapText(t, 'Send', wait: 500);

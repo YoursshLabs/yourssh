@@ -22,7 +22,7 @@ Future<void> runRecordings(JourneyContext c) async {
     await tapTooltip(t, 'Play recording', wait: 1500);
     await c.snap('$s/03-player', 'Recording player opened (paused at 00:00): timeline, play button, speed control');
     await t.tap(find.byIcon(FLucideIcons.play).last, warnIfMissed: false);
-    await sleepPump(t, 900);
+    await sleepPump(t, 2800);
     await c.snap('$s/03b-player-playing', 'Recording playing: the session replays in the terminal view');
     await sleepPump(t, 2500);
     await tapTooltip(t, 'Close player', wait: 600);

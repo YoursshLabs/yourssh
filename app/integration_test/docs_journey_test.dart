@@ -19,6 +19,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:yourssh/main.dart' as app;
 import 'package:yourssh/mobile/mobile_app.dart';
 import 'package:yourssh/models/host.dart';
+import 'package:yourssh/models/known_host.dart';
 import 'package:yourssh/models/ssh_key.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
@@ -41,6 +42,18 @@ void main() {
     final sandbox = installIsolation(prefs: {
       // Debounce the GitHub update check: no network, no banner.
       'last_update_check': DateTime.now().millisecondsSinceEpoch,
+      // Bastion pre-pinned under a DIFFERENT key type with a fake fingerprint:
+      // its first connect raises the "Host key type changed" dialog (section 05).
+      if (!isMobileMode)
+        'yourssh.known_hosts': jsonEncode([
+          KnownHost(
+            host: '127.0.0.1',
+            port: 2223,
+            keyType: 'ssh-rsa',
+            fingerprint: 'SHA256:Zm9ha2UtZG9jcy1kZW1vLWZpbmdlcnByaW50LW5vdC1yZWFs',
+            addedAt: DateTime(2026, 11, 1),
+          ).toJson(),
+        ]),
     });
     final shots = Shots(out);
     final ctx = JourneyContext(tester, shots, sandbox);

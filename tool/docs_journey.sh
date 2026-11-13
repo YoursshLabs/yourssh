@@ -45,7 +45,13 @@ launch() {
 caffeinate -dims -w $$ >/dev/null 2>&1 &   # keep the display awake: a sleeping/occluded window stops Flutter frames
 mkdir -p "$OUT"
 MODES="${MODES:-desktop mobile}"
-for m in $MODES; do launch "$m"; done
+for m in $MODES; do
+  launch "$m"
+  # A hung/aborted mobile launch (observed once) is retried a single time.
+  if [[ "$m" == mobile && "$(ls "$OUT"/M1-mobile/*.png 2>/dev/null | wc -l | tr -d ' ')" -lt 14 ]]; then
+    echo "mobile run produced too few shots; retrying once"; launch mobile
+  fi
+done
 cat "$OUT"/INDEX.*.part.md > "$OUT/INDEX.md" 2>/dev/null || true
 rm -f "$OUT"/INDEX.*.part.md
 

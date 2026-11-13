@@ -81,6 +81,15 @@ Future<void> runSftp(JourneyContext c) async {
     await tapText(t, 'Create', wait: 1200);
     await c.snap('$s/15-folder-created', 'The new folder appears in the listing');
   });
+  await step(c.notes, 'mkdir existing', () async {
+    await rightClick(t, find.text('notes.txt').last);
+    await tapText(t, 'New Folder', wait: 800);
+    await t.enterText(find.byType(EditableText).last, 'releases');
+    await sleepPump(t, 300);
+    await tapText(t, 'Create', wait: 700);
+    await c.snap('$s/15b-mkdir-existing', 'Creating a folder whose name already exists: the error message shown to the user');
+    if (find.text('Cancel').evaluate().isNotEmpty) await tapText(t, 'Cancel', wait: 500);
+  });
   await step(c.notes, 'delete', () async {
     await rightClick(t, find.text('releases').last);
     await tapText(t, 'Delete', wait: 800);

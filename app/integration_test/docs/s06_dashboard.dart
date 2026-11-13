@@ -59,6 +59,11 @@ Future<void> runDashboard(JourneyContext c) async {
         seconds: 40, throwOnTimeout: false);
     await sleepPump(t, 1500);
     await c.snap('$s/10-bulk-run-results', 'Bulk run finished: per-host status and output');
+    await step(c.notes, 'expand bulk row', () async {
+      await t.tap(find.text('Demo Server').last, warnIfMissed: false);
+      await sleepPump(t, 700);
+      await c.snap('$s/10b-bulk-run-row-expanded', 'A result row expanded: the command output and the real exit code of that host');
+    });
     await tapText(t, 'Diff', wait: 700);
     await c.snap('$s/11-bulk-run-diff', 'Diff view groups identical outputs and highlights differences');
     await tapText(t, 'Close', wait: 600);
