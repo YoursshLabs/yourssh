@@ -31,6 +31,7 @@ YourSSH also checks for new releases on launch and from **Settings → Updates**
 | Linux (Debian/Ubuntu — x86_64) | `yourssh_x.x.x_amd64.deb` |
 | Linux (Debian/Ubuntu — ARM64) | `yourssh_x.x.x_arm64.deb` |
 | Android (development preview) | `YourSSH-x.x.x-Android.apk` |
+| iOS | iPhone — beta through TestFlight |
 
 ### macOS — First Launch
 
