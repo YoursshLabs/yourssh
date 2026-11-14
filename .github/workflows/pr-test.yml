@@ -246,11 +246,32 @@ jobs:
         working-directory: app
         run: flutter test test/services/cli/
 
+  # Decides whether the macOS-runner `ios` job is worth its ~45 minutes: a PR
+  # that only changes documentation (tool/ios_ci_needed.sh) skips it. The
+  # checkout is the PR merge commit, so HEAD^1 is the base branch tip.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      ios: ${{ steps.diff.outputs.ios }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+
+      - name: Changed files
+        id: diff
+        run: |
+          ios=$( (git diff --name-only HEAD^1 HEAD || true) | bash tool/ios_ci_needed.sh)
+          echo "ios=$ios"
+          echo "ios=$ios" >> "$GITHUB_OUTPUT"
+
   # iOS: unit tests that touch Darwin paths, a simulator build, the release
   # build with the bundle exclusion check (no desktop-only code or ATS opt-out
   # in the .app), and a launch smoke test on a booted simulator. No signing and
-  # no secrets: --no-codesign.
+  # no secrets: --no-codesign. Skipped for documentation-only PRs.
   ios:
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
@@ -310,17 +331,25 @@ jobs:
   # forever instead of failing.
   test:
     name: test
-    needs: [app, ui, bridge, android, cli, windows-cli, ios]
+    needs: [app, ui, bridge, android, cli, windows-cli, ios, changes]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check job results
+        env:
+          IOS_NEEDED: ${{ needs.changes.outputs.ios }}
         run: |
-          echo "app=${{ needs.app.result }} ui=${{ needs.ui.result }} bridge=${{ needs.bridge.result }} android=${{ needs.android.result }} cli=${{ needs.cli.result }} windows-cli=${{ needs.windows-cli.result }} ios=${{ needs.ios.result }}"
+          echo "app=${{ needs.app.result }} ui=${{ needs.ui.result }} bridge=${{ needs.bridge.result }} android=${{ needs.android.result }} cli=${{ needs.cli.result }} windows-cli=${{ needs.windows-cli.result }} ios=${{ needs.ios.result }} changes=${{ needs.changes.result }}"
+          [ "${{ needs.changes.result }}" = "success" ] || exit 1
           [ "${{ needs.app.result }}" = "success" ] || exit 1
           [ "${{ needs.ui.result }}" = "success" ] || exit 1
           [ "${{ needs.bridge.result }}" = "success" ] || exit 1
           [ "${{ needs.android.result }}" = "success" ] || exit 1
           [ "${{ needs.cli.result }}" = "success" ] || exit 1
           [ "${{ needs.windows-cli.result }}" = "success" ] || exit 1
-          [ "${{ needs.ios.result }}" = "success" ] || exit 1
+          # Skipped only when the changes job said documentation-only.
+          if [ "$IOS_NEEDED" = "false" ]; then
+            [ "${{ needs.ios.result }}" = "skipped" ] || exit 1
+          else
+            [ "${{ needs.ios.result }}" = "success" ] || exit 1
+          fi
