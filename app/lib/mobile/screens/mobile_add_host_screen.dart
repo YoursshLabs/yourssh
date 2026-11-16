@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
+import '../../services/storage_service.dart';
+import '../../theme/app_theme.dart';
 import '../../models/host.dart';
 import '../../models/ssh_key.dart';
 import '../../providers/host_provider.dart';
@@ -24,7 +26,12 @@ class MobileAddHostScreen extends StatefulWidget {
   /// The host to edit, or null to create a new one.
   final Host? existing;
 
-  const MobileAddHostScreen({super.key, this.existing});
+  /// Seeds a NEW host form (label/host/port/username) from [prefill], e.g. an
+  /// `ssh://` link. Ignored when [existing] is set; nothing is saved until the
+  /// user taps Save.
+  final Host? prefill;
+
+  const MobileAddHostScreen({super.key, this.existing, this.prefill});
 
   @override
   State<MobileAddHostScreen> createState() => _MobileAddHostScreenState();
@@ -85,6 +92,11 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
       // Group = first tag (round-trip: save writes it back as the first tag).
       _group.text = h.tags.isNotEmpty ? h.tags.first : '';
       _snippet.text = h.startupSnippet ?? '';
+    } else if (widget.prefill case final p?) {
+      _label.text = p.label;
+      _address.text = p.host;
+      _port.text = '${p.port}';
+      _username.text = p.username;
     }
   }
 
@@ -186,13 +198,24 @@ class _MobileAddHostScreenState extends State<MobileAddHostScreen> {
 
   Future<void> _save() async {
     if (!_canSave) return;
-    await _doSave();
+    try {
+      await _doSave();
+    } on SecretStoreException {
+      if (mounted) AppSnack.error(context, 'Could not save to the iOS Keychain');
+      return;
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _saveAndConnect() async {
     if (!_canSave) return;
-    final savedId = await _doSave();
+    final String savedId;
+    try {
+      savedId = await _doSave();
+    } on SecretStoreException {
+      if (mounted) AppSnack.error(context, 'Could not save to the iOS Keychain');
+      return;
+    }
     if (!mounted) return;
     // Use the id returned by _doSave — deterministic, no .last assumption.
     final host = context.read<HostProvider>().byId(savedId);

@@ -5,6 +5,11 @@ import '../../models/app_notification.dart';
 /// Longest link shown in the bell title.
 const int _maxShown = 120;
 
+/// Longest reason shown (a reason can embed the link's host segment).
+const int _maxBody = 200;
+
+String _cap(String s, int n) => s.length > n ? '${s.substring(0, n)}…' : s;
+
 /// Bell entry for a `yourssh://` open the app refused (unknown host,
 /// unsupported shape). The link comes from a web page or another app, so
 /// control and bidi-override characters are removed before display; the
@@ -15,7 +20,7 @@ AppNotification linkRefusedNotification(String url, String reason) {
   return AppNotification(
     type: AppNotificationType.linkRefused,
     title: 'Link refused: $shown',
-    body: _clean(reason),
+    body: _cap(_clean(reason), _maxBody),
     dedupeKey: 'link-refused:${shown.toLowerCase()}',
   );
 }

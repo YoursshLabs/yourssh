@@ -19,6 +19,12 @@ void main() {
     expect(n.title, endsWith('…'));
   });
 
+  test('a very long reason is capped too', () {
+    final n = linkRefusedNotification('yourssh://connect/x', 'unknown host: ${'a' * 5000}');
+    expect(n.body!.length, lessThanOrEqualTo(201));
+    expect(n.body, endsWith('…'));
+  });
+
   test('the same link refused twice is one entry (deduped)', () {
     final center = NotificationCenterProvider();
     addTearDown(center.dispose);

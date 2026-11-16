@@ -508,6 +508,11 @@ class SessionProvider extends ChangeNotifier {
     // the one the status bar shows, whatever Settings says later.
     session.termType =
         host.termType ?? terminalType?.call() ?? 'xterm-256color';
+    final generation = session.connectGeneration;
+    // A pause (or a newer attempt after it) supersedes this attempt: stop
+    // without touching status, timers or the drop callbacks.
+    bool superseded() =>
+        session.paused || session.connectGeneration != generation;
     try {
       final keyEntry = host.keyId != null ? keyLookup?.call(host.keyId!) : null;
       final jumpChain = SshService.resolveJumpChain(
@@ -524,8 +529,9 @@ class SessionProvider extends ChangeNotifier {
             'Tunneling via ${jumpChain.map((h) => h.host.label).join(' → ')}');
       }
       _safeNotify();
-      await _ssh.connect(
+      final client = await _ssh.connect(
         host,
+        isCurrent: () => !superseded(),
         keyEntry: keyEntry,
         jumpChain: jumpChain,
         verifyHostKey: hostKeyVerifier != null
@@ -537,6 +543,12 @@ class SessionProvider extends ChangeNotifier {
                 _verifyAndLog(session, hop.host, hop.port, keyType, fp)
             : null,
       );
+      if (superseded()) {
+        // Paused (or replaced by a newer attempt) while dialing: this client
+        // belongs to nobody. Close it before it can mark the tab connected.
+        _ssh.discardClient(host.id, client);
+        return;
+      }
       session.logConnection(ConnectionLogLevel.success, 'Connection established');
       session.status = SessionStatus.connected;
       audit?.record(AuditEvent.now(
@@ -566,6 +578,9 @@ class SessionProvider extends ChangeNotifier {
       );
       _safeNotify();
 
+      // Closed on purpose by pauseAll: not a drop, no reconnect, no callback.
+      if (superseded()) return;
+
       // Shell closed — try auto-reconnect
       if (_sessions.contains(session) && (autoReconnectEnabled?.call() ?? false)) {
         // Paired logging: a flapping host must show its disconnects, not an
@@ -587,7 +602,7 @@ class SessionProvider extends ChangeNotifier {
         _safeNotify();
       }
     } catch (e) {
-      if (!_sessions.contains(session)) return;
+      if (!_sessions.contains(session) || superseded()) return;
       session.logConnection(ConnectionLogLevel.error, 'Connection failed: $e');
       final maxAttempts = reconnectAttempts?.call() ?? 0;
       final isUnlimited = maxAttempts == 0;
@@ -647,6 +662,7 @@ class SessionProvider extends ChangeNotifier {
     if (session == null || session.status == SessionStatus.connecting) return;
     _reconnectTimers.remove(sessionId)?.cancel();
     _countdownTimers.remove(sessionId)?.cancel();
+    session.paused = false;
     session.status = SessionStatus.connecting;
     session.errorMessage = null;
     // A manual retry is a fresh attempt — drop the prior attempt's trace so the
@@ -655,6 +671,96 @@ class SessionProvider extends ChangeNotifier {
     session.logConnection(ConnectionLogLevel.info, 'Retrying connection…');
     _safeNotify();
     unawaited(_doConnect(session, session.host, attempt: 1));
+  }
+
+  // ── App lifecycle (iOS background pause / foreground resume) ────────────
+
+  @visibleForTesting
+  void scheduleReconnectForTest(SshSession s) =>
+      _scheduleReconnect(s, s.host, attempt: 1);
+
+  @visibleForTesting
+  void addSessionForTest(SshSession s) {
+    _sessions.add(s);
+    _activeSessionId ??= s.id;
+  }
+
+  /// Closes every live SSH connection on purpose (the OS is about to suspend
+  /// the app). Sessions that are `connected` or `connecting` (a reconnect
+  /// countdown included) become `paused`; `error` and user-closed
+  /// `disconnected` sessions are left alone. Each host's client is closed
+  /// once. This is not a drop: no reconnect is scheduled and
+  /// [onSessionDropped] does not fire.
+  void pauseAll() => _pauseSessions(sshSessions.where((s) => !s.isWatch));
+
+  /// True while any session is paused for the background (until
+  /// [resumePaused] reconnects it). Anything that would re-dial a host on its
+  /// own should wait.
+  // Deliberately global: pauseAll pauses every session together.
+  bool get hasPausedSessions => sshSessions.any((s) => s.paused);
+
+  void _pauseSessions(Iterable<SshSession> candidates) {
+    final hostIds = <String>{};
+    for (final s in candidates.toList()) {
+      if (s.status != SessionStatus.connected &&
+          s.status != SessionStatus.connecting) {
+        continue;
+      }
+      _reconnectTimers.remove(s.id)?.cancel();
+      _countdownTimers.remove(s.id)?.cancel();
+      s.connectGeneration++;
+      s.paused = true;
+      s.status = SessionStatus.disconnected;
+      s.terminal.write(
+          '\r\n\x1b[2m[Paused while YourSSH was in the background]\x1b[0m\r\n');
+      // Clients are per tab but the service keys them by host: close this
+      // tab's own shell too, not just the newest client of the host.
+      _ssh.disconnectSession(s.id);
+      hostIds.add(s.host.id);
+    }
+    for (final id in hostIds) {
+      _ssh.disconnect(id);
+    }
+    if (hostIds.isNotEmpty) _safeNotify();
+  }
+
+  /// Reconnects every paused session in tab order, [stagger] apart. Ignores
+  /// the auto-reconnect setting: a pause is not a drop.
+  Future<void> resumePaused(
+      {Duration stagger = const Duration(milliseconds: 300)}) async {
+    final paused = sshSessions.where((s) => s.paused).toList();
+    for (var i = 0; i < paused.length; i++) {
+      final s = paused[i];
+      if (!_sessions.contains(s) || !s.paused) continue;
+      if (_disposed) return;
+      reconnectSession(s.id); // clears `paused`, reuses the tab
+      if (i < paused.length - 1) await Future<void>.delayed(stagger);
+    }
+  }
+
+  /// After a resume: probes each host that still has a `connected` session and
+  /// pauses + reconnects the sessions of hosts whose link did not survive the
+  /// suspension (half-open TCP looks alive until something is sent).
+  Future<void> verifyLive(
+      {Duration timeout = const Duration(seconds: 3)}) async {
+    final byHost = <String, List<SshSession>>{};
+    for (final s in sshSessions) {
+      if (s.isWatch || s.status != SessionStatus.connected) continue;
+      byHost.putIfAbsent(s.host.id, () => []).add(s);
+    }
+    // Probe all hosts at once: sequentially, N stuck hosts cost N x timeout.
+    final alive = await Future.wait([
+      for (final e in byHost.entries) _ssh.isAlive(e.key, timeout: timeout),
+    ]);
+    final dead = <SshSession>[];
+    var i = 0;
+    for (final e in byHost.entries) {
+      if (!alive[i++]) dead.addAll(e.value);
+    }
+    if (dead.isEmpty || _disposed) return;
+    // Sessions may have changed while probing; _pauseSessions re-checks status.
+    _pauseSessions(dead);
+    await resumePaused(stagger: Duration.zero);
   }
 
   void _scheduleReconnect(SshSession session, Host host, {required int attempt}) {

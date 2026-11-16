@@ -54,6 +54,10 @@ class SshService {
   /// Global on/off for shell integration, read from SettingsProvider in
   /// main.dart. null => treat as enabled.
   bool Function()? isShellIntegrationEnabled;
+
+  /// Fired when a validated sudo password could not be stored (iOS Keychain
+  /// refused and plaintext fallback is off), so the UI can tell the user.
+  void Function(Host host)? onSudoPasswordNotSaved;
   final Map<String, SSHClient> _clients = {};
   final Map<String, SSHSession> _shells = {};
   final Map<String, String> _shellToHost = {}; // sessionId → hostId
@@ -305,6 +309,47 @@ class SshService {
 
   // ── Connect ────────────────────────────────────────────
 
+  /// Builds the destination [SSHClient] for [connect] (a seam for tests).
+  @visibleForTesting
+  SSHClient buildConnectClient(
+    SSHSocket socket, {
+    required Host host,
+    required String? password,
+    required List<SSHKeyPair>? identities,
+    required Future<bool> Function(String keyType, Uint8List fingerprint)?
+        verifyHostKey,
+  }) {
+    return SSHClient(
+      socket,
+      username: host.username,
+      onPasswordRequest: () => password ?? '',
+      identities: identities,
+      // Forwarding terminates at the destination client only (OpenSSH
+      // ProxyJump semantics) — never add a handler to _ensureJumpClient
+      // or testConnection.
+      agentHandler: host.agentForwarding
+          ? AgentForwardingHandler(
+              loadKeychainIdentities: () async =>
+                  await keychainIdentitiesLoader?.call(host.keyId) ??
+                  const <SSHKeyPair>[],
+              onRequestServed: (usedFallback) =>
+                  onAgentForwardingEvent?.call(
+                      host.id,
+                      null,
+                      usedFallback
+                          ? AgentForwardingState.fallback
+                          : AgentForwardingState.active),
+            )
+          : null,
+      onVerifyHostKey: (type, fp) =>
+          hostKeyDecision(verifyHostKey, type.toString(), fp),
+      // Built-in keepalive is disabled: HealthMonitorService is the sole
+      // pinger (it both keeps the connection alive and measures latency),
+      // avoiding a race on the shared global-request reply queue.
+      keepAliveInterval: null,
+    );
+  }
+
   Future<SSHClient> connect(
     Host host, {
     SshKeyEntry? keyEntry,
@@ -314,6 +359,10 @@ class SshService {
     // [verifyHostKey] only covers the destination). Null → reject (fail closed).
     Future<bool> Function(Host hop, String keyType, Uint8List fp)?
         verifyHopHostKey,
+    // Returns false once this attempt was superseded (the app paused it while
+    // it was dialing). A stale attempt never touches the per-host caches the
+    // current one owns: it closes its own client and gives up quietly.
+    bool Function()? isCurrent,
   }) async {
     if (hookBus != null) {
       final result = hookBus!.fireInterceptable(
@@ -343,43 +392,39 @@ class SshService {
       } else {
         socket = await localDial(host);
       }
-      client = SSHClient(
-        socket,
-        username: host.username,
-        onPasswordRequest: () => password ?? '',
-        identities: resolution.identities.isNotEmpty ? resolution.identities : null,
-        // Forwarding terminates at the destination client only (OpenSSH
-        // ProxyJump semantics) — never add a handler to _ensureJumpClient
-        // or testConnection.
-        agentHandler: host.agentForwarding
-            ? AgentForwardingHandler(
-                loadKeychainIdentities: () async =>
-                    await keychainIdentitiesLoader?.call(host.keyId) ??
-                    const <SSHKeyPair>[],
-                onRequestServed: (usedFallback) =>
-                    onAgentForwardingEvent?.call(
-                        host.id,
-                        null,
-                        usedFallback
-                            ? AgentForwardingState.fallback
-                            : AgentForwardingState.active),
-              )
-            : null,
-        onVerifyHostKey: (type, fp) =>
-            hostKeyDecision(verifyHostKey, type.toString(), fp),
-        // Built-in keepalive is disabled: HealthMonitorService is the sole
-        // pinger (it both keeps the connection alive and measures latency),
-        // avoiding a race on the shared global-request reply queue.
-        keepAliveInterval: null,
-      );
+      client = buildConnectClient(socket,
+          host: host,
+          password: password,
+          identities: resolution.identities.isNotEmpty
+              ? resolution.identities
+              : null,
+          verifyHostKey: verifyHostKey);
       await client.authenticated;
     } catch (e) {
-      if (resolution.agentProxy != null) {
-        unawaited(_agentProxies[host.id]?.close() ?? Future.value());
-        _agentProxies.remove(host.id);
+      final proxy = resolution.agentProxy;
+      if (proxy != null) {
+        // Only the proxy this attempt registered: a newer attempt may own the
+        // map entry by now.
+        if (identical(_agentProxies[host.id], proxy)) {
+          _agentProxies.remove(host.id);
+        }
+        unawaited(proxy.close());
       }
-      _teardownJumpChain(host.id);
+      // A stale attempt must not unwind the jump chain a newer one is using.
+      if (isCurrent?.call() ?? true) _teardownJumpChain(host.id);
       rethrow;
+    }
+    if (!(isCurrent?.call() ?? true)) {
+      // Superseded while authenticating: do not evict the live client.
+      client.close();
+      final proxy = resolution.agentProxy;
+      if (proxy != null) {
+        if (identical(_agentProxies[host.id], proxy)) {
+          _agentProxies.remove(host.id);
+        }
+        unawaited(proxy.close());
+      }
+      return client;
     }
     _clients[host.id] = client;
     return client;
@@ -723,6 +768,21 @@ class SshService {
     }
   }
 
+  /// Whether [hostId]'s client is open and answers a keepalive ping within
+  /// [timeout]. False without a client, with a closed one, or when the ping
+  /// does not complete in time (a half-open link after the OS suspended us).
+  Future<bool> isAlive(String hostId,
+      {Duration timeout = const Duration(seconds: 3)}) async {
+    final client = _clients[hostId];
+    if (client == null || client.isClosed) return false;
+    try {
+      await client.ping().timeout(timeout);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ── Shell session (feeds into xterm Terminal) ──────────
 
   Future<void> openShell(
@@ -1028,7 +1088,12 @@ class SshService {
           final out = g.flush();
           if (out.isNotEmpty) outQueue.add(out);
         }
-        _onShellClosed(session);
+        // After a pause/resume the tab already runs a newer shell: only the
+        // current shell (or none) may tear the session's hooks down.
+        final current = _shells[session.id];
+        if (current == null || identical(current, shell)) {
+          _onShellClosed(session);
+        }
         if (!done.isCompleted) done.complete();
       },
       onError: (Object e) {
@@ -1375,8 +1440,11 @@ class SshService {
     if (validatedToPersist != null) {
       try {
         await _storage.saveSudoPassword(host.id, validatedToPersist!);
-      } catch (_) {
+      } catch (e) {
         // Keychain unavailable — the password still works for this session.
+        // Only surfaced when plaintext fallback is off (iOS), where it means
+        // the password was not remembered.
+        if (e is SecretStoreException) onSudoPasswordNotSaved?.call(host);
       }
     }
     return sftp;
@@ -1474,6 +1542,13 @@ class SshService {
     _agentProxies.remove(hostId);
 
     _teardownJumpChain(hostId);
+  }
+
+  /// Closes a [client] nobody will use (a connect attempt superseded while it
+  /// was dialing) and drops it from the cache only when it is the cached one.
+  void discardClient(String hostId, SSHClient client) {
+    if (identical(_clients[hostId], client)) _clients.remove(hostId);
+    client.close();
   }
 
   void disconnectSession(String sessionId) {

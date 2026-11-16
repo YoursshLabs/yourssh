@@ -1,14 +1,16 @@
-import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/storage_service.dart';
+import '../../theme/app_theme.dart';
 import '../../models/ssh_key.dart';
 import '../../providers/host_provider.dart';
 import '../../providers/key_provider.dart';
 import '../../services/key_gen_service.dart';
+import '../files/app_paths.dart';
+import '../files/file_export.dart';
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
 import '../widgets/key_card.dart';
@@ -149,10 +151,25 @@ class MobileKeysScreen extends StatelessWidget {
 
     if (!context.mounted) return;
     final keyProv = context.read<KeyProvider>();
-    final entry = await keyProv.addKeyFromFile(path, result.files.first.name);
+    try {
+      // Copy the key into the private keys dir (not Documents, which the Files
+      // app exposes) and register the copy; the picker's temp copy is cleared.
+      final copy = await importPrivateKey(path, await AppPaths.privateKeysDir());
+      final entry = await keyProv.addKeyFromFile(copy.path, result.files.first.name);
 
-    if (passphrase.isNotEmpty && context.mounted) {
-      await keyProv.savePassphrase?.call(entry.id, passphrase);
+      if (passphrase.isNotEmpty && context.mounted) {
+        try {
+          await keyProv.savePassphrase?.call(entry.id, passphrase);
+        } on SecretStoreException {
+          if (context.mounted) AppSnack.error(context, 'Could not save to the iOS Keychain');
+        }
+      }
+    } catch (e) {
+      if (context.mounted) AppSnack.error(context, 'Could not import key: $e');
+    } finally {
+      try {
+        await FilePicker.platform.clearTemporaryFiles();
+      } catch (_) {}
     }
   }
 
@@ -255,7 +272,7 @@ class _GenerateSheetState extends State<_GenerateSheet> {
   final _nameCtrl = TextEditingController();
   final _passphraseCtrl = TextEditingController();
   String _algo = 'ed25519';
-  bool _sshKeygenAvailable = false;
+  bool _sshKeygenAvailable = false; // true when RSA/ECDSA are offered
   bool _loading = false;
   String? _error;
 
@@ -266,8 +283,8 @@ class _GenerateSheetState extends State<_GenerateSheet> {
   }
 
   Future<void> _probe() async {
-    final available = await context.read<KeyGenService>().probeSshKeygen();
-    if (mounted) setState(() => _sshKeygenAvailable = available);
+    final algos = await context.read<KeyGenService>().supportedAlgorithms();
+    if (mounted) setState(() => _sshKeygenAvailable = algos.contains('rsa'));
   }
 
   @override
@@ -309,7 +326,11 @@ class _GenerateSheetState extends State<_GenerateSheet> {
       if (!mounted) return;
       final entry = await keyProv.addKeyFromFile(result.privateKeyPath, name);
       if (_passphraseCtrl.text.isNotEmpty && mounted) {
-        await keyProv.savePassphrase?.call(entry.id, _passphraseCtrl.text);
+        try {
+          await keyProv.savePassphrase?.call(entry.id, _passphraseCtrl.text);
+        } on SecretStoreException {
+          if (mounted) AppSnack.error(context, 'Could not save to the iOS Keychain');
+        }
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -320,10 +341,7 @@ class _GenerateSheetState extends State<_GenerateSheet> {
   }
 
   Future<String> _keysDir() async {
-    final docs = await getApplicationDocumentsDirectory();
-    final dir = Directory('${docs.path}/YourSSH/keys');
-    if (!dir.existsSync()) dir.createSync(recursive: true);
-    return dir.path;
+    return (await AppPaths.privateKeysDir()).path;
   }
 
   @override

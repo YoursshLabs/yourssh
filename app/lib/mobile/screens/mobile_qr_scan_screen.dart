@@ -3,6 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
+import '../../services/storage_service.dart';
 import '../../providers/host_provider.dart';
 import '../../services/p2p_sync_encryption.dart';
 import '../../services/p2p_sync_service.dart';
@@ -57,6 +58,10 @@ class _MobileQrScanScreenState extends State<MobileQrScanScreen> {
           .replaceAll(payload.hosts, payload.passwords);
       if (mounted) {
         Navigator.of(context).pop('Imported ${payload.hosts.length} hosts');
+      }
+    } on SecretStoreException {
+      if (mounted) {
+        Navigator.of(context).pop('Could not save to the iOS Keychain');
       }
     } catch (e) {
       if (mounted) {

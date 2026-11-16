@@ -7,6 +7,10 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../../models/host.dart';
+import '../../platform/runtime_platform.dart';
+import '../files/app_paths.dart';
+import '../files/file_export.dart';
+import '../../providers/session_provider.dart';
 import '../../services/sftp_transfer_service.dart';
 import '../../services/ssh_service.dart';
 import '../theme/mobile_theme.dart';
@@ -27,11 +31,30 @@ class MobileSftpScreen extends StatefulWidget {
   /// tree can be pumped without a real SSH connection.
   final Future<List<SftpName>> Function(String path)? lister;
 
-  const MobileSftpScreen({super.key, required this.host, this.lister});
+  /// Optional override for opening the SFTP channel — injected in tests.
+  final Future<SftpClient> Function()? sftpOpener;
+
+  const MobileSftpScreen({
+    super.key,
+    required this.host,
+    this.lister,
+    this.sftpOpener,
+  });
 
   @override
   State<MobileSftpScreen> createState() => _MobileSftpScreenState();
 }
+
+/// True when [e] means the SFTP channel or its SSH connection is gone (closed
+/// socket, aborted channel, closed stream) rather than that one operation was
+/// refused (`SftpStatusError`) or failed locally (`FileSystemException`).
+bool isDeadChannelError(Object e) =>
+    e is io.SocketException ||
+    e is SSHSocketError ||
+    e is SSHStateError ||
+    e is SSHChannelOpenError ||
+    e is SftpAbortError ||
+    e is StateError;
 
 enum _SortField { name, size }
 
@@ -65,14 +88,51 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
 
   Future<SftpClient> _client() async {
     if (_sftp != null) return _sftp!;
-    _sftp = await context.read<SshService>().openSftp(widget.host);
-    return _sftp!;
+    final opener = widget.sftpOpener;
+    final sftp = opener != null
+        ? await opener()
+        : await context.read<SshService>().openSftp(widget.host);
+    return _sftp = sftp;
+  }
+
+  /// Drops the cached channel. The connection may have been closed while the
+  /// app was paused in the background, which leaves the channel dead.
+  void _dropClient() {
+    final old = _sftp;
+    _sftp = null;
+    try {
+      old?.close();
+    } catch (_) {}
+  }
+
+  bool _sessionsPaused() {
+    try {
+      return context.read<SessionProvider>().hasPausedSessions;
+    } on ProviderNotFoundException {
+      return false;
+    }
+  }
+
+  /// Runs [op] on the cached channel. Only when it fails because the channel
+  /// or connection is dead ([isDeadChannelError]) is the channel discarded and
+  /// [op] retried once on a fresh one (reconnecting if the session was paused).
+  /// Server status errors and local I/O errors propagate untouched.
+  Future<T> _withSftp<T>(Future<T> Function(SftpClient sftp) op) async {
+    try {
+      return await op(await _client());
+    } catch (e) {
+      if (!isDeadChannelError(e)) rethrow;
+      _dropClient();
+      // Paused for the background: the host is closed on purpose, and a
+      // re-dial now would race the resume. Fail cleanly instead.
+      if (!mounted || _sessionsPaused()) rethrow;
+      return await op(await _client());
+    }
   }
 
   Future<List<SftpName>> _listDir(String path) async {
     if (widget.lister != null) return widget.lister!(path);
-    final sftp = await _client();
-    return sftp.listdir(path);
+    return _withSftp((sftp) => sftp.listdir(path));
   }
 
   Future<void> _load(String path) async {
@@ -197,45 +257,68 @@ class _MobileSftpScreenState extends State<MobileSftpScreen> {
   // ── Transfer ops ──────────────────────────────────────────────────────────
 
   Future<void> _download(SftpName e) async {
-    final dir = await FilePicker.platform.getDirectoryPath();
-    if (dir == null) return;
     final String localPath;
     try {
-      localPath = safeLocalChild(dir, e.filename);
+      final dir = isIOSPlatform
+          ? (await AppPaths.downloadsDir()).path
+          : await FilePicker.platform.getDirectoryPath();
+      if (dir == null) return;
+      localPath = uniqueLocalPath(dir, e.filename);
     } on UnsafeRemotePathException catch (err) {
       _snack('$err');
       return;
     }
-    final sink = io.File(localPath).openWrite();
     try {
-      final sftp = await _client();
-      final file = await sftp.open(_join(e.filename));
-      await for (final chunk in file.read()) {
-        sink.add(chunk);
-      }
-      await file.close();
-      _snack('Downloaded ${e.filename}');
+      await _withSftp((sftp) async {
+        final file = await sftp.open(_join(e.filename));
+        try {
+          await writeDownload(file.read(), localPath);
+        } finally {
+          await file.close();
+        }
+      });
     } catch (err) {
       _snack('Download failed: $err');
-    } finally {
-      await sink.close();
+      return;
+    }
+    if (!mounted) return;
+    if (isIOSPlatform) {
+      showYsToast(
+        context,
+        'Downloaded ${p.basename(localPath)}',
+        kind: YsToastKind.success,
+        actionLabel: 'Share',
+        onAction: () {
+          if (mounted) shareFile(context, localPath);
+        },
+      );
+    } else {
+      _snack('Downloaded ${p.basename(localPath)}');
     }
   }
 
   Future<void> _upload() async {
     final transfer = context.read<SftpTransferService>();
-    final picked = await FilePicker.platform.pickFiles();
-    final localPath = picked == null || picked.files.isEmpty
-        ? null
-        : picked.files.first.path;
-    if (localPath == null) return;
-    final name = p.basename(localPath);
+    String? localPath;
     try {
-      await transfer.uploadFile(widget.host, localPath, _join(name));
-      _snack('Uploaded $name');
-      _load(_path);
-    } catch (err) {
-      _snack('Upload failed: $err');
+      final picked = await FilePicker.platform.pickFiles();
+      localPath = picked == null || picked.files.isEmpty
+          ? null
+          : picked.files.first.path;
+      if (localPath == null) return;
+      final name = p.basename(localPath);
+      try {
+        await transfer.uploadFile(widget.host, localPath, _join(name));
+        _snack('Uploaded $name');
+        _load(_path);
+      } catch (err) {
+        _snack('Upload failed: $err');
+      }
+    } finally {
+      // The picker copies the file into the app's temp dir; drop that copy.
+      try {
+        await FilePicker.platform.clearTemporaryFiles();
+      } catch (_) {}
     }
   }
 

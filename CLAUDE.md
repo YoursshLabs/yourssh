@@ -84,7 +84,7 @@ cd app && flutter test integration_test/vnc_screenshots_test.dart -d macos
 
 ## Architecture
 
-The active codebase is `app/` — a Flutter app targeting macOS, Windows, and Linux. The in-app RDP client is implemented as the `packages/yourssh_rdp` Rust crate bridged via `flutter_rust_bridge` v2; the old `core/` Swift-bridge Rust library has been removed.
+The active codebase is `app/` — a Flutter app targeting macOS, Windows, and Linux, plus Android and iOS through `app/lib/mobile`. The in-app RDP client is implemented as the `packages/yourssh_rdp` Rust crate bridged via `flutter_rust_bridge` v2; the old `core/` Swift-bridge Rust library has been removed.
 
 **Monorepo layout:**
 - `app/` — the Flutter app
@@ -198,6 +198,17 @@ Flutter UI (widgets/screens)
 **Bulk actions:** the hosts dashboard's SELECT mode drives `app/lib/widgets/bulk/` — `BulkActionBar` (Select all / Clear / Connect all / Run command / Push files / Done, forui buttons; action cluster right-anchored, scrolls when narrow), `BulkRunDialog` + `BulkRunController` (parallel exec with bounded concurrency, 30 s per-host timeout, per-host failure isolation), `BulkDiffView` (groups identical outputs against a promotable baseline, side-by-side compare), `BulkPushDialog` (multi-host upload via `SftpTransferService.uploadDirectory(overwrite: true)`), `BulkHostStatusList` (shared per-host status rows), `bulk_dialog_chrome.dart` (shared header/footer and window-fitting body of the two dialogs). Closing a dialog mid-run confirms, cancels queued hosts, and lets in-flight operations finish.
 
 **Code editor:** `CodeEditorScreen` renders a Monaco editor via `webview_flutter` using the bundled `assets/monaco_editor.html`.
+
+## iOS
+
+The iPhone build shares `app/lib/mobile` with Android. Platform gates live in `app/lib/platform/runtime_platform.dart` (`isIOSPlatform`, `supportsRemoteDesktop`, `supportsSubprocesses`, `mobileDefaultTmux`). There is no simulator runtime on the owner's Mac: launching is CI-only (pr-test `ios` job) or manual; locally run `cd app && flutter build ios --simulator --no-codesign` and `flutter build ios --release --no-codesign`.
+
+- **Runner**: UIScene runner (`SceneDelegate.swift`); `YourSshNative` (`app/ios/Runner/YourSshNative.swift`) is registered from `didInitializeImplicitFlutterEngine` and held strongly. Channels: `yourssh/url`, `yourssh/ssh_url`, `yourssh/background`, `yourssh/files`.
+- **Lifecycle**: `MobileLifecycleCoordinator` runs grace / pause / resume with epochs; `SshSession.paused` / `acceptsInput` make input to a non-connected session fail visibly.
+- **Secrets**: `StorageService.iosKeychainOptions` (`first_unlock_this_device`, not synchronizable); no plaintext prefs fallback on iOS. `AppPaths` puts keys in Application Support, excluded from backup.
+- **Links**: `yourssh://` goes through `CliServer` + `UrlChannel`; `ssh://` is an opt-in iOS-only setting, never connects to an unknown target and is deferred while `mobileAppLocked` is true.
+- **Compliance**: `PrivacyInfo.xcprivacy` (UserDefaults CA92.1, FileTimestamp C617.1, DiskSpace E174.1), `ITSAppUsesNonExemptEncryption = YES`, no `NSAppTransportSecurity` key.
+- **CI**: `tool/check_ios_bundle.sh <Runner.app>` rejects QuickJS / RDP / VNC / flutter_pty artifacts, the `pty_forkpty` symbol and any `NSAppTransportSecurity` key; the pr-test `ios` job runs unit tests, simulator and release builds, the bundle check and a simulator smoke test (a `changes` job skips it when `tool/ios_ci_needed.sh` finds only documentation changes: `*.md`, `docs/`, `screenshots/`, `.claude/`). The two iOS `Package.resolved` files (`app/ios/Runner.xcworkspace/…` and `app/ios/Runner.xcodeproj/project.xcworkspace/…`) are committed so the signed build pins file_picker's branch-tracked SwiftPM dependencies (DKCamera, DKPhotoGallery); the macOS ones stay untracked. release.yml `build-ios` builds a signed IPA and uploads to TestFlight (needs secrets `IOS_DISTRIBUTION_P12_BASE64`, `IOS_DISTRIBUTION_P12_PASSWORD`, `IOS_PROVISIONING_PROFILE_BASE64`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_API_KEY_P8_BASE64`; the App Store profile must be named `YourSSH App Store`; `app/ios/ExportOptions.plist`); the IPA is not attached to the GitHub release.
 
 ## Plugin system
 

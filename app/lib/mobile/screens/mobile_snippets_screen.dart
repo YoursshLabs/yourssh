@@ -130,7 +130,10 @@ class _MobileSnippetsScreenState extends State<MobileSnippetsScreen> {
       AppSnack.info(context, 'No active session');
       return;
     }
-    context.read<SshService>().sendInput(sessionId, '${snippet.command}\n');
+    final sent = context
+        .read<SshService>()
+        .sendInput(sessionId, '${snippet.command}\n');
+    if (!sent) AppSnack.info(context, 'Session is not connected');
   }
 }
 

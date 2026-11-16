@@ -31,6 +31,7 @@ YourSSH also checks for new releases on launch and from **Settings → Updates**
 | Linux (Debian/Ubuntu — x86_64) | `yourssh_x.x.x_amd64.deb` |
 | Linux (Debian/Ubuntu — ARM64) | `yourssh_x.x.x_arm64.deb` |
 | Android (development preview) | `YourSSH-x.x.x-Android.apk` |
+| iOS | iPhone — beta through TestFlight |
 
 ### macOS — Homebrew
 
@@ -321,6 +322,7 @@ Not yet: packaged CLI binary and an "Install command-line tool" button; `sftp`/`
 | macOS | 10.14 Mojave |
 | Windows | Windows 10 (64-bit) |
 | Linux | Ubuntu 20.04+ / any GTK3-compatible distro |
+| iOS | iOS 16 (iPhone) |
 | Flutter SDK | 3.12.0+ |
 | Dart SDK | 3.12.0+ |
 

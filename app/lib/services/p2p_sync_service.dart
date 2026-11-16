@@ -20,6 +20,23 @@ class NetworkInterfaceInfo {
 class P2PSyncService {
   HttpServer? _server;
 
+  /// Services whose pairing server is currently open, so the app can close
+  /// them all when it goes to the background ([stopAll]).
+  static final Set<P2PSyncService> _active = {};
+
+  /// Closes every open pairing server because the app is leaving the
+  /// foreground (iOS suspends it and kills the socket). Each service's
+  /// [onInterrupted] fires first so its screen can show a stopped state.
+  static Future<void> stopAll() async {
+    for (final s in _active.toList()) {
+      s.onInterrupted?.call();
+      await s.stop();
+    }
+  }
+
+  /// Invoked when [stopAll] closes this service's server.
+  void Function()? onInterrupted;
+
   /// Invoked when the local HTTP server emits an error (e.g., socket closed
   /// mid-transfer). Without this, the receiver gets a vague "could not fetch"
   /// and the sender has no idea anything went wrong.
@@ -74,6 +91,7 @@ class P2PSyncService {
   }) async {
     // Bind only to the interface the user picked, not every interface.
     _server = await HttpServer.bind(InternetAddress(hostAddress), 0);
+    _active.add(this);
     final port = _server!.port;
     _handleRequests(encryptedPayload);
     return 'http://$hostAddress:$port/sync';
@@ -102,6 +120,7 @@ class P2PSyncService {
   }
 
   Future<void> stop() async {
+    _active.remove(this);
     await _server?.close(force: true);
     _server = null;
   }

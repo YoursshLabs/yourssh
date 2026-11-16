@@ -1,13 +1,44 @@
+import 'dart:io';
+
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/screens/mobile_sftp_screen.dart';
 import 'package:yourssh/models/host.dart';
+import 'package:yourssh/models/ssh_session.dart';
+import 'package:yourssh/providers/session_provider.dart';
+import 'package:yourssh/services/tab_metadata_service.dart';
 import 'package:yourssh/services/sftp_transfer_service.dart';
 import 'package:yourssh/services/ssh_service.dart';
 import 'package:yourssh/services/storage_service.dart';
 import 'package:yourssh/theme/app_theme.dart';
+
+class _FakeSftp implements SftpClient {
+  _FakeSftp(this.names, {this.fail = false, this.error});
+  final List<String> names;
+  final bool fail;
+  final Object? error;
+  bool closed = false;
+
+  @override
+  Future<List<SftpName>> listdir(String path) async {
+    if (error != null) throw error!;
+    if (fail) throw StateError('channel closed');
+    return [
+      for (final n in names)
+        SftpName(
+            filename: n, longname: n, attr: SftpFileAttrs(size: 1, mode: null)),
+    ];
+  }
+
+  @override
+  void close() => closed = true;
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
 
 // Updated after Task 13 redesign: MobileSftpScreen is now contextual and
 // requires a [Host]. The full smoke-test suite lives in
@@ -45,5 +76,122 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.textContaining('Empty'), findsOneWidget);
+  });
+
+  testWidgets('recovers when the cached SFTP channel died while paused',
+      (tester) async {
+    final storage = StorageService();
+    final ssh = SshService(storage);
+    final transfer = SftpTransferService(ssh);
+    final host = Host(
+        id: 'h1', label: 'web-01', host: '10.0.0.1', port: 22, username: 'u');
+    final dead = _FakeSftp(['old'], fail: true);
+    final fresh = _FakeSftp(['new.txt']);
+    final queue = [dead, fresh];
+    var opened = 0;
+
+    await tester.pumpWidget(MaterialApp(
+      builder: ysRootBuilderTouch,
+      home: MultiProvider(
+        providers: [
+          Provider<SshService>.value(value: ssh),
+          Provider<SftpTransferService>.value(value: transfer),
+        ],
+        child: MobileSftpScreen(
+          host: host,
+          sftpOpener: () async {
+            opened++;
+            return queue.removeAt(0);
+          },
+        ),
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('new.txt'), findsOneWidget);
+    expect(opened, 2, reason: 'the dead channel was replaced');
+    expect(dead.closed, isTrue);
+  });
+
+  testWidgets('does not re-dial a dead channel while sessions are paused',
+      (tester) async {
+    final storage = StorageService();
+    final ssh = SshService(storage);
+    final transfer = SftpTransferService(ssh);
+    final host = Host(
+        id: 'h1', label: 'web-01', host: '10.0.0.1', port: 22, username: 'u');
+    final sessions = SessionProvider(ssh, TabMetadataService());
+    addTearDown(sessions.dispose);
+    sessions.addSessionForTest(
+        SshSession(host: host, status: SessionStatus.connected));
+    sessions.pauseAll();
+    var opened = 0;
+
+    await tester.pumpWidget(MaterialApp(
+      builder: ysRootBuilderTouch,
+      home: MultiProvider(
+        providers: [
+          Provider<SshService>.value(value: ssh),
+          Provider<SftpTransferService>.value(value: transfer),
+          ChangeNotifierProvider<SessionProvider>.value(value: sessions),
+        ],
+        child: MobileSftpScreen(
+          host: host,
+          sftpOpener: () async {
+            opened++;
+            return _FakeSftp(['old'], fail: true);
+          },
+        ),
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(opened, 1, reason: 'no second dial while paused');
+    expect(find.textContaining('channel closed'), findsWidgets);
+  });
+
+  testWidgets('a protocol-level SFTP error does not drop or retry the channel',
+      (tester) async {
+    final storage = StorageService();
+    final ssh = SshService(storage);
+    final transfer = SftpTransferService(ssh);
+    final host = Host(
+        id: 'h1', label: 'web-01', host: '10.0.0.1', port: 22, username: 'u');
+    final denied = _FakeSftp([], error: SftpStatusError(3, 'permission denied'));
+    var opened = 0;
+
+    await tester.pumpWidget(MaterialApp(
+      builder: ysRootBuilderTouch,
+      home: MultiProvider(
+        providers: [
+          Provider<SshService>.value(value: ssh),
+          Provider<SftpTransferService>.value(value: transfer),
+        ],
+        child: MobileSftpScreen(
+          host: host,
+          sftpOpener: () async {
+            opened++;
+            return denied;
+          },
+        ),
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(opened, 1, reason: 'no retry on a server-side status error');
+    expect(denied.closed, isFalse, reason: 'shared channel stays open');
+    expect(find.textContaining('permission denied'), findsOneWidget);
+  });
+
+  test('isDeadChannelError classifies connection vs. operation errors', () {
+    expect(isDeadChannelError(const SocketException('reset')), isTrue);
+    expect(isDeadChannelError(SftpAbortError('closed')), isTrue);
+    expect(isDeadChannelError(SSHStateError('not connected')), isTrue);
+    expect(isDeadChannelError(StateError('closed')), isTrue);
+    expect(isDeadChannelError(SftpStatusError(3, 'denied')), isFalse);
+    expect(isDeadChannelError(const FileSystemException('disk full')), isFalse);
   });
 }

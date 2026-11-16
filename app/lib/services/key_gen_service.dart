@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:path/path.dart' as p;
 
+import '../platform/runtime_platform.dart';
 import '../util/file_mode.dart';
 import 'shell_integration_service.dart';
 
@@ -60,6 +61,7 @@ class KeyGenService {
   /// proves the binary runs; only a missing executable throws.
   Future<bool> probeSshKeygen() async {
     if (_probeCache != null) return _probeCache!;
+    if (!supportsSubprocesses) return _probeCache = false;
     try {
       await Process.run('ssh-keygen', ['-?']);
       _probeCache = true;
@@ -68,6 +70,11 @@ class KeyGenService {
     }
     return _probeCache!;
   }
+
+  /// Algorithm ids the UI may offer: Ed25519 is always available (pure
+  /// Dart); RSA/ECDSA need the system ssh-keygen.
+  Future<List<String>> supportedAlgorithms() async =>
+      await probeSshKeygen() ? ['ed25519', 'rsa', 'ecdsa'] : ['ed25519'];
 
   Future<GeneratedKey> generateEd25519({
     required String name,

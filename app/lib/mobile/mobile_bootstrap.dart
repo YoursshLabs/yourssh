@@ -1,9 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 import 'package:yourssh_snippets/yourssh_snippets.dart';
 
+import '../platform/runtime_platform.dart';
+import '../util/native_chmod.dart';
 import '../providers/host_provider.dart';
 import '../providers/key_provider.dart';
 import '../providers/known_hosts_provider.dart';
@@ -12,6 +15,7 @@ import '../providers/session_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/sync_provider.dart';
 import '../services/key_gen_service.dart';
+import '../theme/app_theme.dart' show AppSnack;
 import '../services/port_forward_service.dart';
 import '../services/sftp_transfer_service.dart';
 import '../services/ssh_service.dart';
@@ -39,8 +43,11 @@ class MobileBootstrap {
   late final PortForwardService portForwardService;
   late final KeyGenService keyGen;
 
+  /// Navigator key of the mobile MaterialApp, for toasts raised outside the tree.
+  final navigatorKey = GlobalKey<NavigatorState>();
+
   MobileBootstrap() {
-    storage = StorageService();
+    storage = StorageService(allowPlaintextFallback: !isIOSPlatform);
     ssh = SshService(storage);
     hostProvider = HostProvider(storage);
     keyProvider = KeyProvider()
@@ -63,7 +70,7 @@ class MobileBootstrap {
           portForwardProvider.setStatus(id, status, error: error),
       onConnections: (id, n) => portForwardProvider.setConnections(id, n),
     );
-    keyGen = KeyGenService();
+    keyGen = KeyGenService(chmod: supportsSubprocesses ? null : chmodNative);
     hostProvider.onHostDeleted =
         (id) => unawaited(portForwardService.stopForHost(id));
     unawaited(portForwardProvider.ready.then(
@@ -82,6 +89,12 @@ class MobileBootstrap {
     sessions.hostKeyVerifier = knownHosts.verifyHostKey;
     sessions.onOsDetected = (id, os) => hostProvider.updateDetectedOs(id, os);
 
+    ssh.onSudoPasswordNotSaved = (_) {
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null) {
+        AppSnack.error(ctx, 'Could not save the sudo password to the iOS Keychain');
+      }
+    };
     ssh.defaultHostKeyVerifier = knownHosts.verifyHostKey;
     ssh.defaultKeyLookup = (id) => keyProvider.findById(id);
     ssh.defaultJumpHostLookup =

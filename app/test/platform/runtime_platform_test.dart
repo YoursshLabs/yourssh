@@ -26,4 +26,27 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     expect(isMobilePlatform, isFalse);
   });
+
+  test('iOS: no subprocesses or remote desktop; tmux default on', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    expect(isIOSPlatform, isTrue);
+    expect(supportsSubprocesses, isFalse);
+    expect(supportsRemoteDesktop, isFalse);
+    expect(mobileDefaultTmux, isTrue);
+  });
+
+  test('Android: subprocesses yes, remote desktop no, tmux default on', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    expect(isIOSPlatform, isFalse);
+    expect(supportsSubprocesses, isTrue);
+    expect(supportsRemoteDesktop, isFalse);
+    expect(mobileDefaultTmux, isTrue);
+  });
+
+  test('macOS keeps every desktop capability', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    expect(isIOSPlatform, isFalse);
+    expect(supportsSubprocesses && supportsRemoteDesktop, isTrue);
+    expect(mobileDefaultTmux, isFalse);
+  });
 }
