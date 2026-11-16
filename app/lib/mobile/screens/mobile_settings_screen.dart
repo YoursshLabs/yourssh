@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
 
+import '../../platform/runtime_platform.dart';
+import '../../providers/settings_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../widgets/terminal_appearance_controls.dart';
 import '../security/app_lock_gate.dart';
@@ -28,6 +30,7 @@ class MobileSettingsScreen extends StatefulWidget {
 class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   // ── Security ──────────────────────────────────────────────────────────────
   bool _appLock = true;
+  bool _sshLinks = false;
 
   // ── Keyboard ──────────────────────────────────────────────────────────────
   bool _accessoryBar = true;
@@ -42,6 +45,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
       if (mounted) {
         setState(() {
           _appLock      = p.getBool(kAppLockPrefKey)      ?? true;
+          _sshLinks     = p.getBool(kSshLinksPrefKey)     ?? false;
           _accessoryBar = p.getBool(kAccessoryBarPrefKey) ?? true;
         });
       }
@@ -133,6 +137,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   // ── TERMINAL group ────────────────────────────────────────────────────────
 
   Widget _terminalGroup() {
+    final settings = context.watch<SettingsProvider>();
     return ListGroup(
       label: 'Terminal',
       children: [
@@ -141,6 +146,13 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
           child: const TerminalAppearanceControls(
             layout: AppearanceControlsLayout.rows,
           ),
+        ),
+        SettingsRow(
+          leading: const Icon(FLucideIcons.layers,
+              color: YsColors.mutedForeground, size: 20),
+          title: 'Keep sessions in tmux',
+          toggle: settings.tmuxEnabled,
+          onToggle: (v) => settings.save(tmuxEnabled: v),
         ),
       ],
     );
@@ -162,6 +174,18 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
             await p.setBool(kAppLockPrefKey, v);
           },
         ),
+        if (isIOSPlatform)
+          SettingsRow(
+            leading: const Icon(FLucideIcons.link,
+                color: YsColors.mutedForeground, size: 20),
+            title: 'Open ssh:// links',
+            toggle: _sshLinks,
+            onToggle: (v) async {
+              setState(() => _sshLinks = v);
+              final p = await SharedPreferences.getInstance();
+              await p.setBool(kSshLinksPrefKey, v);
+            },
+          ),
         SettingsRow(
           leading: const Icon(FLucideIcons.timer, color: MobileColors.textMuted, size: 20),
           title: 'Auto-lock',

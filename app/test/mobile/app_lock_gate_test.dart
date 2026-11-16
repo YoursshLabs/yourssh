@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yourssh/mobile/security/app_lock_gate.dart';
 import 'package:yourssh/theme/app_theme.dart';
 import 'package:yourssh_ui/yourssh_ui.dart';
@@ -25,6 +26,29 @@ void main() {
   testWidgets('disabled shows child immediately', (tester) async {
     await _pump(tester, enabled: false, auth: () async => false);
     expect(find.byKey(_childKey), findsOneWidget);
+  });
+
+  testWidgets('cold start paints nothing of the child before the gate decides',
+      (tester) async {
+    for (final enabled in [true, false]) {
+      SharedPreferences.setMockInitialValues({kAppLockPrefKey: enabled});
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(ysTestApp(
+        AppLockGate(
+          // No enabledOverride: the setting is read from prefs, as in the app.
+          authenticator: () async => false,
+          child: const Scaffold(body: SizedBox(key: _childKey)),
+        ),
+        touch: true,
+      ));
+      // First frame: the decision (prefs, device support) is still pending.
+      expect(find.byKey(_childKey), findsNothing, reason: 'enabled=$enabled');
+      expect(find.byKey(_childKey, skipOffstage: false), findsOneWidget);
+      expect(find.text('Unlock'), findsNothing);
+      await tester.pumpAndSettle();
+      expect(find.byKey(_childKey), enabled ? findsNothing : findsOneWidget,
+          reason: 'enabled=$enabled');
+    }
   });
 
   testWidgets('enabled + success unlocks to child', (tester) async {

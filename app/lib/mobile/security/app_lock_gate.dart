@@ -6,6 +6,13 @@ import 'package:yourssh_ui/yourssh_ui.dart';
 
 const String kAppLockPrefKey = 'app_lock_enabled';
 
+/// True while the lock screen covers the app. Starts true: the app counts as
+/// locked until the gate has decided (prefs read, device support) — never
+/// fail open before that. The gate sits in `MaterialApp.builder`, so it covers
+/// every route and dialog; link handlers still wait for this to turn false so
+/// a link never opens a session before the user has unlocked.
+final ValueNotifier<bool> mobileAppLocked = ValueNotifier<bool>(true);
+
 /// Wraps the mobile app in a biometric lock. Locked on launch (and on
 /// resume-from-background) when enabled; unlocks on a successful auth. The
 /// [authenticator] and [enabledOverride] seams keep the state machine testable
@@ -29,6 +36,11 @@ class AppLockGate extends StatefulWidget {
 class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   bool _enabled = false;
   bool _locked = false;
+
+  /// False until [_init] has read the setting and device support. Until then
+  /// the child is kept offstage behind a blank screen, so a cold start never
+  /// paints the app before the lock is in place.
+  bool _decided = false;
   bool _authInFlight = false;
 
   @override
@@ -41,6 +53,7 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    mobileAppLocked.value = false;
     super.dispose();
   }
 
@@ -54,9 +67,11 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
     final enabled = wantEnabled && await _canAuthenticate();
     if (!mounted) return;
     setState(() {
+      _decided = true;
       _enabled = enabled;
       _locked = enabled;
     });
+    mobileAppLocked.value = enabled;
     if (enabled) _authenticate();
   }
 
@@ -81,7 +96,10 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
         // Cover the app-switcher snapshot: lock before the OS captures it.
-        if (!_locked && mounted) setState(() => _locked = true);
+        if (!_locked && mounted) {
+          setState(() => _locked = true);
+          mobileAppLocked.value = true;
+        }
       case AppLifecycleState.resumed:
         if (_locked) _authenticate();
       case AppLifecycleState.detached:
@@ -105,7 +123,10 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
     if (_authInFlight) return;
     _authInFlight = true;
     final ok = await (widget.authenticator ?? _defaultAuth)();
-    if (mounted && ok) setState(() => _locked = false);
+    if (mounted && ok) {
+      setState(() => _locked = false);
+      mobileAppLocked.value = false;
+    }
     // Clear the guard one frame later, so the inactive→resumed transition that
     // accompanies dismissing the system biometric sheet is still ignored above
     // (otherwise it re-locks immediately after unlocking).
@@ -114,7 +135,7 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    if (!_locked) return widget.child;
+    if (_decided && !_locked) return widget.child;
     // The child (navigator, pushed routes, dialogs, toasts) stays mounted so
     // sessions and routes survive the unlock, but offstage with tickers off:
     // nothing of it is painted, so neither the screen nor the app-switcher
@@ -126,7 +147,10 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
         Offstage(
           child: TickerMode(enabled: false, child: widget.child),
         ),
-        FTheme(data: ysThemeDataTouch(), child: _lockScreen()),
+        if (_decided)
+          FTheme(data: ysThemeDataTouch(), child: _lockScreen())
+        else
+          const ColoredBox(color: YsColors.background),
       ],
     );
   }

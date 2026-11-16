@@ -5,7 +5,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/host.dart';
 import '../models/known_host.dart';
 
+/// Thrown by [StorageService] when a secret cannot be written to the platform
+/// secure store and plaintext fallback is disabled (iOS).
+class SecretStoreException implements Exception {
+  final String key;
+  final Object cause;
+  SecretStoreException(this.key, this.cause);
+
+  @override
+  String toString() => 'SecretStoreException($key): $cause';
+}
+
 class StorageService {
+  /// [allowPlaintextFallback] false (iOS): a failed secure write throws
+  /// [SecretStoreException] and nothing lands in `SharedPreferences`.
+  StorageService({this.allowPlaintextFallback = true});
+
+  final bool allowPlaintextFallback;
+
   static const _hostsKey = 'yourssh.hosts';
 
   /// macOS deliberately uses the *legacy file* Keychain.
@@ -24,7 +41,17 @@ class StorageService {
     useDataProtectionKeyChain: false,
   );
 
+  /// iOS Keychain: items stay on this device (no iCloud Keychain sync, not
+  /// restored onto another device from a backup) and are readable after the
+  /// first unlock so background reconnects work.
+  @visibleForTesting
+  static const iosKeychainOptions = IOSOptions(
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+    synchronizable: false,
+  );
+
   static const _storage = FlutterSecureStorage(
+    iOptions: iosKeychainOptions,
     mOptions: macOsKeychainOptions,
     wOptions: WindowsOptions(),
   );
@@ -84,6 +111,10 @@ class StorageService {
       if (prefs.containsKey(key)) await prefs.remove(key);
       _clearPlaintext(key);
     } catch (e) {
+      if (!allowPlaintextFallback) {
+        debugPrint('[StorageService] secure write failed for $key: $e');
+        throw SecretStoreException(key, e);
+      }
       debugPrint('[StorageService] secure write failed for $key, falling back to prefs: $e');
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(key, value);
@@ -98,6 +129,8 @@ class StorageService {
     } catch (e) {
       debugPrint('[StorageService] secure read failed for $key: $e');
     }
+    // Without plaintext fallback nothing was ever written to prefs.
+    if (!allowPlaintextFallback) return null;
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(key);
   }

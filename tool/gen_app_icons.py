@@ -19,6 +19,9 @@ Outputs (all overwritten in place, so the script is safe to re-run):
            drawable-*/ic_launcher_foreground.png adaptive foreground layer
            drawable-*/ic_launcher_monochrome.png Android 13+ themed icon
            mipmap-anydpi-v26/ic_launcher{,_round}.xml
+  iOS      app/ios/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png
+           The 1024 marketing icon: full-bleed (iOS applies its own mask), opaque,
+           no alpha channel (App Store Connect rejects icons with one).
   In-app   app/assets/app_icon.png, logo.png, logo-readme.png
 """
 
@@ -31,12 +34,14 @@ import struct
 import subprocess
 import sys
 import tempfile
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BRANDING = ROOT / "assets" / "branding"
 ANDROID_RES = ROOT / "app" / "android" / "app" / "src" / "main" / "res"
 MACOS_ICONSET = ROOT / "app" / "macos" / "Runner" / "Assets.xcassets" / "AppIcon.appiconset"
+IOS_ICONSET = ROOT / "app" / "ios" / "Runner" / "Assets.xcassets" / "AppIcon.appiconset"
 WINDOWS_ICO = ROOT / "app" / "windows" / "runner" / "resources" / "app_icon.ico"
 APP_ASSETS = ROOT / "app" / "assets"
 
@@ -191,6 +196,120 @@ def android_background_xml() -> str:
     )
 
 
+IOS_CONTENTS_JSON = """{
+  "images" : [
+    {
+      "filename" : "app_icon_1024.png",
+      "idiom" : "universal",
+      "platform" : "ios",
+      "size" : "1024x1024"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
+"""
+
+
+def strip_alpha(path: Path) -> None:
+    """Rewrite an 8-bit RGBA PNG as RGB (colour type 2). sips always keeps an alpha
+    channel, but the iOS marketing icon must have none; the art is already fully
+    opaque, so dropping the channel loses nothing."""
+    data = path.read_bytes()
+    pos, idat, ihdr = 8, b"", b""
+    while pos < len(data):
+        length, kind = struct.unpack(">I4s", data[pos : pos + 8])
+        body = data[pos + 8 : pos + 8 + length]
+        if kind == b"IHDR":
+            ihdr = body
+        elif kind == b"IDAT":
+            idat += body
+        pos += 12 + length
+    width, height, depth, colour = struct.unpack(">IIBB", ihdr[:10])
+    if (depth, colour) == (8, 2):
+        return
+    if (depth, colour) != (8, 6):
+        raise IconError(f"{path}: expected 8-bit RGBA, got depth {depth} colour {colour}")
+    raw = zlib.decompress(idat)
+    stride = width * 4
+    prev = bytearray(stride)
+    out = bytearray()
+    offset = 0
+    for _ in range(height):
+        kind, line = raw[offset], bytearray(raw[offset + 1 : offset + 1 + stride])
+        offset += 1 + stride
+        if kind == 1:
+            for i in range(4, stride):
+                line[i] = (line[i] + line[i - 4]) & 255
+        elif kind == 2:
+            for i in range(stride):
+                line[i] = (line[i] + prev[i]) & 255
+        elif kind == 3:
+            for i in range(stride):
+                left = line[i - 4] if i >= 4 else 0
+                line[i] = (line[i] + ((left + prev[i]) >> 1)) & 255
+        elif kind == 4:
+            for i in range(stride):
+                a = line[i - 4] if i >= 4 else 0
+                b = prev[i]
+                c = prev[i - 4] if i >= 4 else 0
+                pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                pred = a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+                line[i] = (line[i] + pred) & 255
+        elif kind != 0:
+            raise IconError(f"{path}: bad PNG filter {kind}")
+        prev = line
+        out.append(0)
+        for i in range(0, stride, 4):
+            if line[i + 3] != 255:
+                raise IconError(f"{path}: not fully opaque")
+            out += line[i : i + 3]
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(body))
+            + kind
+            + body
+            + struct.pack(">I", zlib.crc32(kind + body))
+        )
+
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(bytes(out), 9))
+        + chunk(b"IEND", b"")
+    )
+
+
+def ios_marketing_svg() -> str:
+    """Full-bleed amber background (the Android layer) plus the master's glyph."""
+    master = (BRANDING / "yourssh_icon.svg").read_text()
+    glyph = re.search(r'<g fill="none".*?</g>', master, re.DOTALL)
+    if not glyph:
+        raise IconError("yourssh_icon.svg: glyph group not found")
+    background = (BRANDING / "yourssh_icon_background.svg").read_text()
+    return background.replace("</svg>", glyph.group(0) + "</svg>")
+
+
+def build_ios_icon(out: Path) -> None:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "ios.svg"
+        src.write_text(ios_marketing_svg())
+        result = subprocess.run(
+            ["sips", "-s", "format", "png", str(src), "--out", str(out)],
+            capture_output=True,
+            text=True,
+        )
+    if result.returncode != 0:
+        raise IconError(f"sips failed for the iOS icon: {result.stderr.strip()}")
+    check_png(out, 1024)
+    strip_alpha(out)
+    check_png(out, 1024)
+
+
 def generate() -> list[Path]:
     written: list[Path] = []
 
@@ -206,6 +325,11 @@ def generate() -> list[Path]:
             emit(MACOS_ICONSET / f"app_icon_{size}.png"),
             inset=MACOS_INSET,
         )
+
+    # iOS — the single 1024 marketing icon, opaque and alpha-free.
+    build_ios_icon(emit(IOS_ICONSET / "app_icon_1024.png"))
+    contents = emit(IOS_ICONSET / "Contents.json")
+    contents.write_text(IOS_CONTENTS_JSON)
 
     # Windows — full-bleed, packed into a multi-size ICO.
     build_ico("yourssh_icon", WINDOWS_SIZES, emit(WINDOWS_ICO))

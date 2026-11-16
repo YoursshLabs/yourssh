@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **iOS (iPhone) build, distributed through TestFlight** — the mobile app now runs on iPhone. Hosts, SSH terminal, SFTP and the Keychain screens work as on Android. Secrets live in the iOS Keychain (this-device-only, no plaintext fallback) and imported keys are kept in app storage excluded from backup. The app lock covers the whole app and uses Face ID; the connection is kept for a short grace period in the background and reconnects on return. `yourssh://connect/<host>` links work, and `ssh://` links are an opt-in setting that never connects to an unknown target. Local shell, RDP and VNC are desktop-only. Not on the App Store yet.
+
+### Fixed
+- RDP and VNC hosts show a "desktop only" notice on mobile instead of failing to connect.
+- Imported SSH keys are copied into app storage, so they keep working after the source file moves or the picker's temporary copy is removed.
+
 ## [0.4.1] — 2026-11-13
 
 Security and polish fixes found while writing the documentation (now at https://yoursshlabs.com).

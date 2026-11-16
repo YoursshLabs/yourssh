@@ -23,6 +23,7 @@ class _CapturingSsh extends SshService {
     Future<bool> Function(String keyType, Uint8List fingerprint)? verifyHostKey,
     Future<bool> Function(Host hop, String keyType, Uint8List fp)?
         verifyHopHostKey,
+    bool Function()? isCurrent,
   }) async {
     capturedChain = jumpChain;
     throw Exception('stop-before-shell');

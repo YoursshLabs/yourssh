@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yourssh/services/key_gen_service.dart';
@@ -13,6 +15,24 @@ void main() {
   });
 
   tearDown(() => tmp.delete(recursive: true));
+
+  group('platform gating', () {
+    tearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    test('iOS: ed25519 only and ssh-keygen is never probed', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      final s = KeyGenService();
+      expect(await s.probeSshKeygen(), isFalse);
+      expect(await s.supportedAlgorithms(), ['ed25519']);
+    });
+
+    test('with ssh-keygen present all algorithms are offered', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      final s = KeyGenService();
+      if (!await s.probeSshKeygen()) return; // CI image without ssh-keygen
+      expect(await s.supportedAlgorithms(), ['ed25519', 'rsa', 'ecdsa']);
+    });
+  });
 
   group('sanitizeKeyName', () {
     test('keeps safe chars, replaces the rest', () {

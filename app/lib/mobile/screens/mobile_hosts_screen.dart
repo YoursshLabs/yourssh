@@ -9,6 +9,7 @@ import '../../models/ssh_session.dart';
 import '../../providers/host_provider.dart';
 import '../../providers/session_provider.dart';
 import '../../util/host_query.dart';
+import '../navigation/open_session.dart';
 import '../services/host_reachability_probe.dart';
 import '../theme/mobile_theme.dart';
 import '../theme/mobile_tokens.dart';
@@ -19,9 +20,6 @@ import '../widgets/section_header.dart';
 import '../widgets/status_dot.dart';
 import '../widgets/tag_chip.dart';
 import 'mobile_add_host_screen.dart';
-import 'mobile_port_forward_screen.dart';
-import 'mobile_sftp_screen.dart';
-import 'mobile_terminal_screen.dart';
 
 /// Hosts tab: header + search + folder chips + tag-grouped list + amber FAB.
 /// Tap a host → connect via SessionProvider. Long-press → edit/delete sheet.
@@ -300,76 +298,12 @@ class _MobileHostsScreenState extends State<MobileHostsScreen> {
       connecting: connState == HostConnState.connecting ||
           ping.state == HostReachState.probing,
       latencyMs: ping.ms,
-      onTap: () => _openSession(host),
+      onTap: () => openMobileSession(Navigator.of(context), host),
       onLongPress: () => _showActions(host),
     );
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────
-
-  Future<void> _openSession(Host host) async {
-    final sp = context.read<SessionProvider>();
-
-    // Re-entry: if a live session exists for this host, just open the terminal.
-    final existing = sp.sshSessions
-        .where((s) => s.host.id == host.id)
-        .toList();
-    if (existing.isNotEmpty) {
-      final sessionId = existing.last.id;
-      if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (ctx) => MobileTerminalScreen(
-            focusSessionId: sessionId,
-            onOpenFiles: (h) => _pushSftp(ctx, h),
-            onOpenPortForward: (h) => _pushPortForward(ctx, h),
-          ),
-        ),
-      );
-      return;
-    }
-
-    // No live session — start connecting and navigate straight away. The
-    // connect future must NOT be awaited: SessionProvider._doConnect awaits
-    // SshService.openShell, which only completes once the shell closes, so
-    // awaiting it would strand the user on the host list for the whole session.
-    // The session is registered synchronously, so the terminal can pick it up
-    // now and render its own connecting state.
-    unawaited(sp.connectAny(host));
-    if (!mounted) return;
-
-    // The session is in sshSessions already; find the freshest one.
-    final after = sp.sshSessions
-        .where((s) => s.host.id == host.id)
-        .toList();
-    final sessionId = after.isNotEmpty ? after.last.id : null;
-
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (ctx) => MobileTerminalScreen(
-          focusSessionId: sessionId,
-          onOpenFiles: (h) => _pushSftp(ctx, h),
-          onOpenPortForward: (h) => _pushPortForward(ctx, h),
-        ),
-      ),
-    );
-  }
-
-  void _pushSftp(BuildContext ctx, Host host) {
-    Navigator.of(ctx).push(
-      MaterialPageRoute(
-        builder: (_) => MobileSftpScreen(host: host),
-      ),
-    );
-  }
-
-  void _pushPortForward(BuildContext ctx, Host host) {
-    Navigator.of(ctx).push(
-      MaterialPageRoute(
-        builder: (_) => MobilePortForwardScreen(host: host),
-      ),
-    );
-  }
 
   void _pushAddHost() {
     Navigator.of(context).push(

@@ -35,6 +35,21 @@ void main() {
       );
     });
 
+    test('stopAll closes the open server and notifies the service', () async {
+      var interrupted = 0;
+      service.onInterrupted = () => interrupted++;
+      final url = await service.startServer(
+        encryptedPayload: 'data',
+        hostAddress: '127.0.0.1',
+      );
+      await P2PSyncService.stopAll();
+      expect(interrupted, 1);
+      expect(() => service.fetchPayload(url), throwsA(anything));
+      // Already closed: a second stopAll is a no-op.
+      await P2PSyncService.stopAll();
+      expect(interrupted, 1);
+    });
+
     test('getLocalInterfaces returns non-loopback addresses', () async {
       final ifaces = await service.getLocalInterfaces();
       for (final i in ifaces) {

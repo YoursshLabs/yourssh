@@ -39,7 +39,7 @@ dependencies:
 
   # QR code generation (P2P sync)
   qr_flutter: ^4.1.0
-  mobile_scanner: ^5.2.3
+  mobile_scanner: ^7.5.0
   local_auth: ^2.3.0
 
   # UUID generation
@@ -49,6 +49,7 @@ dependencies:
   # Path utilities
   path: ^1.9.0
   path_provider: ^2.1.4
+  share_plus: ^10.1.4
 
   # Hotkey management
   hotkey_manager: ^0.2.3

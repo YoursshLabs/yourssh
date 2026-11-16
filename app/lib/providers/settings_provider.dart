@@ -7,6 +7,7 @@ import 'package:xterm/xterm.dart' as xterm;
 
 import '../models/keyword_highlight_rule.dart';
 import '../models/shell_profile.dart';
+import '../platform/runtime_platform.dart';
 import '../theme/terminal_themes.dart';
 
 /// Default audit-log retention — single source for the provider, its
@@ -118,7 +119,15 @@ class SettingsProvider extends ChangeNotifier {
       await prefs.setString('terminalTheme', terminalTheme);
     }
     networkStatsEnabled = prefs.getBool('networkStatsEnabled') ?? false;
-    tmuxEnabled = prefs.getBool('tmuxEnabled') ?? false;
+    final storedTmux = prefs.getBool('tmuxEnabled');
+    if (storedTmux != null) {
+      tmuxEnabled = storedTmux;
+    } else {
+      // Decide once on mobile (like terminalTheme): a fresh install gets
+      // tmux for flaky links, an install that already has hosts keeps off.
+      tmuxEnabled = mobileDefaultTmux && !prefs.containsKey('yourssh.hosts');
+      if (mobileDefaultTmux) await prefs.setBool('tmuxEnabled', tmuxEnabled);
+    }
     commandNotificationsEnabled = prefs.getBool('commandNotificationsEnabled') ?? false;
     shellIntegrationEnabled = prefs.getBool('shellIntegrationEnabled') ?? true;
     recordingRedactionEnabled = prefs.getBool('recordingRedactionEnabled') ?? true;

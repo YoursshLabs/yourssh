@@ -61,6 +61,43 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
+  group('StorageService iOS Keychain', () {
+    test('iOS keychain is this-device-only and not synced', () {
+      expect(StorageService.iosKeychainOptions.params['accessibility'],
+          'first_unlock_this_device');
+      expect(
+          StorageService.iosKeychainOptions.params['synchronizable'], 'false');
+    });
+
+    test(
+        'without plaintext fallback a failed secure write throws and prefs stay clean',
+        () async {
+      secureFailsAllWrites = true;
+      final s = StorageService(allowPlaintextFallback: false);
+      await expectLater(s.savePassword('h1', 'pw'),
+          throwsA(isA<SecretStoreException>()));
+      expect((await SharedPreferences.getInstance()).containsKey('pw_h1'),
+          isFalse);
+      expect(s.hasPlaintextSecrets, isFalse);
+    });
+
+    test('without plaintext fallback reads ignore a prefs copy', () async {
+      SharedPreferences.setMockInitialValues({'pw_h1': 'stale'});
+      expect(await StorageService(allowPlaintextFallback: false)
+          .loadPassword('h1'), isNull);
+      expect(await StorageService().loadPassword('h1'), 'stale');
+    });
+
+    test('the default still falls back to prefs (desktop/Android unchanged)',
+        () async {
+      secureFailsAllWrites = true;
+      final s = StorageService();
+      await s.savePassword('h1', 'pw');
+      expect((await SharedPreferences.getInstance()).getString('pw_h1'), 'pw');
+      expect(s.hasPlaintextSecrets, isTrue);
+    });
+  });
+
   group('StorageService passwords', () {
     test('savePassword writes to secure storage', () async {
       final svc = StorageService();

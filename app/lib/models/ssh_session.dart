@@ -14,6 +14,21 @@ class SshSession implements TerminalSession {
   @override
   final Terminal terminal;
   SessionStatus status;
+
+  /// True while the app lifecycle logic (iOS background) has closed this
+  /// session's connection on purpose. A paused session is `disconnected`, is
+  /// never auto-reconnected by the drop path and is reconnected by
+  /// `SessionProvider.resumePaused` when the app returns to the foreground.
+  bool paused = false;
+
+  /// Bumped whenever the provider invalidates in-flight connect attempts
+  /// (a pause); an attempt that finds a different value stops quietly.
+  int connectGeneration = 0;
+
+  /// Whether keystrokes may reach the remote shell. Input to anything else is
+  /// rejected visibly by callers, never queued.
+  bool get acceptsInput => status == SessionStatus.connected && !paused;
+
   String? errorMessage;
   DateTime connectedAt;
   final String? initialCommand;
