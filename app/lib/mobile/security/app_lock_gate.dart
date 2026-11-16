@@ -36,6 +36,11 @@ class AppLockGate extends StatefulWidget {
 class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   bool _enabled = false;
   bool _locked = false;
+
+  /// False until [_init] has read the setting and device support. Until then
+  /// the child is kept offstage behind a blank screen, so a cold start never
+  /// paints the app before the lock is in place.
+  bool _decided = false;
   bool _authInFlight = false;
 
   @override
@@ -62,6 +67,7 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
     final enabled = wantEnabled && await _canAuthenticate();
     if (!mounted) return;
     setState(() {
+      _decided = true;
       _enabled = enabled;
       _locked = enabled;
     });
@@ -129,7 +135,7 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    if (!_locked) return widget.child;
+    if (_decided && !_locked) return widget.child;
     // The child (navigator, pushed routes, dialogs, toasts) stays mounted so
     // sessions and routes survive the unlock, but offstage with tickers off:
     // nothing of it is painted, so neither the screen nor the app-switcher
@@ -141,7 +147,10 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
         Offstage(
           child: TickerMode(enabled: false, child: widget.child),
         ),
-        FTheme(data: ysThemeDataTouch(), child: _lockScreen()),
+        if (_decided)
+          FTheme(data: ysThemeDataTouch(), child: _lockScreen())
+        else
+          const ColoredBox(color: YsColors.background),
       ],
     );
   }
